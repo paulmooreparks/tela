@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tela Hub — awansatu.net</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 720px;
+      margin: 60px auto;
+      padding: 0 20px;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 { color: #2d7d46; margin-bottom: 8px; }
+    .subtitle { color: #666; margin-bottom: 32px; }
+    .card {
+      background: #f8f8f8;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    .card h2 { font-size: 1.1rem; margin-bottom: 8px; }
+    .status { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: 600; }
+    .status.ok { background: #d4edda; color: #155724; }
+    .diagram {
+      text-align: left;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre;
+      margin: 16px 0;
+      overflow-x: auto;
+    }
+    .path {
+      background: #f0f0f0;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-family: monospace;
+      display: inline-block;
+      margin: 12px 0;
+      font-size: 0.9rem;
+    }
+    footer { margin-top: 40px; color: #999; font-size: 0.85rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Tela Hub</h1>
+  <p class="subtitle">Connectivity fabric for <strong>awansatu.net</strong></p>
+
+  <div class="card">
+    <h2>Hub Status</h2>
+    <span class="status ok">&#10003; Online</span>
+    <p style="margin-top: 8px;">The Tela Hub is running and accepting connections.</p>
+  </div>
+
+  <div class="card">
+    <h2>Tunnel Test</h2>
+    <p>If you reached this page via <code>tela.awansatu.net</code>, the full path is:</p>
+    <div class="path">browser &rarr; Cloudflare &rarr; hub (static site)</div>
+    <p style="margin-top: 8px;">When accessed through a helper tunnel, the path is:</p>
+    <div class="diagram">
+browser (localhost:&lt;port&gt;)
+  &darr;
+helper (TCP &rarr; WebSocket)
+  &darr;
+hub (WebSocket relay)
+  &darr;
+agent (WebSocket &rarr; TCP)
+  &darr;
+target service</div>
+  </div>
+
+  <div class="card">
+    <h2>What is Tela?</h2>
+    <p>Tela is a FOSS connectivity fabric that provides outbound-only tunnels,
+       multiplexed TCP channels, zero-install client access, and browser-mediated
+       orchestration. It is the runtime substrate for Awan Satu.</p>
+    <p style="margin-top: 8px;">
+      <a href="https://github.com/paulmooreparks/tela">github.com/paulmooreparks/tela</a>
+    </p>
+  </div>
+
+  <footer>Tela POC &middot; awansatu.net</footer>
+</body>
+</html>

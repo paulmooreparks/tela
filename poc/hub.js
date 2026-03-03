@@ -2,13 +2,18 @@
   hub.js — Tela POC Hub
 
   Purpose:
-    WebSocket relay server that pairs agents with helpers and pipes
-    binary data between them bidirectionally.
+    Combined HTTP + WebSocket server.
+    - HTTP requests get the static site from www/.
+    - WebSocket connections get the relay that pairs agents with helpers
+      and pipes binary data between them bidirectionally.
 
-  How it works:
-    1. Agent connects, sends: { type: "register", machineId: "..." }
+  Serving both on the same port means Cloudflare Tunnel (or any reverse
+  proxy) only needs a single ingress rule.
+
+  How the relay works:
+    1. Agent connects via WS, sends: { type: "register", machineId: "..." }
        Hub stores the agent's WebSocket keyed by machineId.
-    2. Helper connects, sends: { type: "connect", machineId: "..." }
+    2. Helper connects via WS, sends: { type: "connect", machineId: "..." }
        Hub looks up the agent, then signals both sides to start.
     3. All subsequent binary messages are relayed between the paired
        agent and helper WebSockets.
@@ -16,17 +21,58 @@
   No auth, no TLS, no multiplexing — raw relay for POC validation.
 */
 
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 
 const PORT = parseInt(process.env.HUB_PORT, 10) || 8080;
+const WWW_DIR = path.join(__dirname, 'www');
+
+const MIME = {
+  '.html': 'text/html',
+  '.css':  'text/css',
+  '.js':   'text/javascript',
+  '.json': 'application/json',
+  '.png':  'image/png',
+  '.svg':  'image/svg+xml',
+};
+
+// ── HTTP server (static site) ──────────────────────────────────────
+
+const httpServer = http.createServer((req, res) => {
+  let filePath = path.join(WWW_DIR, req.url === '/' ? 'index.html' : req.url);
+  filePath = path.normalize(filePath);
+
+  // Prevent path traversal
+  if (!filePath.startsWith(WWW_DIR)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('Not Found');
+      return;
+    }
+    const ext = path.extname(filePath);
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.end(data);
+  });
+});
+
+// ── WebSocket server (relay) ───────────────────────────────────────
 
 // machineId -> { agentWs, helperWs }
 const machines = new Map();
 
-const wss = new WebSocketServer({ port: PORT });
+const wss = new WebSocketServer({ server: httpServer });
 
-wss.on('listening', () => {
-  console.log(`[hub] listening on ws://0.0.0.0:${PORT}`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`[hub] listening on http+ws://0.0.0.0:${PORT}`);
+  console.log(`[hub] static site: ${WWW_DIR}`);
 });
 
 wss.on('connection', (ws) => {

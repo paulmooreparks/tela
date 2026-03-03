@@ -3,16 +3,21 @@
 
   Purpose:
     Connects to the Hub via WebSocket, registers a machine ID, and waits.
-    When the Hub signals a session, opens a TCP connection to the local
-    RDP service (localhost:3389) and pipes data bidirectionally between
-    the TCP socket and the WebSocket.
+    When the Hub signals a session, opens a TCP connection to a local
+    service and pipes data bidirectionally between the TCP socket and
+    the WebSocket.
 
   Usage:
-    node agent.js [hubUrl] [machineId]
+    node agent.js [hubUrl] [machineId] [targetPort] [targetHost]
 
   Defaults:
-    hubUrl:    ws://localhost:8080
-    machineId: my-pc
+    hubUrl:     ws://localhost:8080
+    machineId:  my-pc
+    targetPort: 3000  (HTTP — use serve.js for POC testing)
+    targetHost: 127.0.0.1
+
+  For RDP:
+    node agent.js ws://localhost:8080 my-pc 3389
 */
 
 const WebSocket = require('ws');
@@ -20,8 +25,8 @@ const net = require('net');
 
 const HUB_URL = process.argv[2] || process.env.HUB_URL || 'ws://localhost:8080';
 const MACHINE_ID = process.argv[3] || process.env.MACHINE_ID || 'my-pc';
-const RDP_HOST = process.env.RDP_HOST || '127.0.0.1';
-const RDP_PORT = parseInt(process.env.RDP_PORT, 10) || 3389;
+const TARGET_PORT = parseInt(process.argv[4] || process.env.TARGET_PORT || '3000', 10);
+const TARGET_HOST = process.argv[5] || process.env.TARGET_HOST || '127.0.0.1';
 
 let ws = null;
 let tcpSocket = null;
@@ -37,9 +42,7 @@ function connect() {
 
   ws.on('message', (data, isBinary) => {
     // Binary data → forward to TCP socket
-    if (isBinary || Buffer.isBuffer(data)) {
-      // Check if it's actually a JSON control message
-      // Control messages are always text; binary frames are tunnel data
+    if (isBinary) {
       if (tcpSocket && !tcpSocket.destroyed) {
         tcpSocket.write(data);
       }
@@ -57,7 +60,7 @@ function connect() {
     if (msg.type === 'registered') {
       console.log(`[agent] registered as: ${msg.machineId} — waiting for session`);
     } else if (msg.type === 'session-start') {
-      console.log(`[agent] session starting — connecting to ${RDP_HOST}:${RDP_PORT}`);
+      console.log(`[agent] session starting — connecting to ${TARGET_HOST}:${TARGET_PORT}`);
       openTcpTunnel();
     } else if (msg.type === 'session-ended') {
       console.log(`[agent] session ended`);
@@ -79,8 +82,8 @@ function connect() {
 function openTcpTunnel() {
   closeTcp();
 
-  tcpSocket = net.createConnection({ host: RDP_HOST, port: RDP_PORT }, () => {
-    console.log(`[agent] TCP connected to ${RDP_HOST}:${RDP_PORT}`);
+  tcpSocket = net.createConnection({ host: TARGET_HOST, port: TARGET_PORT }, () => {
+    console.log(`[agent] TCP connected to ${TARGET_HOST}:${TARGET_PORT}`);
   });
 
   tcpSocket.on('data', (chunk) => {

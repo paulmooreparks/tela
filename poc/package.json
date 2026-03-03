@@ -6,7 +6,8 @@
   "scripts": {
     "hub": "node hub.js",
     "agent": "node agent.js",
-    "helper": "node helper.js"
+    "helper": "node helper.js",
+    "serve": "node serve.js"
   },
   "dependencies": {
     "ws": "^8.0.0"

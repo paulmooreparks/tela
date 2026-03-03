@@ -1,0 +1,41 @@
+# Tela POC — Docker Compose
+#
+# Runs the hub (WS relay + static site) and an agent that tunnels
+# to the static site. For local testing without Cloudflare.
+#
+# Usage:
+#   docker compose up --build
+#
+# With Cloudflare Tunnel the hub's ports don't need to be published
+# to the host — cloudflared reaches them via Docker networking or
+# localhost. The ports below are published for local-only testing.
+
+services:
+  hub:
+    build:
+      context: .
+      dockerfile: docker/hub/Dockerfile
+    container_name: tela-hub
+    ports:
+      # HTTP + WebSocket on one port
+      # cloudflared routes tela.awansatu.net -> http://localhost:3000
+      - "3000:8080"
+    environment:
+      - HUB_PORT=8080
+    restart: unless-stopped
+
+  agent:
+    # The agent runs the same Node image and connects to the hub's WS port.
+    # It tunnels TCP traffic to the hub's own static site so we can
+    # prove the full path: browser → helper → hub → agent → service.
+    image: node:20-alpine
+    container_name: tela-agent
+    working_dir: /app
+    volumes:
+      - ./poc:/app:ro
+    # Wait a couple seconds for the hub to be ready
+    command: >
+      sh -c "sleep 2 && node agent.js ws://hub:8080 barn 8080 hub"
+    depends_on:
+      - hub
+    restart: unless-stopped

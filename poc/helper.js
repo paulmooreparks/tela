@@ -3,9 +3,9 @@
 
   Purpose:
     Connects to the Hub via WebSocket, requests a session with a specific
-    machine, then binds a local TCP port. When a native client (e.g. mstsc)
-    connects to that port, pipes data bidirectionally between the TCP
-    socket and the WebSocket tunnel.
+    machine, then binds a local TCP port. When a client (browser, mstsc,
+    ssh, etc.) connects to that port, pipes data bidirectionally between
+    the TCP socket and the WebSocket tunnel.
 
   Usage:
     node helper.js [hubUrl] [machineId] [localPort]
@@ -13,9 +13,13 @@
   Defaults:
     hubUrl:    ws://localhost:8080
     machineId: my-pc
-    localPort: 13389
+    localPort: 8000
 
-  Then run:
+  For HTTP test:
+    Open http://localhost:8000 in a browser.
+
+  For RDP:
+    node helper.js ws://localhost:8080 my-pc 13389
     mstsc /v:localhost:13389
 */
 
@@ -24,7 +28,7 @@ const net = require('net');
 
 const HUB_URL = process.argv[2] || process.env.HUB_URL || 'ws://localhost:8080';
 const MACHINE_ID = process.argv[3] || process.env.MACHINE_ID || 'my-pc';
-const LOCAL_PORT = parseInt(process.argv[4] || process.env.LOCAL_PORT || '13389', 10);
+const LOCAL_PORT = parseInt(process.argv[4] || process.env.LOCAL_PORT || '8000', 10);
 
 let ws = null;
 let tcpServer = null;
@@ -42,7 +46,7 @@ function start() {
 
   ws.on('message', (data, isBinary) => {
     // Binary data → forward to TCP client
-    if (isBinary || Buffer.isBuffer(data)) {
+    if (isBinary) {
       if (tcpClient && !tcpClient.destroyed) {
         tcpClient.write(data);
       }
@@ -82,12 +86,13 @@ function startLocalServer() {
 
   tcpServer = net.createServer((socket) => {
     if (tcpClient) {
-      console.log(`[helper] rejecting additional connection (single-session POC)`);
+      console.log(`[helper] already has a connection — queuing new client`);
+      // For POC, only one TCP client at a time. Reject extras.
       socket.destroy();
       return;
     }
 
-    console.log(`[helper] native client connected from ${socket.remoteAddress}:${socket.remotePort}`);
+    console.log(`[helper] client connected from ${socket.remoteAddress}:${socket.remotePort}`);
     tcpClient = socket;
 
     socket.on('data', (chunk) => {
@@ -97,13 +102,9 @@ function startLocalServer() {
     });
 
     socket.on('close', () => {
-      console.log(`[helper] native client disconnected`);
+      console.log(`[helper] client disconnected`);
       tcpClient = null;
-      // Close the WebSocket — session is over
-      if (ws && ws.readyState === 1) {
-        ws.close(1000, 'Client disconnected');
-      }
-      cleanup();
+      // Don't close WebSocket — allow new connections (needed for HTTP)
     });
 
     socket.on('error', (err) => {
@@ -113,7 +114,7 @@ function startLocalServer() {
 
   tcpServer.listen(LOCAL_PORT, '127.0.0.1', () => {
     console.log(`[helper] listening on localhost:${LOCAL_PORT}`);
-    console.log(`[helper] >>> Run: mstsc /v:localhost:${LOCAL_PORT}`);
+    console.log(`[helper] >>> Open: http://localhost:${LOCAL_PORT}`);
   });
 
   tcpServer.on('error', (err) => {
