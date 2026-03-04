@@ -140,16 +140,17 @@ jobs:
           python3 -m json.tool release.json > release-pretty.json
           mv release-pretty.json release.json
 
-      - name: Checkout source (needed for tagging)
-        uses: actions/checkout@v4
-
       - name: Create tag (for main branch builds)
         if: startsWith(github.ref, 'refs/heads/')
-        run: |
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/${{ steps.version.outputs.tag }}',
+              sha: context.sha,
+            });
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
