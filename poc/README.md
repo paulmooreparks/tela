@@ -124,11 +124,15 @@ See `IMPLEMENTATION.md` §8 for the full Docker Compose skeleton and Caddyfile.
 
 Subcommand-based CLI. Run `tela` with no arguments for usage.
 
+**Hub name resolution** — the `-hub` flag accepts a full URL (`wss://...`) or
+a short hub name. Short names are resolved by: (1) querying the portal you
+logged into via `tela login`, (2) falling back to a local `hubs.yaml` file.
+
 **Environment variables** — set these to avoid repeating flags:
 
 | Variable | Description |
 |----------|-------------|
-| `TELA_HUB` | Default hub URL (overridden by `-hub`) |
+| `TELA_HUB` | Default hub URL or name (overridden by `-hub`) |
 | `TELA_MACHINE` | Default machine ID (overridden by `-machine`) |
 | `TELA_TOKEN` | Default auth token (overridden by `-token`) |
 
@@ -146,9 +150,32 @@ tela connect
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-hub` | `$TELA_HUB` | Hub WebSocket URL (`ws://` or `wss://`) |
+| `-hub` | `$TELA_HUB` | Hub WebSocket URL (`ws://` or `wss://`) or hub name |
 | `-machine` | `$TELA_MACHINE` | Machine name to connect to |
 | `-token` | `$TELA_TOKEN` | Authentication token (must match `HUB_TOKEN`) |
+
+#### tela login
+
+Authenticate with a Tela portal to enable hub name resolution.
+
+```
+tela login https://awansatu.net
+```
+
+Prompts for an API token (press Enter for open-mode portals). Stores portal URL
+and token in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`.
+
+Once logged in, `-hub` accepts short hub names (e.g., `owlsnest`) that are
+resolved via the portal's `/api/hubs` endpoint. Local `hubs.yaml` is used as
+a fallback if the portal is unreachable.
+
+#### tela logout
+
+Remove stored portal credentials.
+
+```
+tela logout
+```
 
 #### tela machines
 

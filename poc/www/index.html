@@ -190,9 +190,12 @@
   <!-- CLI Quick Reference -->
   <div class="card">
     <h2>CLI Quick Reference</h2>
-    <div class="usage usage-pre">tela machines -hub wss://tela.awansatu.net          # list machines &amp; services
-tela connect  -hub wss://tela.awansatu.net -machine &lt;name&gt;  # tunnel &amp; connect
-tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
+    <div class="usage usage-pre">tela login https://awansatu.net                       # authenticate with portal
+tela machines -hub owlsnest                            # list machines (hub name via portal)
+tela connect  -hub owlsnest -machine &lt;name&gt;            # tunnel &amp; connect
+tela status   -hub owlsnest                            # hub status summary
+tela logout                                            # remove stored credentials</div>
+    <p style="margin:8px 0 0;font-size:0.85rem;color:#aaa;">Or use full URLs: <code>tela machines -hub wss://tela.awansatu.net</code></p>
   </div>
 
   <!-- About -->

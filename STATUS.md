@@ -91,7 +91,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅. No user auth, no session tokens, no metadata |
 | §8.2 | Implementation (Node.js + MeshCentral) | 🔶 | Node.js ✅; no MeshCentral integration |
 | §8.3 | Storage (SQLite / Postgres) | ⬜ | In-memory only; no persistence |
-| §8.4 | REST API | 🔶 | `/status` endpoint ✅; no `/api/v1/*` endpoints |
+| §8.4 | REST API | 🔶 | Hub `/status` endpoint ✅; Portal `/api/hubs` endpoint ✅; no `/api/v1/*` endpoints |
 | §8.5 | Multiplexing | ⬜ | No channel multiplexing |
 | §8.6 | Logging & Observability | 🔶 | Console logging; no structured logs or metrics |
 | §8.7 | Updates | ⬜ | No update mechanism |
@@ -128,7 +128,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §11.1 | Purpose & Rationale | 🔶 | `tela` binary serves as both client and proto-CLI |
-| §11.2 | Core Commands | ⬜ | No `login`/`machines`/`status` subcommands |
+| §11.2 | Core Commands | 🔶 | `login`/`logout` ✅, `machines` ✅, `services` ✅, `status` ✅, `connect` ✅. Portal-based hub name resolution ✅. Local `hubs.yaml` fallback ✅. |
 
 ---
 
@@ -250,6 +250,8 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 7. **Dual ingress** — Cloudflare Tunnel (`tela.awansatu.net`) + Caddy direct (`tela-local.awansatu.net`)
 8. **Hub /status API** — JSON endpoint for monitoring
 9. **Direct tunnel (P2P)** — STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
+10. **CLI login/logout** — `tela login` authenticates with a portal, `tela logout` removes credentials
+11. **Portal-based hub name resolution** — Short hub names resolved via portal `/api/hubs` with local `hubs.yaml` fallback
 
 ### Biggest gaps to Phase 1 spec
 
@@ -260,6 +262,5 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 5. **Agent identity** (§12.1) — No Ed25519 keys; agents identified by string only
 6. **Certificate pinning** (§12.2) — Neither side validates Hub cert fingerprint
 7. **REST API** (§8.4) — Only `/status`; spec requires full `/api/v1/*`
-8. **CLI** (§11) — Not started as separate tool
-9. **Test suite** (§20) — No automated tests
-10. **Multiple simultaneous sessions** — One session per machine at a time
+8. **Test suite** (§20) — No automated tests
+9. **Multiple simultaneous sessions** — One session per machine at a time

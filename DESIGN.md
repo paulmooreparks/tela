@@ -801,14 +801,16 @@ The CLI is intentionally not part of the core runtime.
 
 Phase 1:
 
-- `tela login` — authenticate with a Hub, store session cookie.
+- `tela login <portal-url>` — authenticate with a portal, store credentials locally.
+- `tela logout` — remove stored portal credentials.
 - `tela machines` — list registered machines and their online/offline status.
-- `tela connect <machineId> <service>` — request a session token, launch the helper, and display the assigned `localhost:<port>`.
+- `tela services <machineId>` — list exposed services on a machine.
+- `tela connect -hub <name-or-url> -machine <machineId>` — establish a WireGuard tunnel, bind local listeners.
 - `tela status` — show current Hub connection and active sessions.
+- `tela version` — print version and exit.
 
 Phase 2+:
 
-- `tela services <machineId>` — list exposed services on a machine.
 - `tela transfer <machineId> <localPath> <remotePath>` — file transfer (Phase 2).
 - `tela config` — manage CLI configuration (Hub URL, stored credentials).
 - `tela helper` — run the helper directly (for scripted/headless workflows).
@@ -1400,9 +1402,15 @@ This separation is what makes Awan Satu a **platform** rather than just a pretti
 
 ## **18.12 Hub Aliases — Named Hubs**
 
-Users should not need to memorize or type full WebSocket URLs. The `tela` CLI supports **hub aliases**: short names that resolve to hub URLs via a local config file.
+Users should not need to memorize or type full WebSocket URLs. The `tela` CLI supports **hub names**: short identifiers that resolve to hub WebSocket URLs.
 
-**Config file location:**
+### Resolution Order
+
+When the `-hub` flag (or `TELA_HUB` env var) does not start with `ws://` or `wss://`, the CLI resolves the name in this order:
+
+1. **Portal API** — If the user has run `tela login <portal-url>`, the CLI queries `GET <portal>/api/hubs` (with Bearer token if set). The portal returns the hub list; a case-insensitive match on `name` yields the URL. The URL is converted from `https://` to `wss://` (or `http://` to `ws://`).
+
+2. **Local config file** — If the portal is unreachable or the user is not logged in, the CLI falls back to a local YAML file:
 
 | Platform | Path |
 |---|---|
@@ -1417,22 +1425,38 @@ hubs:
   work:     wss://hub.corp.example.com
 ```
 
-**Resolution order** (applied to `-hub` flag and `TELA_HUB` env var):
+3. **Error** — If neither source resolves the name, the CLI exits with an error listing known hub names from whichever source was available.
 
-1. Value starts with `ws://` or `wss://` → use as URL directly.
-2. Otherwise → look up as alias in `hubs.yaml` → use mapped URL.
-3. Not found → error with list of known aliases.
-
-**Usage:**
+### Portal Login
 
 ```
+tela login https://awansatu.net    # authenticate, store portal URL + token
+tela logout                        # remove stored credentials
+```
+
+Portal credentials are stored in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`. The login flow verifies reachability by calling the portal's `/api/hubs` endpoint before saving.
+
+**Portal `/api/hubs` endpoint:**
+
+```
+GET /api/hubs
+Authorization: Bearer <token>    (optional; omitted in open mode)
+
+200 OK
+{ "hubs": [ { "name": "owlsnest", "url": "https://owlsnest-hub.parkscomputing.com" } ] }
+```
+
+### Usage
+
+```
+tela login https://awansatu.net
 tela connect  -hub owlsnest -machine barn
 tela machines -hub owlsnest
 export TELA_HUB=owlsnest
 tela machines
 ```
 
-This keeps the CLI ergonomic for daily use while preserving full URL support for scripts and automation. Hub aliases are purely client‑side; the hub never sees the alias name.
+This keeps the CLI ergonomic for daily use while preserving full URL support for scripts and automation. In portal mode, users need only `tela login` once — no local config file required.
 
 ---
 

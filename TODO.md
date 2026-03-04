@@ -24,7 +24,6 @@ When peers are on the same LAN, the relay path is already low-latency.
 
 ## Later
 - [ ] Mesh networking (multi-peer)
-- [ ] DNS integration (machine-name resolution)
 - [ ] ACL policies
 - [ ] Mobile clients (iOS/Android)
 - [ ] GUI (system tray / menu bar)
@@ -32,3 +31,4 @@ When peers are on the same LAN, the relay path is already low-latency.
 - [ ] Audit logging
 - [ ] Multiple simultaneous sessions per machine
 - [ ] Direct tunnel liveness detection (fall back to relay if direct path goes stale)
+- [ ] OAuth2 Device Authorization Grant for portal login (RFC 8628)

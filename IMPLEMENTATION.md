@@ -302,7 +302,13 @@ tela.exe (Go, WireGuard client) ──wss──▶ hub.js (Node.js relay) ◀─
 
 ```bash
 docker compose up --build -d
+
+# Option 1: Use full URL
 ./tela connect -hub wss://tela-local.awansatu.net -machine barn
+
+# Option 2: Log in to portal and use hub names
+tela login https://awansatu.net
+tela connect -hub owlsnest -machine barn
 ```
 
 ### Remaining iteration targets

@@ -78,6 +78,19 @@ export TELA_HUB=ws://localhost:8080 TELA_MACHINE=mybox
 
 Then connect: `ssh localhost` or `mstsc /v:localhost`
 
+### Portal login (hub name resolution)
+
+If your hubs are registered on a portal (e.g., Awan Satu), log in once and use short hub names:
+
+```bash
+tela login https://awansatu.net    # authenticate once, config stored locally
+tela machines -hub owlsnest         # hub name resolved via portal
+tela connect -hub owlsnest -machine barn
+tela logout                         # remove stored credentials
+```
+
+Short hub names are resolved via: (1) portal API, (2) local `hubs.yaml` fallback.
+
 ### Run with Docker (production)
 
 ```bash
@@ -86,9 +99,9 @@ docker compose up --build -d
 # With flags:
 ./tela connect -hub wss://your-hostname -machine barn
 
-# Or with env vars:
-export TELA_HUB=wss://your-hostname TELA_MACHINE=barn
-./tela connect
+# Or log in to a portal and use hub names:
+tela login https://your-portal.example
+tela connect -hub your-hub -machine barn
 ```
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) §8 for the full Docker Compose setup and Caddyfile.
@@ -112,7 +125,7 @@ The cascade is fully automatic. Each tier falls through on failure with no user 
 ## Project structure
 
 ```
-cmd/tela/          Client binary (subcommands: connect, machines, services, status)
+cmd/tela/          Client binary (subcommands: connect, machines, services, status, login, logout)
 cmd/telad/         Daemon binary
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
 poc/hub.js         Hub relay server
@@ -131,6 +144,7 @@ docker/            Dockerfile and Caddyfile for production
 | **Machine** | A named resource registered by an agent (e.g., `barn`). |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
 | **Session** | An active encrypted tunnel between a client and an agent. |
+| **Portal** | Multi-hub dashboard (e.g., Awan Satu). The CLI resolves hub names via the portal API. |
 | **Awan Satu** | Cloud platform built on Tela (hub registry, relay, hosted hubs). |
 
 ## Documentation
