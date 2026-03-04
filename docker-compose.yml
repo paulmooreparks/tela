@@ -54,7 +54,7 @@ services:
       - -machine
       - barn-wg
       - -ports
-      - "22,3389,8080"
+      - "22,3389"
       - -target-host
       - host.docker.internal
     depends_on:

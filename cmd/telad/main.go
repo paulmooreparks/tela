@@ -73,12 +73,35 @@ func (silentLogger) Printf(string, ...any) {}
 var verbose bool
 
 func main() {
-	hubURL := flag.String("hub", envOrDefault("HUB_URL", "ws://localhost:8080"), "Hub WebSocket URL")
-	machineID := flag.String("machine", envOrDefault("MACHINE_ID", "my-pc"), "Machine ID to register")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `telad — Tela Daemon
+
+Register with a Tela Hub and expose local services through an encrypted
+WireGuard tunnel. No TUN device or admin/root required.
+
+Usage:
+  telad -hub <url> -machine <id> [options]
+
+Examples:
+  telad -hub ws://hub:8080 -machine barn-wg -ports 22,3389,8080
+  telad -hub wss://tela.awansatu.net -machine barn-wg -ports 3389 -target-host 192.168.1.10
+
+Options:
+`)
+		flag.PrintDefaults()
+	}
+
+	hubURL := flag.String("hub", envOrDefault("HUB_URL", ""), "Hub WebSocket URL (required)")
+	machineID := flag.String("machine", envOrDefault("MACHINE_ID", ""), "Machine ID to register (required)")
 	portsStr := flag.String("ports", envOrDefault("PORTS", "3389"), "Comma-separated list of TCP ports to forward")
 	targetHost := flag.String("target-host", envOrDefault("TARGET_HOST", "127.0.0.1"), "Target service host")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
+
+	if *hubURL == "" || *machineID == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	ports := parsePorts(*portsStr)
 	if len(ports) == 0 {

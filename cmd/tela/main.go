@@ -75,12 +75,36 @@ var portNames = map[uint16]string{
 var verbose bool
 
 func main() {
-	hubURL := flag.String("hub", envOrDefault("HUB_URL", "wss://localhost:8080"), "Hub WebSocket URL")
-	machineID := flag.String("machine", envOrDefault("MACHINE_ID", "my-pc"), "Target machine ID")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `tela — Tela Client
+
+Connect to a remote machine through a Tela Hub using an encrypted
+WireGuard tunnel. No admin/root required.
+
+Usage:
+  tela -hub <url> -machine <id> [options]
+
+Examples:
+  tela -hub wss://tela.awansatu.net -machine barn-wg
+  tela -hub wss://tela.awansatu.net -machine barn-wg -v
+  tela -hub wss://tela.awansatu.net -machine barn-wg -port 13389 -target-port 3389
+
+Options:
+`)
+		flag.PrintDefaults()
+	}
+
+	hubURL := flag.String("hub", envOrDefault("HUB_URL", ""), "Hub WebSocket URL (required)")
+	machineID := flag.String("machine", envOrDefault("MACHINE_ID", ""), "Target machine ID (required)")
 	localPort := flag.Int("port", 0, "Local TCP port (advanced: single-port override)")
 	targetPort := flag.Int("target-port", 0, "Target port on daemon (advanced: with -port)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
+
+	if *hubURL == "" || *machineID == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	// Single-port override mode: -port given explicitly
 	singlePortMode := *localPort != 0
