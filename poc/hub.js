@@ -24,9 +24,12 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const dgram = require('dgram');
 const { WebSocketServer } = require('ws');
 
 const PORT = parseInt(process.env.HUB_PORT, 10) || 8080;
+const UDP_PORT = parseInt(process.env.HUB_UDP_PORT, 10) || 41820;
 const WWW_DIR = path.join(__dirname, 'www');
 
 const MIME = {
@@ -84,6 +87,60 @@ const httpServer = http.createServer((req, res) => {
 
 // machineId -> { agentWs, helperWs }
 const machines = new Map();
+
+// ── UDP relay ──────────────────────────────────────────────────────
+
+// tokenHex -> { peerTokenHex, peerTokenBuf, peerWs, role, addr: null | {address, port}, machineId }
+const udpSessions = new Map();
+
+const udpSocket = dgram.createSocket('udp4');
+
+const TOKEN_LEN = 8;
+const PROBE_WORD = 'PROBE';
+const READY_WORD = 'READY';
+
+udpSocket.on('message', (msg, rinfo) => {
+  if (msg.length < TOKEN_LEN) return; // too short
+
+  const tokenHex = msg.slice(0, TOKEN_LEN).toString('hex');
+  const payload = msg.slice(TOKEN_LEN);
+  const session = udpSessions.get(tokenHex);
+  if (!session) return; // unknown token
+
+  // Record sender's address for this token
+  session.addr = { address: rinfo.address, port: rinfo.port };
+
+  // Check if this is a PROBE
+  if (payload.toString() === PROBE_WORD) {
+    // Send READY back: [same token]["READY"]
+    const resp = Buffer.concat([msg.slice(0, TOKEN_LEN), Buffer.from(READY_WORD)]);
+    udpSocket.send(resp, rinfo.port, rinfo.address);
+    console.log(`[hub] UDP probe OK from ${rinfo.address}:${rinfo.port} (${session.machineId})`);
+    return;
+  }
+
+  // Relay WG datagram to peer
+  const peer = udpSessions.get(session.peerTokenHex);
+  if (!peer) return;
+
+  if (peer.addr) {
+    // Peer is on UDP — forward via UDP
+    const relayBuf = Buffer.concat([Buffer.from(session.peerTokenHex, 'hex'), payload]);
+    udpSocket.send(relayBuf, peer.addr.port, peer.addr.address);
+  } else if (session.peerWs && session.peerWs.readyState === 1) {
+    // Peer hasn't upgraded to UDP — fall back to WebSocket relay
+    // session.peerWs is the PEER's WebSocket (stored in the sender's entry)
+    session.peerWs.send(payload, { binary: true });
+  }
+});
+
+udpSocket.on('error', (err) => {
+  console.error(`[hub] UDP error:`, err.message);
+});
+
+udpSocket.bind(UDP_PORT, '0.0.0.0', () => {
+  console.log(`[hub] UDP relay on port ${UDP_PORT}`);
+});
 
 const wss = new WebSocketServer({ server: httpServer });
 
@@ -205,6 +262,39 @@ function pair(machineId) {
   agentWs.send(JSON.stringify({ type: 'session-start', wgPubKey: helperWgPubKey }));
   // Signal helper that the tunnel is ready
   helperWs.send(JSON.stringify({ type: 'ready' }));
+
+  // Generate UDP relay tokens and send udp-offer to both sides
+  const agentToken = crypto.randomBytes(TOKEN_LEN);
+  const helperToken = crypto.randomBytes(TOKEN_LEN);
+  const agentTokenHex = agentToken.toString('hex');
+  const helperTokenHex = helperToken.toString('hex');
+
+  // Register UDP session entries (cross-linked)
+  // peerWs points to the PEER's WebSocket (for fallback when peer hasn't upgraded)
+  udpSessions.set(agentTokenHex, {
+    peerTokenHex: helperTokenHex,
+    peerTokenBuf: helperToken,
+    peerWs: helperWs,
+    role: 'agent',
+    addr: null,
+    machineId,
+  });
+  udpSessions.set(helperTokenHex, {
+    peerTokenHex: agentTokenHex,
+    peerTokenBuf: agentToken,
+    peerWs: agentWs,
+    role: 'helper',
+    addr: null,
+    machineId,
+  });
+
+  // Store token hex values on machine entry for cleanup
+  entry.udpTokens = [agentTokenHex, helperTokenHex];
+
+  // Send UDP offers — each side gets its own token and the hub's UDP port
+  agentWs.send(JSON.stringify({ type: 'udp-offer', token: agentTokenHex, port: UDP_PORT }));
+  helperWs.send(JSON.stringify({ type: 'udp-offer', token: helperTokenHex, port: UDP_PORT }));
+  console.log(`[hub] sent udp-offer to both sides for: ${machineId} (port ${UDP_PORT})`);
 }
 
 function handleDisconnect(ws) {
@@ -215,6 +305,15 @@ function handleDisconnect(ws) {
   if (!entry) return;
 
   console.log(`[hub] ${state.role} disconnected: ${state.machineId}`);
+
+  // Clean up UDP session tokens
+  if (entry.udpTokens) {
+    for (const tokenHex of entry.udpTokens) {
+      udpSessions.delete(tokenHex);
+    }
+    entry.udpTokens = null;
+    console.log(`[hub] cleaned up UDP sessions for: ${state.machineId}`);
+  }
 
   // Close peer
   const peer = state.peer;

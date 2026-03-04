@@ -35,8 +35,11 @@ services:
       # HTTP + WebSocket on one port
       # cloudflared routes tela.awansatu.net -> http://localhost:3000
       - "3000:8080"
+      # UDP relay for WireGuard datagrams (bypasses TCP-over-TCP)
+      - "41820:41820/udp"
     environment:
       - HUB_PORT=8080
+      - HUB_UDP_PORT=41820
     restart: unless-stopped
 
   telad:

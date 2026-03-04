@@ -35,6 +35,7 @@ import (
 	"log"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -64,6 +65,7 @@ type controlMessage struct {
 	WGPubKey  string   `json:"wgPubKey,omitempty"`
 	Ports     []uint16 `json:"ports,omitempty"`
 	Token     string   `json:"token,omitempty"`
+	Port      int      `json:"port,omitempty"` // single port (udp-offer)
 }
 
 // silentLogger discards verbose WireGuard-go routine spam.
@@ -189,13 +191,13 @@ func runAgent(hubURL, machineID, token, targetHost string, ports []uint16) {
 				return
 			}
 			log.Printf("session starting — helper pubkey: %s...", helperPubKey[:8])
-			handleSession(ws, helperPubKey, targetHost, ports)
+			handleSession(ws, hubURL, helperPubKey, targetHost, ports)
 			return // reconnect after session ends
 		}
 	}
 }
 
-func handleSession(ws *websocket.Conn, helperPubKeyHex, targetHost string, ports []uint16) {
+func handleSession(ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16) {
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
@@ -263,7 +265,7 @@ persistent_keepalive_interval=25
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		wsReader(ws, bind)
+		wsReader(ws, bind, hubURL)
 	}()
 
 	// Listen on each port inside netstack
@@ -302,8 +304,8 @@ persistent_keepalive_interval=25
 
 // wsReader reads from the WebSocket and dispatches:
 //   - Binary messages → wsBind.RecvCh (WireGuard datagrams)
-//   - Text messages → logged (control messages during data phase)
-func wsReader(ws *websocket.Conn, bind *wsbind.Bind) {
+//   - Text messages → parsed for control commands (udp-offer), else logged
+func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
 	for {
 		msgType, data, err := ws.ReadMessage()
 		if err != nil {
@@ -317,8 +319,32 @@ func wsReader(ws *websocket.Conn, bind *wsbind.Bind) {
 				log.Printf("wsBind recv buffer full, dropping %dB", len(data))
 			}
 		} else {
-			logVerbose("text message during session: %s", string(data))
+			// Parse text messages for control commands during data phase
+			var msg controlMessage
+			if err := json.Unmarshal(data, &msg); err == nil && msg.Type == "udp-offer" && !bind.UDPActive() {
+				log.Printf("received UDP relay offer (port %d)", msg.Port)
+				tryUDPUpgrade(bind, hubURL, msg.Token, msg.Port)
+			} else {
+				logVerbose("text message during session: %s", string(data))
+			}
 		}
+	}
+}
+
+// tryUDPUpgrade attempts to switch from WebSocket to UDP relay transport.
+func tryUDPUpgrade(bind *wsbind.Bind, hubURL, tokenHex string, port int) {
+	u, err := url.Parse(hubURL)
+	if err != nil {
+		log.Printf("UDP upgrade: cannot parse hub URL: %v", err)
+		return
+	}
+	token, err := hex.DecodeString(tokenHex)
+	if err != nil {
+		log.Printf("UDP upgrade: invalid token: %v", err)
+		return
+	}
+	if err := bind.UpgradeUDP(u.Hostname(), port, token); err != nil {
+		log.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
 	}
 }
 

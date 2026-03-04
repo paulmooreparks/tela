@@ -40,6 +40,7 @@ import (
 	"log"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -66,6 +67,7 @@ type controlMessage struct {
 	WGPubKey  string   `json:"wgPubKey,omitempty"`
 	Ports     []uint16 `json:"ports,omitempty"`
 	Token     string   `json:"token,omitempty"`
+	Port      int      `json:"port,omitempty"` // single port (udp-offer)
 }
 
 // Well-known port names for friendly display.
@@ -173,6 +175,8 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	// Wait for "ready" and daemon's public key + port list
 	var agentPubKeyHex string
 	var agentPorts []uint16
+	var udpTokenHex string
+	var udpPort int
 	ready := false
 
 	for {
@@ -198,6 +202,10 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 			if len(agentPorts) > 0 {
 				log.Printf("daemon ports: %v", agentPorts)
 			}
+		case "udp-offer":
+			udpTokenHex = msg.Token
+			udpPort = msg.Port
+			log.Printf("received UDP relay offer (port %d)", udpPort)
 		case "error":
 			log.Printf("hub error: %s", msg.Message)
 			return
@@ -259,8 +267,13 @@ persistent_keepalive_interval=25
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		wsReader(wsConn, bind)
+		wsReader(wsConn, bind, hubURL)
 	}()
+
+	// Attempt UDP relay upgrade (if hub offered it)
+	if udpTokenHex != "" && udpPort > 0 {
+		tryUDPUpgrade(bind, hubURL, udpTokenHex, udpPort)
+	}
 
 	// Determine port mappings
 	mappings := overrideMappings
@@ -377,7 +390,8 @@ func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int
 
 // wsReader reads from the WebSocket and dispatches binary messages
 // to the wsBind receive channel for WireGuard processing.
-func wsReader(ws *websocket.Conn, bind *wsbind.Bind) {
+// Text messages are checked for control commands (e.g. udp-offer).
+func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
 	for {
 		msgType, data, err := ws.ReadMessage()
 		if err != nil {
@@ -391,8 +405,32 @@ func wsReader(ws *websocket.Conn, bind *wsbind.Bind) {
 				log.Printf("wsBind recv buffer full, dropping %dB", len(data))
 			}
 		} else {
-			logVerbose("text message during session: %s", string(data))
+			// Parse text messages for late-arriving control commands
+			var msg controlMessage
+			if err := json.Unmarshal(data, &msg); err == nil && msg.Type == "udp-offer" && !bind.UDPActive() {
+				log.Printf("received late UDP relay offer (port %d)", msg.Port)
+				tryUDPUpgrade(bind, hubURL, msg.Token, msg.Port)
+			} else {
+				logVerbose("text message during session: %s", string(data))
+			}
 		}
+	}
+}
+
+// tryUDPUpgrade attempts to switch from WebSocket to UDP relay transport.
+func tryUDPUpgrade(bind *wsbind.Bind, hubURL, tokenHex string, port int) {
+	u, err := url.Parse(hubURL)
+	if err != nil {
+		log.Printf("UDP upgrade: cannot parse hub URL: %v", err)
+		return
+	}
+	token, err := hex.DecodeString(tokenHex)
+	if err != nil {
+		log.Printf("UDP upgrade: invalid token: %v", err)
+		return
+	}
+	if err := bind.UpgradeUDP(u.Hostname(), port, token); err != nil {
+		log.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
 	}
 }
 

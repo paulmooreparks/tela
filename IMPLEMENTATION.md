@@ -33,7 +33,9 @@ Even though agents/helpers are **outbound-only**, they must connect to something
 A simple reference topology:
 
 ```
-Native client -> helper (localhost:<port>) -> wss://tela.example -> hub -> agent -> local service
+Native client ─▶ tela (localhost listener) ──wss──▶ hub ◀──ws── telad ─▶ local service
+                  │ WireGuard L3 tunnel (encrypted, gVisor netstack)  │
+                  └───── 10.77.0.2/24 ◀──────────────────────────▶ 10.77.0.1/24 ─┘
 ```
 
 A practical rule:
@@ -47,16 +49,17 @@ A practical rule:
 
 To keep Cloudflare optional, keep your internal deployment consistent and swap only the ingress method.
 
-**Recommended:**
+**Current setup (3 containers):**
 
-- `hub` (application) listens on an internal HTTP/WS port (e.g., `:8080`).
-- `proxy` (reverse proxy) terminates TLS on `:443` and forwards to `hub`.
-- optional: `cloudflared` points at the `proxy`.
+- `hub` — Node.js application, listens on `:8080` (HTTP/WS) and `:41820` (UDP relay).
+- `caddy` — reverse proxy with auto TLS (DNS-01 via Cloudflare API), terminates TLS on `:443`.
+- `telad` — Go WireGuard agent, connects to hub over internal `ws://hub:8080`.
+- optional: `cloudflared` points at `caddy` for tunnel ingress.
 
 This yields:
 
-- Direct mode: Internet -> `proxy:443` (via port-forward)
-- Tunnel mode: Internet -> Cloudflare -> `cloudflared` -> `proxy:443`
+- Direct mode: Internet → `caddy:443` (via port-forward) → `hub:8080`
+- Tunnel mode: Internet → Cloudflare → `cloudflared` → `caddy:443` → `hub:8080`
 
 ---
 
@@ -192,49 +195,68 @@ For a POC, option (1) is often the fastest while preserving the long-term direct
 
 ## 8) Docker Compose skeleton (proxy + hub)
 
-This skeleton is intentionally generic. Adapt the `hub` service to your actual implementation.
+**Current production setup** — see `docker-compose.yml` in the repo root:
 
 ```yaml
 services:
-  proxy:
-    image: caddy:2
+  caddy:
+    # Caddy with cloudflare-dns plugin for DNS-01 ACME
+    build:
+      context: ./docker/caddy
     ports:
       - "443:443"
-      - "80:80"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
     depends_on:
       - hub
 
   hub:
-    # Replace this with the real Tela Hub image when it exists.
-    # For a POC hub, you can build a Node-based container that listens on :8080.
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./hub:/app:ro
-    command: ["node", "hub.js"]
+    build:
+      context: .
+      dockerfile: docker/hub/Dockerfile
+    ports:
+      - "3000:8080"          # HTTP + WebSocket
+      - "41820:41820/udp"    # UDP relay for WireGuard datagrams
     environment:
       - HUB_PORT=8080
+      - HUB_UDP_PORT=41820
 
-volumes:
-  caddy_data:
-  caddy_config:
+  telad:
+    build:
+      context: .
+      dockerfile: docker/hub/Dockerfile
+    entrypoint: ["/usr/local/bin/telad"]
+    command:
+      - -hub
+      - ws://hub:8080
+      - -machine
+      - barn-wg
+      - -ports
+      - "22,3389"
+      - -target-host
+      - host.docker.internal
+    depends_on:
+      - hub
 ```
 
-Example `Caddyfile` that supports WebSockets:
+Example `Caddyfile` (DNS-01 with Cloudflare for direct-access TLS):
 
 ```caddyfile
-tela.example.com {
+tela-local.awansatu.net {
   reverse_proxy hub:8080
+  tls {
+    dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+  }
 }
 ```
 
 Notes:
-- Caddy automatically handles WebSocket upgrade when reverse_proxy is used.
-- If you split HTTP UI paths vs WS paths later, you can route by path prefix.
+- Caddy automatically handles WebSocket upgrade when `reverse_proxy` is used.
+- The `hub` image is a multi-stage Docker build that also compiles `tela` and `telad` (Go binaries).
+- UDP port 41820 must be published for the WireGuard UDP relay optimisation.
+- The `telad` service reuses the same image but overrides the entrypoint.
 
 ---
 
@@ -253,21 +275,37 @@ If you do this, try to keep the local origin stable:
 
 ---
 
-## 10) Practical POC workflow (today)
+## 10) Practical POC workflow (current state)
 
-Your current POC in `poc/` demonstrates the core data path (helper localhost bridge + hub relay + agent TCP proxy).
+The POC has evolved well beyond the original Node.js prototype.
+The live data path is now:
 
-A pragmatic next step for “internet-ready POC” (without redesigning everything at once) is:
+```
+tela.exe (Go, WireGuard client) ──wss──▶ hub.js (Node.js relay) ◀──ws── telad (Go, WireGuard agent)
+                                              ▲
+                                         UDP 41820 (optional relay)
+```
 
-1. Put a reverse proxy in front of the POC hub.
-2. Serve it as `wss://...`.
-3. Keep the helper and agent connecting to the proxy URL.
+### Running locally (development)
 
-Then iterate toward the design:
+1. **Build Go binaries:** `go build ./cmd/tela && go build ./cmd/telad`
+2. **Start the hub:** `node poc/hub.js` (listens on `:8080` HTTP/WS + `:41820` UDP)
+3. **Start telad:** `./telad -hub ws://localhost:8080 -machine mybox -ports "22,3389"`
+4. **Start tela:** `./tela -hub ws://localhost:8080 -machine mybox`
+5. Connect to `localhost:<advertised-port>` for SSH/RDP — traffic flows through the WireGuard tunnel.
 
-- Wrap all data/control into the framed multiplex protocol.
-- Add helper session token auth.
-- Add agent identity.
+### Running via Docker (production)
+
+```bash
+docker compose up --build -d
+./tela -hub wss://tela-local.awansatu.net -machine barn-wg
+```
+
+### Remaining iteration targets
+
+- Binary multiplexed framing (DESIGN.md §6.3)
+- Phase 3: STUN-based direct tunnel (hole punching)
+- Multiple simultaneous sessions per machine
 
 ---
 
@@ -325,12 +363,14 @@ proximity. There is no way to reduce this while using the tunnel.
 
 **Mitigation:**
 
-- **Direct mode** — when helper and hub are on the same LAN (or the Hub is
-  directly reachable), connect via `ws://` or `wss://` to the origin,
-  bypassing Cloudflare entirely. This drops the Cloudflare hop and is the
-  recommended path for local-network use.
-- Long-term: allow the Hub to advertise both a public (tunnel) URL and a
-  LAN-local URL; let the helper try the local path first.
+- **Direct mode (done)** — Caddy with DNS-01 (Cloudflare API) serves
+  `tela-local.awansatu.net` with valid Let's Encrypt TLS, bypassing the
+  Cloudflare edge entirely. This is the recommended path for local and
+  LAN-adjacent use.
+- **Tunnel mode** — still available via `tela.awansatu.net` through
+  Cloudflare Tunnel for scenarios where inbound ports are blocked.
+- Long-term: allow the Hub to advertise both URLs and let the client
+  prefer the direct path automatically.
 
 ### 13.3 WebSocket framing overhead
 
@@ -348,28 +388,37 @@ for many tiny SSH packets it multiplies syscalls and copies.
 
 ### 13.4 Double relay (hub as pure relay)
 
-The Hub currently receives every byte from one WS and writes it to
-another. This is a userspace copy on every packet. For a Node.js hub,
-each hop also passes through the event loop and `ws` library buffers.
+The Hub receives every byte from one side and writes it to the other.
+For a Node.js hub, each hop passes through the event loop and `ws`
+library buffers.
 
-**Mitigation (future):**
+**Current mitigation — UDP relay (done):**
 
-- **Native agent/hub implementation** — rewrite the Hub data-plane in
-  C, C++, Rust, or Go where `splice(2)` / zero-copy IO can eliminate
-  userspace copies.
-- **Peer-to-peer upgrade** — for helpers and agents that can reach each
-  other directly (e.g. same LAN), negotiate a direct TCP or QUIC
-  connection, removing the hub from the data path entirely.
+The hub now offers a UDP port (41820) alongside WebSocket. When both
+peers upgrade, WireGuard datagrams bypass the WS framing layer entirely.
+When only one side upgrades (asymmetric mode), the hub bridges
+UDP↔WebSocket so the faster side still benefits. This eliminates the
+TCP-over-TCP overhead that was the biggest contributor to interactive
+latency via the relay.
+
+**Future mitigation:**
+
+- **Native hub data-plane** — rewrite the relay in Go where `splice(2)`
+  / zero-copy IO can eliminate userspace copies for the remaining WS path.
+- **Peer-to-peer upgrade (Phase 3)** — STUN-based hole punching lets
+  tela and telad establish a direct UDP path, removing the hub from the
+  data plane entirely.
 
 ### 13.5 Summary table
 
 | Optimisation          | Latency saved   | Effort  | Status       |
 |-----------------------|-----------------|---------|--------------|
 | TCP_NODELAY           | up to ~40 ms    | trivial | **done**     |
-| Direct (skip CF)      | 10–50 ms RTT    | low     | planned      |
+| Direct (skip CF)      | 10–50 ms RTT    | low     | **done** (Caddy + DNS-01) |
+| UDP relay             | TCP-over-TCP    | medium  | **done** (hub port 41820) |
 | Binary framing        | syscall overhead | medium  | design-phase |
 | Native hub data-plane | copy overhead    | high    | future       |
-| P2P direct connect    | full relay hop   | high    | future       |
+| P2P direct connect    | full relay hop   | high    | Phase 3      |
 
 ---
 

@@ -442,28 +442,29 @@ Each machine in a Tela network receives a virtual IP from the `10.77.0.0/16` ran
 
 | Component | WireGuard mode | TUN required | Admin required |
 |-----------|---------------|--------------|----------------|
-| **Agent** | wireguard‑go + gVisor netstack | No (userspace) | No |
-| **Helper** | wireguard‑go + native TUN | Yes (wintun/utun/tun) | Yes (one‑time) |
+| **Agent (telad)** | wireguard‑go + gVisor netstack | No (userspace) | No |
+| **Client (tela)** | wireguard‑go + gVisor netstack | No (userspace) | No |
 | **Hub** | Unchanged — transparent binary relay | N/A | N/A |
 
-The admin requirement on the helper is identical to Tailscale. Creating a TUN adapter is an OS‑level operation that requires elevated privileges. After creation, the tunnel operates normally.
+Both sides use gVisor netstack (pure userspace). Neither side requires a TUN adapter or admin privileges. This is a key differentiator from Tailscale, which requires admin for TUN creation.
 
 ### Key Exchange
 
 WireGuard Curve25519 public keys are exchanged during the Hub signaling phase:
 
-1. Agent registers: `{ type: "register", ..., wgPubKey: "<base64>" }`
-2. Helper connects: `{ type: "connect", ..., wgPubKey: "<base64>" }`
-3. Hub passes keys to each peer in `ready` / `session-start` messages.
-4. WireGuard Noise\_IK handshake follows as binary WebSocket messages.
+1. Agent registers: `{ type: "register", machineId: "...", token: "..." }`
+2. Client connects: `{ type: "connect", machineId: "...", wgPubKey: "<hex>", token: "..." }`
+3. Hub forwards client's public key to agent in `session-start`.
+4. Agent generates ephemeral keypair and sends its public key back via `wg-pubkey`.
+5. WireGuard Noise\_IK handshake follows as binary WebSocket messages.
 
 The Hub never sees private keys and cannot decrypt tunnel traffic (**zero‑knowledge relay**).
 
 ### IP Assignment
 
-- Agents: `10.77.0.x` (announced during registration)
-- Helpers: `10.77.1.x` (assigned by Hub or self‑assigned)
-- Subnet: `10.77.0.0/16` reserved for Tela virtual network
+- Agent: `10.77.0.1/24`
+- Client: `10.77.0.2/24`
+- MTU: 1420
 
 ### Security Properties
 
@@ -473,12 +474,44 @@ The Hub never sees private keys and cannot decrypt tunnel traffic (**zero‑know
 - Combined with TLS on the WebSocket: defense‑in‑depth
 - Even if TLS is terminated at a relay (Cloudflare, Awan Satu), WireGuard encryption protects all data end‑to‑end (see §12.5)
 
+### UDP Relay Mode (Latency Optimization)
+
+WireGuard datagrams are natively UDP, but the WebSocket transport wraps them in TCP, creating a **TCP‑over‑TCP meltdown** scenario where competing congestion control and retransmission mechanisms interact poorly. This manifests as latency spikes and throughput degradation under packet loss.
+
+To mitigate this, the Hub provides a **UDP relay** alongside the WebSocket relay. After the WebSocket signaling phase completes, the Hub sends a `udp-offer` control message to both sides containing an 8‑byte session token and the Hub's UDP port (default: 41820).
+
+#### Protocol
+
+1. Hub generates two 8‑byte cryptographic tokens (one per side) during `pair()`.
+2. Hub sends `{ type: "udp-offer", token: "<hex>", port: 41820 }` to both sides.
+3. Each side sends a probe packet `[8‑byte token]["PROBE"]` to the Hub's UDP port.
+4. Hub records the sender's address and replies `[token]["READY"]`.
+5. On success, that side switches WireGuard `Send()` to emit `[token][datagram]` over UDP.
+6. Hub strips the token, looks up the peer's token and address, prepends the peer's token, and forwards the datagram.
+
+#### Asymmetric Mode
+
+Each side upgrades independently. If one side can reach the Hub via UDP (e.g. telad in Docker) but the other cannot (e.g. tela behind a firewall that blocks UDP 41820), the Hub handles the asymmetry:
+
+- Packets from the UDP side are delivered to the WebSocket side via the peer's WebSocket connection.
+- Packets from the WebSocket side are delivered to the UDP side via the normal WebSocket relay path.
+
+This means even a half‑upgrade (only the downstream direction on UDP) reduces latency, because the heavier traffic direction (screen data, file contents) typically flows from agent to client.
+
+#### Fallback
+
+If the UDP probe times out (2 seconds), the side stays on WebSocket with zero degradation — no configuration change, no error, no user action required. The upgrade is fully opportunistic.
+
+#### Port
+
+The Hub's UDP relay port defaults to **41820** (a nod to WireGuard's standard port 51820). It is configurable via the `HUB_UDP_PORT` environment variable.
+
 ### Coexistence with TCP Relay
 
-Both transport modes coexist. The Hub does not distinguish between TCP‑relay binary messages and WireGuard datagrams — it relays both identically. Agents and helpers negotiate the transport mode during signaling:
+Both transport modes coexist. The Hub does not distinguish between TCP‑relay binary messages and WireGuard datagrams — it relays both identically. Agents and clients negotiate the transport mode during signaling:
 
 - Agents that support WireGuard include `wgPubKey` in their registration.
-- Helpers detect WireGuard support from the `ready` response.
+- Clients detect WireGuard support from the `ready` response.
 - If either side does not support WireGuard, the connection falls back to TCP relay mode.
 
 ---

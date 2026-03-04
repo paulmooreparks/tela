@@ -1,182 +1,200 @@
-# Tela POC — TCP Tunneling via WebSocket Relay
+# Tela — Secure Remote Access via WireGuard over WebSocket
 
-Proof-of-concept that tunnels arbitrary TCP traffic through a WebSocket relay hub. Default test uses HTTP; also works with RDP, SSH, or any TCP service.
+Tela tunnels TCP services (SSH, RDP, HTTP, etc.) through a WireGuard L3
+tunnel relayed over WebSocket, with an optional UDP fast path. No admin
+privileges required on either end.
 
 ## Architecture
 
-```
-client → helper (localhost:8000) → WebSocket → hub → WebSocket → agent → target service (localhost:3000)
+```mermaid
+graph LR
+    Client["Native Client<br/>(SSH, RDP, …)"]
+    Tela["tela<br/>localhost listener<br/>10.77.0.2/24"]
+    Hub["hub.js<br/>relay"]
+    UDP["UDP 41820<br/>(optional relay)"]
+    Telad["telad<br/>WireGuard agent<br/>10.77.0.1/24"]
+    Services["Local Services<br/>(SSH, RDP, …)"]
+
+    Client -->|TCP| Tela
+    Tela -->|wss| Hub
+    Hub -->|ws| Telad
+    Hub -.->|UDP| UDP
+    Telad --> Services
+
+    linkStyle 1 stroke:#00b894
+    linkStyle 2 stroke:#00b894
+
+    subgraph WireGuard Tunnel
+        direction LR
+        Tela -.-|"gVisor netstack · E2E encrypted"| Telad
+    end
 ```
 
-Four Node.js processes. One TCP tunnel. No auth, no TLS, no multiplexing.
+### Components
+
+| Component | Language | Role |
+|-----------|----------|------|
+| **tela** | Go | Client — WireGuard endpoint, auto-binds localhost listeners for each advertised port |
+| **telad** | Go | Agent/daemon — WireGuard endpoint, forwards tunnel traffic to local services |
+| **hub.js** | Node.js | Relay — pairs agents and clients, relays WS frames, optional UDP relay |
+| **serve.js** | Node.js | Test web server (for quick smoke tests only) |
+
+### Security
+
+- **End-to-end encryption:** WireGuard (Curve25519 + ChaCha20-Poly1305) between tela and telad. The hub sees only ciphertext.
+- **Token auth:** Both tela and telad authenticate to the hub with a shared secret (`HUB_TOKEN` / `-token`).
+- **No admin/TUN:** Both sides use gVisor netstack — pure userspace, no elevated privileges.
 
 ## Prerequisites
 
-- Node.js 18+ (LTS)
+- **Go 1.24+** (to build tela and telad)
+- **Node.js 20+** (to run hub.js)
+- **Docker + Docker Compose** (for production deployment)
 
-## Setup
+## Quick Start — Local Development
+
+### 1. Build the Go binaries
+
+```bash
+go build -o tela.exe ./cmd/tela      # Windows
+go build -o telad.exe ./cmd/telad    # Windows
+# On Linux/macOS, omit the .exe extension
+```
+
+### 2. Start the hub
 
 ```bash
 cd poc
 npm install
-```
-
-## Quick Test — HTTP (Recommended First Test)
-
-Open **four terminals** in the `poc/` directory:
-
-### Terminal 1 — Web Server (target service)
-
-```bash
-npm run serve
-```
-
-Output: `[serve] static web server on http://127.0.0.1:3000`
-
-### Terminal 2 — Hub
-
-```bash
-npm run hub
-```
-
-Output: `[hub] listening on ws://0.0.0.0:8080`
-
-### Terminal 3 — Agent
-
-```bash
-npm run agent
-```
-
-Output: `[agent] registered as: my-pc — waiting for session`
-
-### Terminal 4 — Helper
-
-```bash
-npm run helper
-```
-
-Output: `[helper] >>> Open: http://localhost:8000`
-
-### Open Browser
-
-Navigate to **http://localhost:8000**
-
-You should see the "Tela Tunnel Works" page. The traffic flowed:
-
-```
-browser → helper (port 8000) → WebSocket → hub (port 8080) → WebSocket → agent → web server (port 3000)
-```
-
-## RDP Test (Windows)
-
-Same setup, but change the agent and helper ports:
-
-```powershell
-# Terminal 1 — Hub
-npm run hub
-
-# Terminal 2 — Agent (target: RDP on port 3389)
-node agent.js ws://localhost:8080 my-pc 3389
-
-# Terminal 3 — Helper (expose on port 13389)
-node helper.js ws://localhost:8080 my-pc 13389
-
-# Terminal 4 — Connect
-mstsc /v:localhost:13389
-```
-
-RDP must be enabled on the machine (Windows Pro/Enterprise/Education only).
-
-## Running Across Machines
-
-### Machine A (target) — runs the service + agent
-
-```bash
-node serve.js                                   # or have RDP/SSH enabled
-node agent.js ws://HUB_IP:8080 my-pc 3000       # port of the target service
-```
-
-### Machine B (anywhere) — runs hub
-
-```bash
 node hub.js
 ```
 
-### Machine C (your laptop) — runs helper
+Output: `[hub] HTTP on :8080  ·  UDP relay on :41820`
+
+### 3. Start telad (on the machine with services)
 
 ```bash
-node helper.js ws://HUB_IP:8080 my-pc 8000
-# Then open http://localhost:8000
+./telad -hub ws://localhost:8080 -machine mybox -ports "22,3389"
 ```
 
-## CLI Arguments
+telad registers with the hub, generates its WireGuard keypair, and waits for a client.
 
-### agent.js
+### 4. Start tela (on your laptop)
 
-```
-node agent.js [hubUrl] [machineId] [targetPort] [targetHost]
-```
-
-| Arg | Default | Description |
-|-----|---------|-------------|
-| hubUrl | `ws://localhost:8080` | Hub WebSocket URL |
-| machineId | `my-pc` | Machine identifier |
-| targetPort | `3000` | Port of the local service to tunnel |
-| targetHost | `127.0.0.1` | Host of the local service |
-
-### helper.js
-
-```
-node helper.js [hubUrl] [machineId] [localPort]
+```bash
+./tela -hub ws://localhost:8080 -machine mybox
 ```
 
-| Arg | Default | Description |
-|-----|---------|-------------|
-| hubUrl | `ws://localhost:8080` | Hub WebSocket URL |
-| machineId | `my-pc` | Machine identifier |
-| localPort | `8000` | Local port to bind for client connections |
+tela connects, completes the WireGuard handshake, and prints the local port bindings:
+
+```
+[tela] listening 127.0.0.1:22   → mybox:22
+[tela] listening 127.0.0.1:3389 → mybox:3389
+```
+
+### 5. Connect
+
+```bash
+ssh localhost          # SSH
+mstsc /v:localhost     # RDP (Windows Pro/Enterprise only)
+```
+
+## Production Deployment (Docker)
+
+The repo root contains a `docker-compose.yml` with three services:
+**caddy** (TLS reverse proxy), **hub** (WebSocket + UDP relay), and
+**telad** (WireGuard agent).
+
+```bash
+# Set your Cloudflare API token for DNS-01 ACME
+export CLOUDFLARE_API_TOKEN=your_token_here
+
+# Build and start
+docker compose up --build -d
+
+# Run tela on your laptop
+./tela -hub wss://tela-local.awansatu.net -machine barn-wg
+```
+
+See `IMPLEMENTATION.md` §8 for the full Docker Compose skeleton and Caddyfile.
+
+## CLI Reference
+
+### tela
+
+```
+tela -hub <url> -machine <name> [-token <secret>]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-hub` | (required) | Hub WebSocket URL (`ws://` or `wss://`) |
+| `-machine` | (required) | Machine name to connect to |
+| `-token` | (none) | Authentication token (must match `HUB_TOKEN`) |
+
+### telad
+
+```
+telad -hub <url> -machine <name> -ports <list> [-target-host <host>] [-token <secret>]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-hub` | (required) | Hub WebSocket URL |
+| `-machine` | (required) | Machine name to register as |
+| `-ports` | (required) | Comma-separated ports to advertise (e.g. `"22,3389"`) |
+| `-target-host` | `127.0.0.1` | Host where services are running |
+| `-token` | (none) | Authentication token |
 
 ### hub.js
 
 ```
-HUB_PORT=8080 node hub.js
+HUB_PORT=8080 HUB_UDP_PORT=41820 HUB_TOKEN=secret node hub.js
 ```
 
-### serve.js
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `HUB_PORT` | `8080` | HTTP/WebSocket listen port |
+| `HUB_UDP_PORT` | `41820` | UDP relay port for WireGuard datagrams |
+| `HUB_TOKEN` | (none) | Shared authentication token |
+
+### serve.js (test only)
 
 ```
 node serve.js [port]
 ```
 
-Default port: `3000`
+Default port: `3000`. Serves a static test page.
 
 ## What This Proves
 
-- WebSocket can carry TCP traffic (HTTP, RDP, SSH, etc.)
-- The hub relay model works (outbound-only agent connectivity)
-- Helper-based localhost binding works
-- Protocol-agnostic tunneling is viable
-- Native clients connect normally to the tunnel
+- WireGuard L3 tunneling over WebSocket works for real protocols (SSH, RDP)
+- gVisor netstack eliminates the need for TUN interfaces or admin privileges
+- The outbound-only hub relay model works across NATs and firewalls
+- UDP relay provides a fast path when available, with automatic WS fallback
+- Asymmetric UDP mode (one side UDP, other side WS) works via hub bridging
+- Token authentication prevents unauthorized pairing
+- Auto-reconnect keeps sessions resilient
 
-## What This Skips
+## What's Next
 
-- TLS / encryption
-- Authentication / session tokens
-- Multiplexing (one session per WebSocket pair)
-- Browser UI for orchestration
-- Certificate pinning
-- Protocol framing (raw binary relay, no `tela_frame_header_t`)
-- Multiple simultaneous sessions
-- Reconnect after session ends (agent reconnects to hub; helper exits)
+- Binary multiplexed framing (DESIGN.md §6.3)
+- STUN-based direct tunnel / hole punching (Phase 3)
+- Multiple simultaneous sessions per machine
+- Browser-based UI for session management
+
+See `TODO.md` for the full roadmap.
 
 ## Troubleshooting
 
-**"Agent not found"** — Start the agent before the helper. The agent must register first.
+**"Agent not found"** — Start telad before tela. The agent must register first.
 
-**Connection refused on port 8000** — Helper hasn't bound yet. Wait for the `>>> Open:` message.
+**"auth failed"** — Token mismatch. Ensure `-token` matches `HUB_TOKEN`.
 
-**Page doesn't load / hangs** — Ensure the web server is running (`npm run serve`) and the agent's target port matches (default: 3000).
+**Connection hangs after pairing** — Check that the WireGuard handshake completes. Look for `[wg] handshake complete` in the logs. If missing, there may be a WebSocket framing issue.
 
-**RDP black screen** — Ensure RDP is enabled: Settings → System → Remote Desktop → On. Windows Home does not support inbound RDP.
+**RDP black screen / NLA error** — Ensure RDP is enabled (Windows Pro/Enterprise only). Tela uses a WireGuard tunnel so NLA/CredSSP works correctly (unlike L4 TCP proxies).
 
-**Port already in use** — Another process is using that port. Change it via CLI args or env vars.
+**UDP relay not upgrading** — The hub's UDP port (41820) must be reachable from the client. If behind NAT without port forwarding, the system falls back to WebSocket automatically.
+
+**Port already in use** — Another process is using that port. tela will report the conflict at startup.
