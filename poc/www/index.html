@@ -128,7 +128,7 @@
   </style>
 </head>
 <body>
-  <h1>Tela Hub Console</h1>
+  <h1 id="hub-title">Tela Hub Console</h1>
   <p class="subtitle">Connectivity fabric for <strong>awansatu.net</strong></p>
 
   <!-- Machines & Services -->
@@ -277,6 +277,11 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
           .then(function (r) { return r.json(); })
           .then(function (data) {
             hubDot.className = 'dot green';
+            // Show hub name if provided by the hub
+            if (data.hubName) {
+              document.getElementById('hub-title').textContent = data.hubName + ' \u2014 Tela Hub Console';
+              document.title = data.hubName + ' \u2014 Tela Hub Console';
+            }
             if (!data.machines || data.machines.length === 0) {
               content.innerHTML = '<p class="no-machines">No machines registered.</p>';
             } else {

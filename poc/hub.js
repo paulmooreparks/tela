@@ -30,6 +30,7 @@ const { WebSocketServer } = require('ws');
 
 const PORT = parseInt(process.env.HUB_PORT, 10) || 8080;
 const UDP_PORT = parseInt(process.env.HUB_UDP_PORT, 10) || 41820;
+const HUB_NAME = process.env.HUB_NAME || '';
 const WWW_DIR = path.join(__dirname, 'www');
 
 const MIME = {
@@ -80,7 +81,9 @@ const httpServer = http.createServer((req, res) => {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
     });
-    res.end(JSON.stringify({ machines: status, timestamp: new Date().toISOString() }, null, 2));
+    const payload = { machines: status, timestamp: new Date().toISOString() };
+    if (HUB_NAME) payload.hubName = HUB_NAME;
+    res.end(JSON.stringify(payload, null, 2));
     return;
   }
 
