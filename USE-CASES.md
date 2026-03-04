@@ -2,21 +2,41 @@
 
 ## Overview
 
-Tela is a connectivity fabric that provides outbound-only, encrypted TCP tunnels between machines — with no installation, no admin privileges, and no inbound ports required on either end.
+Tela is a connectivity fabric that provides outbound-only, encrypted TCP tunnels between machines, with no installation, no admin privileges, and no inbound ports required on either end.
 
 This document describes concrete scenarios where Tela's design gives it a meaningful advantage over existing tools.
 
 ---
 
+## Deployment Patterns (Important)
+
+Tela supports two common real-world deployment patterns. Most use cases below work with either; the right choice depends on operational constraints and your threat model.
+
+### Pattern A: Endpoint Agent (Canonical)
+
+- `telad` runs directly on the machine that hosts the services.
+- Best when you control the machine and can run a long-lived daemon.
+- Strongest “last hop” story: `telad` to the local service is usually `localhost`.
+
+### Pattern B: Gateway / Bridge Agent
+
+- `telad` runs on a gateway (VM/container/bastion) that can reach one or more target machines over the local network.
+- Best when you cannot install on targets (locked-down endpoints, appliances) or want to minimize software on sensitive hosts.
+- Tradeoff: the hop from `telad` to the target service is normal LAN/VPC TCP, so you rely on segmentation and service-level security.
+
+**Example (your current Barn setup):** `telad` runs in Docker and forwards to the Windows host via `host.docker.internal` while presenting the host as a machine named `barn`.
+
+---
+
 ## 1. Personal Cloud / Homelab Remote Access
 
-**Scenario:** You have machines at home (NAS, media server, dev workstation) and want to reach them from anywhere — a hotel, a coffee shop, a corporate laptop that won't let you install a VPN.
+**Scenario:** You have machines at home (NAS, media server, dev workstation) and want to reach them from anywhere: a hotel, a coffee shop, a corporate laptop that won't let you install a VPN.
 
 **How Tela works here:**
 
 - `telad` runs on your home machines, connecting outbound to your hub. No port forwarding, no dynamic DNS.
 - From any machine, you download `tela`, run it, and get an SSH or RDP session to your home machine.
-- Works through any network that allows outbound HTTPS — including locked-down corporate Wi-Fi.
+- Works through any network that allows outbound HTTPS, including locked-down corporate Wi-Fi.
 
 **Compared to alternatives:**
 
@@ -59,7 +79,7 @@ This document describes concrete scenarios where Tela's design gives it a meanin
 
 - `telad` is a static Go binary. Cross-compile for ARM, drop it on the device, point it at your hub. It connects outbound and stays registered.
 - No need to convince the customer to open firewall ports.
-- The hub console shows all devices, their status, services, and last-seen time — a lightweight fleet view.
+- The hub console shows all devices, their status, services, and last-seen time: a lightweight fleet view.
 
 **Compared to alternatives:**
 
