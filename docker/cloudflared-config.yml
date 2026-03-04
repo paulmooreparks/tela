@@ -26,5 +26,12 @@ ingress:
   - hostname: tela.awansatu.net
     service: http://localhost:3000
 
+  # Awan Satu portal
+  - hostname: awansatu.net
+    service: http://localhost:3001
+
+  - hostname: www.awansatu.net
+    service: http://localhost:3001
+
   # Catch-all rule (required)
   - service: http_status:404

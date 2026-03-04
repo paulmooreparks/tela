@@ -1,2 +1,7 @@
 node_modules/
 .env
+
+# Compiled binaries
+*.exe
+tela
+telad

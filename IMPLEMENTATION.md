@@ -32,11 +32,21 @@ Even though agents/helpers are **outbound-only**, they must connect to something
 
 A simple reference topology:
 
+```mermaid
+flowchart LR
+  NC["Native client"] --> T["tela\nlocalhost listener\n10.77.0.2/24"]
+  T -->|wss| Hub
+  Hub -->|ws| TD["telad\n10.77.0.1/24"]
+  TD --> LS["Local service"]
+
+  linkStyle 1 stroke:#5ee89e
+  linkStyle 2 stroke:#5ee89e
+
+  style T fill:#16213e,stroke:#5ee89e,color:#fff
+  style TD fill:#16213e,stroke:#5ee89e,color:#fff
 ```
-Native client ─▶ tela (localhost listener) ──wss──▶ hub ◀──ws── telad ─▶ local service
-                  │ WireGuard L3 tunnel (encrypted, gVisor netstack)  │
-                  └───── 10.77.0.2/24 ◀──────────────────────────▶ 10.77.0.1/24 ─┘
-```
+
+> WireGuard L3 tunnel (encrypted, gVisor netstack) spans `10.77.0.2/24` ↔ `10.77.0.1/24`.
 
 A practical rule:
 

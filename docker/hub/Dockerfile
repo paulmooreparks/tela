@@ -26,9 +26,15 @@ RUN go mod download
 COPY internal/ ./internal/
 COPY cmd/ ./cmd/
 
-# Build telad — Linux only (runs inside Docker)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-    -o /out/telad ./cmd/telad
+# Build telad for each target platform (agent daemon)
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
+    -o /out/telad/windows/telad.exe ./cmd/telad \
+ && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
+    -o /out/telad/linux/telad ./cmd/telad \
+ && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
+    -o /out/telad/macos/telad ./cmd/telad \
+ && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
+    -o /out/telad/macos-arm64/telad ./cmd/telad
 
 # Build tela client for each target platform (downloaded by end users)
 RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
@@ -66,8 +72,14 @@ COPY --from=go-builder /out/tela/linux/      ./www/tela/linux/
 COPY --from=go-builder /out/tela/macos/      ./www/tela/macos/
 COPY --from=go-builder /out/tela/macos-arm64/ ./www/tela/macos-arm64/
 
-# Copy telad daemon binary (used by the telad service)
-COPY --from=go-builder /out/telad /usr/local/bin/telad
+# Copy telad agent binaries for download
+COPY --from=go-builder /out/telad/windows/    ./www/telad/windows/
+COPY --from=go-builder /out/telad/linux/      ./www/telad/linux/
+COPY --from=go-builder /out/telad/macos/      ./www/telad/macos/
+COPY --from=go-builder /out/telad/macos-arm64/ ./www/telad/macos-arm64/
+
+# Copy telad daemon binary (used by the telad service in this container)
+COPY --from=go-builder /out/telad/linux/telad /usr/local/bin/telad
 
 # Environment defaults
 ENV HUB_PORT=8080

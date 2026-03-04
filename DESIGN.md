@@ -436,10 +436,15 @@ This is a fundamental limitation of L4/L7 proxying — Tailscale and Cloudflare 
 
 Each machine in a Tela network receives a virtual IP from the `10.77.0.0/16` range. Traffic flows through a WireGuard tunnel whose datagrams are encapsulated as binary WebSocket messages through the Hub.
 
-```
-[Client App] → 10.77.0.x:port → [TUN] → [WireGuard encrypt]
-  → [WebSocket binary] → [Hub relay] → [WebSocket binary]
-  → [WireGuard decrypt] → [netstack] → localhost:port → [Service]
+```mermaid
+flowchart LR
+  A["Client App\n10.77.0.x:port"] --> B["WireGuard\nencrypt"]
+  B --> C["WebSocket\nbinary"]
+  C --> D["Hub\nrelay"]
+  D --> E["WebSocket\nbinary"]
+  E --> F["WireGuard\ndecrypt"]
+  F --> G["netstack\nlocalhost:port"]
+  G --> H["Service"]
 ```
 
 ### Components
@@ -1165,18 +1170,22 @@ Tela's protocol is identical regardless of deployment model. The Hub does not kn
 
 ### Model A: Direct / Standalone (no Awan Satu)
 
-```
-Helper → wss://hub-ip-or-domain → Hub → Agent → Service
+```mermaid
+flowchart LR
+  Helper -->|wss://hub-ip-or-domain| Hub --> Agent --> Service
 ```
 
 The user deploys a Hub, obtains a TLS certificate (Let's Encrypt, self‑signed, etc.), and exposes it directly via port forwarding, VPN, or LAN. No external service is involved. This is the base Tela experience defined in the rest of this document.
 
 ### Model B: Self‑Hosted Hub + Awan Satu Relay
 
-```
-Hub    ──persistent WSS──→ Awan Satu relay
-Helper → wss://relay.awansatu.net/hub/<id> → routed to Hub
-Agent  → wss://relay.awansatu.net/hub/<id> → routed to Hub
+```mermaid
+flowchart LR
+  Hub -->|persistent WSS| Relay["Awan Satu relay"]
+  Helper -->|"wss://relay.awansatu.net/hub/&lt;id&gt;"| Relay
+  Agent -->|"wss://relay.awansatu.net/hub/&lt;id&gt;"| Relay
+  Relay -->|routed| Hub
+  Hub --> Agent2[Agent] --> Service
 ```
 
 The user runs their own Hub but registers it with Awan Satu. The Hub maintains a persistent outbound connection to an Awan Satu relay endpoint. Agents and helpers connect to the Awan Satu relay URL; Awan Satu routes traffic to the correct registered Hub.
@@ -1192,9 +1201,10 @@ The user's Hub is reachable via a stable Awan Satu‑provided URL without exposi
 
 ### Model C: Awan Satu‑Hosted Hub (Fully Managed)
 
-```
-Helper → wss://awansatu.net/hub/<id> → Hub (hosted) → Agent → Service
-Agent  → wss://awansatu.net/hub/<id> → Hub (hosted)
+```mermaid
+flowchart LR
+  Helper -->|"wss://awansatu.net/hub/&lt;id&gt;"| Hub["Hub\n(hosted)"] --> Agent --> Service
+  Agent2[Agent] -->|"wss://awansatu.net/hub/&lt;id&gt;"| Hub
 ```
 
 Awan Satu runs the Hub on the user's behalf. The user registers agents and creates sessions through the Awan Satu dashboard or API. No self‑hosting required.
