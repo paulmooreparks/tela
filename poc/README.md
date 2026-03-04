@@ -179,7 +179,6 @@ Default port: `3000`. Serves a static test page.
 ## What's Next
 
 - Binary multiplexed framing (DESIGN.md §6.3)
-- STUN-based direct tunnel / hole punching (Phase 3)
 - Multiple simultaneous sessions per machine
 - Browser-based UI for session management
 

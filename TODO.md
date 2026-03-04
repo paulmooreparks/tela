@@ -11,18 +11,16 @@
 - [x] Automatic fallback to WebSocket if UDP blocked (probe timeout → stays on WS)
 - [x] Asymmetric mode: hub bridges UDP↔WebSocket when only one side upgrades
 
-## Phase 3: Direct Tunnel ← recommended next
-- [ ] STUN-based public endpoint discovery
-- [ ] Hub exchanges endpoints between peers
-- [ ] Simultaneous UDP hole punching
-- [ ] WireGuard endpoint roaming to direct path
-- [ ] Fallback cascade: direct UDP → UDP relay → WebSocket
+## Phase 3: Direct Tunnel ✅
+- [x] STUN-based public endpoint discovery (RFC 5389 Binding Request via `stun.l.google.com:19302`)
+- [x] Hub exchanges endpoints between peers (relayed as `peer-endpoint` JSON over paired WS)
+- [x] Simultaneous UDP hole punching (`TPUNCH` probes, 100ms interval, 5s timeout)
+- [x] WireGuard endpoint roaming to direct path (wsBind routes raw datagrams to peer)
+- [x] Fallback cascade: direct UDP → UDP relay → WebSocket
 
-**Why this is next:** Phases 1 and 2 made the relay path fast and resilient.
-Phase 3 removes the relay from the data path entirely for peers that can
-reach each other directly — the biggest remaining latency and bandwidth win.
-The UDP relay infrastructure from Phase 2 provides the signaling and fallback
-scaffolding that hole punching builds on.
+**Note:** Hole punching requires both peers to be on separate NATs (standard
+scenario). Same-NAT tests fail because most routers don't support hairpin NAT.
+When peers are on the same LAN, the relay path is already low-latency.
 
 ## Later
 - [ ] Mesh networking (multi-peer)
@@ -33,3 +31,4 @@ scaffolding that hole punching builds on.
 - [ ] OIDC/SSO authentication (layer on top of token auth)
 - [ ] Audit logging
 - [ ] Multiple simultaneous sessions per machine
+- [ ] Direct tunnel liveness detection (fall back to relay if direct path goes stale)

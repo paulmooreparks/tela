@@ -304,7 +304,6 @@ docker compose up --build -d
 ### Remaining iteration targets
 
 - Binary multiplexed framing (DESIGN.md §6.3)
-- Phase 3: STUN-based direct tunnel (hole punching)
 - Multiple simultaneous sessions per machine
 
 ---
@@ -405,9 +404,10 @@ latency via the relay.
 
 - **Native hub data-plane** — rewrite the relay in Go where `splice(2)`
   / zero-copy IO can eliminate userspace copies for the remaining WS path.
-- **Peer-to-peer upgrade (Phase 3)** — STUN-based hole punching lets
+- **Peer-to-peer direct tunnel (done)** — STUN-based hole punching lets
   tela and telad establish a direct UDP path, removing the hub from the
-  data plane entirely.
+  data plane entirely. Implemented in Phase 3 with automatic fallback
+  cascade (direct → UDP relay → WebSocket).
 
 ### 13.5 Summary table
 
@@ -416,9 +416,9 @@ latency via the relay.
 | TCP_NODELAY           | up to ~40 ms    | trivial | **done**     |
 | Direct (skip CF)      | 10–50 ms RTT    | low     | **done** (Caddy + DNS-01) |
 | UDP relay             | TCP-over-TCP    | medium  | **done** (hub port 41820) |
+| P2P direct connect    | full relay hop   | high    | **done** (STUN + hole punch) |
 | Binary framing        | syscall overhead | medium  | design-phase |
 | Native hub data-plane | copy overhead    | high    | future       |
-| P2P direct connect    | full relay hop   | high    | Phase 3      |
 
 ---
 

@@ -67,6 +67,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §6.7 | Error Handling | 🔶 | Basic error logging; no structured error types or per-channel error handling |
 | §6.8 | WireGuard L3 Transport | ✅ | wireguard-go + gVisor netstack on both sides, ephemeral keypairs, zero-admin, hub is zero-knowledge relay |
 | §6.8 | UDP Relay Mode | ✅ | Hub UDP relay (port 41820), probe/ready handshake, asymmetric fallback (UDP↔WS bridging), auto-fallback on timeout |
+| §6.8 | Direct Tunnel (P2P) | ✅ | STUN discovery (RFC 5389), endpoint exchange via hub, simultaneous UDP hole punching, fallback cascade (direct → relay → WS) |
 
 ---
 
@@ -232,7 +233,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| ✅ Done | 16 | Working implementation |
+| ✅ Done | 17 | Working implementation |
 | 🔶 Partial | 19 | POC covers some aspects |
 | ⬜ Not started | 19 | No implementation |
 | 🔮 Future | 8 | Awan Satu / Phase 3+ |
@@ -248,6 +249,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 6. **Cross-platform client** — Windows, Linux, macOS (Intel + ARM) binaries served from hub
 7. **Dual ingress** — Cloudflare Tunnel (`tela.awansatu.net`) + Caddy direct (`tela-local.awansatu.net`)
 8. **Hub /status API** — JSON endpoint for monitoring
+9. **Direct tunnel (P2P)** — STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
 
 ### Biggest gaps to Phase 1 spec
 

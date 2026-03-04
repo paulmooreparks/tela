@@ -506,6 +506,43 @@ If the UDP probe times out (2 seconds), the side stays on WebSocket with zero de
 
 The Hub's UDP relay port defaults to **41820** (a nod to WireGuard's standard port 51820). It is configurable via the `HUB_UDP_PORT` environment variable.
 
+### Direct Tunnel (Phase 3 — STUN + Hole Punching)
+
+When both peers have upgraded to UDP, they can attempt to establish a **direct** peer-to-peer UDP path that bypasses the hub entirely for data traffic.
+
+#### Protocol
+
+1. **STUN Discovery** — Each peer sends a STUN Binding Request (RFC 5389) to `stun.l.google.com:19302` using the same UDP socket opened during the relay upgrade. The STUN server returns the peer's server-reflexive address (public IP:port as seen after NAT).
+
+2. **Endpoint Exchange** — Each peer sends `{ type: "peer-endpoint", message: "IP:port" }` to the other via the hub's existing paired WebSocket relay. No hub changes are needed — the paired relay already forwards both binary and text messages.
+
+3. **Simultaneous Hole Punch** — Both peers send `TPUNCH` (6-byte magic) to each other's reflexive address every 100 ms for up to 5 seconds. When a NAT sees outbound traffic to a new destination, it creates a mapping. If both sides punch simultaneously, each side's outbound packet creates the mapping the other side's inbound packet needs.
+
+4. **Direct Activation** — When a peer's `udpReader` receives a `TPUNCH` from a non-hub address, it records that address and signals the `AttemptDirect` goroutine. The bind begins routing raw WireGuard datagrams (no token prefix) directly to the peer.
+
+5. **Receive Transition** — The `udpReader` classifies incoming packets by source:
+   - From hub address → relayed (strip token prefix)
+   - STUN magic cookie → STUN response (route to `stunCh`)
+   - `TPUNCH` → hole-punch signal (record peer, signal `punchCh`)
+   - From known direct peer → raw WG datagram (deliver to WireGuard)
+
+#### Packet Demux
+
+`TPUNCH` starts with `0x54` (`T`), which cannot conflict with WireGuard (type bytes 1–4) or STUN (first two bits `00`). This allows reliable demultiplexing on a single UDP socket.
+
+#### Send Priority
+
+`Send()` prefers: **direct** → **UDP relay** → **WebSocket**. On write failure at any tier, the bind deactivates that tier and falls through to the next.
+
+#### When It Fails
+
+Hole punching fails when:
+- Both peers are behind **symmetric NAT** (different external port per destination)
+- Both peers are behind the **same NAT** (hairpin NAT not supported)
+- A firewall blocks outbound UDP entirely
+
+On timeout, the bind stays on UDP relay (or WebSocket) with zero user impact.
+
 ### Coexistence with TCP Relay
 
 Both transport modes coexist. The Hub does not distinguish between TCP‑relay binary messages and WireGuard datagrams — it relays both identically. Agents and clients negotiate the transport mode during signaling:

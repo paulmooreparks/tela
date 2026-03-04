@@ -304,7 +304,7 @@ persistent_keepalive_interval=25
 
 // wsReader reads from the WebSocket and dispatches:
 //   - Binary messages → wsBind.RecvCh (WireGuard datagrams)
-//   - Text messages → parsed for control commands (udp-offer), else logged
+//   - Text messages → parsed for control commands (udp-offer, peer-endpoint), else logged
 func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
 	for {
 		msgType, data, err := ws.ReadMessage()
@@ -319,12 +319,30 @@ func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
 				log.Printf("wsBind recv buffer full, dropping %dB", len(data))
 			}
 		} else {
-			// Parse text messages for control commands during data phase
 			var msg controlMessage
-			if err := json.Unmarshal(data, &msg); err == nil && msg.Type == "udp-offer" && !bind.UDPActive() {
-				log.Printf("received UDP relay offer (port %d)", msg.Port)
-				tryUDPUpgrade(bind, hubURL, msg.Token, msg.Port)
-			} else {
+			if err := json.Unmarshal(data, &msg); err != nil {
+				logVerbose("text message during session: %s", string(data))
+				continue
+			}
+			switch msg.Type {
+			case "udp-offer":
+				if !bind.UDPActive() {
+					log.Printf("received UDP relay offer (port %d)", msg.Port)
+					tryUDPUpgrade(bind, hubURL, msg.Token, msg.Port)
+					if bind.UDPActive() {
+						go tryDirectUpgrade(bind, hubURL)
+					}
+				}
+			case "peer-endpoint":
+				if bind.UDPActive() && !bind.DirectActive() {
+					log.Printf("received peer endpoint: %s", msg.Message)
+					go func() {
+						if err := bind.AttemptDirect(msg.Message); err != nil {
+							log.Printf("direct tunnel failed (staying on relay): %v", err)
+						}
+					}()
+				}
+			default:
 				logVerbose("text message during session: %s", string(data))
 			}
 		}
@@ -345,6 +363,23 @@ func tryUDPUpgrade(bind *wsbind.Bind, hubURL, tokenHex string, port int) {
 	}
 	if err := bind.UpgradeUDP(u.Hostname(), port, token); err != nil {
 		log.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
+	}
+}
+
+// tryDirectUpgrade performs STUN discovery and sends our reflexive
+// address to the peer via the hub relay for hole punching.
+func tryDirectUpgrade(bind *wsbind.Bind, hubURL string) {
+	reflexive, err := bind.STUNDiscover()
+	if err != nil {
+		log.Printf("STUN discovery failed (staying on relay): %v", err)
+		return
+	}
+	log.Printf("STUN reflexive address: %s", reflexive)
+
+	msg := controlMessage{Type: "peer-endpoint", Message: reflexive}
+	data, _ := json.Marshal(msg)
+	if err := bind.SendText(data); err != nil {
+		log.Printf("failed to send peer-endpoint: %v", err)
 	}
 }
 
