@@ -1,0 +1,7 @@
+tela-local.awansatu.net {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	reverse_proxy hub:8080
+}

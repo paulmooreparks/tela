@@ -11,6 +11,25 @@
 # localhost. The ports below are published for local-only testing.
 
 services:
+  caddy:
+    # Reverse proxy with auto TLS for direct (non-Cloudflare) access.
+    # Uses DNS-01 challenge via Cloudflare API — no port 80 needed.
+    # Token stored in .env (not committed).
+    build:
+      context: ./docker/caddy
+    container_name: tela-caddy
+    ports:
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+    depends_on:
+      - hub
+    restart: unless-stopped
+
   hub:
     build:
       context: .
@@ -39,3 +58,55 @@ services:
     depends_on:
       - hub
     restart: unless-stopped
+
+  agent-ssh:
+    # Second agent: tunnels SSH (port 22) on the host machine.
+    # host.docker.internal resolves to the Docker host (BARN).
+    image: node:20-alpine
+    container_name: tela-agent-ssh
+    working_dir: /app
+    volumes:
+      - ./poc:/app:ro
+    command: >
+      sh -c "sleep 2 && node agent.js ws://hub:8080 barn-ssh 22 host.docker.internal"
+    depends_on:
+      - hub
+    restart: unless-stopped
+
+  agent-rdp:
+    # Third agent: tunnels RDP (port 3389) on the host machine.
+    image: node:20-alpine
+    container_name: tela-agent-rdp
+    working_dir: /app
+    volumes:
+      - ./poc:/app:ro
+    command: >
+      sh -c "sleep 2 && node agent.js ws://hub:8080 barn-rdp 3389 host.docker.internal"
+    depends_on:
+      - hub
+    restart: unless-stopped
+
+  agent-rdp-wg:
+    # WireGuard L3 agent for RDP — end-to-end encrypted, NLA-compatible.
+    # Uses gVisor netstack (pure userspace, no TUN, no admin).
+    build:
+      context: .
+      dockerfile: docker/hub/Dockerfile
+    container_name: tela-agent-rdp-wg
+    entrypoint: ["/usr/local/bin/tela-agent"]
+    command:
+      - -hub
+      - ws://hub:8080
+      - -machine
+      - barn-rdp-wg
+      - -target-port
+      - "3389"
+      - -target-host
+      - host.docker.internal
+    depends_on:
+      - hub
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

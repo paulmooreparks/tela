@@ -48,6 +48,46 @@
       font-size: 0.9rem;
     }
     footer { margin-top: 40px; color: #999; font-size: 0.85rem; text-align: center; }
+
+    /* Helper download section */
+    .download-primary {
+      display: inline-block;
+      background: #2d7d46;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1rem;
+      margin: 12px 0 8px;
+      transition: background 0.15s;
+    }
+    .download-primary:hover { background: #236b38; }
+    .download-primary .dl-icon { margin-right: 6px; }
+    .download-alt {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0;
+      font-size: 0.9rem;
+    }
+    .download-alt li {
+      display: inline-block;
+      margin-right: 16px;
+    }
+    .download-alt a { color: #2d7d46; text-decoration: none; }
+    .download-alt a:hover { text-decoration: underline; }
+    .detected { font-size: 0.85rem; color: #666; margin-top: 4px; }
+    .usage {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      margin-top: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -58,6 +98,22 @@
     <h2>Hub Status</h2>
     <span class="status ok">&#10003; Online</span>
     <p style="margin-top: 8px;">The Tela Hub is running and accepting connections.</p>
+  </div>
+
+  <div class="card" id="helper-card">
+    <h2>Download Helper</h2>
+    <p>The helper is a small, zero-install binary. Download it, run it, and connect.</p>
+    <p class="detected" id="detected-os"></p>
+    <a class="download-primary" id="dl-primary" href="/helper/windows/tela-helper.exe">
+      <span class="dl-icon">&#11015;</span> <span id="dl-label">Download for Windows</span>
+    </a>
+    <ul class="download-alt" id="dl-alt">
+      <li><a href="/helper/windows/tela-helper.exe">Windows</a></li>
+      <li><a href="/helper/linux/tela-helper">Linux (amd64)</a></li>
+      <li><a href="/helper/macos/tela-helper">macOS (Intel)</a></li>
+      <li><a href="/helper/macos-arm64/tela-helper">macOS (Apple&nbsp;Silicon)</a></li>
+    </ul>
+    <div class="usage" id="usage-block">tela-helper.exe -hub wss://tela.awansatu.net -machine &lt;name&gt; -port 8000</div>
   </div>
 
   <div class="card">
@@ -88,5 +144,63 @@ target service</div>
   </div>
 
   <footer>Tela POC &middot; awansatu.net</footer>
+
+  <script>
+    // Detect client OS from User-Agent and highlight the right download.
+    (function () {
+      var platforms = [
+        { pattern: /Win/,                    label: 'Windows',              href: '/helper/windows/tela-helper.exe', bin: 'tela-helper.exe' },
+        { pattern: /Linux(?!.*Android)/,     label: 'Linux (amd64)',        href: '/helper/linux/tela-helper',       bin: 'tela-helper' },
+        { pattern: /Mac.*ARM|Mac.*Apple/i,   label: 'macOS (Apple Silicon)',href: '/helper/macos-arm64/tela-helper', bin: 'tela-helper' },
+        { pattern: /Mac/,                    label: 'macOS (Intel)',        href: '/helper/macos/tela-helper',       bin: 'tela-helper' },
+      ];
+
+      // Apple Silicon detection: Safari on ARM, or Chrome/Edge userAgentData
+      var ua = navigator.userAgent || '';
+      var match = null;
+
+      // Try modern UA-CH API first (Chromium 93+)
+      if (navigator.userAgentData && navigator.userAgentData.platform) {
+        var plat = navigator.userAgentData.platform;
+        if (/windows/i.test(plat))  match = platforms[0];
+        else if (/linux/i.test(plat))  match = platforms[1];
+        else if (/macOS/i.test(plat)) {
+          // Attempt architecture detection
+          if (navigator.userAgentData.getHighEntropyValues) {
+            navigator.userAgentData.getHighEntropyValues(['architecture']).then(function (vals) {
+              if (vals.architecture === 'arm') applyMatch(platforms[2]);
+              else applyMatch(platforms[3]);
+            }).catch(function () { applyMatch(platforms[3]); });
+            return; // async path
+          }
+          match = platforms[3]; // fallback to Intel
+        }
+      }
+
+      // Fall back to User-Agent string
+      if (!match) {
+        for (var i = 0; i < platforms.length; i++) {
+          if (platforms[i].pattern.test(ua)) { match = platforms[i]; break; }
+        }
+      }
+
+      if (match) applyMatch(match);
+
+      function applyMatch(m) {
+        document.getElementById('dl-primary').href = m.href;
+        document.getElementById('dl-label').textContent = 'Download for ' + m.label;
+        document.getElementById('detected-os').textContent = 'Detected: ' + m.label;
+        document.getElementById('usage-block').textContent =
+          m.bin + ' -hub wss://tela.awansatu.net -machine <name> -port 8000';
+        // Hide the matched platform from the "also available" list
+        var links = document.querySelectorAll('#dl-alt a');
+        for (var j = 0; j < links.length; j++) {
+          if (links[j].getAttribute('href') === m.href) {
+            links[j].parentElement.style.display = 'none';
+          }
+        }
+      }
+    })();
+  </script>
 </body>
 </html>

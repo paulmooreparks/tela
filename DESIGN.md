@@ -75,6 +75,8 @@ Tela is the **engine**. Awan Satu is the **platform**.
 Tela is the runtime, the connectivity substrate, the stable, boring, long‑lived layer.
 Awan Satu is the orchestrator, the identity and policy layer, the multi‑service cloud platform.
 
+Critically, Awan Satu is also a **connectivity service**: it can serve as a rendezvous relay for self‑hosted Hubs (eliminating the need for Cloudflare Tunnels, port forwarding, or static IPs), or it can host Hubs directly as a managed service. Users choose their deployment model; Tela's protocol is identical across all of them. See §18.
+
 Tela must remain small, stable, and protocol‑frozen so Awan Satu can evolve rapidly above it.
 
 ## **1.3 What Tela Is**
@@ -167,7 +169,7 @@ These invariants shape every architectural decision.
 - **Tela Web** — Vanilla JS browser UI. Orchestration only.
 - **Tela Helper** — Tiny signed Go binary. Binds localhost, forwards TCP.
 - **Tela CLI** — Go static binary. Administrative tool.
-- **Awan Satu** — Future control plane. Not part of Tela core.
+- **Awan Satu** — Future control plane and optional connectivity/hosting service. Not part of Tela core. See §18.
 
 ## **4.2 Data Flow**
 
@@ -416,6 +418,69 @@ New control message types, new optional fields, new channel types, new capabilit
 - Channels may be closed individually.
 - Hub logs all errors.
 
+## **6.8 WireGuard L3 Transport**
+
+For protocols that bind authentication to the target hostname (e.g., RDP with NLA/CredSSP), Tela supports an alternative transport mode: **WireGuard L3 tunneling**. This replaces the TCP‑over‑WebSocket relay (§4.2, §10.4) with a full IP‑level tunnel.
+
+### Motivation
+
+TCP relay through `localhost` works for protocols that don't verify server identity against the target address (SSH, HTTP, VNC). However, RDP with Network Level Authentication (NLA/CredSSP) performs server identity verification tied to the target hostname. Connecting to `localhost` produces an incorrect Service Principal Name (SPN), causing CredSSP to fail.
+
+This is a fundamental limitation of L4/L7 proxying — Tailscale and Cloudflare solve it using L3 tunneling, not TCP relay. Tela does the same.
+
+### Architecture
+
+Each machine in a Tela network receives a virtual IP from the `10.77.0.0/16` range. Traffic flows through a WireGuard tunnel whose datagrams are encapsulated as binary WebSocket messages through the Hub.
+
+```
+[Client App] → 10.77.0.x:port → [TUN] → [WireGuard encrypt]
+  → [WebSocket binary] → [Hub relay] → [WebSocket binary]
+  → [WireGuard decrypt] → [netstack] → localhost:port → [Service]
+```
+
+### Components
+
+| Component | WireGuard mode | TUN required | Admin required |
+|-----------|---------------|--------------|----------------|
+| **Agent** | wireguard‑go + gVisor netstack | No (userspace) | No |
+| **Helper** | wireguard‑go + native TUN | Yes (wintun/utun/tun) | Yes (one‑time) |
+| **Hub** | Unchanged — transparent binary relay | N/A | N/A |
+
+The admin requirement on the helper is identical to Tailscale. Creating a TUN adapter is an OS‑level operation that requires elevated privileges. After creation, the tunnel operates normally.
+
+### Key Exchange
+
+WireGuard Curve25519 public keys are exchanged during the Hub signaling phase:
+
+1. Agent registers: `{ type: "register", ..., wgPubKey: "<base64>" }`
+2. Helper connects: `{ type: "connect", ..., wgPubKey: "<base64>" }`
+3. Hub passes keys to each peer in `ready` / `session-start` messages.
+4. WireGuard Noise\_IK handshake follows as binary WebSocket messages.
+
+The Hub never sees private keys and cannot decrypt tunnel traffic (**zero‑knowledge relay**).
+
+### IP Assignment
+
+- Agents: `10.77.0.x` (announced during registration)
+- Helpers: `10.77.1.x` (assigned by Hub or self‑assigned)
+- Subnet: `10.77.0.0/16` reserved for Tela virtual network
+
+### Security Properties
+
+- **Curve25519** ECDH key agreement
+- **ChaCha20‑Poly1305** AEAD encryption
+- **BLAKE2s** MAC
+- Combined with TLS on the WebSocket: defense‑in‑depth
+- Even if TLS is terminated at a relay (Cloudflare, Awan Satu), WireGuard encryption protects all data end‑to‑end (see §12.5)
+
+### Coexistence with TCP Relay
+
+Both transport modes coexist. The Hub does not distinguish between TCP‑relay binary messages and WireGuard datagrams — it relays both identically. Agents and helpers negotiate the transport mode during signaling:
+
+- Agents that support WireGuard include `wgPubKey` in their registration.
+- Helpers detect WireGuard support from the `ready` response.
+- If either side does not support WireGuard, the connection falls back to TCP relay mode.
+
 ---
 
 # **7. Tela Agent**
@@ -593,7 +658,9 @@ The helper is the key to Tela's zero‑install local‑client access. Implemente
 
 ## **10.2 Non‑Responsibilities**
 
-The helper must **not**: store credentials, store configuration, persist any state, modify system settings, require admin rights, install itself, run as a service, or write to protected directories. It must be a pure user‑mode, ephemeral process.
+The helper must **not**: store credentials, store configuration, persist any state, modify system settings, install itself, run as a service, or write to protected directories. It must be a pure user‑mode, ephemeral process.
+
+**Exception — WireGuard L3 mode (§6.8):** Creating a TUN adapter requires one‑time admin/root elevation on the host OS — the same requirement as Tailscale. In TCP‑relay mode, the helper requires no admin rights.
 
 ## **10.3 Distribution & Signing**
 
@@ -999,7 +1066,10 @@ This phase delivers the core Tela substrate. The 3‑month timeline is feasible 
 
 ## **17.4 Phase 4 — Awan Satu v0.1 (12–18 months)**
 
-- Cloudflare Access SSO
+- Hub registry (users register self‑hosted Hubs with Awan Satu)
+- Relay infrastructure (Awan Satu provides stable, publicly‑reachable relay endpoints)
+- Hosted Hub option (Awan Satu runs a Hub as a managed service)
+- Cloudflare Access / OIDC SSO
 - RBAC
 - Provisioning tokens
 - Machine inventory
@@ -1007,20 +1077,126 @@ This phase delivers the core Tela substrate. The 3‑month timeline is feasible 
 - Multi‑tenant isolation
 - Billing foundations
 
-Tela remains stable and unchanged except for additive features.
+Tela remains stable and unchanged except for additive features. See §18 for architecture details.
 
 ---
 
-# **18. Risks & Mitigations**
+# **18. Awan Satu Architecture**
 
-## **18.1 Agentic Coding Risks**
+This section previews how Awan Satu extends Tela from a self‑hosted tool into a cloud service. Detailed Awan Satu specifications will live in a separate document; this section establishes the architectural contract between Tela and Awan Satu.
+
+## **18.1 Three Connectivity Models**
+
+Tela's protocol is identical regardless of deployment model. The Hub does not know or care how it became reachable. This is the key architectural invariant that allows the three models below to coexist.
+
+### Model A: Direct / Standalone (no Awan Satu)
+
+```
+Helper → wss://hub-ip-or-domain → Hub → Agent → Service
+```
+
+The user deploys a Hub, obtains a TLS certificate (Let's Encrypt, self‑signed, etc.), and exposes it directly via port forwarding, VPN, or LAN. No external service is involved. This is the base Tela experience defined in the rest of this document.
+
+### Model B: Self‑Hosted Hub + Awan Satu Relay
+
+```
+Hub    ──persistent WSS──→ Awan Satu relay
+Helper → wss://relay.awansatu.net/hub/<id> → routed to Hub
+Agent  → wss://relay.awansatu.net/hub/<id> → routed to Hub
+```
+
+The user runs their own Hub but registers it with Awan Satu. The Hub maintains a persistent outbound connection to an Awan Satu relay endpoint. Agents and helpers connect to the Awan Satu relay URL; Awan Satu routes traffic to the correct registered Hub.
+
+This eliminates the need for:
+
+- Cloudflare Tunnel (or any third‑party tunnel service)
+- Static IP addresses or dynamic DNS
+- Port forwarding or firewall changes
+- Manual DNS and TLS certificate management
+
+The user's Hub is reachable via a stable Awan Satu‑provided URL without exposing any inbound ports.
+
+### Model C: Awan Satu‑Hosted Hub (Fully Managed)
+
+```
+Helper → wss://awansatu.net/hub/<id> → Hub (hosted) → Agent → Service
+Agent  → wss://awansatu.net/hub/<id> → Hub (hosted)
+```
+
+Awan Satu runs the Hub on the user's behalf. The user registers agents and creates sessions through the Awan Satu dashboard or API. No self‑hosting required.
+
+This is the "Tailscale experience" — sign up, install agents, connect.
+
+## **18.2 Hub Registry**
+
+Awan Satu maintains a **Hub registry**: a directory of Hubs, their owners, connectivity endpoints, and online/offline status.
+
+- **Self‑hosted Hubs** register by establishing a persistent control connection to Awan Satu and proving ownership via a registration token or keypair.
+- **Managed Hubs** are created and lifecycle‑managed by Awan Satu directly.
+- The registry maps stable Hub identifiers to live relay connections or managed instances.
+
+## **18.3 Relay Protocol**
+
+The Awan Satu relay is transparent to the Tela protocol:
+
+- It forwards WebSocket frames between clients (agents/helpers) and the target Hub.
+- It does not inspect, modify, or interpret Tela frames.
+- It terminates TLS and re‑encrypts to the Hub (or, for managed Hubs, uses internal transport).
+- It adds only routing metadata (which registered Hub should receive this connection).
+
+From Tela's perspective, the relay is equivalent to a reverse proxy. No changes to Tela's frame format, handshake, or channel lifecycle are required.
+
+**E2E encryption note:** Because the relay terminates TLS, it can theoretically observe traffic in transit — the same concern that applies to any TLS‑terminating proxy (including Cloudflare). The optional E2E encryption described in §12.5 mitigates this for deployments that require zero‑trust relay transit.
+
+## **18.4 What Changes in Tela (Nothing)**
+
+This is the critical point: **Tela's protocol, agent, helper, and Hub implementations do not change.** The relay is an infrastructure layer below Tela; the Hub registry and managed hosting are Awan Satu features above Tela. Tela remains the stable substrate.
+
+| Concern | Owner |
+|---------|-------|
+| Frame format, multiplexing, channels | Tela (frozen) |
+| Agent/helper protocol, handshake | Tela (frozen) |
+| Hub session brokering, auth | Tela Hub |
+| Relay routing, Hub registry | Awan Satu |
+| Managed Hub provisioning | Awan Satu |
+| SSO, RBAC, billing, dashboards | Awan Satu |
+
+## **18.5 Eliminating External Dependencies**
+
+Awan Satu as a connectivity service means users no longer need:
+
+| Self‑hosting requirement | Replaced by |
+|--------------------------|-------------|
+| Cloudflare Tunnel | Awan Satu relay (Model B) |
+| Static IP / DDNS | Awan Satu relay URL |
+| Port forwarding | Hub connects outbound to relay |
+| TLS certificate management | Awan Satu handles TLS termination |
+| Reverse proxy (Caddy/nginx) | Not needed for relay or managed model |
+| DNS configuration | Awan Satu provides stable URLs |
+
+Users who prefer full control continue using Model A (direct/standalone). Awan Satu is always optional.
+
+## **18.6 Analogy Summary**
+
+| Layer | Self‑hosted | Managed service |
+|-------|-------------|------------------|
+| git | local repo | **GitHub** |
+| WireGuard | self‑hosted mesh | **Tailscale** |
+| Docker | local engine | **Docker Hub / ECS** |
+| **Tela** | local Hub (Model A) | **Awan Satu** (Models B & C) |
+
+---
+
+# **19. Risks & Mitigations**
+
+## **19.1 Agentic Coding Risks**
 
 - **Protocol drift** → mitigated by literate coding, embedded protocol excerpts, DO NOT MODIFY markers.
 - **Security regressions** → mitigated by human review requirements, explicit threat model.
 - **Concurrency bugs** → mitigated by strict invariants, locked concurrency model.
 - **Dependency creep** → mitigated by hard rules, boring tech philosophy.
 
-## **18.2 Platform Risks**
+## **19.2 Platform Risks**
 
 - **Scope creep** → mitigated by Tela/Awan Satu separation.
 - **Identity complexity** → mitigated by deferring to Cloudflare Access.
@@ -1029,11 +1205,11 @@ Tela remains stable and unchanged except for additive features.
 
 ---
 
-# **19. Testing Strategy**
+# **20. Testing Strategy**
 
 Tela’s emphasis on stability, backward compatibility, and 18‑month support windows requires a structured testing approach.
 
-## **19.1 Protocol Conformance Tests**
+## **20.1 Protocol Conformance Tests**
 
 A dedicated test suite must validate:
 
@@ -1045,7 +1221,7 @@ A dedicated test suite must validate:
 
 These tests are **mandatory before any release** and must run against every supported platform.
 
-## **19.2 Integration Tests**
+## **20.2 Integration Tests**
 
 - Agent → Hub → Helper end‑to‑end tunnel establishment.
 - Session token lifecycle (issue, use, invalidate).
@@ -1053,13 +1229,13 @@ These tests are **mandatory before any release** and must run against every supp
 - Reconnect/heartbeat behavior.
 - Channel multiplexing under load.
 
-## **19.3 Regression Suite**
+## **20.3 Regression Suite**
 
 - Every bug fix must include a regression test.
 - Every protocol change must include conformance tests for the new behavior.
 - Tests must cover Windows and Linux at minimum; macOS added in Phase 2.
 
-## **19.4 What Is Not Tested in Tela Core**
+## **20.4 What Is Not Tested in Tela Core**
 
 - UI testing (Tela Web is minimal; manual verification is acceptable for Phase 1).
 - Performance benchmarking (deferred to Phase 3).

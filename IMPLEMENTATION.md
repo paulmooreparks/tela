@@ -301,7 +301,79 @@ Either way, keeping the same internal deployment shape reduces churn.
 
 ---
 
-## 13) Where to record environment-specific details
+## 13) Latency optimisation roadmap
+
+Interactive protocols (SSH, RDP) are sensitive to per-keystroke latency.
+The relay path `client → helper → Cloudflare → hub → agent → service`
+adds multiple hops and framing layers. Below are the known contributors
+and their mitigations, roughly ordered from easiest to hardest.
+
+### 13.1 TCP_NODELAY (implemented)
+
+Nagle's algorithm batches small TCP writes into larger segments, adding up
+to 40 ms of delay per write on each TCP socket in the path. Disabling it
+with `TCP_NODELAY` is the single biggest quick-win for interactive feel.
+
+**Status:** Applied in `poc/agent.js` (`setNoDelay(true)`) and
+`helper/main.go` (`SetNoDelay(true)`) as of the current build.
+
+### 13.2 Cloudflare round-trip
+
+Every WS frame transits Cloudflare edge → origin and back. This adds one
+RTT to every data exchange, typically 10–50 ms depending on edge
+proximity. There is no way to reduce this while using the tunnel.
+
+**Mitigation:**
+
+- **Direct mode** — when helper and hub are on the same LAN (or the Hub is
+  directly reachable), connect via `ws://` or `wss://` to the origin,
+  bypassing Cloudflare entirely. This drops the Cloudflare hop and is the
+  recommended path for local-network use.
+- Long-term: allow the Hub to advertise both a public (tunnel) URL and a
+  LAN-local URL; let the helper try the local path first.
+
+### 13.3 WebSocket framing overhead
+
+Each TCP segment is wrapped in a WS frame (2–14 bytes header + masking on
+client-to-server direction). For bulk transfers this is negligible, but
+for many tiny SSH packets it multiplies syscalls and copies.
+
+**Mitigation (future):**
+
+- **Binary multiplexed framing** as specified in DESIGN.md §6.3 — a thin
+  12-byte Tela frame header replaces per-message WS framing, and multiple
+  logical channels share a single WS connection.
+- **Per-message-deflate** (`permessage-deflate` WS extension) can compress
+  repetitive terminal output but adds CPU cost; benchmark before enabling.
+
+### 13.4 Double relay (hub as pure relay)
+
+The Hub currently receives every byte from one WS and writes it to
+another. This is a userspace copy on every packet. For a Node.js hub,
+each hop also passes through the event loop and `ws` library buffers.
+
+**Mitigation (future):**
+
+- **Native agent/hub implementation** — rewrite the Hub data-plane in
+  C, C++, Rust, or Go where `splice(2)` / zero-copy IO can eliminate
+  userspace copies.
+- **Peer-to-peer upgrade** — for helpers and agents that can reach each
+  other directly (e.g. same LAN), negotiate a direct TCP or QUIC
+  connection, removing the hub from the data path entirely.
+
+### 13.5 Summary table
+
+| Optimisation          | Latency saved   | Effort  | Status       |
+|-----------------------|-----------------|---------|--------------|
+| TCP_NODELAY           | up to ~40 ms    | trivial | **done**     |
+| Direct (skip CF)      | 10–50 ms RTT    | low     | planned      |
+| Binary framing        | syscall overhead | medium  | design-phase |
+| Native hub data-plane | copy overhead    | high    | future       |
+| P2P direct connect    | full relay hop   | high    | future       |
+
+---
+
+## 14) Where to record environment-specific details
 
 As you implement, keep a small private note (not necessarily in git) with:
 

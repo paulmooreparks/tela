@@ -43,6 +43,7 @@ function connect() {
   ws.on('message', (data, isBinary) => {
     // Binary data → forward to TCP socket
     if (isBinary) {
+      console.log(`[agent] ws→tcp ${data.length}B`);
       if (tcpSocket && !tcpSocket.destroyed) {
         tcpSocket.write(data);
       }
@@ -83,10 +84,12 @@ function openTcpTunnel() {
   closeTcp();
 
   tcpSocket = net.createConnection({ host: TARGET_HOST, port: TARGET_PORT }, () => {
+    tcpSocket.setNoDelay(true);
     console.log(`[agent] TCP connected to ${TARGET_HOST}:${TARGET_PORT}`);
   });
 
   tcpSocket.on('data', (chunk) => {
+    console.log(`[agent] tcp→ws ${chunk.length}B`);
     if (ws && ws.readyState === 1) {
       ws.send(chunk, { binary: true });
     }

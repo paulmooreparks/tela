@@ -36,6 +36,7 @@ const MIME = {
   '.json': 'application/json',
   '.png':  'image/png',
   '.svg':  'image/svg+xml',
+  '.exe':  'application/octet-stream',
 };
 
 // ── HTTP server (static site) ──────────────────────────────────────
@@ -86,7 +87,8 @@ wss.on('connection', (ws) => {
     if (state.paired) {
       const peer = state.peer;
       if (peer && peer.readyState === 1) {
-        peer.send(data, { binary: true });
+        console.log(`[hub] relay ${state.role}→${state.peer._tela.role} ${data.length}B binary=${isBinary}`);
+        peer.send(data, { binary: isBinary });
       }
       return;
     }
@@ -103,7 +105,7 @@ wss.on('connection', (ws) => {
     if (msg.type === 'register') {
       handleRegister(ws, msg.machineId);
     } else if (msg.type === 'connect') {
-      handleConnect(ws, msg.machineId);
+      handleConnect(ws, msg.machineId, msg.wgPubKey);
     } else {
       ws.close(1002, 'Unknown message type');
     }
@@ -138,9 +140,10 @@ function handleRegister(ws, machineId) {
   }
 }
 
-function handleConnect(ws, machineId) {
+function handleConnect(ws, machineId, wgPubKey) {
   ws._tela.role = 'helper';
   ws._tela.machineId = machineId;
+  ws._tela.wgPubKey = wgPubKey || null;
 
   const entry = machines.get(machineId);
   if (!entry || !entry.agentWs || entry.agentWs.readyState !== 1) {
@@ -151,7 +154,7 @@ function handleConnect(ws, machineId) {
   }
 
   entry.helperWs = ws;
-  console.log(`[hub] helper connected for: ${machineId}`);
+  console.log(`[hub] helper connected for: ${machineId}${wgPubKey ? ' (WG)' : ''}`);
   pair(machineId);
 }
 
@@ -171,8 +174,9 @@ function pair(machineId) {
 
   console.log(`[hub] paired agent <-> helper for: ${machineId}`);
 
-  // Signal agent to open TCP to local RDP
-  agentWs.send(JSON.stringify({ type: 'session-start' }));
+  // Forward helper's WG public key (if present) to agent in session-start
+  const helperWgPubKey = helperWs._tela.wgPubKey || undefined;
+  agentWs.send(JSON.stringify({ type: 'session-start', wgPubKey: helperWgPubKey }));
   // Signal helper that the tunnel is ready
   helperWs.send(JSON.stringify({ type: 'ready' }));
 }
