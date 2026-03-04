@@ -16,6 +16,12 @@
       background: #fafafa;
     }
     h1 { color: #2d7d46; margin-bottom: 4px; }
+    .hub-name-bar {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px; font-size: 1.5rem;
+    }
+    .hub-name-label { color: #888; font-weight: 400; }
+    .hub-name-value { color: #2d7d46; font-weight: 700; }
     .subtitle { color: #666; margin-bottom: 24px; font-size: 0.95rem; }
     .card {
       background: #fff;
@@ -128,6 +134,10 @@
   </style>
 </head>
 <body>
+  <div class="hub-name-bar" id="hub-name-bar" style="display:none">
+    <span class="hub-name-label">Hub:</span>
+    <span class="hub-name-value" id="hub-name-value"></span>
+  </div>
   <h1 id="hub-title">Tela Hub Console</h1>
   <p class="subtitle">Connectivity fabric for <strong>awansatu.net</strong></p>
 
@@ -279,7 +289,8 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
             hubDot.className = 'dot green';
             // Show hub name if provided by the hub
             if (data.hubName) {
-              document.getElementById('hub-title').textContent = data.hubName + ' \u2014 Tela Hub Console';
+              document.getElementById('hub-name-value').textContent = data.hubName;
+              document.getElementById('hub-name-bar').style.display = 'flex';
               document.title = data.hubName + ' \u2014 Tela Hub Console';
             }
             if (!data.machines || data.machines.length === 0) {
@@ -417,7 +428,7 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
         document.getElementById('dl-label').textContent = 'Download for ' + m.label;
         document.getElementById('detected-os').textContent = 'Detected: ' + m.label;
         document.getElementById('usage-block').textContent =
-          m.bin + ' connect -hub ' + hubWsUrl + ' -machine <name>';
+          'tela connect -hub ' + hubWsUrl + ' -machine <name>';
         var links = document.querySelectorAll('#dl-alt a');
         for (var j = 0; j < links.length; j++) {
           if (links[j].getAttribute('href') === m.href) {

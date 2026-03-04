@@ -1,4 +1,4 @@
-tela-local.awansatu.net {
+owlsnest-hub.parkscomputing.com {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
