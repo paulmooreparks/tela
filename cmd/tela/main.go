@@ -25,6 +25,7 @@ Network:
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
@@ -102,6 +103,10 @@ func main() {
 		cmdServices(os.Args[2:])
 	case "status":
 		cmdStatus(os.Args[2:])
+	case "login":
+		cmdLogin(os.Args[2:])
+	case "logout":
+		cmdLogout(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Printf("tela %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 	case "help", "-h", "--help":
@@ -124,6 +129,8 @@ Commands:
   machines  List registered machines and their services
   services  List services on a specific machine
   status    Show hub status summary
+  login     Authenticate with a Tela portal
+  logout    Remove stored portal credentials
   version   Print version and exit
 
 Environment Variables:
@@ -133,9 +140,14 @@ Environment Variables:
 
   When set, these provide defaults so flags can be omitted.
 
-Hub Aliases:
-  The -hub flag accepts a full URL (wss://...) or a short alias.
-  Aliases are defined in a config file:
+Hub Name Resolution:
+  The -hub flag accepts a full URL (wss://...) or a short hub name.
+  Short names are resolved by querying the portal you logged into:
+
+    tela login https://awansatu.net   # authenticate once
+    tela connect -hub owlsnest -machine barn
+
+  Names can also be defined locally in a config file (used as fallback):
     Linux/macOS:  ~/.tela/hubs.yaml
     Windows:      %%APPDATA%%\tela\hubs.yaml
 
@@ -144,6 +156,7 @@ Hub Aliases:
       myHub: wss://example.com
 
 Examples:
+  tela login https://awansatu.net
   tela connect  -hub owlsnest -machine barn
   tela machines -hub owlsnest
   tela connect  -hub wss://tela.awansatu.net -machine barn
@@ -798,15 +811,33 @@ type hubsConfig struct {
 	Hubs map[string]string `yaml:"hubs"`
 }
 
-// hubsConfigPath returns the platform-appropriate path to the hubs config file.
-func hubsConfigPath() string {
+// telaConfig is the schema for ~/.tela/config.yaml (or %APPDATA%\tela\config.yaml).
+type telaConfig struct {
+	Portal struct {
+		URL   string `yaml:"url"`
+		Token string `yaml:"token"`
+	} `yaml:"portal"`
+}
+
+// telaConfigDir returns the platform-appropriate tela config directory.
+func telaConfigDir() string {
 	if runtime.GOOS == "windows" {
 		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "tela", "hubs.yaml")
+			return filepath.Join(appData, "tela")
 		}
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".tela", "hubs.yaml")
+	return filepath.Join(home, ".tela")
+}
+
+// hubsConfigPath returns the platform-appropriate path to the hubs config file.
+func hubsConfigPath() string {
+	return filepath.Join(telaConfigDir(), "hubs.yaml")
+}
+
+// telaConfigPath returns the platform-appropriate path to the main config file.
+func telaConfigPath() string {
+	return filepath.Join(telaConfigDir(), "config.yaml")
 }
 
 // loadHubsConfig reads and parses the hubs config file.
@@ -825,9 +856,95 @@ func loadHubsConfig() (*hubsConfig, error) {
 	return &cfg, nil
 }
 
+// loadTelaConfig reads and parses the main tela config file.
+func loadTelaConfig() (*telaConfig, error) {
+	data, err := os.ReadFile(telaConfigPath())
+	if err != nil {
+		return nil, err
+	}
+	var cfg telaConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("invalid config %s: %w", telaConfigPath(), err)
+	}
+	return &cfg, nil
+}
+
+// saveTelaConfig writes the main tela config file.
+func saveTelaConfig(cfg *telaConfig) error {
+	dir := telaConfigDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(telaConfigPath(), data, 0600)
+}
+
+// portalHubEntry matches the JSON shape from the portal /api/hubs endpoint.
+type portalHubEntry struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// resolveHubFromPortal queries the authenticated portal to resolve a hub name.
+func resolveHubFromPortal(name string) (string, error) {
+	cfg, err := loadTelaConfig()
+	if err != nil || cfg.Portal.URL == "" {
+		return "", fmt.Errorf("not logged in to a portal (run 'tela login <url>')")
+	}
+
+	apiURL := strings.TrimRight(cfg.Portal.URL, "/") + "/api/hubs"
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return "", err
+	}
+	if cfg.Portal.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Portal.Token)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("could not reach portal %s: %w", cfg.Portal.URL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return "", fmt.Errorf("portal returned 401 unauthorized — try 'tela login %s'", cfg.Portal.URL)
+	}
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("portal returned HTTP %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Hubs []portalHubEntry `json:"hubs"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("invalid JSON from portal: %w", err)
+	}
+
+	for _, h := range result.Hubs {
+		if strings.EqualFold(h.Name, name) {
+			// Convert https:// → wss://, http:// → ws://
+			wsURL := strings.Replace(h.URL, "https://", "wss://", 1)
+			wsURL = strings.Replace(wsURL, "http://", "ws://", 1)
+			logVerbose("resolved hub %q via portal → %s", name, wsURL)
+			return wsURL, nil
+		}
+	}
+
+	var known []string
+	for _, h := range result.Hubs {
+		known = append(known, h.Name)
+	}
+	return "", fmt.Errorf("hub %q not found on portal (known: %s)", name, strings.Join(known, ", "))
+}
+
 // resolveHubURL resolves a hub reference to a WebSocket URL.
 // If the value starts with ws:// or wss://, it is used as-is.
-// Otherwise it is looked up as a named alias in the hubs config file.
+// Otherwise it is resolved via: (1) portal API, (2) local hubs.yaml fallback.
 func resolveHubURL(value string) (string, error) {
 	if value == "" {
 		return "", nil
@@ -837,21 +954,29 @@ func resolveHubURL(value string) (string, error) {
 		return value, nil
 	}
 
-	cfg, err := loadHubsConfig()
-	if err != nil {
-		return "", fmt.Errorf("hub %q is not a URL and no config file found (%s)", value, hubsConfigPath())
+	// Try portal first
+	if resolved, err := resolveHubFromPortal(value); err == nil {
+		return resolved, nil
+	} else {
+		logVerbose("portal lookup failed: %v", err)
 	}
 
-	url, ok := cfg.Hubs[value]
+	// Fallback to local hubs.yaml
+	cfg, err := loadHubsConfig()
+	if err != nil {
+		return "", fmt.Errorf("hub %q is not a URL and could not be resolved (no portal login, no local config)", value)
+	}
+
+	hubURL, ok := cfg.Hubs[value]
 	if !ok {
 		var known []string
 		for k := range cfg.Hubs {
 			known = append(known, k)
 		}
-		return "", fmt.Errorf("hub alias %q not found in %s (known: %s)", value, hubsConfigPath(), strings.Join(known, ", "))
+		return "", fmt.Errorf("hub %q not found (portal unreachable, not in %s; known: %s)", value, hubsConfigPath(), strings.Join(known, ", "))
 	}
-	logVerbose("resolved hub alias %q → %s", value, url)
-	return url, nil
+	logVerbose("resolved hub alias %q via local config → %s", value, hubURL)
+	return hubURL, nil
 }
 
 // mustResolveHub resolves a hub alias, exiting on error.
@@ -862,4 +987,88 @@ func mustResolveHub(value string) string {
 		os.Exit(1)
 	}
 	return resolved
+}
+
+// ── "tela login" ───────────────────────────────────────────────────
+
+func cmdLogin(args []string) {
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela login <portal-url>")
+		fmt.Fprintln(os.Stderr, "Example: tela login https://awansatu.net")
+		os.Exit(1)
+	}
+
+	portalURL := strings.TrimRight(fs.Arg(0), "/")
+
+	// Validate URL
+	if !strings.HasPrefix(portalURL, "http://") && !strings.HasPrefix(portalURL, "https://") {
+		portalURL = "https://" + portalURL
+	}
+
+	// Prompt for token
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("Token for %s (press Enter for none): ", portalURL)
+	token, _ := reader.ReadString('\n')
+	token = strings.TrimSpace(token)
+
+	// Test the connection
+	fmt.Printf("Verifying portal... ")
+	apiURL := portalURL + "/api/hubs"
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+		os.Exit(1)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError: could not reach %s: %v\n", portalURL, err)
+		os.Exit(1)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		fmt.Fprintln(os.Stderr, "\nError: unauthorized — check your token")
+		os.Exit(1)
+	}
+	if resp.StatusCode != 200 {
+		fmt.Fprintf(os.Stderr, "\nError: portal returned HTTP %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
+	fmt.Println("ok")
+
+	// Save config
+	var cfg telaConfig
+	cfg.Portal.URL = portalURL
+	cfg.Portal.Token = token
+	if err := saveTelaConfig(&cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Logged in to %s\n", portalURL)
+	fmt.Printf("Config saved to %s\n", telaConfigPath())
+}
+
+// ── "tela logout" ──────────────────────────────────────────────────
+
+func cmdLogout(args []string) {
+	path := telaConfigPath()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fmt.Println("Not logged in.")
+		return
+	}
+
+	if err := os.Remove(path); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Logged out. Portal credentials removed.")
 }
