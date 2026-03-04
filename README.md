@@ -39,7 +39,7 @@ The hub never sees plaintext — it relays opaque WireGuard ciphertext.
 |-----------|----------|-------------|
 | **tela** | Go | Client — connects to hub, establishes WG tunnel, binds localhost listeners |
 | **telad** | Go | Daemon — registers with hub, exposes local services through WG tunnel |
-| **hub.js** | Node.js | Relay — pairs agents with clients, relays WS/UDP, serves static site |
+| **hub.js** | Node.js | Relay — pairs agents with clients, relays WS/UDP, serves hub console |
 
 ## Quick start
 
@@ -60,8 +60,20 @@ node poc/hub.js
 # Terminal 2 — Daemon (exposes SSH + RDP)
 ./telad -hub ws://localhost:8080 -machine mybox -ports "22,3389"
 
-# Terminal 3 — Client
-./tela -hub ws://localhost:8080 -machine mybox
+# Terminal 3 — List machines
+./tela machines -hub ws://localhost:8080
+
+# Terminal 3 — Connect to a machine
+./tela connect -hub ws://localhost:8080 -machine mybox
+```
+
+Or set environment variables to skip repeating flags:
+
+```bash
+export TELA_HUB=ws://localhost:8080 TELA_MACHINE=mybox
+./tela connect
+./tela machines
+./tela services
 ```
 
 Then connect: `ssh localhost` or `mstsc /v:localhost`
@@ -70,7 +82,13 @@ Then connect: `ssh localhost` or `mstsc /v:localhost`
 
 ```bash
 docker compose up --build -d
-./tela -hub wss://your-hostname -machine barn-wg
+
+# With flags:
+./tela connect -hub wss://your-hostname -machine barn
+
+# Or with env vars:
+export TELA_HUB=wss://your-hostname TELA_MACHINE=barn
+./tela connect
 ```
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) §8 for the full Docker Compose setup and Caddyfile.
@@ -94,17 +112,30 @@ The cascade is fully automatic. Each tier falls through on failure with no user 
 ## Project structure
 
 ```
-cmd/tela/          Client binary
+cmd/tela/          Client binary (subcommands: connect, machines, services, status)
 cmd/telad/         Daemon binary
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
 poc/hub.js         Hub relay server
-poc/www/           Static site served by hub
+poc/www/           Hub console (web UI)
 docker/            Dockerfile and Caddyfile for production
 ```
 
+## Glossary
+
+| Term | Meaning |
+|------|---------|
+| **Hub** | Central relay that pairs agents with clients. Serves the hub console. |
+| **Hub Console** | Web interface for a hub (e.g., `https://tela.awansatu.net/`). |
+| **Agent / telad** | Long-lived daemon on a managed machine that registers with the hub. |
+| **Client / tela** | Binary on the user's laptop that tunnels through the hub to an agent. |
+| **Machine** | A named resource registered by an agent (e.g., `barn`). |
+| **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
+| **Session** | An active encrypted tunnel between a client and an agent. |
+| **Awan Satu** | Cloud platform built on Tela (hub registry, relay, hosted hubs). |
+
 ## Documentation
 
-- [DESIGN.md](DESIGN.md) — Architecture specification
+- [DESIGN.md](DESIGN.md) — Architecture specification (includes full glossary)
 - [IMPLEMENTATION.md](IMPLEMENTATION.md) — Deployment runbook
 - [TODO.md](TODO.md) — Roadmap
 - [STATUS.md](STATUS.md) — Traceability matrix (design → implementation)
@@ -112,4 +143,4 @@ docker/            Dockerfile and Caddyfile for production
 
 ## License
 
-See repository for license details.
+Apache 2.0 — see [LICENSE](LICENSE).

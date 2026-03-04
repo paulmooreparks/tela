@@ -1,26 +1,23 @@
 /*
-  telad — Tela Daemon (WireGuard Agent)
+telad — Tela Daemon (WireGuard Agent)
 
-  Purpose:
-    Connects to the Hub via WebSocket, registers a machine ID, and waits.
-    When the Hub signals a session (with the client's WireGuard public key),
-    it creates a userspace WireGuard tunnel using gVisor netstack — no TUN
-    device, no admin/root required.
+Purpose:
 
-    The daemon listens inside the netstack on 10.77.0.1 for each port in
-    the -ports list and proxies accepted TCP connections to the target host.
-    One daemon can expose RDP, SSH, HTTP, and any other TCP service.
+	Connects to the Hub via WebSocket, registers one or more machines,
+	and waits. When the Hub signals a session (with the client's WireGuard
+	public key), it creates a userspace WireGuard tunnel using gVisor
+	netstack — no TUN device, no admin/root required.
 
-    All traffic between daemon and client is encrypted end-to-end with
-    WireGuard (Curve25519 + ChaCha20-Poly1305). The Hub sees only opaque
-    binary blobs.
+	Config-file mode (recommended):
+	  telad -config telad.yaml
 
-  Usage:
-    telad -hub ws://hub:8080 -machine barn-wg -ports 22,3389,8080 -target-host host.docker.internal
+	Single-machine mode (flags):
+	  telad -hub ws://hub:8080 -machine barn -ports 22,3389
 
-  Network:
-    Daemon IP: 10.77.0.1/24  (inside netstack)
-    Client IP: 10.77.0.2/24  (inside netstack)
+Network:
+
+	Daemon IP: 10.77.0.1/24  (inside netstack, per machine)
+	Client IP: 10.77.0.2/24  (inside netstack, per machine)
 */
 package main
 
@@ -47,6 +44,7 @@ import (
 	"github.com/gorilla/websocket"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun/netstack"
+	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
@@ -73,6 +71,23 @@ type silentLogger struct{}
 
 func (silentLogger) Printf(string, ...any) {}
 
+// ── Config file schema ─────────────────────────────────────────────
+
+// configFile is the top-level YAML structure for telad.yaml.
+type configFile struct {
+	Hub      string          `yaml:"hub"`
+	Token    string          `yaml:"token,omitempty"`
+	Machines []machineConfig `yaml:"machines"`
+}
+
+// machineConfig describes one machine to register with the hub.
+type machineConfig struct {
+	Name   string   `yaml:"name"`
+	Ports  []uint16 `yaml:"ports"`
+	Target string   `yaml:"target,omitempty"` // defaults to 127.0.0.1
+	Token  string   `yaml:"token,omitempty"`  // overrides top-level token
+}
+
 var verbose bool
 
 func main() {
@@ -83,35 +98,27 @@ Register with a Tela Hub and expose local services through an encrypted
 WireGuard tunnel. No TUN device or admin/root required.
 
 Usage:
-  telad -hub <url> -machine <id> [options]
+  telad -config <file>                   Config-file mode (recommended)
+  telad -hub <url> -machine <id> [opts]  Single-machine mode
 
 Examples:
-  telad -hub ws://hub:8080 -machine barn-wg -ports 22,3389
-  telad -hub wss://tela.awansatu.net -machine barn-wg -ports 3389 -token s3cret
-  telad -hub wss://tela.awansatu.net -machine barn-wg -ports 3389 -target-host 192.168.1.10
+  telad -config telad.yaml
+  telad -hub ws://hub:8080 -machine barn -ports 22,3389
+  telad -hub wss://tela.awansatu.net -machine barn -ports 3389 -token s3cret
 
 Options:
 `)
 		flag.PrintDefaults()
 	}
 
-	hubURL := flag.String("hub", envOrDefault("HUB_URL", ""), "Hub WebSocket URL (required)")
-	machineID := flag.String("machine", envOrDefault("MACHINE_ID", ""), "Machine ID to register (required)")
-	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Connection token (clients must match to connect)")
-	portsStr := flag.String("ports", envOrDefault("PORTS", "3389"), "Comma-separated list of TCP ports to forward")
-	targetHost := flag.String("target-host", envOrDefault("TARGET_HOST", "127.0.0.1"), "Target service host")
+	configPath := flag.String("config", envOrDefault("TELA_CONFIG", ""), "Path to YAML config file (env: TELA_CONFIG)")
+	hubURL := flag.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
+	machineID := flag.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID to register (env: TELA_MACHINE)")
+	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
+	portsStr := flag.String("ports", envOrDefault("TELA_PORTS", "3389"), "Comma-separated TCP ports (env: TELA_PORTS)")
+	targetHost := flag.String("target-host", envOrDefault("TELA_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELA_TARGET_HOST)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
-
-	if *hubURL == "" || *machineID == "" {
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	ports := parsePorts(*portsStr)
-	if len(ports) == 0 {
-		log.Fatalf("no valid ports in: %s", *portsStr)
-	}
 
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[telad] ")
@@ -125,9 +132,84 @@ Options:
 		os.Exit(0)
 	}()
 
+	// Config-file mode
+	if *configPath != "" {
+		cfg, err := loadConfig(*configPath)
+		if err != nil {
+			log.Fatalf("config: %v", err)
+		}
+		runMultiMachine(cfg)
+		return
+	}
+
+	// Single-machine mode (flags / env vars)
+	if *hubURL == "" || *machineID == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	ports := parsePorts(*portsStr)
+	if len(ports) == 0 {
+		log.Fatalf("no valid ports in: %s", *portsStr)
+	}
+
+	runSingleMachine(*hubURL, *machineID, *token, *targetHost, ports)
+}
+
+// loadConfig reads and validates a telad YAML config file.
+func loadConfig(path string) (*configFile, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	var cfg configFile
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if cfg.Hub == "" {
+		return nil, fmt.Errorf("%s: 'hub' is required", path)
+	}
+	if len(cfg.Machines) == 0 {
+		return nil, fmt.Errorf("%s: 'machines' list is empty", path)
+	}
+	for i, m := range cfg.Machines {
+		if m.Name == "" {
+			return nil, fmt.Errorf("%s: machines[%d]: 'name' is required", path, i)
+		}
+		if len(m.Ports) == 0 {
+			return nil, fmt.Errorf("%s: machines[%d] (%s): 'ports' is required", path, i, m.Name)
+		}
+		if m.Target == "" {
+			cfg.Machines[i].Target = "127.0.0.1"
+		}
+		if m.Token == "" {
+			cfg.Machines[i].Token = cfg.Token
+		}
+	}
+	return &cfg, nil
+}
+
+// runMultiMachine launches a goroutine per machine and blocks forever.
+func runMultiMachine(cfg *configFile) {
+	log.Printf("config: %d machine(s), hub %s", len(cfg.Machines), cfg.Hub)
+	var wg sync.WaitGroup
+	for _, m := range cfg.Machines {
+		wg.Add(1)
+		go func(mc machineConfig) {
+			defer wg.Done()
+			runSingleMachine(cfg.Hub, mc.Name, mc.Token, mc.Target, mc.Ports)
+		}(m)
+	}
+	wg.Wait()
+}
+
+// runSingleMachine is the reconnect loop for one machine.
+func runSingleMachine(hubURL, machineID, token, targetHost string, ports []uint16) {
+	prefix := fmt.Sprintf("[telad:%s] ", machineID)
+	logger := log.New(os.Stderr, prefix, log.Ltime)
 	for {
-		runAgent(*hubURL, *machineID, *token, *targetHost, ports)
-		log.Println("reconnecting in 3 seconds...")
+		runAgent(logger, hubURL, machineID, token, targetHost, ports)
+		logger.Println("reconnecting in 3 seconds...")
 		time.Sleep(3 * time.Second)
 	}
 }
@@ -149,21 +231,21 @@ func parsePorts(s string) []uint16 {
 	return ports
 }
 
-func runAgent(hubURL, machineID, token, targetHost string, ports []uint16) {
-	log.Printf("connecting to hub: %s", hubURL)
+func runAgent(lg *log.Logger, hubURL, machineID, token, targetHost string, ports []uint16) {
+	lg.Printf("connecting to hub: %s", hubURL)
 
 	ws, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
 	if err != nil {
-		log.Printf("dial failed: %v", err)
+		lg.Printf("dial failed: %v", err)
 		return
 	}
 	defer ws.Close()
 
-	// Register with hub
-	log.Printf("connected, registering as: %s", machineID)
-	regMsg := controlMessage{Type: "register", MachineID: machineID, Token: token}
+	// Register with hub (include ports so the hub console can display services)
+	lg.Printf("connected, registering as: %s", machineID)
+	regMsg := controlMessage{Type: "register", MachineID: machineID, Token: token, Ports: ports}
 	if err := ws.WriteJSON(&regMsg); err != nil {
-		log.Printf("register failed: %v", err)
+		lg.Printf("register failed: %v", err)
 		return
 	}
 
@@ -171,7 +253,7 @@ func runAgent(hubURL, machineID, token, targetHost string, ports []uint16) {
 	for {
 		_, raw, err := ws.ReadMessage()
 		if err != nil {
-			log.Printf("hub read error: %v", err)
+			lg.Printf("hub read error: %v", err)
 			return
 		}
 
@@ -182,26 +264,26 @@ func runAgent(hubURL, machineID, token, targetHost string, ports []uint16) {
 
 		switch msg.Type {
 		case "registered":
-			log.Printf("registered as: %s — waiting for session", msg.MachineID)
+			lg.Printf("registered as: %s — waiting for session", msg.MachineID)
 
 		case "session-start":
 			helperPubKey := msg.WGPubKey
 			if helperPubKey == "" {
-				log.Printf("session-start missing helper public key")
+				lg.Printf("session-start missing helper public key")
 				return
 			}
-			log.Printf("session starting — helper pubkey: %s...", helperPubKey[:8])
-			handleSession(ws, hubURL, helperPubKey, targetHost, ports)
+			lg.Printf("session starting — helper pubkey: %s...", helperPubKey[:8])
+			handleSession(lg, ws, hubURL, helperPubKey, targetHost, ports)
 			return // reconnect after session ends
 		}
 	}
 }
 
-func handleSession(ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16) {
+func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16) {
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
-		log.Printf("keygen failed: %v", err)
+		lg.Printf("keygen failed: %v", err)
 		return
 	}
 	privKeyHex := hex.EncodeToString(privKey.Bytes())
@@ -210,10 +292,10 @@ func handleSession(ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost strin
 	// Send our public key and port list back to helper (via hub relay)
 	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports}
 	if err := ws.WriteJSON(&keyMsg); err != nil {
-		log.Printf("failed to send pubkey: %v", err)
+		lg.Printf("failed to send pubkey: %v", err)
 		return
 	}
-	log.Printf("sent agent pubkey: %s...", pubKeyHex[:8])
+	lg.Printf("sent agent pubkey: %s...", pubKeyHex[:8])
 
 	// Create netstack TUN (pure userspace — no admin needed)
 	tunDev, tnet, err := netstack.CreateNetTUN(
@@ -222,7 +304,7 @@ func handleSession(ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost strin
 		mtu,
 	)
 	if err != nil {
-		log.Printf("netstack creation failed: %v", err)
+		lg.Printf("netstack creation failed: %v", err)
 		return
 	}
 
@@ -232,11 +314,11 @@ func handleSession(ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost strin
 	// Create WireGuard device
 	wgVerbose := silentLogger{}.Printf
 	if verbose {
-		wgVerbose = log.Printf
+		wgVerbose = lg.Printf
 	}
 	logger := &device.Logger{
 		Verbosef: wgVerbose,
-		Errorf:   log.Printf,
+		Errorf:   lg.Printf,
 	}
 	dev := device.NewDevice(tunDev, bind, logger)
 
@@ -249,23 +331,23 @@ persistent_keepalive_interval=25
 `, privKeyHex, helperPubKeyHex, helperIP)
 
 	if err := dev.IpcSet(ipcConf); err != nil {
-		log.Printf("WireGuard IPC config failed: %v", err)
+		lg.Printf("WireGuard IPC config failed: %v", err)
 		dev.Close()
 		return
 	}
 
 	if err := dev.Up(); err != nil {
-		log.Printf("WireGuard device up failed: %v", err)
+		lg.Printf("WireGuard device up failed: %v", err)
 		dev.Close()
 		return
 	}
-	log.Printf("WireGuard tunnel up — agent=%s helper=%s", agentIP, helperIP)
+	lg.Printf("WireGuard tunnel up — agent=%s helper=%s", agentIP, helperIP)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		wsReader(ws, bind, hubURL)
+		wsReader(lg, ws, bind, hubURL)
 	}()
 
 	// Listen on each port inside netstack
@@ -274,11 +356,11 @@ persistent_keepalive_interval=25
 		listenAddr := netip.AddrPortFrom(netip.MustParseAddr(agentIP), port)
 		listener, err := tnet.ListenTCPAddrPort(listenAddr)
 		if err != nil {
-			log.Printf("netstack listen failed on %s: %v", listenAddr, err)
+			lg.Printf("netstack listen failed on %s: %v", listenAddr, err)
 			continue
 		}
 		listeners = append(listeners, listener)
-		log.Printf("forwarding %s → %s:%d", listenAddr, targetHost, port)
+		lg.Printf("forwarding %s → %s:%d", listenAddr, targetHost, port)
 
 		// Accept connections from helper through the WireGuard tunnel
 		go func(l net.Listener, p uint16) {
@@ -287,15 +369,15 @@ persistent_keepalive_interval=25
 				if err != nil {
 					return // listener closed
 				}
-					logVerbose("tunnel→%s:%d from %s", targetHost, p, nsConn.RemoteAddr())
-				go proxyToTarget(nsConn, targetHost, int(p))
+				logVerbose(lg, "tunnel→%s:%d from %s", targetHost, p, nsConn.RemoteAddr())
+				go proxyToTarget(lg, nsConn, targetHost, int(p))
 			}
 		}(listener, port)
 	}
 
 	// Wait for WebSocket to close (session end)
 	<-done
-	log.Println("session ended — tearing down WireGuard")
+	lg.Println("session ended — tearing down WireGuard")
 	for _, l := range listeners {
 		l.Close()
 	}
@@ -305,92 +387,92 @@ persistent_keepalive_interval=25
 // wsReader reads from the WebSocket and dispatches:
 //   - Binary messages → wsBind.RecvCh (WireGuard datagrams)
 //   - Text messages → parsed for control commands (udp-offer, peer-endpoint), else logged
-func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
+func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
 	for {
 		msgType, data, err := ws.ReadMessage()
 		if err != nil {
-			log.Printf("ws read error: %v", err)
+			lg.Printf("ws read error: %v", err)
 			return
 		}
 		if msgType == websocket.BinaryMessage {
 			select {
 			case bind.RecvCh <- data:
 			default:
-				log.Printf("wsBind recv buffer full, dropping %dB", len(data))
+				lg.Printf("wsBind recv buffer full, dropping %dB", len(data))
 			}
 		} else {
 			var msg controlMessage
 			if err := json.Unmarshal(data, &msg); err != nil {
-				logVerbose("text message during session: %s", string(data))
+				logVerbose(lg, "text message during session: %s", string(data))
 				continue
 			}
 			switch msg.Type {
 			case "udp-offer":
 				if !bind.UDPActive() {
-					log.Printf("received UDP relay offer (port %d)", msg.Port)
-					tryUDPUpgrade(bind, hubURL, msg.Token, msg.Port)
+					lg.Printf("received UDP relay offer (port %d)", msg.Port)
+					tryUDPUpgrade(lg, bind, hubURL, msg.Token, msg.Port)
 					if bind.UDPActive() {
-						go tryDirectUpgrade(bind, hubURL)
+						go tryDirectUpgrade(lg, bind, hubURL)
 					}
 				}
 			case "peer-endpoint":
 				if bind.UDPActive() && !bind.DirectActive() {
-					log.Printf("received peer endpoint: %s", msg.Message)
+					lg.Printf("received peer endpoint: %s", msg.Message)
 					go func() {
 						if err := bind.AttemptDirect(msg.Message); err != nil {
-							log.Printf("direct tunnel failed (staying on relay): %v", err)
+							lg.Printf("direct tunnel failed (staying on relay): %v", err)
 						}
 					}()
 				}
 			default:
-				logVerbose("text message during session: %s", string(data))
+				logVerbose(lg, "text message during session: %s", string(data))
 			}
 		}
 	}
 }
 
 // tryUDPUpgrade attempts to switch from WebSocket to UDP relay transport.
-func tryUDPUpgrade(bind *wsbind.Bind, hubURL, tokenHex string, port int) {
+func tryUDPUpgrade(lg *log.Logger, bind *wsbind.Bind, hubURL, tokenHex string, port int) {
 	u, err := url.Parse(hubURL)
 	if err != nil {
-		log.Printf("UDP upgrade: cannot parse hub URL: %v", err)
+		lg.Printf("UDP upgrade: cannot parse hub URL: %v", err)
 		return
 	}
 	token, err := hex.DecodeString(tokenHex)
 	if err != nil {
-		log.Printf("UDP upgrade: invalid token: %v", err)
+		lg.Printf("UDP upgrade: invalid token: %v", err)
 		return
 	}
 	if err := bind.UpgradeUDP(u.Hostname(), port, token); err != nil {
-		log.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
+		lg.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
 	}
 }
 
 // tryDirectUpgrade performs STUN discovery and sends our reflexive
 // address to the peer via the hub relay for hole punching.
-func tryDirectUpgrade(bind *wsbind.Bind, hubURL string) {
+func tryDirectUpgrade(lg *log.Logger, bind *wsbind.Bind, hubURL string) {
 	reflexive, err := bind.STUNDiscover()
 	if err != nil {
-		log.Printf("STUN discovery failed (staying on relay): %v", err)
+		lg.Printf("STUN discovery failed (staying on relay): %v", err)
 		return
 	}
-	log.Printf("STUN reflexive address: %s", reflexive)
+	lg.Printf("STUN reflexive address: %s", reflexive)
 
 	msg := controlMessage{Type: "peer-endpoint", Message: reflexive}
 	data, _ := json.Marshal(msg)
 	if err := bind.SendText(data); err != nil {
-		log.Printf("failed to send peer-endpoint: %v", err)
+		lg.Printf("failed to send peer-endpoint: %v", err)
 	}
 }
 
 // proxyToTarget connects to the real target service and pipes data bidirectionally.
-func proxyToTarget(nsConn net.Conn, targetHost string, targetPort int) {
+func proxyToTarget(lg *log.Logger, nsConn net.Conn, targetHost string, targetPort int) {
 	defer nsConn.Close()
 
 	addr := fmt.Sprintf("%s:%d", targetHost, targetPort)
 	targetConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
-		log.Printf("target dial failed (%s): %v", addr, err)
+		lg.Printf("target dial failed (%s): %v", addr, err)
 		return
 	}
 	defer targetConn.Close()
@@ -399,7 +481,7 @@ func proxyToTarget(nsConn net.Conn, targetHost string, targetPort int) {
 		tc.SetNoDelay(true)
 	}
 
-	logVerbose("proxying tunnel ↔ %s", addr)
+	logVerbose(lg, "proxying tunnel ↔ %s", addr)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -408,7 +490,7 @@ func proxyToTarget(nsConn net.Conn, targetHost string, targetPort int) {
 	go func() {
 		defer wg.Done()
 		n, _ := io.Copy(targetConn, nsConn)
-		logVerbose("tunnel→target closed (%d bytes)", n)
+		logVerbose(lg, "tunnel→target closed (%d bytes)", n)
 		if tc, ok := targetConn.(*net.TCPConn); ok {
 			tc.CloseWrite()
 		}
@@ -418,16 +500,16 @@ func proxyToTarget(nsConn net.Conn, targetHost string, targetPort int) {
 	go func() {
 		defer wg.Done()
 		n, _ := io.Copy(nsConn, targetConn)
-		logVerbose("target→tunnel closed (%d bytes)", n)
+		logVerbose(lg, "target→tunnel closed (%d bytes)", n)
 	}()
 
 	wg.Wait()
-	logVerbose("proxy session ended for %s", addr)
+	logVerbose(lg, "proxy session ended for %s", addr)
 }
 
-func logVerbose(format string, args ...any) {
+func logVerbose(lg *log.Logger, format string, args ...any) {
 	if verbose {
-		log.Printf(format, args...)
+		lg.Printf(format, args...)
 	}
 }
 

@@ -45,19 +45,35 @@ const MIME = {
 // ── HTTP server (static site + status API) ─────────────────────────
 
 const httpServer = http.createServer((req, res) => {
-  // /status endpoint — JSON summary of registered machines and sessions
-  if (req.url === '/status') {
+  // /status and /api/status — JSON summary of registered machines, services, and sessions
+  if (req.url === '/status' || req.url === '/api/status') {
     const status = [];
     for (const [id, entry] of machines) {
+      const ports = entry.ports || [];
       status.push({
         id,
         agentConnected: !!(entry.agentWs && entry.agentWs.readyState === 1),
         hasSession: !!(entry.helperWs && entry.helperWs.readyState === 1),
         registeredAt: entry.registeredAt || null,
+        services: ports.map(p => ({ port: p, label: portLabel(p) })),
       });
     }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
     res.end(JSON.stringify({ machines: status, timestamp: new Date().toISOString() }, null, 2));
+    return;
+  }
+
+  // CORS preflight for API endpoints
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    res.end();
     return;
   }
 
@@ -85,8 +101,15 @@ const httpServer = http.createServer((req, res) => {
 
 // ── WebSocket server (relay) ───────────────────────────────────────
 
-// machineId -> { agentWs, helperWs }
+// machineId -> { agentWs, helperWs, ports, token, registeredAt, udpTokens }
 const machines = new Map();
+
+// Well-known port labels for the API and console.
+const PORT_LABELS = {
+  22: 'SSH', 80: 'HTTP', 443: 'HTTPS', 3389: 'RDP',
+  5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt',
+};
+function portLabel(p) { return PORT_LABELS[p] || `port ${p}`; }
 
 // ── UDP relay ──────────────────────────────────────────────────────
 
@@ -176,7 +199,7 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'register') {
-      handleRegister(ws, msg.machineId, msg.token);
+      handleRegister(ws, msg.machineId, msg.token, msg.ports);
     } else if (msg.type === 'connect') {
       handleConnect(ws, msg.machineId, msg.wgPubKey, msg.token);
     } else {
@@ -194,19 +217,20 @@ wss.on('connection', (ws) => {
   });
 });
 
-function handleRegister(ws, machineId, token) {
+function handleRegister(ws, machineId, token, ports) {
   ws._tela.role = 'agent';
   ws._tela.machineId = machineId;
 
   if (!machines.has(machineId)) {
-    machines.set(machineId, { agentWs: null, helperWs: null, token: null, registeredAt: null });
+    machines.set(machineId, { agentWs: null, helperWs: null, ports: [], token: null, registeredAt: null });
   }
   const entry = machines.get(machineId);
   entry.agentWs = ws;
   entry.token = token || null;
+  entry.ports = Array.isArray(ports) ? ports : [];
   entry.registeredAt = new Date().toISOString();
 
-  console.log(`[hub] agent registered: ${machineId}${token ? ' (token-protected)' : ''}`);
+  console.log(`[hub] agent registered: ${machineId} ports=[${entry.ports}]${token ? ' (token-protected)' : ''}`);
   ws.send(JSON.stringify({ type: 'registered', machineId }));
 
   // If a helper is already waiting, pair them

@@ -5,22 +5,16 @@
     Connects to a Tela Hub via WebSocket, performs a WireGuard key exchange
     with the target daemon, and establishes an encrypted L3 tunnel.
 
-    Two modes of operation:
+    Subcommands:
+      tela connect  — connect to a machine
+      tela machines — list registered machines and their services
+      tela services — list services on a specific machine
+      tela status   — show hub status summary
 
-    1. Default (netstack) — no admin required:
-       Binds a local TCP listener on 127.0.0.1:<port>.
-       When a client (mstsc, ssh, browser) connects, data is piped through
-       a userspace gVisor netstack into the WireGuard tunnel.
-
-    2. TUN mode (--tun) — requires admin/root:
-       Creates a real TUN interface with IP 10.77.0.2.
-       The OS routes traffic to 10.77.0.0/24 through the TUN.
-       Clients connect directly to the daemon's IP (e.g. mstsc /v:10.77.0.1).
-       This is the Tailscale-like experience — completely transparent.
-
-  Usage:
-    tela -hub wss://tela.awansatu.net -machine barn-wg
-    tela -hub wss://tela.awansatu.net -machine barn-wg -port 13389 -target-port 3389
+    Environment variables (provide defaults so flags can be omitted):
+      TELA_HUB      — hub WebSocket URL
+      TELA_MACHINE  — target machine ID
+      TELA_TOKEN    — authentication token
 
   Network:
     Daemon IP: 10.77.0.1/24
@@ -32,6 +26,7 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -39,12 +34,15 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -79,49 +77,89 @@ var portNames = map[uint16]string{
 var verbose bool
 
 func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `tela — Tela Client
+	log.SetFlags(log.Ltime)
+	log.SetPrefix("[tela] ")
 
-Connect to a remote machine through a Tela Hub using an encrypted
-WireGuard tunnel. No admin/root required.
-
-Usage:
-  tela -hub <url> -machine <id> [options]
-
-Examples:
-  tela -hub wss://tela.awansatu.net -machine barn-wg
-  tela -hub wss://tela.awansatu.net -machine barn-wg -v
-  tela -hub wss://tela.awansatu.net -machine barn-wg -token s3cret
-  tela -hub wss://tela.awansatu.net -machine barn-wg -port 13389 -target-port 3389
-
-Options:
-`)
-		flag.PrintDefaults()
-	}
-
-	hubURL := flag.String("hub", envOrDefault("HUB_URL", ""), "Hub WebSocket URL (required)")
-	machineID := flag.String("machine", envOrDefault("MACHINE_ID", ""), "Target machine ID (required)")
-	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Connection token (must match daemon)")
-	localPort := flag.Int("port", 0, "Local TCP port (advanced: single-port override)")
-	targetPort := flag.Int("target-port", 0, "Target port on daemon (advanced: with -port)")
-	flag.BoolVar(&verbose, "v", false, "Verbose logging")
-	flag.Parse()
-
-	if *hubURL == "" || *machineID == "" {
-		flag.Usage()
+	if len(os.Args) < 2 {
+		printUsage()
 		os.Exit(1)
 	}
 
-	// Single-port override mode: -port given explicitly
+	switch os.Args[1] {
+	case "connect":
+		cmdConnect(os.Args[2:])
+	case "machines":
+		cmdMachines(os.Args[2:])
+	case "services":
+		cmdServices(os.Args[2:])
+	case "status":
+		cmdStatus(os.Args[2:])
+	case "help", "-h", "--help":
+		printUsage()
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", os.Args[1])
+		printUsage()
+		os.Exit(1)
+	}
+}
+
+func printUsage() {
+	fmt.Fprintf(os.Stderr, `tela — Tela Client
+
+Usage:
+  tela <command> [options]
+
+Commands:
+  connect   Connect to a machine through an encrypted WireGuard tunnel
+  machines  List registered machines and their services
+  services  List services on a specific machine
+  status    Show hub status summary
+
+Environment Variables:
+  TELA_HUB      Default hub URL     (overridden by -hub)
+  TELA_MACHINE  Default machine ID  (overridden by -machine)
+  TELA_TOKEN    Default auth token  (overridden by -token)
+
+  When set, these provide defaults so flags can be omitted.
+
+Examples:
+  tela connect  -hub wss://tela.awansatu.net -machine barn
+  tela machines -hub wss://tela.awansatu.net
+  tela services -hub wss://tela.awansatu.net -machine barn
+  tela status   -hub wss://tela.awansatu.net
+
+  # Or set env vars and skip the flags:
+  export TELA_HUB=wss://tela.awansatu.net TELA_MACHINE=barn
+  tela connect          # uses env defaults
+  tela machines         # only needs TELA_HUB
+
+Run 'tela <command> -h' for command-specific help.
+`)
+}
+
+// ── "tela connect" ─────────────────────────────────────────────────
+
+func cmdConnect(args []string) {
+	fs := flag.NewFlagSet("connect", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
+	machineID := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Target machine ID (env: TELA_MACHINE)")
+	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
+	localPort := fs.Int("port", 0, "Local TCP port (advanced: single-port override)")
+	targetPort := fs.Int("target-port", 0, "Target port on daemon (advanced: with -port)")
+	fs.BoolVar(&verbose, "v", false, "Verbose logging")
+	fs.Parse(args)
+
+	if *hubURL == "" || *machineID == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub and -machine are required (or set TELA_HUB / TELA_MACHINE)")
+		fs.Usage()
+		os.Exit(1)
+	}
+
 	singlePortMode := *localPort != 0
 	if singlePortMode && *targetPort == 0 {
 		*targetPort = *localPort
 	}
 
-	log.SetFlags(log.Ltime)
-	log.SetPrefix("[tela] ")
-
-	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -140,6 +178,224 @@ Options:
 		log.Println("reconnecting in 3 seconds...")
 		time.Sleep(3 * time.Second)
 	}
+}
+
+// ── "tela machines" ────────────────────────────────────────────────
+
+// hubStatusResponse is the JSON shape returned by the hub /api/status endpoint.
+type hubStatusResponse struct {
+	Machines  []hubMachine `json:"machines"`
+	Timestamp string       `json:"timestamp"`
+}
+
+type hubMachine struct {
+	ID             string       `json:"id"`
+	AgentConnected bool         `json:"agentConnected"`
+	HasSession     bool         `json:"hasSession"`
+	RegisteredAt   string       `json:"registeredAt"`
+	Services       []hubService `json:"services"`
+}
+
+type hubService struct {
+	Port  int    `json:"port"`
+	Label string `json:"label"`
+}
+
+func cmdMachines(args []string) {
+	fs := flag.NewFlagSet("machines", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(args)
+
+	if *hubURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub is required (or set TELA_HUB)")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	data, err := fetchHubStatus(*hubURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(data)
+		return
+	}
+
+	if len(data.Machines) == 0 {
+		fmt.Println("No machines registered.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "MACHINE\tSTATUS\tSERVICES\tSESSION")
+	for _, m := range data.Machines {
+		status := "offline"
+		if m.AgentConnected {
+			status = "online"
+		}
+		var svcs []string
+		for _, s := range m.Services {
+			svcs = append(svcs, fmt.Sprintf("%s:%d", s.Label, s.Port))
+		}
+		svcStr := strings.Join(svcs, ", ")
+		if svcStr == "" {
+			svcStr = "—"
+		}
+		sess := "—"
+		if m.HasSession {
+			sess = "active"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.ID, status, svcStr, sess)
+	}
+	w.Flush()
+}
+
+// ── "tela services" ────────────────────────────────────────────────
+
+func cmdServices(args []string) {
+	fs := flag.NewFlagSet("services", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	machineID := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID (env: TELA_MACHINE)")
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(args)
+
+	if *hubURL == "" || *machineID == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub and -machine are required (or set TELA_HUB / TELA_MACHINE)")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	data, err := fetchHubStatus(*hubURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	var found *hubMachine
+	for i := range data.Machines {
+		if data.Machines[i].ID == *machineID {
+			found = &data.Machines[i]
+			break
+		}
+	}
+	if found == nil {
+		fmt.Fprintf(os.Stderr, "Machine not found: %s\n", *machineID)
+		os.Exit(1)
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(found)
+		return
+	}
+
+	status := "offline"
+	if found.AgentConnected {
+		status = "online"
+	}
+	fmt.Printf("Machine: %s (%s)\n", found.ID, status)
+
+	if len(found.Services) == 0 {
+		fmt.Println("No services advertised.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "PORT\tSERVICE\tCONNECT")
+	for _, s := range found.Services {
+		fmt.Fprintf(w, "%d\t%s\ttela connect -hub %s -machine %s\n", s.Port, s.Label, *hubURL, *machineID)
+	}
+	w.Flush()
+}
+
+// ── "tela status" ──────────────────────────────────────────────────
+
+func cmdStatus(args []string) {
+	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(args)
+
+	if *hubURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub is required (or set TELA_HUB)")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	data, err := fetchHubStatus(*hubURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(data)
+		return
+	}
+
+	online := 0
+	sessions := 0
+	totalSvcs := 0
+	for _, m := range data.Machines {
+		if m.AgentConnected {
+			online++
+		}
+		if m.HasSession {
+			sessions++
+		}
+		totalSvcs += len(m.Services)
+	}
+
+	fmt.Printf("Hub:       %s\n", *hubURL)
+	fmt.Printf("Machines:  %d registered, %d online\n", len(data.Machines), online)
+	fmt.Printf("Services:  %d total\n", totalSvcs)
+	fmt.Printf("Sessions:  %d active\n", sessions)
+	fmt.Printf("Timestamp: %s\n", data.Timestamp)
+}
+
+// ── Hub API client ─────────────────────────────────────────────────
+
+// fetchHubStatus queries the hub's /api/status HTTP endpoint.
+// The hubURL may be a ws:// or wss:// URL; we convert to http(s).
+func fetchHubStatus(hubURL string) (*hubStatusResponse, error) {
+	apiURL := wsToHTTP(hubURL) + "/api/status"
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{},
+		},
+	}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("could not reach hub: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("hub returned HTTP %d", resp.StatusCode)
+	}
+
+	var data hubStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, fmt.Errorf("invalid JSON from hub: %w", err)
+	}
+	return &data, nil
+}
+
+// wsToHTTP converts a ws:// or wss:// URL to http:// or https://.
+func wsToHTTP(wsURL string) string {
+	s := strings.Replace(wsURL, "wss://", "https://", 1)
+	s = strings.Replace(s, "ws://", "http://", 1)
+	return strings.TrimRight(s, "/")
 }
 
 func runSession(hubURL, machineID, token string, overrideMappings []portMapping) {

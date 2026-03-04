@@ -43,23 +43,17 @@ services:
     restart: unless-stopped
 
   telad:
-    # WireGuard L3 daemon — end-to-end encrypted, multi-port.
+    # WireGuard L3 daemon — end-to-end encrypted, multi-port, multi-machine.
     # Uses gVisor netstack (pure userspace, no TUN, no admin).
-    # Forwards all listed ports to the Docker host.
+    # Reads machine definitions from telad.yaml.
     build:
       context: .
       dockerfile: docker/hub/Dockerfile
     container_name: tela-daemon
     entrypoint: ["/usr/local/bin/telad"]
-    command:
-      - -hub
-      - ws://hub:8080
-      - -machine
-      - barn-wg
-      - -ports
-      - "22,3389"
-      - -target-host
-      - host.docker.internal
+    command: ["-config", "/etc/tela/telad.yaml"]
+    volumes:
+      - ./poc/telad.yaml:/etc/tela/telad.yaml:ro
     depends_on:
       - hub
     restart: unless-stopped

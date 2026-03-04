@@ -228,15 +228,9 @@ services:
       context: .
       dockerfile: docker/hub/Dockerfile
     entrypoint: ["/usr/local/bin/telad"]
-    command:
-      - -hub
-      - ws://hub:8080
-      - -machine
-      - barn-wg
-      - -ports
-      - "22,3389"
-      - -target-host
-      - host.docker.internal
+    command: ["-config", "/etc/tela/telad.yaml"]
+    volumes:
+      - ./poc/telad.yaml:/etc/tela/telad.yaml:ro
     depends_on:
       - hub
 ```
@@ -298,7 +292,7 @@ tela.exe (Go, WireGuard client) ──wss──▶ hub.js (Node.js relay) ◀─
 
 ```bash
 docker compose up --build -d
-./tela -hub wss://tela-local.awansatu.net -machine barn-wg
+./tela connect -hub wss://tela-local.awansatu.net -machine barn
 ```
 
 ### Remaining iteration targets

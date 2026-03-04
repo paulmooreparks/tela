@@ -82,7 +82,7 @@ telad registers with the hub, generates its WireGuard keypair, and waits for a c
 ### 4. Start tela (on your laptop)
 
 ```bash
-./tela -hub ws://localhost:8080 -machine mybox
+./tela connect -hub ws://localhost:8080 -machine mybox
 ```
 
 tela connects, completes the WireGuard handshake, and prints the local port bindings:
@@ -113,26 +113,94 @@ export CLOUDFLARE_API_TOKEN=your_token_here
 docker compose up --build -d
 
 # Run tela on your laptop
-./tela -hub wss://tela-local.awansatu.net -machine barn-wg
+./tela connect -hub wss://tela-local.awansatu.net -machine barn
 ```
 
 See `IMPLEMENTATION.md` §8 for the full Docker Compose skeleton and Caddyfile.
 
 ## CLI Reference
 
-### tela
+### tela (client)
+
+Subcommand-based CLI. Run `tela` with no arguments for usage.
+
+**Environment variables** — set these to avoid repeating flags:
+
+| Variable | Description |
+|----------|-------------|
+| `TELA_HUB` | Default hub URL (overridden by `-hub`) |
+| `TELA_MACHINE` | Default machine ID (overridden by `-machine`) |
+| `TELA_TOKEN` | Default auth token (overridden by `-token`) |
+
+#### tela connect
+
+Open a WireGuard tunnel to a registered machine.
 
 ```
-tela -hub <url> -machine <name> [-token <secret>]
+tela connect -hub <url> -machine <name> [-token <secret>]
+
+# With env vars:
+export TELA_HUB=wss://tela.awansatu.net TELA_MACHINE=barn
+tela connect
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-hub` | (required) | Hub WebSocket URL (`ws://` or `wss://`) |
-| `-machine` | (required) | Machine name to connect to |
-| `-token` | (none) | Authentication token (must match `HUB_TOKEN`) |
+| `-hub` | `$TELA_HUB` | Hub WebSocket URL (`ws://` or `wss://`) |
+| `-machine` | `$TELA_MACHINE` | Machine name to connect to |
+| `-token` | `$TELA_TOKEN` | Authentication token (must match `HUB_TOKEN`) |
 
-### telad
+#### tela machines
+
+List machines registered on the hub.
+
+```
+tela machines -hub <url> [-token <secret>] [-json]
+tela machines              # uses $TELA_HUB
+```
+
+#### tela services
+
+List services advertised by machines.
+
+```
+tela services -hub <url> -machine <name> [-token <secret>] [-json]
+tela services              # uses $TELA_HUB + $TELA_MACHINE
+```
+
+#### tela status
+
+Show a summary of hub status (machine counts, session counts).
+
+```
+tela status -hub <url> [-token <secret>] [-json]
+tela status                # uses $TELA_HUB
+```
+
+### telad (agent)
+
+**Config-file mode** (recommended for production and multi-machine):
+
+```yaml
+# telad.yaml
+hub: ws://hub:8080
+token: secret              # optional, shared default
+
+machines:
+  - name: barn
+    ports: [22, 3389]
+    target: host.docker.internal
+
+  - name: nas
+    ports: [22, 445]
+    target: 192.168.1.50
+```
+
+```
+telad -config telad.yaml
+```
+
+**Single-machine mode** (flags):
 
 ```
 telad -hub <url> -machine <name> -ports <list> [-target-host <host>] [-token <secret>]
@@ -140,11 +208,12 @@ telad -hub <url> -machine <name> -ports <list> [-target-host <host>] [-token <se
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-hub` | (required) | Hub WebSocket URL |
-| `-machine` | (required) | Machine name to register as |
-| `-ports` | (required) | Comma-separated ports to advertise (e.g. `"22,3389"`) |
-| `-target-host` | `127.0.0.1` | Host where services are running |
-| `-token` | (none) | Authentication token |
+| `-config` | `$TELA_CONFIG` | Path to YAML config file |
+| `-hub` | `$TELA_HUB` | Hub WebSocket URL |
+| `-machine` | `$TELA_MACHINE` | Machine name to register as |
+| `-ports` | `$TELA_PORTS` or `3389` | Comma-separated ports to advertise |
+| `-target-host` | `$TELA_TARGET_HOST` or `127.0.0.1` | Host where services are running |
+| `-token` | `$TELA_TOKEN` | Authentication token |
 
 ### hub.js
 
@@ -166,6 +235,18 @@ node serve.js [port]
 
 Default port: `3000`. Serves a static test page.
 
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **Hub** | Central relay server (`hub.js`). Routes control + data between agents and clients. |
+| **Hub Console** | Web dashboard served at the hub root URL. Shows live machine/service status. |
+| **Agent (telad)** | Daemon running on a machine that registers with the hub and exposes services. |
+| **Client (tela)** | CLI tool that connects to a machine through the hub and opens a WireGuard tunnel. |
+| **Machine** | A named endpoint registered by an agent (e.g. `barn`). |
+| **Service** | A network port advertised by an agent (e.g. SSH/22, RDP/3389). |
+| **Session** | An active tunnel between a client and a machine. |
+
 ## What This Proves
 
 - WireGuard L3 tunneling over WebSocket works for real protocols (SSH, RDP)
@@ -175,12 +256,12 @@ Default port: `3000`. Serves a static test page.
 - Asymmetric UDP mode (one side UDP, other side WS) works via hub bridging
 - Token authentication prevents unauthorized pairing
 - Auto-reconnect keeps sessions resilient
+- Hub Console provides live visibility into registered machines and services
 
 ## What's Next
 
 - Binary multiplexed framing (DESIGN.md §6.3)
 - Multiple simultaneous sessions per machine
-- Browser-based UI for session management
 
 See `TODO.md` for the full roadmap.
 

@@ -1,0 +1,10 @@
+# telad configuration — register machines with the hub.
+# Each machine gets its own WireGuard tunnel and reconnect loop.
+
+hub: ws://hub:8080
+# token: secret              # shared auth token (optional)
+
+machines:
+  - name: barn
+    ports: [22, 3389]
+    target: host.docker.internal

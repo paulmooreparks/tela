@@ -24,37 +24,41 @@ This glossary defines terms as they are used in Tela.
 
 | Term | Definition (Tela meaning) |
 | --- | --- |
-| **Agent** | The long‑lived process on a managed machine that makes an outbound connection to the Hub and proxies traffic to local services (e.g., RDP/SSH/HTTP). |
-| **Browser UI / Web** | The web page the user opens for login and session setup. It orchestrates sessions but is not in the data path. |
-| **Certificate pinning** | The agent/helper refuses to connect unless the Hub presents the expected TLS certificate fingerprint, preventing MITM even when a proxy can issue “valid” certificates. |
-| **Channel** | A logical stream within a single WebSocket connection (e.g., one proxied TCP connection) identified by a channel ID and managed via `open`/`close`. |
+| **Agent (telad)** | The long‑lived daemon on a managed machine that makes an outbound connection to the Hub and exposes local services. Binary: \	elad\. |
+| **Awan Satu** | The cloud platform/service built on top of Tela. Provides hub registry, relay infrastructure, hosted hubs, SSO, and dashboards. Not part of Tela core. See §18. |
+| **Certificate pinning** | The agent/client refuses to connect unless the Hub presents the expected TLS certificate fingerprint, preventing MITM even when a proxy can issue “valid” certificates. |
+| **Channel** | A logical stream within a single WebSocket connection (e.g., one proxied TCP connection) identified by a channel ID and managed via \open\/\close\. |
+| **Client (tela)** | The binary on the user’s laptop that connects through the Hub to an agent, establishes a WireGuard tunnel, and binds localhost listeners. Binary: \	ela\. Replaces the earlier “Helper” concept. |
 | **Connectivity fabric (fabric)** | The stable substrate that provides secure, outbound‑only connectivity and multiplexed tunnels between endpoints. |
 | **Control plane** | Authentication, session creation, token issuance, device registry/metadata, and other “decisions” (not bulk data transport). |
-| **Data plane** | The high‑volume tunneled bytes (e.g., an RDP stream) flowing between helper↔agent via the Hub. |
-| **Ephemeral port / localhost binding** | A temporary `127.0.0.1:<port>` listener created by the helper so native clients can connect without installing anything system‑wide. |
+| **Data plane** | The high‑volume tunneled bytes (e.g., an RDP stream) flowing between client↔agent via the Hub. |
+| **Ephemeral port / localhost binding** | A temporary W.0.0.1:<port>\ listener created by the client so native apps (mstsc, ssh, etc.) can connect without installing anything system‑wide. |
 | **Fingerprint (certificate fingerprint)** | A short hash derived from the Hub’s TLS certificate (or public key) used for pinning; must match the expected value exactly. |
 | **Frame** | One protocol unit on the wire: a fixed header plus a payload (control JSON, TCP data, or heartbeat). |
-| **Helper** | A short‑lived user‑mode binary that connects outbound to the Hub, authenticates with a session token, binds `localhost:<port>`, and forwards TCP traffic. |
-| **Hub** | The central relay/coordinator that accepts agent and helper connections, brokers sessions, allocates channels, and routes frames between parties. |
+| **Hub** | The central relay/coordinator that accepts agent and client connections, brokers sessions, allocates channels, and routes frames between parties. Binary: \hub.js\. |
+| **Hub Console** | The web interface served by a Hub (e.g., \https://tela.awansatu.net/\). Shows registered machines, services, and session status. |
 | **HTTP** | Hypertext Transfer Protocol; commonly tunneled to validate connectivity (e.g., a static page). |
 | **Locked‑down environment** | A network or workstation that restricts inbound ports, VPNs, and/or installation, but still allows outbound HTTPS/WebSocket traffic. |
+| **Machine** | A named resource registered by an agent (e.g., \arn-wg\). One agent registers one machine. |
 | **Mesh** | A connected set of agents and sessions forming a network of reachable services through the Hub (not necessarily peer‑to‑peer). |
 | **MITM (man‑in‑the‑middle)** | An attacker (or intercepting proxy) that attempts to observe/modify traffic between endpoints by inserting itself between client and server. |
 | **Multiplexing** | Carrying multiple channels (control + multiple TCP streams) over a single WebSocket connection using a framing header and channel IDs. |
 | **NAT** | Network Address Translation; a common reason inbound connections to a machine are not possible without port forwarding. |
-| **Orchestration layer** | The browser‑based workflow that creates sessions and provides the helper download/run instructions; it does not forward tunneled TCP bytes. |
-| **Outbound‑only** | Agents/helpers initiate connections out to the Hub; no inbound ports are required on managed machines. |
+| **Outbound‑only** | Agents and clients initiate connections out to the Hub; no inbound ports are required on managed machines. |
+| **Portal** | The Awan Satu web UI for multi‑hub management, user accounts, and billing. Distinct from the single‑hub Console. |
 | **RDP** | Microsoft Remote Desktop Protocol (typically TCP/3389); a primary example of a tunneled service. |
-| **SSH** | Secure Shell (typically TCP/22); commonly used for remote terminals and file transfer (SCP/SFTP). |
+| **Registry** | The directory of Hubs maintained by Awan Satu (§18.2). Maps hub identifiers to live connections. |
+| **Relay** | Awan Satu’s rendezvous service for self‑hosted Hubs (§18.3). Transparently forwards WebSocket frames. |
+| **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). Identified by port number and optional label. |
+| **Session** | An active encrypted tunnel between a client and an agent, brokered by the Hub. |
+| **Session token** | A short‑lived, single‑use credential issued by the Hub that authorizes a client for a specific session. |
 | **SFTP** | SSH File Transfer Protocol; a file transfer protocol that runs over SSH. |
-| **Session** | A bounded period where a helper is authorized to connect and proxy traffic to a specific agent/service using a short‑lived token. |
-| **Session token** | A short‑lived, single‑use credential issued by the Hub that allows a helper (not an agent) to authenticate for a specific session. |
-| **Service** | A TCP endpoint on the agent machine that Tela can proxy (e.g., `127.0.0.1:3389` for RDP, `127.0.0.1:22` for SSH). |
+| **SSH** | Secure Shell (typically TCP/22); commonly used for remote terminals and file transfer (SCP/SFTP). |
 | **TCP** | Transmission Control Protocol; Tela tunnels TCP streams (RDP/SSH/HTTP/etc.) without needing to understand the application protocol. |
 | **TLS** | Transport Layer Security; provides encrypted and authenticated transport. Tela uses TLS 1.3 for Hub connections. |
-| **Tunnel** | The end‑to‑end forwarding path `client → helper → Hub → agent → service` that makes a remote service appear local. |
+| **Tunnel** | The end‑to‑end forwarding path \client → tela → Hub → telad → service\ that makes a remote service appear local. |
 | **VNC** | Virtual Network Computing; another example of a TCP service that can be tunneled. |
-| **WebSocket (WS/WSS)** | A persistent full‑duplex connection over HTTP(S). Tela uses `wss://` for secure transport once deployed. |
+| **WebSocket (WS/WSS)** | A persistent full‑duplex connection over HTTP(S). Tela uses \wss://\ for secure transport once deployed. |
 
 # **1. Identity & Positioning**
 
