@@ -1,39 +1,20 @@
 # Tela Hub — POC Docker Image (multi-stage)
 #
-# Stage 1: Compile Go helper binaries for Windows, Linux, macOS.
-# Stage 2: Node.js hub serving HTTP + WebSocket + helper downloads.
+# Stage 1: Compile telad (daemon) and tela (client) Go binaries.
+# Stage 2: Node.js hub serving HTTP + WebSocket + tela client downloads.
 #
-# The hub serves helper binaries at:
-#   /helper/windows/tela-helper.exe
-#   /helper/linux/tela-helper
-#   /helper/macos/tela-helper          (amd64)
-#   /helper/macos-arm64/tela-helper    (Apple Silicon)
+# The hub serves client binaries at:
+#   /tela/windows/tela.exe
+#   /tela/linux/tela
+#   /tela/macos/tela          (amd64)
+#   /tela/macos-arm64/tela    (Apple Silicon)
 #
 # Build context must be the repo root:
 #   docker build -f docker/hub/Dockerfile -t tela-hub-poc .
 
-# ── Stage 1a: Build Go helper binaries (plain TCP tunnel) ──────────
+# ── Stage 1: Build telad + tela Go binaries ────────────────────────
 
-FROM golang:1.24-alpine AS helper-builder
-
-WORKDIR /src
-
-# Copy Go module files first for layer caching
-COPY helper/go.mod helper/go.sum ./
-RUN go mod download
-
-# Copy source
-COPY helper/*.go ./
-
-# Build for each target platform (static, stripped)
-RUN GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /out/windows/tela-helper.exe . \
- && GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o /out/linux/tela-helper       . \
- && GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o /out/macos/tela-helper        . \
- && GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o /out/macos-arm64/tela-helper  .
-
-# ── Stage 1b: Build WireGuard agent + helper (L3 tunnel) ───────────
-
-FROM golang:1.24-alpine AS wg-builder
+FROM golang:1.24-alpine AS go-builder
 
 WORKDIR /src
 
@@ -45,26 +26,26 @@ RUN go mod download
 COPY internal/ ./internal/
 COPY cmd/ ./cmd/
 
-# Build WG agent (Linux only — runs inside Docker)
+# Build telad — Linux only (runs inside Docker)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-    -o /out/tela-agent ./cmd/tela-agent
+    -o /out/telad ./cmd/telad
 
-# Build WG helper for each target platform
+# Build tela client for each target platform (downloaded by end users)
 RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
-    -o /out/helper-wg/windows/tela-helper-wg.exe ./cmd/tela-helper \
+    -o /out/tela/windows/tela.exe ./cmd/tela \
  && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-    -o /out/helper-wg/linux/tela-helper-wg ./cmd/tela-helper \
+    -o /out/tela/linux/tela ./cmd/tela \
  && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
-    -o /out/helper-wg/macos/tela-helper-wg ./cmd/tela-helper \
+    -o /out/tela/macos/tela ./cmd/tela \
  && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
-    -o /out/helper-wg/macos-arm64/tela-helper-wg ./cmd/tela-helper
+    -o /out/tela/macos-arm64/tela ./cmd/tela
 
 # ── Stage 2: Node.js hub ───────────────────────────────────────────
 
 FROM node:20-alpine
 
 LABEL org.opencontainers.image.title="tela-hub-poc" \
-      org.opencontainers.image.description="Tela POC Hub — HTTP + WebSocket + helper downloads" \
+      org.opencontainers.image.description="Tela POC Hub — HTTP + WebSocket + client downloads" \
       org.opencontainers.image.source="https://github.com/paulmooreparks/tela"
 
 RUN apk add --no-cache tini curl
@@ -79,21 +60,14 @@ RUN npm ci --omit=dev
 COPY poc/hub.js ./
 COPY poc/www/ ./www/
 
-# Copy helper binaries from build stage into www/ so the static
-# server exposes them at /helper/<platform>/tela-helper[.exe]
-COPY --from=helper-builder /out/windows/    ./www/helper/windows/
-COPY --from=helper-builder /out/linux/      ./www/helper/linux/
-COPY --from=helper-builder /out/macos/      ./www/helper/macos/
-COPY --from=helper-builder /out/macos-arm64/ ./www/helper/macos-arm64/
+# Copy tela client binaries for download
+COPY --from=go-builder /out/tela/windows/    ./www/tela/windows/
+COPY --from=go-builder /out/tela/linux/      ./www/tela/linux/
+COPY --from=go-builder /out/tela/macos/      ./www/tela/macos/
+COPY --from=go-builder /out/tela/macos-arm64/ ./www/tela/macos-arm64/
 
-# Copy WG helper binaries for download
-COPY --from=wg-builder /out/helper-wg/windows/    ./www/helper-wg/windows/
-COPY --from=wg-builder /out/helper-wg/linux/      ./www/helper-wg/linux/
-COPY --from=wg-builder /out/helper-wg/macos/      ./www/helper-wg/macos/
-COPY --from=wg-builder /out/helper-wg/macos-arm64/ ./www/helper-wg/macos-arm64/
-
-# Copy WG agent binary (used by agent-rdp-wg service)
-COPY --from=wg-builder /out/tela-agent /usr/local/bin/tela-agent
+# Copy telad daemon binary (used by the telad service)
+COPY --from=go-builder /out/telad /usr/local/bin/telad
 
 # Environment defaults
 ENV HUB_PORT=8080

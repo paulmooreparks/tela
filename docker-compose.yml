@@ -1,14 +1,10 @@
 # Tela POC — Docker Compose
 #
-# Runs the hub (WS relay + static site) and an agent that tunnels
-# to the static site. For local testing without Cloudflare.
+# Runs the hub (WS relay + static site), Caddy reverse proxy, and
+# telad (WireGuard daemon) that tunnels services on the host.
 #
 # Usage:
 #   docker compose up --build
-#
-# With Cloudflare Tunnel the hub's ports don't need to be published
-# to the host — cloudflared reaches them via Docker networking or
-# localhost. The ports below are published for local-only testing.
 
 services:
   caddy:
@@ -43,64 +39,22 @@ services:
       - HUB_PORT=8080
     restart: unless-stopped
 
-  agent:
-    # The agent runs the same Node image and connects to the hub's WS port.
-    # It tunnels TCP traffic to the hub's own static site so we can
-    # prove the full path: browser → helper → hub → agent → service.
-    image: node:20-alpine
-    container_name: tela-agent
-    working_dir: /app
-    volumes:
-      - ./poc:/app:ro
-    # Wait a couple seconds for the hub to be ready
-    command: >
-      sh -c "sleep 2 && node agent.js ws://hub:8080 barn 8080 hub"
-    depends_on:
-      - hub
-    restart: unless-stopped
-
-  agent-ssh:
-    # Second agent: tunnels SSH (port 22) on the host machine.
-    # host.docker.internal resolves to the Docker host (BARN).
-    image: node:20-alpine
-    container_name: tela-agent-ssh
-    working_dir: /app
-    volumes:
-      - ./poc:/app:ro
-    command: >
-      sh -c "sleep 2 && node agent.js ws://hub:8080 barn-ssh 22 host.docker.internal"
-    depends_on:
-      - hub
-    restart: unless-stopped
-
-  agent-rdp:
-    # Third agent: tunnels RDP (port 3389) on the host machine.
-    image: node:20-alpine
-    container_name: tela-agent-rdp
-    working_dir: /app
-    volumes:
-      - ./poc:/app:ro
-    command: >
-      sh -c "sleep 2 && node agent.js ws://hub:8080 barn-rdp 3389 host.docker.internal"
-    depends_on:
-      - hub
-    restart: unless-stopped
-
-  agent-rdp-wg:
-    # WireGuard L3 agent for RDP — end-to-end encrypted, NLA-compatible.
+  telad:
+    # WireGuard L3 daemon — end-to-end encrypted, multi-port.
     # Uses gVisor netstack (pure userspace, no TUN, no admin).
+    # Forwards all listed ports to the Docker host.
     build:
       context: .
       dockerfile: docker/hub/Dockerfile
-    container_name: tela-agent-rdp-wg
-    entrypoint: ["/usr/local/bin/tela-agent"]
+    container_name: tela-daemon
+    entrypoint: ["/usr/local/bin/telad"]
     command:
       - -hub
       - ws://hub:8080
       - -machine
-      - barn-rdp-wg
-      - -target-port
-      - "3389"
+      - barn-wg
+      - -ports
+      - "22,3389,8080"
       - -target-host
       - host.docker.internal
     depends_on:

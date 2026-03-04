@@ -2,12 +2,9 @@
   "name": "tela-poc",
   "version": "0.1.0",
   "private": true,
-  "description": "Tela proof-of-concept: RDP tunneling via WebSocket relay",
+  "description": "Tela proof-of-concept: WireGuard tunneling via WebSocket relay",
   "scripts": {
-    "hub": "node hub.js",
-    "agent": "node agent.js",
-    "helper": "node helper.js",
-    "serve": "node serve.js"
+    "hub": "node hub.js"
   },
   "dependencies": {
     "ws": "^8.0.0"

@@ -28,12 +28,17 @@ import (
 
 // Bind implements conn.Bind for WireGuard-over-WebSocket transport.
 // The caller must feed received binary WebSocket messages into RecvCh.
+//
+// WireGuard calls Close() then Open() during device state transitions
+// (e.g. Up). The bind must support this cycle — Close/Open are
+// re-entrant and reset the receive path each time.
 type Bind struct {
 	ws      *websocket.Conn
 	writeMu sync.Mutex // gorilla/websocket requires serialized writes
 	RecvCh  chan []byte // binary WG datagrams from the reader goroutine
+	mu      sync.Mutex // protects closed
 	closed  chan struct{}
-	once    sync.Once
+	open    bool
 }
 
 // New creates a Bind using the given WebSocket connection.
@@ -60,12 +65,25 @@ func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 }
 
 // Open returns the receive function. Port is ignored (we don't use UDP).
+// WireGuard calls Open after Close during state transitions, so this
+// resets the closed channel to allow receiveFunc to work again.
 func (b *Bind) Open(port uint16) ([]conn.ReceiveFunc, uint16, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Reset the closed channel so receiveFunc unblocks
+	b.closed = make(chan struct{})
+	b.open = true
+	log.Printf("[wsbind] opened")
 	return []conn.ReceiveFunc{b.receiveFunc}, 0, nil
 }
 
 // receiveFunc blocks until a WireGuard datagram arrives on RecvCh.
 func (b *Bind) receiveFunc(bufs [][]byte, sizes []int, eps []conn.Endpoint) (int, error) {
+	b.mu.Lock()
+	closed := b.closed
+	b.mu.Unlock()
+
 	select {
 	case data, ok := <-b.RecvCh:
 		if !ok {
@@ -75,17 +93,22 @@ func (b *Bind) receiveFunc(bufs [][]byte, sizes []int, eps []conn.Endpoint) (int
 		sizes[0] = n
 		eps[0] = &endpoint{}
 		return 1, nil
-	case <-b.closed:
+	case <-closed:
 		return 0, errors.New("bind closed")
 	}
 }
 
-// Close shuts down the bind. Safe to call multiple times.
+// Close signals all receiveFunc goroutines to stop. Safe to call
+// multiple times. The bind can be re-opened via Open().
 func (b *Bind) Close() error {
-	b.once.Do(func() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.open {
 		close(b.closed)
+		b.open = false
 		log.Printf("[wsbind] closed")
-	})
+	}
 	return nil
 }
 

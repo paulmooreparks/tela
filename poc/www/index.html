@@ -101,34 +101,34 @@
   </div>
 
   <div class="card" id="helper-card">
-    <h2>Download Helper</h2>
-    <p>The helper is a small, zero-install binary. Download it, run it, and connect.</p>
+    <h2>Download Tela Client</h2>
+    <p>tela is a small, zero-install binary. Download it, run it, and connect.</p>
     <p class="detected" id="detected-os"></p>
-    <a class="download-primary" id="dl-primary" href="/helper/windows/tela-helper.exe">
+    <a class="download-primary" id="dl-primary" href="/tela/windows/tela.exe">
       <span class="dl-icon">&#11015;</span> <span id="dl-label">Download for Windows</span>
     </a>
     <ul class="download-alt" id="dl-alt">
-      <li><a href="/helper/windows/tela-helper.exe">Windows</a></li>
-      <li><a href="/helper/linux/tela-helper">Linux (amd64)</a></li>
-      <li><a href="/helper/macos/tela-helper">macOS (Intel)</a></li>
-      <li><a href="/helper/macos-arm64/tela-helper">macOS (Apple&nbsp;Silicon)</a></li>
+      <li><a href="/tela/windows/tela.exe">Windows</a></li>
+      <li><a href="/tela/linux/tela">Linux (amd64)</a></li>
+      <li><a href="/tela/macos/tela">macOS (Intel)</a></li>
+      <li><a href="/tela/macos-arm64/tela">macOS (Apple&nbsp;Silicon)</a></li>
     </ul>
-    <div class="usage" id="usage-block">tela-helper.exe -hub wss://tela.awansatu.net -machine &lt;name&gt; -port 8000</div>
+    <div class="usage" id="usage-block">tela.exe -hub wss://tela.awansatu.net -machine &lt;name&gt;</div>
   </div>
 
   <div class="card">
     <h2>Tunnel Test</h2>
     <p>If you reached this page via <code>tela.awansatu.net</code>, the full path is:</p>
     <div class="path">browser &rarr; Cloudflare &rarr; hub (static site)</div>
-    <p style="margin-top: 8px;">When accessed through a helper tunnel, the path is:</p>
+    <p>When accessed through a tela tunnel, the path is:</p>
     <div class="diagram">
 browser (localhost:&lt;port&gt;)
   &darr;
-helper (TCP &rarr; WebSocket)
+tela (WireGuard &rarr; WebSocket)
   &darr;
 hub (WebSocket relay)
   &darr;
-agent (WebSocket &rarr; TCP)
+telad (WebSocket &rarr; WireGuard)
   &darr;
 target service</div>
   </div>
@@ -149,10 +149,10 @@ target service</div>
     // Detect client OS from User-Agent and highlight the right download.
     (function () {
       var platforms = [
-        { pattern: /Win/,                    label: 'Windows',              href: '/helper/windows/tela-helper.exe', bin: 'tela-helper.exe' },
-        { pattern: /Linux(?!.*Android)/,     label: 'Linux (amd64)',        href: '/helper/linux/tela-helper',       bin: 'tela-helper' },
-        { pattern: /Mac.*ARM|Mac.*Apple/i,   label: 'macOS (Apple Silicon)',href: '/helper/macos-arm64/tela-helper', bin: 'tela-helper' },
-        { pattern: /Mac/,                    label: 'macOS (Intel)',        href: '/helper/macos/tela-helper',       bin: 'tela-helper' },
+        { pattern: /Win/,                    label: 'Windows',              href: '/tela/windows/tela.exe', bin: 'tela.exe' },
+        { pattern: /Linux(?!.*Android)/,     label: 'Linux (amd64)',        href: '/tela/linux/tela',       bin: 'tela' },
+        { pattern: /Mac.*ARM|Mac.*Apple/i,   label: 'macOS (Apple Silicon)',href: '/tela/macos-arm64/tela', bin: 'tela' },
+        { pattern: /Mac/,                    label: 'macOS (Intel)',        href: '/tela/macos/tela',       bin: 'tela' },
       ];
 
       // Apple Silicon detection: Safari on ARM, or Chrome/Edge userAgentData
@@ -191,7 +191,7 @@ target service</div>
         document.getElementById('dl-label').textContent = 'Download for ' + m.label;
         document.getElementById('detected-os').textContent = 'Detected: ' + m.label;
         document.getElementById('usage-block').textContent =
-          m.bin + ' -hub wss://tela.awansatu.net -machine <name> -port 8000';
+          m.bin + ' -hub wss://tela.awansatu.net -machine <name>';
         // Hide the matched platform from the "also available" list
         var links = document.querySelectorAll('#dl-alt a');
         for (var j = 0; j < links.length; j++) {
