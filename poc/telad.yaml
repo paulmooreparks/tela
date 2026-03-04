@@ -6,5 +6,15 @@ hub: ws://hub:8080
 
 machines:
   - name: barn
-    ports: [22, 3389]
+    # Either `ports:` (shortcut) or `services:` (rich descriptors).
+    # ports: [22, 3389]
+    services:
+      - port: 22
+        proto: tcp
+        name: SSH
+        description: Secure Shell
+      - port: 3389
+        proto: tcp
+        name: RDP
+        description: Remote Desktop
     target: host.docker.internal

@@ -35,6 +35,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -55,15 +56,32 @@ const (
 	mtu      = 1420
 )
 
+var version = "dev"
+
 // controlMessage is the JSON envelope for hub ↔ agent signalling.
 type controlMessage struct {
 	Type      string   `json:"type"`
 	MachineID string   `json:"machineId,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+	Hostname    string `json:"hostname,omitempty"`
+	OS          string `json:"os,omitempty"`
+	AgentVersion string `json:"agentVersion,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Location    string   `json:"location,omitempty"`
+	Owner       string   `json:"owner,omitempty"`
 	Message   string   `json:"message,omitempty"`
 	WGPubKey  string   `json:"wgPubKey,omitempty"`
 	Ports     []uint16 `json:"ports,omitempty"`
+	Services  []serviceDescriptor `json:"services,omitempty"`
 	Token     string   `json:"token,omitempty"`
 	Port      int      `json:"port,omitempty"` // single port (udp-offer)
+}
+
+type serviceDescriptor struct {
+	Port        uint16 `json:"port" yaml:"port"`
+	Proto       string `json:"proto,omitempty" yaml:"proto,omitempty"`
+	Name        string `json:"name,omitempty" yaml:"name,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 }
 
 // silentLogger discards verbose WireGuard-go routine spam.
@@ -82,10 +100,29 @@ type configFile struct {
 
 // machineConfig describes one machine to register with the hub.
 type machineConfig struct {
-	Name   string   `yaml:"name"`
-	Ports  []uint16 `yaml:"ports"`
-	Target string   `yaml:"target,omitempty"` // defaults to 127.0.0.1
-	Token  string   `yaml:"token,omitempty"`  // overrides top-level token
+	Name        string   `yaml:"name"`
+	DisplayName string   `yaml:"displayName,omitempty"`
+	Tags        []string `yaml:"tags,omitempty"`
+	Location    string   `yaml:"location,omitempty"`
+	Owner       string   `yaml:"owner,omitempty"`
+	Ports       []uint16 `yaml:"ports,omitempty"`
+	Services    []serviceDescriptor `yaml:"services,omitempty"`
+	Target      string   `yaml:"target,omitempty"` // defaults to 127.0.0.1
+	Token       string   `yaml:"token,omitempty"`  // overrides top-level token
+}
+
+type registration struct {
+	MachineID    string
+	DisplayName  string
+	Hostname     string
+	OS           string
+	AgentVersion string
+	Tags         []string
+	Location     string
+	Owner        string
+	Token        string
+	Ports        []uint16
+	Services     []serviceDescriptor
 }
 
 var verbose bool
@@ -153,7 +190,18 @@ Options:
 		log.Fatalf("no valid ports in: %s", *portsStr)
 	}
 
-	runSingleMachine(*hubURL, *machineID, *token, *targetHost, ports)
+	hostname, _ := os.Hostname()
+	reg := registration{
+		MachineID:    *machineID,
+		Hostname:     hostname,
+		OS:           runtime.GOOS,
+		AgentVersion: version,
+		Token:        *token,
+		Ports:        ports,
+		Services:     defaultServicesFromPorts(ports),
+	}
+
+	runSingleMachine(*hubURL, reg, *targetHost)
 }
 
 // loadConfig reads and validates a telad YAML config file.
@@ -176,14 +224,20 @@ func loadConfig(path string) (*configFile, error) {
 		if m.Name == "" {
 			return nil, fmt.Errorf("%s: machines[%d]: 'name' is required", path, i)
 		}
-		if len(m.Ports) == 0 {
-			return nil, fmt.Errorf("%s: machines[%d] (%s): 'ports' is required", path, i, m.Name)
+		if len(m.Ports) == 0 && len(m.Services) == 0 {
+			return nil, fmt.Errorf("%s: machines[%d] (%s): either 'ports' or 'services' is required", path, i, m.Name)
 		}
 		if m.Target == "" {
 			cfg.Machines[i].Target = "127.0.0.1"
 		}
 		if m.Token == "" {
 			cfg.Machines[i].Token = cfg.Token
+		}
+		if len(m.Ports) == 0 && len(m.Services) > 0 {
+			cfg.Machines[i].Ports = portsFromServices(m.Services)
+		}
+		if len(m.Services) == 0 && len(m.Ports) > 0 {
+			cfg.Machines[i].Services = defaultServicesFromPorts(m.Ports)
 		}
 	}
 	return &cfg, nil
@@ -197,21 +251,79 @@ func runMultiMachine(cfg *configFile) {
 		wg.Add(1)
 		go func(mc machineConfig) {
 			defer wg.Done()
-			runSingleMachine(cfg.Hub, mc.Name, mc.Token, mc.Target, mc.Ports)
+			hostname, _ := os.Hostname()
+			reg := registration{
+				MachineID:    mc.Name,
+				DisplayName:  mc.DisplayName,
+				Hostname:     hostname,
+				OS:           runtime.GOOS,
+				AgentVersion: version,
+				Tags:         mc.Tags,
+				Location:     mc.Location,
+				Owner:        mc.Owner,
+				Token:        mc.Token,
+				Ports:        mc.Ports,
+				Services:     mc.Services,
+			}
+			runSingleMachine(cfg.Hub, reg, mc.Target)
 		}(m)
 	}
 	wg.Wait()
 }
 
 // runSingleMachine is the reconnect loop for one machine.
-func runSingleMachine(hubURL, machineID, token, targetHost string, ports []uint16) {
-	prefix := fmt.Sprintf("[telad:%s] ", machineID)
+func runSingleMachine(hubURL string, reg registration, targetHost string) {
+	prefix := fmt.Sprintf("[telad:%s] ", reg.MachineID)
 	logger := log.New(os.Stderr, prefix, log.Ltime)
 	for {
-		runAgent(logger, hubURL, machineID, token, targetHost, ports)
+		runAgent(logger, hubURL, reg, targetHost)
 		logger.Println("reconnecting in 3 seconds...")
 		time.Sleep(3 * time.Second)
 	}
+}
+
+func portsFromServices(services []serviceDescriptor) []uint16 {
+	ports := make([]uint16, 0, len(services))
+	seen := make(map[uint16]struct{}, len(services))
+	for _, s := range services {
+		if s.Port == 0 {
+			continue
+		}
+		if _, ok := seen[s.Port]; ok {
+			continue
+		}
+		seen[s.Port] = struct{}{}
+		ports = append(ports, s.Port)
+	}
+	return ports
+}
+
+func defaultServicesFromPorts(ports []uint16) []serviceDescriptor {
+	services := make([]serviceDescriptor, 0, len(ports))
+	for _, p := range ports {
+		name := fmt.Sprintf("port %d", p)
+		desc := ""
+		switch p {
+		case 22:
+			name, desc = "SSH", "Secure Shell"
+		case 80:
+			name, desc = "HTTP", "Web"
+		case 443:
+			name, desc = "HTTPS", "Web (TLS)"
+		case 3389:
+			name, desc = "RDP", "Remote Desktop"
+		case 445:
+			name, desc = "SMB", "File sharing"
+		case 5900:
+			name, desc = "VNC", "Remote desktop"
+		case 8080:
+			name, desc = "HTTP-Alt", "Web"
+		case 8443:
+			name, desc = "HTTPS-Alt", "Web (TLS)"
+		}
+		services = append(services, serviceDescriptor{Port: p, Proto: "tcp", Name: name, Description: desc})
+	}
+	return services
 }
 
 func parsePorts(s string) []uint16 {
@@ -231,7 +343,7 @@ func parsePorts(s string) []uint16 {
 	return ports
 }
 
-func runAgent(lg *log.Logger, hubURL, machineID, token, targetHost string, ports []uint16) {
+func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string) {
 	lg.Printf("connecting to hub: %s", hubURL)
 
 	ws, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
@@ -241,9 +353,22 @@ func runAgent(lg *log.Logger, hubURL, machineID, token, targetHost string, ports
 	}
 	defer ws.Close()
 
-	// Register with hub (include ports so the hub console can display services)
-	lg.Printf("connected, registering as: %s", machineID)
-	regMsg := controlMessage{Type: "register", MachineID: machineID, Token: token, Ports: ports}
+	// Register with hub (include ports/services + metadata for the registry)
+	lg.Printf("connected, registering as: %s", reg.MachineID)
+	regMsg := controlMessage{
+		Type:         "register",
+		MachineID:    reg.MachineID,
+		DisplayName:  reg.DisplayName,
+		Hostname:     reg.Hostname,
+		OS:           reg.OS,
+		AgentVersion: reg.AgentVersion,
+		Tags:         reg.Tags,
+		Location:     reg.Location,
+		Owner:        reg.Owner,
+		Token:        reg.Token,
+		Ports:        reg.Ports,
+		Services:     reg.Services,
+	}
 	if err := ws.WriteJSON(&regMsg); err != nil {
 		lg.Printf("register failed: %v", err)
 		return
@@ -273,7 +398,7 @@ func runAgent(lg *log.Logger, hubURL, machineID, token, targetHost string, ports
 				return
 			}
 			lg.Printf("session starting — helper pubkey: %s...", helperPubKey[:8])
-			handleSession(lg, ws, hubURL, helperPubKey, targetHost, ports)
+			handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports)
 			return // reconnect after session ends
 		}
 	}
@@ -469,7 +594,7 @@ func tryDirectUpgrade(lg *log.Logger, bind *wsbind.Bind, hubURL string) {
 func proxyToTarget(lg *log.Logger, nsConn net.Conn, targetHost string, targetPort int) {
 	defer nsConn.Close()
 
-	addr := fmt.Sprintf("%s:%d", targetHost, targetPort)
+	addr := net.JoinHostPort(targetHost, strconv.Itoa(targetPort))
 	targetConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
 		lg.Printf("target dial failed (%s): %v", addr, err)

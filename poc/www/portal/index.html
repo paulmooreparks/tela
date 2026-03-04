@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Awan Satu Portal</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #222;
+      line-height: 1.6;
+      background: #f4f5f7;
+    }
+
+    /* Top nav */
+    .topnav {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      height: 52px;
+      gap: 24px;
+    }
+    .topnav .logo { font-weight: 700; font-size: 1.1rem; letter-spacing: 0.5px; }
+    .topnav .logo em { color: #5ee89e; font-style: normal; }
+    .topnav nav { display: flex; gap: 16px; font-size: 0.9rem; }
+    .topnav nav a { color: #ccc; text-decoration: none; padding: 4px 0; }
+    .topnav nav a:hover, .topnav nav a.active { color: #fff; border-bottom: 2px solid #5ee89e; }
+    .topnav .user-area { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: #aaa; }
+    .topnav .user-area .avatar {
+      width: 30px; height: 30px; border-radius: 50%; background: #5ee89e; color: #1a1a2e;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;
+    }
+
+    /* Layout */
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .page-desc { color: #666; font-size: 0.9rem; margin-bottom: 24px; }
+
+    /* Summary stats */
+    .stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .stat-card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px 24px;
+      min-width: 160px;
+      flex: 1;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .stat-card .label { font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; color: #222; margin-top: 4px; }
+    .stat-card .value.green { color: #2d7d46; }
+
+    /* Cards */
+    .card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .card h2 { font-size: 1.05rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+
+    /* Hub table */
+    .hub-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .hub-table th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #e0e0e0; color: #555; font-weight: 600; }
+    .hub-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .hub-table tr:last-child td { border-bottom: none; }
+
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+    .dot.green { background: #2d7d46; }
+    .dot.red { background: #c0392b; }
+    .dot.yellow { background: #e6a817; }
+    .dot.gray { background: #aaa; }
+
+    .hub-name { font-weight: 600; }
+    .hub-url { color: #888; font-size: 0.8rem; }
+
+    /* Machine list (aggregated) */
+    .machine-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .machine-table th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #e0e0e0; color: #555; font-weight: 600; }
+    .machine-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .machine-table tr:last-child td { border-bottom: none; }
+    .machine-name { font-weight: 600; }
+    .machine-meta { font-size: 0.78rem; color: #888; margin-top: 2px; }
+    .machine-meta span { margin-right: 10px; }
+    .service-tag {
+      display: inline-block; background: #e8f5e9; color: #2d7d46;
+      padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;
+      margin: 1px 4px 1px 0; font-weight: 500;
+    }
+    .tag { display: inline-block; background: #f0f0f0; color: #555; padding: 1px 6px; border-radius: 3px; font-size: 0.75rem; margin: 1px 2px; }
+
+    .btn-console {
+      display: inline-block; background: #1a1a2e; color: #fff; border: none;
+      padding: 3px 10px; border-radius: 4px; font-size: 0.78rem;
+      cursor: pointer; text-decoration: none; transition: background 0.15s;
+    }
+    .btn-console:hover { background: #333; }
+
+    /* Auth placeholder */
+    .auth-placeholder {
+      text-align: center; padding: 32px 16px; color: #888;
+    }
+    .auth-placeholder .icon { font-size: 2rem; margin-bottom: 8px; }
+
+    /* History */
+    .history-list { list-style: none; padding: 0; font-size: 0.85rem; max-height: 280px; overflow-y: auto; }
+    .history-list li { padding: 4px 0; border-bottom: 1px solid #f0f0f0; display: flex; gap: 12px; }
+    .history-list li:last-child { border-bottom: none; }
+    .history-time { color: #aaa; min-width: 80px; }
+    .history-hub { color: #555; min-width: 80px; font-size: 0.8rem; }
+    .history-machine { font-weight: 600; color: #2d7d46; min-width: 80px; }
+    .history-event { color: #555; }
+
+    .no-data { color: #999; font-style: italic; padding: 12px 0; }
+    .last-updated { color: #aaa; font-size: 0.8rem; margin-top: 8px; }
+
+    footer { margin-top: 40px; color: #999; font-size: 0.85rem; text-align: center; padding-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <div class="topnav">
+    <div class="logo"><em>Awan</em>Satu</div>
+    <nav>
+      <a href="/portal/" class="active">Dashboard</a>
+      <a href="/portal/#hubs">Hubs</a>
+      <a href="/portal/#machines">Machines</a>
+    </nav>
+    <div class="user-area">
+      <span id="user-name">Guest</span>
+      <div class="avatar" id="user-avatar">G</div>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>Dashboard</h1>
+    <p class="page-desc">Awan Satu portal &mdash; multi-hub management for Tela connectivity fabric</p>
+
+    <!-- Summary stats -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="label">Hubs</div>
+        <div class="value" id="stat-hubs">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Machines</div>
+        <div class="value" id="stat-machines">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Online</div>
+        <div class="value green" id="stat-online">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Services</div>
+        <div class="value" id="stat-services">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Active Sessions</div>
+        <div class="value green" id="stat-sessions">-</div>
+      </div>
+    </div>
+
+    <!-- Hubs -->
+    <div class="card" id="hubs">
+      <h2>Hubs</h2>
+      <div id="hubs-content">
+        <p class="no-data">Loading...</p>
+      </div>
+    </div>
+
+    <!-- All machines (aggregated across hubs) -->
+    <div class="card" id="machines">
+      <h2>All Machines</h2>
+      <div id="machines-content">
+        <p class="no-data">Loading...</p>
+      </div>
+      <p class="last-updated" id="last-updated"></p>
+    </div>
+
+    <!-- Recent Activity (aggregated) -->
+    <div class="card">
+      <h2>Recent Activity</h2>
+      <div id="history-content">
+        <p class="no-data">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Auth placeholder -->
+    <div class="card">
+      <h2>Authentication</h2>
+      <div class="auth-placeholder">
+        <div class="icon">&#x1F512;</div>
+        <p><strong>SSO / Identity coming soon</strong></p>
+        <p>The portal will support OAuth2/OIDC for user authentication,<br>
+           role-based access control, and API keys for automation.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>Awan Satu Portal &middot; Powered by Tela</footer>
+
+  <script>
+    // ── Hub registry ────────────────────────────────────────────────
+    // In a real deployment, this would be fetched from a central registry API.
+    // For the POC scaffold, we query the local hub and allow adding more via config.
+    var HUBS = [
+      { name: 'Local Hub', url: location.origin, wsUrl: (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host }
+    ];
+
+    // Try to load additional hubs from localStorage
+    try {
+      var extra = JSON.parse(localStorage.getItem('awansatu-hubs') || '[]');
+      if (Array.isArray(extra)) HUBS = HUBS.concat(extra);
+    } catch (e) {}
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function timeAgo(isoStr) {
+      if (!isoStr) return '\u2014';
+      var diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+      if (diff < 0) diff = 0;
+      if (diff < 5)    return 'just now';
+      if (diff < 60)   return Math.floor(diff) + 's ago';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    var EVENT_LABELS = {
+      'session-start': '\uD83D\uDD17 Session started',
+      'agent-register': '\u2705 Agent registered',
+      'agent-disconnect': '\u274C Agent disconnected',
+      'helper-disconnect': '\uD83D\uDD0C Client disconnected',
+    };
+
+    // ── Fetch status + history from all hubs ────────────────────────
+    function fetchAllHubs() {
+      return Promise.all(HUBS.map(function (hub) {
+        var statusP = fetch(hub.url + '/api/status')
+          .then(function (r) { return r.json(); })
+          .catch(function () { return { machines: [] }; });
+        var historyP = fetch(hub.url + '/api/history')
+          .then(function (r) { return r.json(); })
+          .catch(function () { return { events: [] }; });
+        return Promise.all([statusP, historyP]).then(function (results) {
+          return { hub: hub, status: results[0].machines ? 'online' : 'offline', data: results[0], history: results[1].events || [] };
+        });
+      }));
+    }
+
+    // ── Render ──────────────────────────────────────────────────────
+    function render(results) {
+      var totalMachines = 0, totalOnline = 0, totalServices = 0, totalSessions = 0;
+
+      // Hubs table
+      var hubsHtml = '<table class="hub-table"><thead><tr>'
+        + '<th>Hub</th><th>Status</th><th>Machines</th><th>Online</th><th>Sessions</th><th></th>'
+        + '</tr></thead><tbody>';
+
+      results.forEach(function (r) {
+        var machines = r.data.machines || [];
+        var online = machines.filter(function (m) { return m.agentConnected; }).length;
+        var sessions = machines.filter(function (m) { return m.hasSession; }).length;
+        var svcs = machines.reduce(function (sum, m) { return sum + (m.services || []).length; }, 0);
+
+        totalMachines += machines.length;
+        totalOnline += online;
+        totalServices += svcs;
+        totalSessions += sessions;
+
+        var dot = r.status === 'online'
+          ? '<span class="dot green"></span> Online'
+          : '<span class="dot red"></span> Unreachable';
+
+        var consoleLink = '<a class="btn-console" href="' + escHtml(r.hub.url) + '/" target="_blank">Console</a>';
+
+        hubsHtml += '<tr>'
+          + '<td><span class="hub-name">' + escHtml(r.hub.name) + '</span><br><span class="hub-url">' + escHtml(r.hub.url) + '</span></td>'
+          + '<td>' + dot + '</td>'
+          + '<td>' + machines.length + '</td>'
+          + '<td>' + online + '</td>'
+          + '<td>' + sessions + '</td>'
+          + '<td>' + consoleLink + '</td>'
+          + '</tr>';
+      });
+
+      hubsHtml += '</tbody></table>';
+      document.getElementById('hubs-content').innerHTML = hubsHtml;
+
+      // Stats
+      document.getElementById('stat-hubs').textContent = results.length;
+      document.getElementById('stat-machines').textContent = totalMachines;
+      document.getElementById('stat-online').textContent = totalOnline;
+      document.getElementById('stat-services').textContent = totalServices;
+      document.getElementById('stat-sessions').textContent = totalSessions;
+
+      // Aggregated machines table
+      var allMachines = [];
+      results.forEach(function (r) {
+        (r.data.machines || []).forEach(function (m) {
+          allMachines.push({ machine: m, hubName: r.hub.name, hubUrl: r.hub.url, hubWs: r.hub.wsUrl });
+        });
+      });
+
+      if (allMachines.length === 0) {
+        document.getElementById('machines-content').innerHTML = '<p class="no-data">No machines registered across any hub.</p>';
+      } else {
+        var mHtml = '<table class="machine-table"><thead><tr>'
+          + '<th>Machine</th><th>Hub</th><th>Status</th><th>Services</th><th>Last seen</th>'
+          + '</tr></thead><tbody>';
+
+        allMachines.forEach(function (item) {
+          var m = item.machine;
+
+          var statusDot;
+          if (!m.agentConnected) {
+            statusDot = '<span class="dot red"></span> Offline';
+          } else if (m.lastSeen && (Date.now() - new Date(m.lastSeen).getTime() > 60000)) {
+            statusDot = '<span class="dot yellow"></span> Stale';
+          } else {
+            statusDot = '<span class="dot green"></span> Online';
+          }
+
+          var svcs = (m.services || []).map(function (s) {
+            var label = s.name || s.label || ('port ' + s.port);
+            return '<span class="service-tag">' + escHtml(label) + ' :' + s.port + '</span>';
+          }).join('') || '<span style="color:#aaa">\u2014</span>';
+
+          var name = '<div class="machine-name">' + escHtml(m.displayName || m.id) + '</div>';
+          var meta = [];
+          if (m.hostname) meta.push('<span>\uD83D\uDCBB ' + escHtml(m.hostname) + '</span>');
+          if (m.os)       meta.push('<span>' + escHtml(m.os) + '</span>');
+          if (m.agentVersion) meta.push('<span>v' + escHtml(m.agentVersion) + '</span>');
+          var tags = (m.tags || []).map(function (t) { return '<span class="tag">' + escHtml(t) + '</span>'; }).join('');
+          if (tags) meta.push(tags);
+          if (meta.length > 0) name += '<div class="machine-meta">' + meta.join('') + '</div>';
+
+          mHtml += '<tr>'
+            + '<td>' + name + '</td>'
+            + '<td>' + escHtml(item.hubName) + '</td>'
+            + '<td>' + statusDot + '</td>'
+            + '<td>' + svcs + '</td>'
+            + '<td>' + timeAgo(m.lastSeen) + '</td>'
+            + '</tr>';
+        });
+
+        mHtml += '</tbody></table>';
+        document.getElementById('machines-content').innerHTML = mHtml;
+      }
+
+      // Aggregated history
+      var allEvents = [];
+      results.forEach(function (r) {
+        (r.history || []).forEach(function (ev) {
+          ev._hub = r.hub.name;
+          allEvents.push(ev);
+        });
+      });
+      allEvents.sort(function (a, b) { return (b.timestamp || '').localeCompare(a.timestamp || ''); });
+      var historyContainer = document.getElementById('history-content');
+      var items = allEvents.slice(0, 30);
+      if (items.length === 0) {
+        historyContainer.innerHTML = '<p class="no-data">No activity yet.</p>';
+      } else {
+        var hHtml = '<ul class="history-list">';
+        items.forEach(function (ev) {
+          var label = EVENT_LABELS[ev.event] || ev.event;
+          hHtml += '<li>'
+            + '<span class="history-time">' + timeAgo(ev.timestamp) + '</span>'
+            + '<span class="history-hub">' + escHtml(ev._hub) + '</span>'
+            + '<span class="history-machine">' + escHtml(ev.machineId) + '</span>'
+            + '<span class="history-event">' + label + '</span>'
+            + '</li>';
+        });
+        hHtml += '</ul>';
+        historyContainer.innerHTML = hHtml;
+      }
+
+      document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    }
+
+    // ── Poll loop ───────────────────────────────────────────────────
+    function poll() {
+      fetchAllHubs().then(render);
+    }
+
+    poll();
+    setInterval(poll, 5000);
+  </script>
+</body>
+</html>

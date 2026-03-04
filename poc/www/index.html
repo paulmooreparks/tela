@@ -8,7 +8,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      max-width: 900px;
+      max-width: 960px;
       margin: 40px auto;
       padding: 0 20px;
       color: #222;
@@ -29,13 +29,18 @@
     .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
     .dot.green { background: #2d7d46; }
     .dot.red { background: #c0392b; }
+    .dot.yellow { background: #e6a817; }
     .dot.gray { background: #aaa; }
 
     /* Machine list */
     .machine-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     .machine-table th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #e0e0e0; color: #555; font-weight: 600; }
-    .machine-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+    .machine-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
     .machine-table tr:last-child td { border-bottom: none; }
+    .machine-name { font-weight: 600; }
+    .machine-meta { font-size: 0.78rem; color: #888; margin-top: 2px; }
+    .machine-meta span { margin-right: 10px; }
+    .tag { display: inline-block; background: #f0f0f0; color: #555; padding: 1px 6px; border-radius: 3px; font-size: 0.75rem; margin: 1px 2px; }
     .service-tag {
       display: inline-block;
       background: #e8f5e9;
@@ -48,6 +53,34 @@
     }
     .no-machines { color: #999; font-style: italic; padding: 16px 0; }
     .last-updated { color: #aaa; font-size: 0.8rem; margin-top: 8px; }
+    .stale { color: #e6a817; }
+
+    /* Connect button */
+    .btn-connect {
+      display: inline-block;
+      background: #2d7d46;
+      color: #fff;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-connect:hover { background: #236b38; }
+    .btn-connect.copied { background: #888; }
+    .btn-connect:disabled { opacity: 0.5; cursor: default; }
+
+    /* History */
+    .history-list { list-style: none; padding: 0; font-size: 0.85rem; }
+    .history-list li { padding: 4px 0; border-bottom: 1px solid #f0f0f0; display: flex; gap: 12px; }
+    .history-list li:last-child { border-bottom: none; }
+    .history-time { color: #aaa; min-width: 80px; }
+    .history-machine { font-weight: 600; color: #2d7d46; min-width: 80px; }
+    .history-event { color: #555; }
+    .history-none { color: #999; font-style: italic; padding: 8px 0; }
 
     /* Download section */
     .download-primary {
@@ -84,6 +117,7 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
+    .usage-pre { white-space: pre; line-height: 1.5; }
 
     footer { margin-top: 40px; color: #999; font-size: 0.85rem; text-align: center; }
 
@@ -106,6 +140,14 @@
     <p class="last-updated" id="last-updated"></p>
   </div>
 
+  <!-- Connection History -->
+  <div class="card">
+    <h2>Recent Activity</h2>
+    <div id="history-content">
+      <p class="history-none">Loading...</p>
+    </div>
+  </div>
+
   <!-- Download -->
   <div class="card" id="helper-card">
     <h2>Download Tela Client</h2>
@@ -120,13 +162,13 @@
       <li><a href="/tela/macos/tela">macOS (Intel)</a></li>
       <li><a href="/tela/macos-arm64/tela">macOS (Apple&nbsp;Silicon)</a></li>
     </ul>
-    <div class="usage" id="usage-block">tela -hub wss://tela.awansatu.net -machine &lt;name&gt;</div>
+    <div class="usage" id="usage-block">tela connect -hub wss://tela.awansatu.net -machine &lt;name&gt;</div>
   </div>
 
   <!-- CLI Quick Reference -->
   <div class="card">
     <h2>CLI Quick Reference</h2>
-    <div class="usage" style="white-space: pre; line-height: 1.5;">tela machines -hub wss://tela.awansatu.net          # list machines &amp; services
+    <div class="usage usage-pre">tela machines -hub wss://tela.awansatu.net          # list machines &amp; services
 tela connect  -hub wss://tela.awansatu.net -machine &lt;name&gt;  # tunnel &amp; connect
 tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
   </div>
@@ -137,8 +179,8 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
     <p>Tela (<em>Filipino: fabric</em>) is a FOSS connectivity fabric that provides outbound-only
        WireGuard tunnels for TCP services (SSH, RDP, HTTP, etc.) &mdash; no admin privileges
        or TUN devices required on either end.</p>
-    <p style="margin-top: 8px;">
-      <a href="https://github.com/paulmooreparks/tela" style="color: #2d7d46;">github.com/paulmooreparks/tela</a>
+    <p class="about-link">
+      <a href="https://github.com/paulmooreparks/tela">github.com/paulmooreparks/tela</a>
     </p>
   </div>
 
@@ -166,6 +208,64 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
   <footer>Tela Hub Console &middot; awansatu.net</footer>
 
   <script>
+    // ── Utility: relative time ──────────────────────────────────────
+    function timeAgo(isoStr) {
+      if (!isoStr) return '\u2014';
+      var diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+      if (diff < 0) diff = 0;
+      if (diff < 5)    return 'just now';
+      if (diff < 60)   return Math.floor(diff) + 's ago';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    // Staleness threshold: if lastSeen > 60s ago but agent says connected, show yellow
+    var STALE_THRESHOLD_MS = 60000;
+
+    function statusDot(m) {
+      if (!m.agentConnected) {
+        return '<span class="dot red"></span> Offline';
+      }
+      if (m.lastSeen) {
+        var age = Date.now() - new Date(m.lastSeen).getTime();
+        if (age > STALE_THRESHOLD_MS) {
+          return '<span class="dot yellow"></span> <span class="stale">Stale</span>';
+        }
+      }
+      return '<span class="dot green"></span> Online';
+    }
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Detect hub URL for connect commands
+    var hubWsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+
+    // ── Copy to clipboard ───────────────────────────────────────────
+    function copyConnect(machineId, btn) {
+      var cmd = 'tela connect -hub ' + hubWsUrl + ' -machine ' + machineId;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(function () {
+          btn.textContent = 'Copied!';
+          btn.className = 'btn-connect copied';
+          setTimeout(function () { btn.textContent = 'Connect'; btn.className = 'btn-connect'; }, 1500);
+        });
+      } else {
+        // fallback
+        var ta = document.createElement('textarea');
+        ta.value = cmd;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = 'Copied!';
+        btn.className = 'btn-connect copied';
+        setTimeout(function () { btn.textContent = 'Connect'; btn.className = 'btn-connect'; }, 1500);
+      }
+    }
+
     // ── Live machine status ─────────────────────────────────────────
     (function () {
       var content = document.getElementById('machines-content');
@@ -181,24 +281,37 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
               content.innerHTML = '<p class="no-machines">No machines registered.</p>';
             } else {
               var html = '<table class="machine-table"><thead><tr>'
-                + '<th>Machine</th><th>Status</th><th>Services</th><th>Session</th><th>Registered</th>'
+                + '<th>Machine</th><th>Status</th><th>Services</th><th>Session</th><th>Last seen</th><th></th>'
                 + '</tr></thead><tbody>';
               data.machines.forEach(function (m) {
-                var dot = m.agentConnected
-                  ? '<span class="dot green"></span> Online'
-                  : '<span class="dot red"></span> Offline';
+                var dot = statusDot(m);
                 var svcs = (m.services || []).map(function (s) {
-                  return '<span class="service-tag">' + s.label + ' :' + s.port + '</span>';
-                }).join('') || '<span style="color:#aaa">&mdash;</span>';
+                  var label = s.name || s.label || ('port ' + s.port);
+                  return '<span class="service-tag">' + escHtml(label) + ' :' + s.port + '</span>';
+                }).join('') || '<span style="color:#aaa">\u2014</span>';
                 var sess = m.hasSession
                   ? '<span class="dot green"></span> Active'
-                  : '<span style="color:#aaa">&mdash;</span>';
-                var reg = m.registeredAt
-                  ? new Date(m.registeredAt).toLocaleString()
-                  : '&mdash;';
-                html += '<tr><td><strong>' + m.id + '</strong></td><td>' + dot
+                  : '<span style="color:#aaa">\u2014</span>';
+                var seen = timeAgo(m.lastSeen);
+
+                // Machine name + metadata sub-line
+                var name = '<div class="machine-name">' + escHtml(m.displayName || m.id) + '</div>';
+                var meta = [];
+                if (m.hostname) meta.push('<span>\uD83D\uDCBB ' + escHtml(m.hostname) + '</span>');
+                if (m.os)       meta.push('<span>' + escHtml(m.os) + '</span>');
+                if (m.agentVersion) meta.push('<span>v' + escHtml(m.agentVersion) + '</span>');
+                var tags = (m.tags || []).map(function (t) { return '<span class="tag">' + escHtml(t) + '</span>'; }).join('');
+                if (tags) meta.push(tags);
+                if (meta.length > 0) name += '<div class="machine-meta">' + meta.join('') + '</div>';
+
+                // Connect button
+                var connectBtn = m.agentConnected
+                  ? '<button class="btn-connect" onclick="copyConnect(\'' + escHtml(m.id) + '\', this)">Connect</button>'
+                  : '<button class="btn-connect" disabled>Offline</button>';
+
+                html += '<tr><td>' + name + '</td><td>' + dot
                   + '</td><td>' + svcs + '</td><td>' + sess
-                  + '</td><td>' + reg + '</td></tr>';
+                  + '</td><td>' + seen + '</td><td>' + connectBtn + '</td></tr>';
               });
               html += '</tbody></table>';
               content.innerHTML = html;
@@ -213,7 +326,49 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
       }
 
       refresh();
-      setInterval(refresh, 5000); // poll every 5 seconds
+      setInterval(refresh, 5000);
+    })();
+
+    // ── Connection history ──────────────────────────────────────────
+    (function () {
+      var container = document.getElementById('history-content');
+
+      var EVENT_LABELS = {
+        'session-start': '\uD83D\uDD17 Session started',
+        'agent-register': '\u2705 Agent registered',
+        'agent-disconnect': '\u274C Agent disconnected',
+        'helper-disconnect': '\uD83D\uDD0C Client disconnected',
+      };
+
+      function refreshHistory() {
+        fetch('/api/history')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var events = data.events || [];
+            if (events.length === 0) {
+              container.innerHTML = '<p class="history-none">No activity yet.</p>';
+              return;
+            }
+            var html = '<ul class="history-list">';
+            // Show up to 20 most recent
+            events.slice(0, 20).forEach(function (ev) {
+              var label = EVENT_LABELS[ev.event] || ev.event;
+              html += '<li>'
+                + '<span class="history-time">' + timeAgo(ev.timestamp) + '</span>'
+                + '<span class="history-machine">' + escHtml(ev.machineId) + '</span>'
+                + '<span class="history-event">' + label + '</span>'
+                + '</li>';
+            });
+            html += '</ul>';
+            container.innerHTML = html;
+          })
+          .catch(function () {
+            container.innerHTML = '<p class="history-none">Could not load history.</p>';
+          });
+      }
+
+      refreshHistory();
+      setInterval(refreshHistory, 5000);
     })();
 
     // ── OS detection for downloads ──────────────────────────────────
@@ -257,7 +412,7 @@ tela status   -hub wss://tela.awansatu.net          # hub status summary</div>
         document.getElementById('dl-label').textContent = 'Download for ' + m.label;
         document.getElementById('detected-os').textContent = 'Detected: ' + m.label;
         document.getElementById('usage-block').textContent =
-          m.bin + ' -hub wss://tela.awansatu.net -machine <name>';
+          m.bin + ' connect -hub ' + hubWsUrl + ' -machine <name>';
         var links = document.querySelectorAll('#dl-alt a');
         for (var j = 0; j < links.length; j++) {
           if (links[j].getAttribute('href') === m.href) {

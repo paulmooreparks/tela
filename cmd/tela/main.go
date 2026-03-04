@@ -1,24 +1,26 @@
 /*
-  tela — Tela Client
+tela — Tela Client
 
-  Purpose:
-    Connects to a Tela Hub via WebSocket, performs a WireGuard key exchange
-    with the target daemon, and establishes an encrypted L3 tunnel.
+Purpose:
 
-    Subcommands:
-      tela connect  — connect to a machine
-      tela machines — list registered machines and their services
-      tela services — list services on a specific machine
-      tela status   — show hub status summary
+	Connects to a Tela Hub via WebSocket, performs a WireGuard key exchange
+	with the target daemon, and establishes an encrypted L3 tunnel.
 
-    Environment variables (provide defaults so flags can be omitted):
-      TELA_HUB      — hub WebSocket URL
-      TELA_MACHINE  — target machine ID
-      TELA_TOKEN    — authentication token
+	Subcommands:
+	  tela connect  — connect to a machine
+	  tela machines — list registered machines and their services
+	  tela services — list services on a specific machine
+	  tela status   — show hub status summary
 
-  Network:
-    Daemon IP: 10.77.0.1/24
-    Client IP: 10.77.0.2/24
+	Environment variables (provide defaults so flags can be omitted):
+	  TELA_HUB      — hub WebSocket URL
+	  TELA_MACHINE  — target machine ID
+	  TELA_TOKEN    — authentication token
+
+Network:
+
+	Daemon IP: 10.77.0.1/24
+	Client IP: 10.77.0.2/24
 */
 package main
 
@@ -39,6 +41,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -48,6 +52,7 @@ import (
 	"github.com/gorilla/websocket"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun/netstack"
+	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
@@ -116,20 +121,29 @@ Commands:
   status    Show hub status summary
 
 Environment Variables:
-  TELA_HUB      Default hub URL     (overridden by -hub)
-  TELA_MACHINE  Default machine ID  (overridden by -machine)
-  TELA_TOKEN    Default auth token  (overridden by -token)
+  TELA_HUB      Default hub URL or alias  (overridden by -hub)
+  TELA_MACHINE  Default machine ID        (overridden by -machine)
+  TELA_TOKEN    Default auth token        (overridden by -token)
 
   When set, these provide defaults so flags can be omitted.
 
+Hub Aliases:
+  The -hub flag accepts a full URL (wss://...) or a short alias.
+  Aliases are defined in a config file:
+    Linux/macOS:  ~/.tela/hubs.yaml
+    Windows:      %%APPDATA%%\tela\hubs.yaml
+
+  Config file format:
+    hubs:
+      myHub: wss://example.com
+
 Examples:
+  tela connect  -hub owlsnest -machine barn
+  tela machines -hub owlsnest
   tela connect  -hub wss://tela.awansatu.net -machine barn
-  tela machines -hub wss://tela.awansatu.net
-  tela services -hub wss://tela.awansatu.net -machine barn
-  tela status   -hub wss://tela.awansatu.net
 
   # Or set env vars and skip the flags:
-  export TELA_HUB=wss://tela.awansatu.net TELA_MACHINE=barn
+  export TELA_HUB=owlsnest TELA_MACHINE=barn
   tela connect          # uses env defaults
   tela machines         # only needs TELA_HUB
 
@@ -148,6 +162,7 @@ func cmdConnect(args []string) {
 	targetPort := fs.Int("target-port", 0, "Target port on daemon (advanced: with -port)")
 	fs.BoolVar(&verbose, "v", false, "Verbose logging")
 	fs.Parse(args)
+	*hubURL = mustResolveHub(*hubURL)
 
 	if *hubURL == "" || *machineID == "" {
 		fmt.Fprintln(os.Stderr, "Error: -hub and -machine are required (or set TELA_HUB / TELA_MACHINE)")
@@ -190,6 +205,14 @@ type hubStatusResponse struct {
 
 type hubMachine struct {
 	ID             string       `json:"id"`
+	DisplayName    string       `json:"displayName,omitempty"`
+	Hostname       string       `json:"hostname,omitempty"`
+	OS             string       `json:"os,omitempty"`
+	AgentVersion   string       `json:"agentVersion,omitempty"`
+	Tags           []string     `json:"tags,omitempty"`
+	Location       string       `json:"location,omitempty"`
+	Owner          string       `json:"owner,omitempty"`
+	LastSeen       string       `json:"lastSeen,omitempty"`
 	AgentConnected bool         `json:"agentConnected"`
 	HasSession     bool         `json:"hasSession"`
 	RegisteredAt   string       `json:"registeredAt"`
@@ -197,8 +220,24 @@ type hubMachine struct {
 }
 
 type hubService struct {
-	Port  int    `json:"port"`
-	Label string `json:"label"`
+	Port        int    `json:"port"`
+	Proto       string `json:"proto,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Label       string `json:"label,omitempty"` // backward compat
+}
+
+func serviceLabel(s hubService) string {
+	if s.Name != "" {
+		return s.Name
+	}
+	if s.Label != "" {
+		return s.Label
+	}
+	if s.Port > 0 {
+		return fmt.Sprintf("port %d", s.Port)
+	}
+	return "service"
 }
 
 func cmdMachines(args []string) {
@@ -206,6 +245,7 @@ func cmdMachines(args []string) {
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
+	*hubURL = mustResolveHub(*hubURL)
 
 	if *hubURL == "" {
 		fmt.Fprintln(os.Stderr, "Error: -hub is required (or set TELA_HUB)")
@@ -240,7 +280,7 @@ func cmdMachines(args []string) {
 		}
 		var svcs []string
 		for _, s := range m.Services {
-			svcs = append(svcs, fmt.Sprintf("%s:%d", s.Label, s.Port))
+			svcs = append(svcs, fmt.Sprintf("%s:%d", serviceLabel(s), s.Port))
 		}
 		svcStr := strings.Join(svcs, ", ")
 		if svcStr == "" {
@@ -263,6 +303,7 @@ func cmdServices(args []string) {
 	machineID := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID (env: TELA_MACHINE)")
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
+	*hubURL = mustResolveHub(*hubURL)
 
 	if *hubURL == "" || *machineID == "" {
 		fmt.Fprintln(os.Stderr, "Error: -hub and -machine are required (or set TELA_HUB / TELA_MACHINE)")
@@ -309,7 +350,7 @@ func cmdServices(args []string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "PORT\tSERVICE\tCONNECT")
 	for _, s := range found.Services {
-		fmt.Fprintf(w, "%d\t%s\ttela connect -hub %s -machine %s\n", s.Port, s.Label, *hubURL, *machineID)
+		fmt.Fprintf(w, "%d\t%s\ttela connect -hub %s -machine %s\n", s.Port, serviceLabel(s), *hubURL, *machineID)
 	}
 	w.Flush()
 }
@@ -321,6 +362,7 @@ func cmdStatus(args []string) {
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
+	*hubURL = mustResolveHub(*hubURL)
 
 	if *hubURL == "" {
 		fmt.Fprintln(os.Stderr, "Error: -hub is required (or set TELA_HUB)")
@@ -741,4 +783,77 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// ── Hub alias config ───────────────────────────────────────────────
+
+// hubsConfig is the schema for ~/.tela/hubs.yaml (or %APPDATA%\tela\hubs.yaml).
+type hubsConfig struct {
+	Hubs map[string]string `yaml:"hubs"`
+}
+
+// hubsConfigPath returns the platform-appropriate path to the hubs config file.
+func hubsConfigPath() string {
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "tela", "hubs.yaml")
+		}
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".tela", "hubs.yaml")
+}
+
+// loadHubsConfig reads and parses the hubs config file.
+func loadHubsConfig() (*hubsConfig, error) {
+	data, err := os.ReadFile(hubsConfigPath())
+	if err != nil {
+		return nil, err
+	}
+	var cfg hubsConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("invalid config %s: %w", hubsConfigPath(), err)
+	}
+	if cfg.Hubs == nil {
+		cfg.Hubs = make(map[string]string)
+	}
+	return &cfg, nil
+}
+
+// resolveHubURL resolves a hub reference to a WebSocket URL.
+// If the value starts with ws:// or wss://, it is used as-is.
+// Otherwise it is looked up as a named alias in the hubs config file.
+func resolveHubURL(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://") {
+		return value, nil
+	}
+
+	cfg, err := loadHubsConfig()
+	if err != nil {
+		return "", fmt.Errorf("hub %q is not a URL and no config file found (%s)", value, hubsConfigPath())
+	}
+
+	url, ok := cfg.Hubs[value]
+	if !ok {
+		var known []string
+		for k := range cfg.Hubs {
+			known = append(known, k)
+		}
+		return "", fmt.Errorf("hub alias %q not found in %s (known: %s)", value, hubsConfigPath(), strings.Join(known, ", "))
+	}
+	logVerbose("resolved hub alias %q → %s", value, url)
+	return url, nil
+}
+
+// mustResolveHub resolves a hub alias, exiting on error.
+func mustResolveHub(value string) string {
+	resolved, err := resolveHubURL(value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	return resolved
 }

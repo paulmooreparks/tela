@@ -45,11 +45,11 @@ This glossary defines terms as they are used in Tela.
 | **Multiplexing** | Carrying multiple channels (control + multiple TCP streams) over a single WebSocket connection using a framing header and channel IDs. |
 | **NAT** | Network Address Translation; a common reason inbound connections to a machine are not possible without port forwarding. |
 | **Outbound‑only** | Agents and clients initiate connections out to the Hub; no inbound ports are required on managed machines. |
-| **Portal** | The Awan Satu web UI for multi‑hub management, user accounts, and billing. Distinct from the single‑hub Console. |
+| **Portal** | The Awan Satu multi‑hub dashboard at `awansatu.net/`. Aggregates machines, services, and sessions across all hubs a user has been granted access to. Provides SSO, RBAC, and centralized management. Distinct from the single‑hub Console. See §18.7–18.11. |
 | **RDP** | Microsoft Remote Desktop Protocol (typically TCP/3389); a primary example of a tunneled service. |
 | **Registry** | The directory of Hubs maintained by Awan Satu (§18.2). Maps hub identifiers to live connections. |
 | **Relay** | Awan Satu’s rendezvous service for self‑hosted Hubs (§18.3). Transparently forwards WebSocket frames. |
-| **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). Identified by port number and optional label. |
+| **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). Identified by port (and proto), with optional name/description metadata. |
 | **Session** | An active encrypted tunnel between a client and an agent, brokered by the Hub. |
 | **Session token** | A short‑lived, single‑use credential issued by the Hub that authorizes a client for a specific session. |
 | **SFTP** | SSH File Transfer Protocol; a file transfer protocol that runs over SSH. |
@@ -456,7 +456,7 @@ Both sides use gVisor netstack (pure userspace). Neither side requires a TUN ada
 
 WireGuard Curve25519 public keys are exchanged during the Hub signaling phase:
 
-1. Agent registers: `{ type: "register", machineId: "...", token: "..." }`
+1. Agent registers: `{ type: "register", machineId: "...", token: "...", ports?: [...], services?: [...], displayName?: "...", hostname?: "...", os?: "...", agentVersion?: "...", tags?: [...], location?: "...", owner?: "..." }`
 2. Client connects: `{ type: "connect", machineId: "...", wgPubKey: "<hex>", token: "..." }`
 3. Hub forwards client's public key to agent in `session-start`.
 4. Agent generates ephemeral keypair and sends its public key back via `wg-pubkey`.
@@ -1258,6 +1258,171 @@ Users who prefer full control continue using Model A (direct/standalone). Awan S
 | WireGuard | self‑hosted mesh | **Tailscale** |
 | Docker | local engine | **Docker Hub / ECS** |
 | **Tela** | local Hub (Model A) | **Awan Satu** (Models B & C) |
+
+## **18.7 Portal — The Multi‑Hub Aggregation Layer**
+
+Awan Satu provides a **Portal** at `awansatu.net/` — a centralized dashboard that aggregates status, machines, and services across all Hubs registered to a user's account.
+
+The Portal is architecturally separate from the Hub Console:
+
+| | Hub Console | Awan Satu Portal |
+|---|-----------|-----------------|
+| **URL** | Served by each hub (e.g. `/`) | `awansatu.net/` (separate service) |
+| **Scope** | Single hub — its machines, sessions, history | All hubs the user can access |
+| **Auth** | Hub‑local (token, cookie, optional TOTP) | SSO / OIDC (centralized identity) |
+| **Owner** | Tela (part of the hub runtime) | Awan Satu (platform layer) |
+| **Requires AS** | No — works standalone | Yes — is Awan Satu |
+
+The Portal queries each registered hub's standard API endpoints (`/api/status`, `/api/history`) and presents a unified view. The hub does not need to know it is being aggregated.
+
+## **18.8 Path‑Based Hub Routing**
+
+Awan Satu uses **path‑based routing** under a single domain rather than per‑hub subdomains:
+
+```
+awansatu.net/                     → Portal dashboard
+awansatu.net/hub/<name>/          → Hub console (proxied)
+awansatu.net/hub/<name>/api/...   → Hub API (proxied)
+wss://awansatu.net/hub/<name>/ws  → WebSocket endpoint (agent + client)
+```
+
+Benefits over subdomains:
+
+- One TLS certificate, no wildcard required.
+- One Cloudflare Tunnel (or reverse proxy), single ingress.
+- One origin for cookies, CORS, and CSP.
+- Adding a hub is a config/database row, not a DNS record.
+- Self‑hosted hubs still use their own domain (e.g. `tela.mycompany.com`); path‑based routing applies only to Awan Satu‑managed or relay‑connected hubs.
+
+## **18.9 User‑Centric Access Model**
+
+In standalone Tela, a user must know the hub URL and any access token. In Awan Satu, the user sees **machines, not infrastructure**.
+
+### Roles
+
+| Role | Can do |
+|------|--------|
+| **Hub owner** | Registers a hub with Awan Satu, manages its machines, grants access to users |
+| **User** | Logs into Awan Satu, sees machines they've been granted access to, connects |
+| **Org admin** | Manages users, roles, and access policies across hubs owned by the org |
+
+### Access grant flow
+
+1. Hub owner registers their hub with Awan Satu (outbound connection or managed instance).
+2. Hub owner grants user X access to machine(s) on that hub via the Portal.
+3. User X logs into Awan Satu (SSO) and sees all machines across all hubs where they have grants.
+4. User X connects — they never see a hub URL, IP address, or token.
+
+### What the user sees
+
+```
+> tela machines -portal https://awansatu.net
+MACHINE      HUB              STATUS  SERVICES
+api-gw       Acme Production  online  HTTPS:443
+nas          Paul's Home      online  Postgres:5432, MinIO:9000
+workstation  Paul's Home      online  ML:8090
+
+> tela connect -portal https://awansatu.net -machine nas
+Authenticating via awansatu.net... OK
+Routing through hub "Paul's Home"...
+Connected. Listening:
+  localhost:5432 → nas:5432 (Postgres)
+  localhost:9000 → nas:9000 (MinIO)
+```
+
+The user does not know or care that "Paul's Home" hub is at `192.168.1.50` behind NAT, reached via the Awan Satu relay. Awan Satu resolves the machine name to the correct hub, establishes the relay path, and handles authentication.
+
+## **18.10 CLI Integration — `tela` Talks to Awan Satu**
+
+There is **one CLI**: `tela`. It gains an optional `-portal` flag (and `TELA_PORTAL` environment variable) that points to an Awan Satu instance. No separate `awansatu` CLI is needed.
+
+### Direct mode (standalone, no AS)
+
+```
+tela connect  -hub wss://hub.example.com -machine mybox
+tela machines -hub wss://hub.example.com
+```
+
+The user specifies the hub directly. Authentication is hub‑local (token, cookie). This is the base Tela experience and always works without Awan Satu.
+
+### Portal mode (via AS)
+
+```
+tela connect  -portal https://awansatu.net -machine mybox
+tela machines -portal https://awansatu.net
+tela hubs     -portal https://awansatu.net
+```
+
+The client contacts the portal, authenticates (OAuth2 device flow or cached token), resolves the machine to its hub, and connects through the relay. The user never provides a hub URL.
+
+### Resolution order
+
+When both `-hub` and `-portal` are omitted, `tela` checks environment variables:
+
+1. `TELA_HUB` → direct mode
+2. `TELA_PORTAL` → portal mode
+3. Neither → error, must specify one
+
+When `-portal` is used, discovery flow is:
+
+1. `tela` calls `GET https://awansatu.net/api/resolve?machine=<name>` with an OAuth2 bearer token.
+2. Awan Satu returns the hub's relay WebSocket URL (e.g. `wss://awansatu.net/hub/pauls-home/ws`) and any session metadata.
+3. `tela` connects to that URL as if it were a direct hub connection. The hub sees a normal client WebSocket — no protocol changes.
+
+### Authentication flow
+
+For portal mode, `tela` uses **OAuth2 Device Authorization Grant** (RFC 8628):
+
+1. `tela` requests a device code from `https://awansatu.net/oauth/device`.
+2. User opens a browser URL and enters the code (or scans a QR code).
+3. `tela` polls for the token, then caches it locally.
+4. Subsequent commands use the cached token until it expires.
+
+This avoids embedding browser windows in the CLI and works on headless machines.
+
+## **18.11 Hub Owner ≠ Hub User**
+
+A critical distinction: the person who runs a hub is not necessarily the person who uses machines on it.
+
+**Example:** A company's IT department runs a hub on a cloud VM. They register it with Awan Satu and grant access to 50 employees. Each employee sees only the machines they're authorized for. The employees never SSH into the hub VM, never see its IP, and never manage it. They just run `tela connect -machine dev-server` and work.
+
+This separation is what makes Awan Satu a **platform** rather than just a prettier standalone hub. The hub is infrastructure; the portal is the user‑facing product.
+
+## **18.12 Hub Aliases — Named Hubs**
+
+Users should not need to memorize or type full WebSocket URLs. The `tela` CLI supports **hub aliases**: short names that resolve to hub URLs via a local config file.
+
+**Config file location:**
+
+| Platform | Path |
+|---|---|
+| Windows | `%APPDATA%\tela\hubs.yaml` |
+| Linux / macOS | `~/.tela/hubs.yaml` |
+
+**Config file format:**
+
+```yaml
+hubs:
+  owlsnest: wss://tela-local.awansatu.net
+  work:     wss://hub.corp.example.com
+```
+
+**Resolution order** (applied to `-hub` flag and `TELA_HUB` env var):
+
+1. Value starts with `ws://` or `wss://` → use as URL directly.
+2. Otherwise → look up as alias in `hubs.yaml` → use mapped URL.
+3. Not found → error with list of known aliases.
+
+**Usage:**
+
+```
+tela connect  -hub owlsnest -machine barn
+tela machines -hub owlsnest
+export TELA_HUB=owlsnest
+tela machines
+```
+
+This keeps the CLI ergonomic for daily use while preserving full URL support for scripts and automation. Hub aliases are purely client‑side; the hub never sees the alias name.
 
 ---
 
