@@ -30,6 +30,8 @@ services:
     build:
       context: .
       dockerfile: docker/hub/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
     container_name: tela-hub
     ports:
       # HTTP + WebSocket on one port
@@ -50,6 +52,8 @@ services:
     build:
       context: .
       dockerfile: docker/hub/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
     container_name: tela-daemon
     entrypoint: ["/usr/local/bin/telad"]
     command: ["-config", "/etc/tela/telad.yaml"]

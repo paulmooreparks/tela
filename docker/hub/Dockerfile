@@ -16,6 +16,8 @@
 
 FROM golang:1.24-alpine AS go-builder
 
+ARG VERSION=dev
+
 WORKDIR /src
 
 # Copy root Go module (cmd/ + internal/ are under this module)
@@ -27,23 +29,23 @@ COPY internal/ ./internal/
 COPY cmd/ ./cmd/
 
 # Build telad for each target platform (agent daemon)
-RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/telad/windows/telad.exe ./cmd/telad \
- && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
+ && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/telad/linux/telad ./cmd/telad \
- && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
+ && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/telad/macos/telad ./cmd/telad \
- && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
+ && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/telad/macos-arm64/telad ./cmd/telad
 
 # Build tela client for each target platform (downloaded by end users)
-RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" \
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/tela/windows/tela.exe ./cmd/tela \
- && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
+ && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/tela/linux/tela ./cmd/tela \
- && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" \
+ && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/tela/macos/tela ./cmd/tela \
- && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" \
+ && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/tela/macos-arm64/tela ./cmd/tela
 
 # ── Stage 2: Node.js hub ───────────────────────────────────────────

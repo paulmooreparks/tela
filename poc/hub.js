@@ -26,6 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const dgram = require('dgram');
+const os = require('os');
 const { WebSocketServer } = require('ws');
 
 const PORT = parseInt(process.env.HUB_PORT, 10) || 8080;
@@ -83,6 +84,13 @@ const httpServer = http.createServer((req, res) => {
     });
     const payload = { machines: status, timestamp: new Date().toISOString() };
     if (HUB_NAME) payload.hubName = HUB_NAME;
+    payload.hub = {
+      os: os.platform(),
+      arch: os.arch(),
+      hostname: os.hostname(),
+      nodeVersion: process.version,
+      uptime: Math.floor(process.uptime()),
+    };
     res.end(JSON.stringify(payload, null, 2));
     return;
   }

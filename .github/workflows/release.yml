@@ -1,0 +1,120 @@
+# Build tela and telad binaries for all platforms, publish SHA-256 hashes,
+# and attach everything to a GitHub Release.
+#
+# Triggered by pushing a tag like v0.1.0:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# What this proves to users:
+#   - Binaries were built by GitHub Actions (not someone's laptop)
+#   - Built from the exact tagged commit (verifiable via source)
+#   - SHA-256 checksums are published alongside the binaries
+#   - Reproducible: same Go version, same flags, same source → same binary
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write  # needed to create releases and upload assets
+
+env:
+  GO_VERSION: "1.24.4"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: linux
+            goarch: amd64
+            ext: ""
+          - goos: linux
+            goarch: arm64
+            ext: ""
+          - goos: darwin
+            goarch: amd64
+            ext: ""
+          - goos: darwin
+            goarch: arm64
+            ext: ""
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build tela
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -o dist/tela-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
+            ./cmd/tela
+
+      - name: Build telad
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -o dist/telad-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
+            ./cmd/telad
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Generate checksums and manifest
+        run: |
+          cd dist
+          sha256sum * | tee SHA256SUMS.txt
+          # Build a JSON manifest for easy consumption by web pages
+          echo '{"version":"${{ github.ref_name }}","binaries":{' > release.json
+          first=true
+          for f in tela-* telad-*; do
+            hash=$(sha256sum "$f" | cut -d' ' -f1)
+            [ "$first" = true ] && first=false || echo ',' >> release.json
+            echo "\"$f\":{\"sha256\":\"$hash\",\"size\":$(stat -c%s "$f\")}" >> release.json
+          done
+          echo '}}' >> release.json
+          # Pretty-print for readability
+          python3 -m json.tool release.json > release-pretty.json
+          mv release-pretty.json release.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*

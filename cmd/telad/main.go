@@ -102,6 +102,8 @@ type configFile struct {
 type machineConfig struct {
 	Name        string   `yaml:"name"`
 	DisplayName string   `yaml:"displayName,omitempty"`
+	Hostname    string   `yaml:"hostname,omitempty"`    // override os.Hostname() (useful in containers)
+	OS          string   `yaml:"os,omitempty"`          // e.g. "windows", "linux"; defaults to runtime.GOOS
 	Tags        []string `yaml:"tags,omitempty"`
 	Location    string   `yaml:"location,omitempty"`
 	Owner       string   `yaml:"owner,omitempty"`
@@ -156,6 +158,12 @@ Options:
 	targetHost := flag.String("target-host", envOrDefault("TELA_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELA_TARGET_HOST)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
+
+	// Handle version flag before anything else
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		fmt.Printf("telad %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+		os.Exit(0)
+	}
 
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[telad] ")
@@ -251,12 +259,19 @@ func runMultiMachine(cfg *configFile) {
 		wg.Add(1)
 		go func(mc machineConfig) {
 			defer wg.Done()
-			hostname, _ := os.Hostname()
+			hostname := mc.Hostname
+			if hostname == "" {
+				hostname, _ = os.Hostname()
+			}
+			machineOS := mc.OS
+			if machineOS == "" {
+				machineOS = runtime.GOOS
+			}
 			reg := registration{
 				MachineID:    mc.Name,
 				DisplayName:  mc.DisplayName,
 				Hostname:     hostname,
-				OS:           runtime.GOOS,
+				OS:           machineOS,
 				AgentVersion: version,
 				Tags:         mc.Tags,
 				Location:     mc.Location,

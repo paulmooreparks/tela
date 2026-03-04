@@ -26,6 +26,10 @@ ingress:
   - hostname: tela.awansatu.net
     service: http://localhost:3000
 
+  # Tela Hub — HTTP + WebSocket on one port (docker-compose publishes 3000->8080)
+  - hostname: owlsnest-cfhub.parkscomputing.com
+    service: http://localhost:3000
+
   # Awan Satu portal
   - hostname: awansatu.net
     service: http://localhost:3001

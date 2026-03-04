@@ -3,5 +3,5 @@ node_modules/
 
 # Compiled binaries
 *.exe
-tela
-telad
+tela.exe
+telad.exe

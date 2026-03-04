@@ -57,6 +57,9 @@ import (
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
 
+// version is set at build time via -ldflags "-X main.version=..."
+var version = "dev"
+
 const (
 	agentIP  = "10.77.0.1"
 	helperIP = "10.77.0.2"
@@ -99,6 +102,8 @@ func main() {
 		cmdServices(os.Args[2:])
 	case "status":
 		cmdStatus(os.Args[2:])
+	case "version", "-v", "--version":
+		fmt.Printf("tela %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 	case "help", "-h", "--help":
 		printUsage()
 	default:
@@ -119,6 +124,7 @@ Commands:
   machines  List registered machines and their services
   services  List services on a specific machine
   status    Show hub status summary
+  version   Print version and exit
 
 Environment Variables:
   TELA_HUB      Default hub URL or alias  (overridden by -hub)

@@ -6,6 +6,8 @@ hub: ws://hub:8080
 
 machines:
   - name: barn
+    hostname: barn
+    os: windows
     # Either `ports:` (shortcut) or `services:` (rich descriptors).
     # ports: [22, 3389]
     services:
