@@ -165,21 +165,22 @@
     </div>
   </div>
 
-  <!-- Download -->
-  <div class="card" id="helper-card">
+  <!-- Download (hidden until a GitHub Release exists) -->
+  <div class="card" id="helper-card" style="display:none">
     <h2>Download Tela Client</h2>
     <p>tela is a small, zero-install binary. Download it, run it, connect.</p>
     <p class="detected" id="detected-os"></p>
-    <a class="download-primary" id="dl-primary" href="/tela/windows/tela.exe">
+    <a class="download-primary" id="dl-primary" href="#" data-asset="tela-windows-amd64.exe">
       <span>&#11015;</span> <span id="dl-label">Download for Windows</span>
     </a>
     <ul class="download-alt" id="dl-alt">
-      <li><a href="/tela/windows/tela.exe">Windows</a></li>
-      <li><a href="/tela/linux/tela">Linux (amd64)</a></li>
-      <li><a href="/tela/macos/tela">macOS (Intel)</a></li>
-      <li><a href="/tela/macos-arm64/tela">macOS (Apple&nbsp;Silicon)</a></li>
+      <li><a href="#" data-asset="tela-windows-amd64.exe">Windows</a></li>
+      <li><a href="#" data-asset="tela-linux-amd64">Linux (amd64)</a></li>
+      <li><a href="#" data-asset="tela-darwin-amd64">macOS (Intel)</a></li>
+      <li><a href="#" data-asset="tela-darwin-arm64">macOS (Apple&nbsp;Silicon)</a></li>
     </ul>
-    <div class="usage" id="usage-block">tela connect -hub wss://tela.awansatu.net -machine &lt;name&gt;</div>
+    <div class="usage" id="usage-block">tela login https://awansatu.net
+tela connect -hub owlsnest -machine &lt;name&gt;</div>
     <div class="release-info" id="release-info" style="display:none">
       <div class="release-version" id="release-version"></div>
       <div id="release-hashes"></div>
@@ -402,10 +403,11 @@ tela logout                                            # remove stored credentia
       setInterval(refreshHistory, 5000);
     })();
 
-    // ── Release version + hashes from GitHub ────────────────────────
+    // ── Release version + downloads from GitHub ─────────────────────
     (function () {
       var REPO = 'paulmooreparks/tela';
       var API  = 'https://api.github.com/repos/' + REPO + '/releases/latest';
+      var card     = document.getElementById('helper-card');
       var infoEl   = document.getElementById('release-info');
       var verEl    = document.getElementById('release-version');
       var hashesEl = document.getElementById('release-hashes');
@@ -414,10 +416,34 @@ tela logout                                            # remove stored credentia
         .then(function (r) { return r.json(); })
         .then(function (rel) {
           if (!rel.tag_name) return;
+
+          // Build asset URL map
+          var assetMap = {};
+          (rel.assets || []).forEach(function (a) { assetMap[a.name] = a.browser_download_url; });
+
+          // Populate download hrefs from data-asset attributes
+          var anyLinked = false;
+          card.querySelectorAll('[data-asset]').forEach(function (el) {
+            var name = el.getAttribute('data-asset');
+            if (assetMap[name]) {
+              el.href = assetMap[name];
+              anyLinked = true;
+            }
+          });
+
+          if (!anyLinked) return; // no matching assets — keep section hidden
+
+          // Show the download card
+          card.style.display = '';
+
+          // Run OS detection now that hrefs are populated
+          detectOS(assetMap);
+
+          // Version info
           verEl.innerHTML = '<a href="' + rel.html_url + '">' + escHtml(rel.tag_name) + '</a>'
             + ' <span style="color:#888;font-weight:400">&middot; ' + new Date(rel.published_at).toLocaleDateString() + '</span>';
 
-          // Find SHA256SUMS.txt asset
+          // Parse SHA256SUMS.txt and show hashes
           var sumAsset = (rel.assets || []).filter(function (a) { return a.name === 'SHA256SUMS.txt'; })[0];
           if (sumAsset) {
             fetch(sumAsset.browser_download_url)
@@ -437,16 +463,16 @@ tela logout                                            # remove stored credentia
           }
           infoEl.style.display = 'block';
         })
-        .catch(function () { /* no release yet — leave hidden */ });
+        .catch(function () { /* no release yet — card stays hidden */ });
     })();
 
-    // ── OS detection for downloads ──────────────────────────────────
-    (function () {
+    // ── OS detection for downloads (called after release assets are loaded) ──
+    function detectOS(assetMap) {
       var platforms = [
-        { pattern: /Win/,                    label: 'Windows',              href: '/tela/windows/tela.exe', bin: 'tela.exe' },
-        { pattern: /Linux(?!.*Android)/,     label: 'Linux (amd64)',        href: '/tela/linux/tela',       bin: 'tela' },
-        { pattern: /Mac.*ARM|Mac.*Apple/i,   label: 'macOS (Apple Silicon)',href: '/tela/macos-arm64/tela', bin: 'tela' },
-        { pattern: /Mac/,                    label: 'macOS (Intel)',        href: '/tela/macos/tela',       bin: 'tela' },
+        { pattern: /Win/,                    label: 'Windows',              asset: 'tela-windows-amd64.exe' },
+        { pattern: /Linux(?!.*Android)/,     label: 'Linux (amd64)',        asset: 'tela-linux-amd64' },
+        { pattern: /Mac.*ARM|Mac.*Apple/i,   label: 'macOS (Apple Silicon)',asset: 'tela-darwin-arm64' },
+        { pattern: /Mac/,                    label: 'macOS (Intel)',        asset: 'tela-darwin-amd64' },
       ];
 
       var ua = navigator.userAgent || '';
@@ -477,19 +503,21 @@ tela logout                                            # remove stored credentia
       if (match) applyMatch(match);
 
       function applyMatch(m) {
-        document.getElementById('dl-primary').href = m.href;
+        if (assetMap[m.asset]) {
+          document.getElementById('dl-primary').href = assetMap[m.asset];
+          document.getElementById('dl-primary').setAttribute('data-asset', m.asset);
+        }
         document.getElementById('dl-label').textContent = 'Download for ' + m.label;
         document.getElementById('detected-os').textContent = 'Detected: ' + m.label;
-        document.getElementById('usage-block').textContent =
-          'tela connect -hub ' + hubWsUrl + ' -machine <name>';
+        // Hide the matching alt link
         var links = document.querySelectorAll('#dl-alt a');
         for (var j = 0; j < links.length; j++) {
-          if (links[j].getAttribute('href') === m.href) {
+          if (links[j].getAttribute('data-asset') === m.asset) {
             links[j].parentElement.style.display = 'none';
           }
         }
       }
-    })();
+    }
   </script>
 </body>
 </html>
