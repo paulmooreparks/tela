@@ -39,9 +39,25 @@ const MIME = {
   '.exe':  'application/octet-stream',
 };
 
-// ── HTTP server (static site) ──────────────────────────────────────
+// ── HTTP server (static site + status API) ─────────────────────────
 
 const httpServer = http.createServer((req, res) => {
+  // /status endpoint — JSON summary of registered machines and sessions
+  if (req.url === '/status') {
+    const status = [];
+    for (const [id, entry] of machines) {
+      status.push({
+        id,
+        agentConnected: !!(entry.agentWs && entry.agentWs.readyState === 1),
+        hasSession: !!(entry.helperWs && entry.helperWs.readyState === 1),
+        registeredAt: entry.registeredAt || null,
+      });
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ machines: status, timestamp: new Date().toISOString() }, null, 2));
+    return;
+  }
+
   let filePath = path.join(WWW_DIR, req.url === '/' ? 'index.html' : req.url);
   filePath = path.normalize(filePath);
 
@@ -103,9 +119,9 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'register') {
-      handleRegister(ws, msg.machineId);
+      handleRegister(ws, msg.machineId, msg.token);
     } else if (msg.type === 'connect') {
-      handleConnect(ws, msg.machineId, msg.wgPubKey);
+      handleConnect(ws, msg.machineId, msg.wgPubKey, msg.token);
     } else {
       ws.close(1002, 'Unknown message type');
     }
@@ -121,17 +137,19 @@ wss.on('connection', (ws) => {
   });
 });
 
-function handleRegister(ws, machineId) {
+function handleRegister(ws, machineId, token) {
   ws._tela.role = 'agent';
   ws._tela.machineId = machineId;
 
   if (!machines.has(machineId)) {
-    machines.set(machineId, { agentWs: null, helperWs: null });
+    machines.set(machineId, { agentWs: null, helperWs: null, token: null, registeredAt: null });
   }
   const entry = machines.get(machineId);
   entry.agentWs = ws;
+  entry.token = token || null;
+  entry.registeredAt = new Date().toISOString();
 
-  console.log(`[hub] agent registered: ${machineId}`);
+  console.log(`[hub] agent registered: ${machineId}${token ? ' (token-protected)' : ''}`);
   ws.send(JSON.stringify({ type: 'registered', machineId }));
 
   // If a helper is already waiting, pair them
@@ -140,7 +158,7 @@ function handleRegister(ws, machineId) {
   }
 }
 
-function handleConnect(ws, machineId, wgPubKey) {
+function handleConnect(ws, machineId, wgPubKey, token) {
   ws._tela.role = 'helper';
   ws._tela.machineId = machineId;
   ws._tela.wgPubKey = wgPubKey || null;
@@ -150,6 +168,14 @@ function handleConnect(ws, machineId, wgPubKey) {
     console.log(`[hub] helper requested ${machineId} — agent not found`);
     ws.send(JSON.stringify({ type: 'error', message: 'Agent not found' }));
     ws.close(1008, 'Agent not found');
+    return;
+  }
+
+  // Validate token — if the agent registered with a token, the client must match
+  if (entry.token && entry.token !== (token || '')) {
+    console.log(`[hub] helper token mismatch for ${machineId}`);
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
+    ws.close(1008, 'Invalid token');
     return;
   }
 

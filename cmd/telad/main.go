@@ -63,6 +63,7 @@ type controlMessage struct {
 	Message   string   `json:"message,omitempty"`
 	WGPubKey  string   `json:"wgPubKey,omitempty"`
 	Ports     []uint16 `json:"ports,omitempty"`
+	Token     string   `json:"token,omitempty"`
 }
 
 // silentLogger discards verbose WireGuard-go routine spam.
@@ -83,7 +84,8 @@ Usage:
   telad -hub <url> -machine <id> [options]
 
 Examples:
-  telad -hub ws://hub:8080 -machine barn-wg -ports 22,3389,8080
+  telad -hub ws://hub:8080 -machine barn-wg -ports 22,3389
+  telad -hub wss://tela.awansatu.net -machine barn-wg -ports 3389 -token s3cret
   telad -hub wss://tela.awansatu.net -machine barn-wg -ports 3389 -target-host 192.168.1.10
 
 Options:
@@ -93,6 +95,7 @@ Options:
 
 	hubURL := flag.String("hub", envOrDefault("HUB_URL", ""), "Hub WebSocket URL (required)")
 	machineID := flag.String("machine", envOrDefault("MACHINE_ID", ""), "Machine ID to register (required)")
+	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Connection token (clients must match to connect)")
 	portsStr := flag.String("ports", envOrDefault("PORTS", "3389"), "Comma-separated list of TCP ports to forward")
 	targetHost := flag.String("target-host", envOrDefault("TARGET_HOST", "127.0.0.1"), "Target service host")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
@@ -121,7 +124,7 @@ Options:
 	}()
 
 	for {
-		runAgent(*hubURL, *machineID, *targetHost, ports)
+		runAgent(*hubURL, *machineID, *token, *targetHost, ports)
 		log.Println("reconnecting in 3 seconds...")
 		time.Sleep(3 * time.Second)
 	}
@@ -144,7 +147,7 @@ func parsePorts(s string) []uint16 {
 	return ports
 }
 
-func runAgent(hubURL, machineID, targetHost string, ports []uint16) {
+func runAgent(hubURL, machineID, token, targetHost string, ports []uint16) {
 	log.Printf("connecting to hub: %s", hubURL)
 
 	ws, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
@@ -156,7 +159,7 @@ func runAgent(hubURL, machineID, targetHost string, ports []uint16) {
 
 	// Register with hub
 	log.Printf("connected, registering as: %s", machineID)
-	regMsg := controlMessage{Type: "register", MachineID: machineID}
+	regMsg := controlMessage{Type: "register", MachineID: machineID, Token: token}
 	if err := ws.WriteJSON(&regMsg); err != nil {
 		log.Printf("register failed: %v", err)
 		return

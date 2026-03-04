@@ -44,6 +44,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"golang.zx2c4.com/wireguard/device"
@@ -64,6 +65,7 @@ type controlMessage struct {
 	Message   string   `json:"message,omitempty"`
 	WGPubKey  string   `json:"wgPubKey,omitempty"`
 	Ports     []uint16 `json:"ports,omitempty"`
+	Token     string   `json:"token,omitempty"`
 }
 
 // Well-known port names for friendly display.
@@ -87,6 +89,7 @@ Usage:
 Examples:
   tela -hub wss://tela.awansatu.net -machine barn-wg
   tela -hub wss://tela.awansatu.net -machine barn-wg -v
+  tela -hub wss://tela.awansatu.net -machine barn-wg -token s3cret
   tela -hub wss://tela.awansatu.net -machine barn-wg -port 13389 -target-port 3389
 
 Options:
@@ -96,6 +99,7 @@ Options:
 
 	hubURL := flag.String("hub", envOrDefault("HUB_URL", ""), "Hub WebSocket URL (required)")
 	machineID := flag.String("machine", envOrDefault("MACHINE_ID", ""), "Target machine ID (required)")
+	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Connection token (must match daemon)")
 	localPort := flag.Int("port", 0, "Local TCP port (advanced: single-port override)")
 	targetPort := flag.Int("target-port", 0, "Target port on daemon (advanced: with -port)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
@@ -115,33 +119,58 @@ Options:
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[tela] ")
 
-	log.Printf("connecting to hub: %s", *hubURL)
+	// Handle graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("shutting down")
+		os.Exit(0)
+	}()
+
+	var mappings []portMapping
+	if singlePortMode {
+		mappings = []portMapping{{local: uint16(*localPort), remote: uint16(*targetPort)}}
+	}
+
+	for {
+		runSession(*hubURL, *machineID, *token, mappings)
+		log.Println("reconnecting in 3 seconds...")
+		time.Sleep(3 * time.Second)
+	}
+}
+
+func runSession(hubURL, machineID, token string, overrideMappings []portMapping) {
+	log.Printf("connecting to hub: %s", hubURL)
 
 	// Connect to Hub via WebSocket
-	wsConn, _, err := websocket.DefaultDialer.Dial(*hubURL, nil)
+	wsConn, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
 	if err != nil {
-		log.Fatalf("websocket dial failed: %v", err)
+		log.Printf("websocket dial failed: %v", err)
+		return
 	}
 	defer wsConn.Close()
 
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
-		log.Fatalf("keygen failed: %v", err)
+		log.Printf("keygen failed: %v", err)
+		return
 	}
 	privKeyHex := hex.EncodeToString(privKey.Bytes())
 	pubKeyHex := hex.EncodeToString(privKey.PublicKey().Bytes())
 
-	log.Printf("connected, requesting session for: %s", *machineID)
-	log.Printf("helper pubkey: %s...", pubKeyHex[:8])
+	log.Printf("connected, requesting session for: %s", machineID)
+	logVerbose("client pubkey: %s...", pubKeyHex[:8])
 
-	// Send connect request with our public key
-	connectMsg := controlMessage{Type: "connect", MachineID: *machineID, WGPubKey: pubKeyHex}
+	// Send connect request with our public key and token
+	connectMsg := controlMessage{Type: "connect", MachineID: machineID, WGPubKey: pubKeyHex, Token: token}
 	if err := wsConn.WriteJSON(&connectMsg); err != nil {
-		log.Fatalf("failed to send connect: %v", err)
+		log.Printf("failed to send connect: %v", err)
+		return
 	}
 
-	// Wait for "ready" and agent's public key + port list
+	// Wait for "ready" and daemon's public key + port list
 	var agentPubKeyHex string
 	var agentPorts []uint16
 	ready := false
@@ -149,7 +178,8 @@ Options:
 	for {
 		_, rawMsg, err := wsConn.ReadMessage()
 		if err != nil {
-			log.Fatalf("failed reading from hub: %v", err)
+			log.Printf("failed reading from hub: %v", err)
+			return
 		}
 
 		var msg controlMessage
@@ -164,12 +194,13 @@ Options:
 		case "wg-pubkey":
 			agentPubKeyHex = msg.WGPubKey
 			agentPorts = msg.Ports
-			log.Printf("agent pubkey: %s...", agentPubKeyHex[:8])
+			logVerbose("daemon pubkey: %s...", agentPubKeyHex[:8])
 			if len(agentPorts) > 0 {
-				log.Printf("agent ports: %v", agentPorts)
+				log.Printf("daemon ports: %v", agentPorts)
 			}
 		case "error":
-			log.Fatalf("hub error: %s", msg.Message)
+			log.Printf("hub error: %s", msg.Message)
+			return
 		}
 
 		// Need both ready and agent pubkey to proceed
@@ -185,7 +216,8 @@ Options:
 		mtu,
 	)
 	if err != nil {
-		log.Fatalf("netstack creation failed: %v", err)
+		log.Printf("netstack creation failed: %v", err)
+		return
 	}
 
 	// Create wsBind — WireGuard datagrams go through the WebSocket
@@ -211,43 +243,40 @@ persistent_keepalive_interval=25
 `, privKeyHex, agentPubKeyHex, agentIP)
 
 	if err := dev.IpcSet(ipcConf); err != nil {
-		log.Fatalf("WireGuard IPC config failed: %v", err)
+		log.Printf("WireGuard IPC config failed: %v", err)
+		dev.Close()
+		return
 	}
 
 	if err := dev.Up(); err != nil {
-		log.Fatalf("WireGuard device up failed: %v", err)
+		log.Printf("WireGuard device up failed: %v", err)
+		dev.Close()
+		return
 	}
-	log.Printf("WireGuard tunnel up — helper=%s agent=%s", helperIP, agentIP)
+	log.Printf("WireGuard tunnel up — client=%s daemon=%s", helperIP, agentIP)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
-	go wsReader(wsConn, bind)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		wsReader(wsConn, bind)
+	}()
 
-	if singlePortMode {
-		// Advanced: single-port override
-		runNetstackMode(tnet, []portMapping{{local: uint16(*localPort), remote: uint16(*targetPort)}}, dev)
-	} else if len(agentPorts) > 0 {
-		// Auto mode: bind local listeners for each agent-advertised port
-		var mappings []portMapping
+	// Determine port mappings
+	mappings := overrideMappings
+	if len(mappings) == 0 && len(agentPorts) > 0 {
 		for _, p := range agentPorts {
 			mappings = append(mappings, portMapping{local: p, remote: p})
 		}
-		runNetstackMode(tnet, mappings, dev)
-	} else {
-		log.Fatalf("agent did not advertise any ports — use -port and -target-port")
 	}
-}
+	if len(mappings) == 0 {
+		log.Printf("daemon did not advertise any ports — use -port and -target-port")
+		dev.Close()
+		return
+	}
 
-// portMapping pairs a local listener port with the remote agent port.
-type portMapping struct {
-	local  uint16
-	remote uint16
-}
-
-// runNetstackMode binds local TCP listeners for each port mapping and proxies
-// connections through the WireGuard tunnel to the agent.
-func runNetstackMode(tnet *netstack.Net, mappings []portMapping, dev *device.Device) {
+	// Bind local listeners
 	var listeners []net.Listener
-
 	log.Println("Services available:")
 	for _, m := range mappings {
 		listenAddr := fmt.Sprintf("127.0.0.1:%d", m.local)
@@ -265,9 +294,7 @@ func runNetstackMode(tnet *netstack.Net, mappings []portMapping, dev *device.Dev
 		} else {
 			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
 		}
-
 		listeners = append(listeners, listener)
-
 		go func(l net.Listener, remote uint16) {
 			for {
 				localConn, err := l.Accept()
@@ -283,18 +310,24 @@ func runNetstackMode(tnet *netstack.Net, mappings []portMapping, dev *device.Dev
 	}
 
 	if len(listeners) == 0 {
-		log.Fatalf("no ports could be bound")
+		log.Printf("no ports could be bound")
+		dev.Close()
+		return
 	}
 
-	// Handle graceful shutdown
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
-	log.Printf("shutting down")
+	// Wait for WebSocket to close (session end) or signal
+	<-done
+	log.Println("session ended — cleaning up")
 	for _, l := range listeners {
 		l.Close()
 	}
 	dev.Close()
+}
+
+// portMapping pairs a local listener port with the remote agent port.
+type portMapping struct {
+	local  uint16
+	remote uint16
 }
 
 // portLabel returns a friendly name for well-known ports.
