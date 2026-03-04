@@ -140,6 +140,9 @@ jobs:
           python3 -m json.tool release.json > release-pretty.json
           mv release-pretty.json release.json
 
+      - name: Checkout source (needed for tagging)
+        uses: actions/checkout@v4
+
       - name: Create tag (for main branch builds)
         if: startsWith(github.ref, 'refs/heads/')
         run: |
