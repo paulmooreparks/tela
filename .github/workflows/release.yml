@@ -1,8 +1,9 @@
 # Build tela and telad binaries for all platforms, publish SHA-256 hashes,
 # and attach everything to a GitHub Release.
 #
-# Triggered by pushing a tag like v0.1.0:
-#   git tag v0.1.0 && git push origin v0.1.0
+# Triggers:
+#   - Push to main: creates release v0.1.<run_number>
+#   - Push a v* tag:  uses the tag name as-is
 #
 # What this proves to users:
 #   - Binaries were built by GitHub Actions (not someone's laptop)
@@ -14,6 +15,7 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
 
@@ -53,6 +55,15 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Compute version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -64,7 +75,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
         run: |
-          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+          go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
             -o dist/tela-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
             ./cmd/tela
 
@@ -74,7 +85,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
         run: |
-          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+          go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
             -o dist/telad-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
             ./cmd/telad
 
@@ -89,6 +100,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Compute version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -99,22 +119,39 @@ jobs:
         run: |
           cd dist
           sha256sum * | tee SHA256SUMS.txt
+
           # Build a JSON manifest for easy consumption by web pages
-          echo '{"version":"${{ github.ref_name }}","binaries":{' > release.json
+          VERSION="${{ steps.version.outputs.tag }}"
+          echo "{\"version\":\"${VERSION}\",\"binaries\":{" > release.json
           first=true
           for f in tela-* telad-*; do
             hash=$(sha256sum "$f" | cut -d' ' -f1)
-            [ "$first" = true ] && first=false || echo ',' >> release.json
-            echo "\"$f\":{\"sha256\":\"$hash\",\"size\":$(stat -c%s "$f\")}" >> release.json
+            size=$(stat -c%s "$f")
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo ',' >> release.json
+            fi
+            printf '"%s":{"sha256":"%s","size":%s}' "$f" "$hash" "$size" >> release.json
           done
           echo '}}' >> release.json
+
           # Pretty-print for readability
           python3 -m json.tool release.json > release-pretty.json
           mv release-pretty.json release.json
 
+      - name: Create tag (for main branch builds)
+        if: startsWith(github.ref, 'refs/heads/')
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
           files: |
             dist/*
