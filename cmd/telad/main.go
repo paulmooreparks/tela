@@ -159,8 +159,8 @@ Usage:
 
 Examples:
   telad -config telad.yaml
-  telad -hub ws://hub:8080 -machine barn -ports 22,3389
-  telad -hub wss://tela.awansatu.net -machine barn -ports 3389 -token s3cret
+  telad -hub ws://hub:8080 -machine barn -ports 22:SSH,3389:RDP
+  telad -hub wss://tela.awansatu.net -machine barn -ports "22:SSH,3389:RDP,12345:Prometheus" -token s3cret
 
 Options:
 `)
@@ -171,7 +171,7 @@ Options:
 	hubURL := flag.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
 	machineID := flag.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID to register (env: TELA_MACHINE)")
 	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
-	portsStr := flag.String("ports", envOrDefault("TELA_PORTS", "3389"), "Comma-separated TCP ports (env: TELA_PORTS)")
+	portsStr := flag.String("ports", envOrDefault("TELA_PORTS", "3389"), "Comma-separated port specs: port[:name[:description]]  e.g. 22:SSH,3389:RDP,12345:MyApp (env: TELA_PORTS)")
 	targetHost := flag.String("target-host", envOrDefault("TELA_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELA_TARGET_HOST)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
@@ -210,8 +210,8 @@ Options:
 		os.Exit(1)
 	}
 
-	ports := parsePorts(*portsStr)
-	if len(ports) == 0 {
+	services := parsePortSpecs(*portsStr)
+	if len(services) == 0 {
 		log.Fatalf("no valid ports in: %s", *portsStr)
 	}
 
@@ -222,8 +222,8 @@ Options:
 		OS:           runtime.GOOS,
 		AgentVersion: version,
 		Token:        *token,
-		Ports:        ports,
-		Services:     defaultServicesFromPorts(ports),
+		Ports:        portsFromServices(services),
+		Services:     services,
 	}
 
 	runSingleMachine(*hubURL, reg, *targetHost)
@@ -486,7 +486,7 @@ func loadConfig(path string) (*configFile, error) {
 			cfg.Machines[i].Ports = portsFromServices(m.Services)
 		}
 		if len(m.Services) == 0 && len(m.Ports) > 0 {
-			cfg.Machines[i].Services = defaultServicesFromPorts(m.Ports)
+			cfg.Machines[i].Services = minimalServicesFromPorts(m.Ports)
 		}
 	}
 	return &cfg, nil
@@ -554,49 +554,45 @@ func portsFromServices(services []serviceDescriptor) []uint16 {
 	return ports
 }
 
-func defaultServicesFromPorts(ports []uint16) []serviceDescriptor {
+// minimalServicesFromPorts creates bare service descriptors (no guessed names)
+// for use when the YAML config specifies ports: but no services:.
+func minimalServicesFromPorts(ports []uint16) []serviceDescriptor {
 	services := make([]serviceDescriptor, 0, len(ports))
 	for _, p := range ports {
-		name := fmt.Sprintf("port %d", p)
-		desc := ""
-		switch p {
-		case 22:
-			name, desc = "SSH", "Secure Shell"
-		case 80:
-			name, desc = "HTTP", "Web"
-		case 443:
-			name, desc = "HTTPS", "Web (TLS)"
-		case 3389:
-			name, desc = "RDP", "Remote Desktop"
-		case 445:
-			name, desc = "SMB", "File sharing"
-		case 5900:
-			name, desc = "VNC", "Remote desktop"
-		case 8080:
-			name, desc = "HTTP-Alt", "Web"
-		case 8443:
-			name, desc = "HTTPS-Alt", "Web (TLS)"
-		}
-		services = append(services, serviceDescriptor{Port: p, Proto: "tcp", Name: name, Description: desc})
+		services = append(services, serviceDescriptor{Port: p, Proto: "tcp"})
 	}
 	return services
 }
 
-func parsePorts(s string) []uint16 {
-	var ports []uint16
-	for _, p := range strings.Split(s, ",") {
-		p = strings.TrimSpace(p)
-		if p == "" {
+// parsePortSpecs parses the -ports flag value into service descriptors.
+// Each spec is one of:
+//
+//	<port>                     e.g. 3389
+//	<port>:<name>              e.g. 3389:RDP
+//	<port>:<name>:<description> e.g. 3389:RDP:Remote Desktop
+func parsePortSpecs(s string) []serviceDescriptor {
+	var services []serviceDescriptor
+	for _, spec := range strings.Split(s, ",") {
+		spec = strings.TrimSpace(spec)
+		if spec == "" {
 			continue
 		}
-		n, err := strconv.Atoi(p)
+		parts := strings.SplitN(spec, ":", 3)
+		n, err := strconv.Atoi(strings.TrimSpace(parts[0]))
 		if err != nil || n < 1 || n > 65535 {
-			log.Printf("ignoring invalid port: %s", p)
+			log.Printf("ignoring invalid port spec: %s", spec)
 			continue
 		}
-		ports = append(ports, uint16(n))
+		svc := serviceDescriptor{Port: uint16(n), Proto: "tcp"}
+		if len(parts) >= 2 {
+			svc.Name = strings.TrimSpace(parts[1])
+		}
+		if len(parts) == 3 {
+			svc.Description = strings.TrimSpace(parts[2])
+		}
+		services = append(services, svc)
 	}
-	return ports
+	return services
 }
 
 func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string) {
