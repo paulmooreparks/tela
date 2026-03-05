@@ -35,6 +35,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -47,6 +48,7 @@ import (
 	"golang.zx2c4.com/wireguard/tun/netstack"
 	"gopkg.in/yaml.v3"
 
+	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
 
@@ -129,7 +131,22 @@ type registration struct {
 
 var verbose bool
 
+// stopCh is closed to signal graceful shutdown (used in service mode).
+var stopCh chan struct{}
+
 func main() {
+	// Check for service subcommand or Windows SCM launch before flag parsing.
+	if len(os.Args) > 1 && os.Args[1] == "service" {
+		handleServiceCommand()
+		return
+	}
+
+	// If launched by the Windows SCM, enter service mode automatically.
+	if service.IsWindowsService() {
+		runAsWindowsService()
+		return
+	}
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `telad — Tela Daemon
 
@@ -212,7 +229,231 @@ Options:
 	runSingleMachine(*hubURL, reg, *targetHost)
 }
 
-// loadConfig reads and validates a telad YAML config file.
+// ── Service management ─────────────────────────────────────────────
+
+func handleServiceCommand() {
+	if len(os.Args) < 3 {
+		cfgPath := service.BinaryConfigPath("telad")
+		fmt.Fprintf(os.Stderr, `telad service — manage telad as an OS service
+
+Usage:
+  telad service install -config <file>  Install service (copies config to system dir)
+  telad service uninstall               Remove the service
+  telad service start                   Start the installed service
+  telad service stop                    Stop the running service
+  telad service restart                 Restart the service
+  telad service status                  Show service status
+  telad service run                     Run in service mode (used by the service manager)
+
+The service reads its configuration from:
+  %s
+
+Edit that file and run "telad service restart" to reconfigure.
+
+Install example:
+  telad service install -config telad.yaml
+`, cfgPath)
+		os.Exit(1)
+	}
+
+	subcmd := os.Args[2]
+
+	switch subcmd {
+	case "install":
+		serviceInstall()
+	case "uninstall":
+		serviceUninstall()
+	case "start":
+		serviceStart()
+	case "stop":
+		serviceStop()
+	case "restart":
+		serviceRestart()
+	case "status":
+		serviceStatus()
+	case "run":
+		serviceRun()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown service subcommand: %s\n", subcmd)
+		os.Exit(1)
+	}
+}
+
+func serviceInstall() {
+	// Parse flags after "service install"
+	fs := flag.NewFlagSet("service install", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to YAML config file (required)")
+	fs.Parse(os.Args[3:])
+
+	if *configPath == "" {
+		fmt.Fprintf(os.Stderr, "error: -config is required\n")
+		fmt.Fprintf(os.Stderr, "usage: telad service install -config <file>\n")
+		os.Exit(1)
+	}
+
+	// Validate the config file
+	absConfig, _ := filepath.Abs(*configPath)
+	if _, err := loadConfig(absConfig); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Copy the config to the system-wide location
+	destPath := service.BinaryConfigPath("telad")
+	if err := copyFile(absConfig, destPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Get the absolute path to the current executable
+	exePath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot determine executable path: %v\n", err)
+		os.Exit(1)
+	}
+	exePath, _ = filepath.Abs(exePath)
+
+	wd, _ := os.Getwd()
+	cfg := &service.Config{
+		BinaryPath:  exePath,
+		Description: "Tela Daemon — encrypted tunnel agent",
+		WorkingDir:  wd,
+	}
+
+	if err := service.Install("telad", cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telad service installed successfully")
+	fmt.Printf("  config: %s\n", destPath)
+	fmt.Println("  start:  telad service start")
+	fmt.Println("")
+	fmt.Println("Edit the config file and run \"telad service restart\" to reconfigure.")
+}
+
+// copyFile copies src to dst, creating parent directories as needed.
+func copyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", src, err)
+	}
+	if err := os.WriteFile(dst, data, 0644); err != nil {
+		return fmt.Errorf("write %s: %w", dst, err)
+	}
+	return nil
+}
+
+func serviceUninstall() {
+	if err := service.Uninstall("telad"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	// Also remove the YAML config
+	yamlPath := service.BinaryConfigPath("telad")
+	_ = os.Remove(yamlPath)
+	fmt.Println("telad service uninstalled")
+}
+
+func serviceStart() {
+	if err := service.Start("telad"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telad service started")
+}
+
+func serviceStop() {
+	if err := service.Stop("telad"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telad service stopped")
+}
+
+func serviceRestart() {
+	fmt.Println("stopping telad service...")
+	_ = service.Stop("telad")
+	// Brief pause to let the service fully stop
+	time.Sleep(time.Second)
+	if err := service.Start("telad"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telad service restarted")
+}
+
+func serviceStatus() {
+	st, err := service.QueryStatus("telad")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("installed: %v\n", st.Installed)
+	fmt.Printf("running:   %v\n", st.Running)
+	fmt.Printf("status:    %s\n", st.Info)
+	if st.Installed {
+		fmt.Printf("config:    %s\n", service.BinaryConfigPath("telad"))
+	}
+}
+
+// serviceRunDaemon loads the YAML config from the system directory and
+// runs telad. It blocks until stopCh is closed.
+func serviceRunDaemon(stopCh <-chan struct{}) {
+	log.SetFlags(log.Ltime)
+	log.SetPrefix("[telad] ")
+
+	svcCfg, err := service.LoadConfig("telad")
+	if err != nil {
+		log.Fatalf("service config: %v", err)
+	}
+
+	if svcCfg.WorkingDir != "" {
+		os.Chdir(svcCfg.WorkingDir)
+	}
+
+	// Load the YAML config from the system-wide location
+	yamlPath := service.BinaryConfigPath("telad")
+	fileCfg, err := loadConfig(yamlPath)
+	if err != nil {
+		log.Fatalf("config %s: %v", yamlPath, err)
+	}
+
+	log.Printf("loaded config from %s", yamlPath)
+	go runMultiMachine(fileCfg)
+
+	<-stopCh
+	log.Println("service stopping")
+}
+
+func serviceRun() {
+	stopCh = make(chan struct{})
+
+	// Handle signals for non-Windows "service run" (systemd/launchd)
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		close(stopCh)
+	}()
+
+	serviceRunDaemon(stopCh)
+}
+
+func runAsWindowsService() {
+	handler := &service.Handler{
+		Run: func(svcStopCh <-chan struct{}) {
+			serviceRunDaemon(svcStopCh)
+		},
+	}
+	if err := service.RunAsService("telad", handler); err != nil {
+		log.Fatalf("service failed: %v", err)
+	}
+}
+
+// ── Config loading ─────────────────────────────────────────────────
 func loadConfig(path string) (*configFile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

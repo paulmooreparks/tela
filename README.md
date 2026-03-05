@@ -147,13 +147,35 @@ After the initial WebSocket connection, tela and telad automatically negotiate f
 
 The cascade is fully automatic. Each tier falls through on failure with no user action.
 
+## Running as an OS service
+
+Both `telad` and `telahubd` can run as native OS services (Windows SCM, Linux systemd, macOS launchd). Configuration lives in a YAML file in a system-wide directory — edit the file and restart to reconfigure, no reinstallation needed.
+
+```bash
+# Install telad as a service (copies config to system dir)
+telad service install -config telad.yaml
+telad service start
+
+# Install telahubd as a service (generates config from flags)
+telahubd service install -name myhub -port 8080
+telahubd service start
+
+# Reconfigure: edit the config, then restart
+telad service restart
+telahubd service restart
+```
+
+See [howto/services.md](howto/services.md) for full details.
+
 ## Project structure
 
 ```
 cmd/tela/          Client binary (subcommands: connect, machines, services, status, login, logout)
 cmd/telad/         Daemon binary
 cmd/telahubd/      Hub server binary
+internal/service/   Cross-platform OS service management (Windows SCM, systemd, launchd)
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
+howto/             Guides (hub setup, services, networking, use cases)
 poc/hub.js         Legacy hub relay (Node.js)
 poc/www/           Hub console (web UI)
 docker/gohub/      Dockerfile for telahubd

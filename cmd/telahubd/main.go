@@ -5,11 +5,15 @@
 // /api/status and /api/history with permissive CORS, and relays paired
 // WireGuard sessions between agents and clients.
 //
-// Environment variables:
-//   HUB_PORT      – HTTP+WS listen port  (default 8080)
-//   HUB_UDP_PORT  – UDP relay port        (default 41820)
-//   HUB_NAME      – optional display name for this hub
-//   HUB_WWW_DIR   – static file directory (default ./www)
+// Configuration (in order of precedence, highest first):
+//   1. Environment variables  (HUB_PORT, HUB_UDP_PORT, HUB_NAME, HUB_WWW_DIR)
+//   2. YAML config file       (-config telahubd.yaml)
+//   3. Built-in defaults      (port 8080, udpPort 41820, wwwDir ./www)
+//
+// When running as an OS service the binary reads its config from the
+// system-wide location (e.g. /etc/tela/telahubd.yaml or
+// %ProgramData%\Tela\telahubd.yaml). Edit the file and restart the
+// service to reconfigure.
 //
 // Invariants:
 //   - Hub never inspects encrypted tunnel payloads (zero-knowledge relay).
@@ -28,6 +32,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"mime"
@@ -44,12 +49,61 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"gopkg.in/yaml.v3"
+
+	"github.com/paulmooreparks/tela/internal/service"
 )
 
 // version is set by -ldflags at build time.
 var version = "dev"
 
 // ── Configuration ──────────────────────────────────────────────────
+
+// hubConfig is the YAML configuration for telahubd.
+type hubConfig struct {
+	Port    int    `yaml:"port"`     // HTTP+WS listen port (default 8080)
+	UDPPort int    `yaml:"udpPort"`  // UDP relay port (default 41820)
+	Name    string `yaml:"name"`     // Display name for this hub
+	WWWDir  string `yaml:"wwwDir"`   // Static file directory (default ./www)
+}
+
+// loadHubConfig reads a telahubd YAML config file.
+func loadHubConfig(path string) (*hubConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	var cfg hubConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return &cfg, nil
+}
+
+// applyHubConfig sets package-level vars from a config, then lets env
+// vars override (so env always wins over file).
+func applyHubConfig(cfg *hubConfig) {
+	if cfg != nil {
+		if cfg.Port != 0 {
+			httpPort = cfg.Port
+		}
+		if cfg.UDPPort != 0 {
+			udpPort = cfg.UDPPort
+		}
+		if cfg.Name != "" {
+			hubName = cfg.Name
+		}
+		if cfg.WWWDir != "" {
+			wwwDir = cfg.WWWDir
+		}
+	}
+
+	// Env vars override config file
+	httpPort = envInt("HUB_PORT", httpPort)
+	udpPort = envInt("HUB_UDP_PORT", udpPort)
+	hubName = envStr("HUB_NAME", hubName)
+	wwwDir = envStr("HUB_WWW_DIR", wwwDir)
+}
 
 func envInt(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
@@ -68,10 +122,10 @@ func envStr(key, def string) string {
 }
 
 var (
-	httpPort = envInt("HUB_PORT", 8080)
-	udpPort  = envInt("HUB_UDP_PORT", 41820)
-	hubName  = envStr("HUB_NAME", "")
-	wwwDir   = envStr("HUB_WWW_DIR", "./www")
+	httpPort = 8080
+	udpPort  = 41820
+	hubName  = ""
+	wwwDir   = "./www"
 )
 
 // ── Data structures ────────────────────────────────────────────────
@@ -123,6 +177,15 @@ type wsState struct {
 	Paired    bool
 	Peer      *websocket.Conn
 	WGPubKey  string // client's WireGuard public key
+
+	// RequestedPorts is an optional hint from the client about which service
+	// ports it intends to use (e.g., when tela connect uses -port/-target-port).
+	// If empty, the hub treats the session as covering all advertised services.
+	RequestedPorts []int
+
+	// SessionDetail is a human-friendly summary for portals/console.
+	// Example: "services=SSH:22,RDP:3389".
+	SessionDetail string
 }
 
 // udpSession tracks one side of a UDP relay pair.
@@ -168,6 +231,39 @@ func recordEvent(machineID, event, detail string) {
 	if len(history) > maxHistory {
 		history = history[:maxHistory]
 	}
+}
+
+func sessionDetailFrom(entry *machineEntry, requestedPorts []int) string {
+	entry.mu.Lock()
+	services := normalizeServices(entry.Ports, entry.Services)
+	entry.mu.Unlock()
+
+	if len(services) == 0 {
+		return ""
+	}
+
+	portSet := map[int]bool{}
+	if len(requestedPorts) > 0 {
+		for _, p := range requestedPorts {
+			portSet[p] = true
+		}
+	}
+
+	parts := make([]string, 0, len(services))
+	for _, s := range services {
+		if len(portSet) > 0 && !portSet[s.Port] {
+			continue
+		}
+		name := s.Name
+		if name == "" {
+			name = portLabel(s.Port)
+		}
+		parts = append(parts, fmt.Sprintf("%s:%d", name, s.Port))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "services=" + strings.Join(parts, ",")
 }
 
 // ── Well-known port labels ─────────────────────────────────────────
@@ -575,6 +671,9 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	state.Role = "client"
 	state.MachineID = machineID
 	state.WGPubKey = msg.WGPubKey
+	if msg.Ports != nil {
+		state.RequestedPorts = append([]int(nil), msg.Ports...)
+	}
 
 	machinesMu.RLock()
 	entry, exists := machines[machineID]
@@ -642,6 +741,13 @@ func pair(machineID string) {
 		clientState.Paired = true
 		clientState.Peer = agentWS
 	}
+	if clientState != nil {
+		entryDetail := sessionDetailFrom(entry, clientState.RequestedPorts)
+		clientState.SessionDetail = entryDetail
+		if agentState != nil {
+			agentState.SessionDetail = entryDetail
+		}
+	}
 	wgPubKey := ""
 	if clientState != nil {
 		wgPubKey = clientState.WGPubKey
@@ -649,7 +755,13 @@ func pair(machineID string) {
 	wsStatesMu.Unlock()
 
 	log.Printf("[hub] paired agent <-> client for: %s", machineID)
-	recordEvent(machineID, "session-start", "Client connected")
+	ss := ""
+	wsStatesMu.RLock()
+	if cs := wsStates[clientWS]; cs != nil {
+		ss = cs.SessionDetail
+	}
+	wsStatesMu.RUnlock()
+	recordEvent(machineID, "session-start", ss)
 
 	// Signal agent: session-start (with client's WG public key if present)
 	sessionStart := map[string]any{"type": "session-start"}
@@ -721,7 +833,11 @@ func handleDisconnect(ws *websocket.Conn) {
 	}
 
 	log.Printf("[hub] %s disconnected: %s", state.Role, state.MachineID)
-	recordEvent(state.MachineID, state.Role+"-disconnect", state.Role+" disconnected")
+	detail := state.SessionDetail
+	if detail == "" {
+		detail = state.Role + " disconnected"
+	}
+	recordEvent(state.MachineID, state.Role+"-disconnect", detail)
 
 	// Clean up UDP session tokens
 	entry.mu.Lock()
@@ -875,11 +991,47 @@ func runKeepalive() {
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
+	// Handle service subcommand before anything else.
+	if len(os.Args) > 1 && os.Args[1] == "service" {
+		handleServiceCommand()
+		return
+	}
+
+	// If launched by Windows SCM, enter service mode automatically.
+	if service.IsWindowsService() {
+		runAsWindowsService()
+		return
+	}
+
 	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
 		fmt.Printf("telahubd %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 		os.Exit(0)
 	}
 
+	// Parse flags
+	configPath := flag.String("config", "", "Path to YAML config file")
+	flag.Parse()
+
+	// Load config file if given
+	var cfg *hubConfig
+	if *configPath != "" {
+		var err error
+		cfg, err = loadHubConfig(*configPath)
+		if err != nil {
+			log.Fatalf("config: %v", err)
+		}
+	}
+
+	// Apply config (file values, then env overrides)
+	applyHubConfig(cfg)
+
+	runHub(nil)
+}
+
+// runHub starts the hub server and blocks until shutdown.
+// If stopCh is non-nil, shutdown is triggered when it closes (service mode).
+// If stopCh is nil, shutdown is triggered by SIGINT/SIGTERM (interactive mode).
+func runHub(stopCh <-chan struct{}) {
 	// Register HTTP handlers
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", handleAPIStatus)
@@ -912,13 +1064,23 @@ func main() {
 	go runKeepalive()
 
 	// Graceful shutdown
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		sig := <-sigCh
-		log.Printf("[hub] received %v, shutting down", sig)
-		server.Close()
-	}()
+	if stopCh != nil {
+		// Service mode: stop when SCM/systemd signals
+		go func() {
+			<-stopCh
+			log.Println("[hub] service stop received, shutting down")
+			server.Close()
+		}()
+	} else {
+		// Interactive mode: stop on SIGINT/SIGTERM
+		go func() {
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			sig := <-sigCh
+			log.Printf("[hub] received %v, shutting down", sig)
+			server.Close()
+		}()
+	}
 
 	log.Printf("[hub] telahubd %s listening on http+ws://0.0.0.0:%d", version, httpPort)
 	log.Printf("[hub] static site: %s", wwwDir)
@@ -930,4 +1092,250 @@ func main() {
 		log.Fatalf("[hub] server error: %v", err)
 	}
 	log.Println("[hub] stopped")
+}
+
+// ── Service management ─────────────────────────────────────────────
+
+func handleServiceCommand() {
+	if len(os.Args) < 3 {
+		cfgPath := service.BinaryConfigPath("telahubd")
+		fmt.Fprintf(os.Stderr, `telahubd service — manage telahubd as an OS service
+
+Usage:
+  telahubd service install [flags]  Install service (generates config in system dir)
+  telahubd service uninstall        Remove the service
+  telahubd service start            Start the installed service
+  telahubd service stop             Stop the running service
+  telahubd service restart          Restart the service
+  telahubd service status           Show service status
+  telahubd service run              Run in service mode (used by the service manager)
+
+The service reads its configuration from:
+  %s
+
+Edit that file and run "telahubd service restart" to reconfigure.
+
+Install examples:
+  telahubd service install -config telahubd.yaml
+  telahubd service install -name myhub -port 8080 -udp-port 41820 -www ./www
+`, cfgPath)
+		os.Exit(1)
+	}
+
+	subcmd := os.Args[2]
+
+	switch subcmd {
+	case "install":
+		hubServiceInstall()
+	case "uninstall":
+		hubServiceUninstall()
+	case "start":
+		hubServiceStart()
+	case "stop":
+		hubServiceStop()
+	case "restart":
+		hubServiceRestart()
+	case "status":
+		hubServiceStatus()
+	case "run":
+		hubServiceRun()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown service subcommand: %s\n", subcmd)
+		os.Exit(1)
+	}
+}
+
+func hubServiceInstall() {
+	fs := flag.NewFlagSet("service install", flag.ExitOnError)
+	cfgFile := fs.String("config", "", "Path to YAML config file (optional — generates one if omitted)")
+	name := fs.String("name", "", "Hub display name")
+	port := fs.Int("port", 8080, "HTTP+WS listen port")
+	udpPortFlag := fs.Int("udp-port", 41820, "UDP relay port")
+	www := fs.String("www", "./www", "Static file directory")
+	fs.Parse(os.Args[3:])
+
+	destPath := service.BinaryConfigPath("telahubd")
+
+	if *cfgFile != "" {
+		// Copy existing config to system dir
+		absConfig, _ := filepath.Abs(*cfgFile)
+		if _, err := loadHubConfig(absConfig); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := copyFile(absConfig, destPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		// Generate a YAML config from flags
+		wwwAbs, _ := filepath.Abs(*www)
+		cfg := hubConfig{
+			Port:    *port,
+			UDPPort: *udpPortFlag,
+			Name:    *name,
+			WWWDir:  wwwAbs,
+		}
+		if err := writeHubConfig(destPath, &cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing config: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot determine executable path: %v\n", err)
+		os.Exit(1)
+	}
+	exePath, _ = filepath.Abs(exePath)
+
+	wd, _ := os.Getwd()
+	svcCfg := &service.Config{
+		BinaryPath:  exePath,
+		Description: "Tela Hub Server — encrypted tunnel relay",
+		WorkingDir:  wd,
+	}
+
+	if err := service.Install("telahubd", svcCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telahubd service installed successfully")
+	fmt.Printf("  config: %s\n", destPath)
+	fmt.Println("  start:  telahubd service start")
+	fmt.Println("")
+	fmt.Println("Edit the config file and run \"telahubd service restart\" to reconfigure.")
+}
+
+// writeHubConfig writes a telahubd YAML config file.
+func writeHubConfig(path string, cfg *hubConfig) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	header := "# telahubd configuration\n# Edit and restart the service to apply changes.\n\n"
+	if err := os.WriteFile(path, []byte(header+string(data)), 0644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+// copyFile copies src to dst, creating parent directories as needed.
+func copyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", src, err)
+	}
+	if err := os.WriteFile(dst, data, 0644); err != nil {
+		return fmt.Errorf("write %s: %w", dst, err)
+	}
+	return nil
+}
+
+func hubServiceUninstall() {
+	if err := service.Uninstall("telahubd"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	// Also remove the YAML config
+	yamlPath := service.BinaryConfigPath("telahubd")
+	_ = os.Remove(yamlPath)
+	fmt.Println("telahubd service uninstalled")
+}
+
+func hubServiceStart() {
+	if err := service.Start("telahubd"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telahubd service started")
+}
+
+func hubServiceStop() {
+	if err := service.Stop("telahubd"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telahubd service stopped")
+}
+
+func hubServiceRestart() {
+	fmt.Println("stopping telahubd service...")
+	_ = service.Stop("telahubd")
+	time.Sleep(time.Second)
+	if err := service.Start("telahubd"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("telahubd service restarted")
+}
+
+func hubServiceStatus() {
+	st, err := service.QueryStatus("telahubd")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("installed: %v\n", st.Installed)
+	fmt.Printf("running:   %v\n", st.Running)
+	fmt.Printf("status:    %s\n", st.Info)
+	if st.Installed {
+		fmt.Printf("config:    %s\n", service.BinaryConfigPath("telahubd"))
+	}
+}
+
+// serviceRunHub loads the YAML config from the system directory and
+// starts the hub. It blocks until stopCh is closed.
+func serviceRunHub(stopCh <-chan struct{}) {
+	svcCfg, err := service.LoadConfig("telahubd")
+	if err != nil {
+		log.Fatalf("service config: %v", err)
+	}
+
+	if svcCfg.WorkingDir != "" {
+		os.Chdir(svcCfg.WorkingDir)
+	}
+
+	// Load the YAML config from the system-wide location
+	yamlPath := service.BinaryConfigPath("telahubd")
+	cfg, err := loadHubConfig(yamlPath)
+	if err != nil {
+		log.Fatalf("config %s: %v", yamlPath, err)
+	}
+
+	log.Printf("[hub] loaded config from %s", yamlPath)
+	applyHubConfig(cfg)
+
+	runHub(stopCh)
+}
+
+func hubServiceRun() {
+	stopCh := make(chan struct{})
+
+	// Handle signals for non-Windows "service run" (systemd/launchd)
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		close(stopCh)
+	}()
+
+	serviceRunHub(stopCh)
+}
+
+func runAsWindowsService() {
+	handler := &service.Handler{
+		Run: func(svcStopCh <-chan struct{}) {
+			serviceRunHub(svcStopCh)
+		},
+	}
+	if err := service.RunAsService("telahubd", handler); err != nil {
+		log.Fatalf("service failed: %v", err)
+	}
 }
