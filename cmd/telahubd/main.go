@@ -1,6 +1,6 @@
-// telahubd — Go Tela Hub
+// telahubd — Tela Hub
 //
-// Drop-in replacement for poc/hub.js. Combined HTTP + WebSocket + UDP relay
+// Combined HTTP + WebSocket + UDP relay
 // server on a single port. Serves the hub console (static files), exposes
 // /api/status and /api/history with permissive CORS, and relays paired
 // WireGuard sessions between agents and clients.
