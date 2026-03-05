@@ -41,6 +41,30 @@ The hub never sees plaintext — it relays opaque WireGuard ciphertext.
 | **telad** | Go | Daemon — registers with hub, exposes local services through WG tunnel |
 | **hub.js** | Node.js | Relay — pairs agents with clients, relays WS/UDP, serves hub console |
 
+## Networking & port requirements
+
+Tela is outbound-only for agents and clients, but the **Hub must be reachable**.
+
+At a minimum:
+
+- The **Hub** must accept inbound HTTPS/WebSocket traffic from both `tela` (client) and `telad` (agent).
+- `telad` must be able to reach the **services** it exposes (either on `localhost` or via `target:` in gateway/bridge mode).
+
+Common requirements by component:
+
+| Component | Needs inbound from Internet | Needs outbound | Notes |
+|----------|------------------------------|---------------|------|
+| **Hub** (`hub.js`) | TCP 443 (recommended) for HTTPS + WebSockets | none special | Optional: UDP 41820 for UDP relay (faster than WS when available). |
+| **Agent** (`telad`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 (UDP relay) and outbound UDP to STUN (direct P2P). |
+| **Client** (`tela`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 and STUN. Binds `127.0.0.1:<port>` locally for apps (SSH/RDP/etc.). |
+| **Portal (browser)** | n/a | HTTPS to each Hub’s `/api/status` and `/api/history` | Cross-origin fetch requires CORS from the Hub (the current hub implementation sets `Access-Control-Allow-Origin: *` for these endpoints). |
+
+See also:
+
+- `howto/networking.md`
+- `howto/hub.md`
+- `howto/telad.md`
+
 ## Quick start
 
 ### Build

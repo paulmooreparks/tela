@@ -26,7 +26,7 @@ It covers two supported deployment patterns:
 
 ### Software
 
-- Hub: this repo’s `poc/hub.js` (typically run via Docker Compose).
+- Hub: Tela Hub service (in this repo, currently `poc/hub.js`, typically run via Docker Compose).
 - Agent: `telad` (run on endpoints or a gateway).
 - Client: `tela` (download/run on-demand from GitHub Releases, or build from source).
 
@@ -50,7 +50,7 @@ docker compose up --build -d
 This brings up:
 
 - `hub` (HTTP + WebSocket + console)
-- `telad` (a demo agent from `poc/telad.yaml`, if you keep it enabled)
+- `telad` (an example agent config from `poc/telad.yaml`, if you keep it enabled)
 - `caddy` (reverse proxy / TLS, if configured)
 
 Verify locally:
@@ -137,7 +137,7 @@ If `telad` runs in a container and you want to expose services on the Docker hos
 
 - `target: host.docker.internal`
 
-This is a convenient POC pattern because you don’t need to install `telad` on the host OS.
+This is a convenient dev/test pattern because you don’t need to install `telad` on the host OS.
 
 ---
 

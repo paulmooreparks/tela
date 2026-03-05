@@ -18,6 +18,14 @@ on:
     branches: [main]
     tags:
       - "v*"
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "cmd/**"
+      - "internal/**"
+      - ".github/workflows/release.yml"
+
+  workflow_dispatch: {}
 
 permissions:
   contents: write  # needed to create releases and upload assets
