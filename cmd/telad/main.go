@@ -687,8 +687,12 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 		return
 	}
 
-	// Per-session IP addressing: 10.77.{idx+1}.1 / 10.77.{idx+1}.2
-	subnet := sessionIdx + 1
+	// Per-session IP addressing: 10.77.{idx}.1 / 10.77.{idx}.2
+	// sessionIdx is already 1-based (from hub: len(entry.Sessions) after insert)
+	subnet := sessionIdx
+	if subnet < 1 {
+		subnet = 1
+	}
 	if subnet > 254 {
 		subnet = 254
 	}
