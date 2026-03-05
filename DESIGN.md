@@ -35,7 +35,7 @@ This glossary defines terms as they are used in Tela.
 | **Ephemeral port / localhost binding** | A temporary W.0.0.1:<port>\ listener created by the client so native apps (mstsc, ssh, etc.) can connect without installing anything system‑wide. |
 | **Fingerprint (certificate fingerprint)** | A short hash derived from the Hub’s TLS certificate (or public key) used for pinning; must match the expected value exactly. |
 | **Frame** | One protocol unit on the wire: a fixed header plus a payload (control JSON, TCP data, or heartbeat). |
-| **Hub** | The central relay/coordinator that accepts agent and client connections, brokers sessions, allocates channels, and routes frames between parties. Binary: \hub.js\. |
+| **Hub** | The central relay/coordinator that accepts agent and client connections, brokers sessions, allocates channels, and routes frames between parties. Binary: `telahubd`. |
 | **Hub Console** | The web interface served by a Hub (e.g., \https://tela.awansatu.net/\). Shows registered machines, services, and session status. |
 | **HTTP** | Hypertext Transfer Protocol; commonly tunneled to validate connectivity (e.g., a static page). |
 | **Locked‑down environment** | A network or workstation that restricts inbound ports, VPNs, and/or installation, but still allows outbound HTTPS/WebSocket traffic. |
@@ -141,7 +141,9 @@ Tela must be stable enough to run for 10+ years with minimal changes: frozen pro
 
 ## **3.2 Boring Technology**
 
-C/C++ for the agent, Node.js LTS for the Hub, vanilla JS for the browser, Go for the CLI. These choices minimize churn and maximize longevity.
+Go for the agent (`telad`) and Hub (`telahubd`), vanilla JS for the browser, Go for the CLI. These choices minimize churn and maximize longevity.
+
+> **Implementation note:** The original design specified C/C++ for the agent and Node.js for the Hub. Both were implemented in Go — a deliberate simplification that preserves the "boring technology" intent while using a single language across all server-side components.
 
 ## **3.3 Agent‑Centric Development**
 
@@ -168,12 +170,13 @@ These invariants shape every architectural decision.
 
 ## **4.1 Components**
 
-- **Tela Agent** — C/C++ single static binary. Runs on managed machines.
-- **Tela Hub** — Node.js LTS server, MeshCentral‑derived. Central coordination point.
+- **telad** — Go static binary (daemon/agent). Runs on managed machines. Registers services with the Hub, brokers WireGuard sessions.
+- **telahubd** — Go HTTP+WebSocket server (Hub). Central coordination point. Serves hub console, `/api/status`, `/api/history`.
+- **tela** — Go static binary (client). Connects through the Hub to an agent, establishes WireGuard tunnel, binds localhost listeners.
 - **Tela Web** — Vanilla JS browser UI. Orchestration only.
-- **Tela Helper** — Tiny signed Go binary. Binds localhost, forwards TCP.
-- **Tela CLI** — Go static binary. Administrative tool.
 - **Awan Satu** — Future control plane and optional connectivity/hosting service. Not part of Tela core. See §18.
+
+> **Implementation note:** The original design specified separate "Agent" (C/C++), "Hub" (Node.js), "Helper" (Go), and "CLI" (Go) binaries. The implementation consolidates these into three Go binaries: `telad` (agent/daemon), `telahubd` (hub), and `tela` (client/helper/CLI).
 
 ## **4.2 Data Flow**
 
@@ -248,7 +251,9 @@ Tela replaces all MeshCentral components that are UI‑heavy, RDP‑specific, op
 
 ## **5.3 Rationale**
 
-MeshCentral solves the hardest problems — cross‑platform C/C++ agent, stable WebSocket transport, NAT traversal, multiplexing, reconnect logic, TLS handling — and is modular enough that Tela can reuse the transport layer while replacing the UI, control plane, identity model, and service model without forking the entire project.
+> **Implementation note (§5.1–§5.3):** MeshCentral integration was not pursued. The current implementation (`telahubd`, `telad`, `tela`) is written entirely from scratch in Go, using `gorilla/websocket`, `wireguard-go`, and gVisor netstack. No MeshCentral code is integrated. The architectural intent — minimal hub, outbound-only agents, protocol-agnostic tunnels — is preserved.
+
+MeshCentral would have solved the hardest problems — cross‑platform agent, stable WebSocket transport, NAT traversal, multiplexing, reconnect logic, TLS handling — without reinventing them. The from-scratch Go implementation achieves the same goals via a simpler architecture.
 
 ---
 
@@ -578,41 +583,39 @@ The agent is the core runtime component that runs on every managed machine.
 
 ## **7.2 Implementation**
 
-- **Language:** C/C++
-- **Build:** Single static binary, no dynamic linking.
-- **Dependencies:** OpenSSL or mbedTLS (TLS), libuv (event loop). Nothing else.
-- **Platforms:** Windows, Linux (primary); macOS (Phase 2).
+- **Language:** Go
+- **Binary:** `telad` — static, cross-compiled, no CGO.
+- **Dependencies:** `gorilla/websocket` (WS), `wireguard-go` + gVisor netstack (WireGuard L3). No libuv, no C/C++, no OpenSSL.
+- **Platforms:** Windows, Linux, macOS (all supported via CI cross-compilation).
+
+> **Note:** Original design specified C/C++ + libuv + OpenSSL/mbedTLS. Implementation uses Go throughout.
 
 ## **7.3 Concurrency Model**
 
 The agent uses a **strict, invariant concurrency model**.
 
-### Event Loop
+> **Implementation note:** The original design specified the libuv event loop. The Go implementation uses Go's goroutine + channel model instead — one goroutine per connection, channels for coordination between them. The invariants below are updated to reflect the actual model.
 
-**libuv** event loop handles: WebSocket I/O, control messages, channel multiplexing, heartbeat scheduling, reconnection logic.
+### Goroutines
 
-### Worker Threads
-
-Used **only** for CPU‑bound work: optional compression (future), optional encryption (future).
-
-All I/O — including TCP socket read/write — is handled by the libuv event loop, not by worker threads. libuv is designed for non‑blocking async I/O; duplicating TCP handling in worker threads would introduce unnecessary complexity and race conditions.
+Each WebSocket connection (hub, UDP relay) runs a dedicated read goroutine. Each accepted service session runs a pair of copy goroutines. The WireGuard device runs its own internal goroutines managed by `wireguard-go`.
 
 ### Concurrency Invariants
 
 These rules must never be violated:
 
-- No async/await abstractions.
-- No thread‑per‑connection model.
-- No lock‑heavy designs.
-- No refactoring to promises/futures.
-- No changes to libuv event loop structure.
-- No new concurrency primitives without human approval.
+- No shared mutable state without a mutex or channel.
+- No goroutine-per-byte stream (use `io.Copy` pairs).
+- No new global state without human approval.
+- No blocking calls on the main goroutine after startup.
 
 ## **7.4 Configuration**
 
-A simple, static config file (`tela.conf`) containing: Hub URL, Hub certificate fingerprint, agent ID, allowed services, optional tags.
+YAML config file (`telad.yaml`) containing: hub URL, token, machine definitions (ID, display name, services, target host, OS, tags, location, owner). Loaded via `-config <path>` flag or `TELA_CONFIG` env var.
 
-The agent must not fetch remote configs, auto‑update configs, or modify its own config. All changes require human action.
+System-wide service path: `%ProgramData%\Tela\telad.yaml` (Windows) / `/etc/tela/telad.yaml` (Linux/macOS), written by `telad service install`.
+
+Flags and env vars override config file values. The agent must not fetch remote configs or auto-update its config file.
 
 ## **7.5 Logging**
 
@@ -642,9 +645,11 @@ The Hub is **not** an identity provider, dashboard engine, policy engine, orches
 
 ## **8.2 Implementation**
 
-- **Language:** Node.js LTS
-- **Base:** MeshCentral's transport and multiplexing core.
-- **Dependency constraints:** No frontend frameworks, no ORMs, no complex dependency trees, no microservices, no build systems.
+- **Language:** Go
+- **Binary:** `telahubd` — static, cross-compiled, no CGO.
+- **Dependencies:** `gorilla/websocket` (WS+HTTP), `gopkg.in/yaml.v3` (config). No Node.js, no MeshCentral, no ORMs.
+- **Config:** YAML file (`telahubd.yaml`) with `port`, `udpPort`, `name`, `wwwDir` fields. Loaded via `-config` flag; env vars (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`, `HUB_WWW_DIR`) override file values.
+- **Dependency constraints:** No frontend frameworks, no complex dependency trees, no microservices, no build systems.
 
 ## **8.3 Storage**
 
@@ -804,7 +809,7 @@ Phase 1:
 - `tela login <portal-url>` — authenticate with a portal, store credentials locally.
 - `tela logout` — remove stored portal credentials.
 - `tela machines` — list registered machines and their online/offline status.
-- `tela services <machineId>` — list exposed services on a machine.
+- `tela services -machine <machineId>` — list exposed services on a machine.
 - `tela connect -hub <name-or-url> -machine <machineId>` — establish a WireGuard tunnel, bind local listeners.
 - `tela status` — show current Hub connection and active sessions.
 - `tela version` — print version and exit.
@@ -823,7 +828,9 @@ The CLI must remain additive‑only. No subcommand removals or renames after rel
 
 Tela's security model is intentionally simple, strong, and long‑lived. This section is the **unified security reference** across agent, helper, and Hub.
 
-## **12.1 Identity**
+> **Implementation status:** Of the security properties described in §12.1–12.3, only **WireGuard E2E encryption (§12.5) is currently implemented**. Ed25519 agent identity, certificate pinning, and signed session tokens are designed but not yet built. The hub's WebSocket endpoint currently accepts any registering agent. See §12.6 for what the current implementation does and does not protect against.
+
+## **12.1 Identity** *(NOT YET IMPLEMENTED)*
 
 ### Agent Identity
 
@@ -831,6 +838,8 @@ Tela's security model is intentionally simple, strong, and long‑lived. This se
 - Private key stored locally.
 - Public key registered with Hub.
 - Used for agent authentication.
+
+*Current implementation: machine ID is a plain string. No cryptographic agent identity exists.*
 
 ### Helper Identity
 
@@ -843,13 +852,19 @@ Tela's security model is intentionally simple, strong, and long‑lived. This se
 - TLS certificate.
 - Fingerprint pinned by agent and helper.
 
-## **12.2 Certificate Pinning**
+*Current implementation: TLS is terminated externally (Cloudflare tunnel). `tela` and `telad` perform standard TLS CA validation; no fingerprint pinning.*
+
+## **12.2 Certificate Pinning** *(NOT YET IMPLEMENTED)*
 
 Both agent and helper must: validate Hub certificate fingerprint, refuse to connect if mismatched, log all failures. This prevents MITM attacks even if TLS infrastructure is compromised.
 
-## **12.3 Session Tokens**
+*Current implementation: not implemented. Standard TLS CA validation only.*
+
+## **12.3 Session Tokens** *(PARTIAL — shared secret only)*
 
 Short‑lived, single‑use, signed by Hub, passed from browser → helper, validated by Hub, invalidated immediately after use. See §6.5 for full specification.
+
+*Current implementation: the `-token` flag carries a plain shared secret. The hub stores the token set by the registering `telad` and rejects clients that present a different value. Token is not signed, not time-limited, and not single-use.*
 
 ## **12.4 Transport Security**
 
@@ -857,7 +872,11 @@ All traffic encrypted via TLS 1.3 over WebSocket.
 
 ## **12.5 E2E Encryption**
 
-Optional E2E encryption via WebCrypto may be added in **Phase 2** for untrusted Hub environments and multi‑tenant Awan Satu deployments. **Not part of the MVP.**
+**Implemented.** WireGuard (Curve25519 key exchange + ChaCha20-Poly1305 data) provides end-to-end encryption between `tela` (client) and `telad` (daemon). The Hub is a zero-knowledge relay — it sees only encrypted WireGuard datagrams and cannot inspect or tamper with tunnel traffic.
+
+Ephemeral keypairs are generated per session; no long-term WireGuard keys are stored.
+
+> *The original design described WireGuard as optional Phase 2 work. It was implemented as the primary transport in the current version.*
 
 ## **12.6 Threat Model**
 
@@ -884,7 +903,9 @@ Optional E2E encryption via WebCrypto may be added in **Phase 2** for untrusted 
 
 ---
 
-# **13. Authentication**
+# **13. Authentication** *(NOT YET IMPLEMENTED)*
+
+> **Status:** No user authentication exists in the current implementation. The hub has no user database, no login page, no sessions, and no cookies. The token system (§12.3) is a per-machine shared secret, not a user authentication mechanism.
 
 ## **13.1 Tela Standalone (Before Awan Satu)**
 
@@ -905,13 +926,15 @@ Awan Satu replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise id
 
 # **14. End‑to‑End Usage Flow**
 
+> **Implementation status:** Steps dependent on user authentication ("Create local Tela user", "log in", "session token", "browser downloads helper") are not yet implemented. The current working flow is described in the tela README and `howto/` docs.
+
 ## **14.1 Setup (Tela Standalone)**
 
-1. Deploy Tela Hub on a VPS.
-2. Put it behind Cloudflare Tunnel.
-3. Create local Tela user.
-4. Install Tela Agent on target machines.
-5. Register agents using provisioning tokens.
+1. Deploy `telahubd` (via Docker Compose or as a service).
+2. Put it behind Cloudflare Tunnel or reverse proxy for TLS.
+3. *(Planned)* Create local Tela user.
+4. Run `telad -config telad.yaml` on target machines (or `telad service install -config telad.yaml` for a persisted service).
+5. *(Planned)* Register agents using provisioning tokens.
 
 ## **14.2 Accessing a Machine from a Locked‑Down Laptop**
 

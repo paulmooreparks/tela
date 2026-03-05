@@ -9,7 +9,7 @@ Traceability matrix mapping each DESIGN.md section to current implementation sta
 - 🔮 **Future** — Awan Satu scope or Phase 3+
 - 📄 **Doc-only** — Informational section, no implementation required
 
-Last updated: 2026-03-04
+Last updated: 2026-03-05
 
 ---
 
@@ -35,7 +35,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §4.1 | Components | 🔶 | Hub (Node.js ✅), Agent/telad (Go ✅ — spec says C/C++), Client/tela (Go ✅), Web (landing page + downloads ✅), CLI (⬜), Awan Satu (🔮) |
+| §4.1 | Components | 🔶 | `telad` (Go agent ✅), `telahubd` (Go hub ✅), `tela` (Go client ✅), Web (landing page + downloads ✅), CLI (⬜), Awan Satu (🔮) |
 | §4.2 | Data Flow — Agent Connection | ✅ | `telad`: outbound WS, register, reconnect, token auth |
 | §4.2 | Data Flow — Browser Orchestration | 🔶 | Landing page with OS-detected download links; no login, session tokens, or machine list |
 | §4.2 | Data Flow — Client Connection | ✅ | `tela`: WS connect, WireGuard tunnel, auto-bind local listeners, reconnect |
@@ -58,7 +58,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §6.1 | Transport (TLS 1.3, WSS, binary) | 🔶 | WSS via Cloudflare + direct (Caddy TLS); internal plain WS; binary frames for WG, JSON for control |
+| §6.1 | Transport (TLS 1.3, WSS, binary) | 🔶 | WSS via Cloudflare tunnel; internal plain WS; binary frames for WG datagrams, JSON for control |
 | §6.2 | Multiplexing | ⬜ | No channel mux; one WS = one session |
 | §6.3 | Frame Format (12-byte header) | ⬜ | POC uses raw WS messages, no Tela frame header |
 | §6.4 | Control Messages | 🔶 | POC uses `register`/`connect`/`ready`/`session-start`/`wg-pubkey`/`udp-offer`/`error`; spec defines `hello`/`welcome`/`ready`/`open`/`close`/`error`/`heartbeat` |
@@ -78,7 +78,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §7.1 | Responsibilities | 🔶 | Outbound WS ✅, register ✅, TCP proxy ✅, reconnect ✅, token auth ✅, multi-port ✅, heartbeat ⬜, service discovery ⬜, policy ⬜, metadata ⬜ |
 | §7.2 | Implementation (C/C++, static binary) | 🔶 | Agent is Go (telad), not C/C++. Static binary ✅, cross-compiled ✅ |
 | §7.3 | Concurrency Model (libuv) | ⬜ | N/A — Go runtime, not libuv |
-| §7.4 | Configuration (`tela.conf`) | ⬜ | CLI flags + env vars; no config file |
+| §7.4 | Configuration (`telad.yaml`) | ✅ | YAML config file with `-config` flag. Multi-machine, per-machine token override, rich metadata fields. System path: `%ProgramData%\Tela\telad.yaml` / `/etc/tela/telad.yaml` |
 | §7.5 | Logging | 🔶 | Console logging with `[telad]` prefix; no structured/rotated logs |
 | §7.6 | Updates | ⬜ | No update mechanism |
 
@@ -89,7 +89,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅. No user auth, no session tokens, no metadata |
-| §8.2 | Implementation (Node.js + MeshCentral) | 🔶 | Node.js ✅; no MeshCentral integration |
+| §8.2 | Implementation (Go) | ✅ | `telahubd` — Go, `gorilla/websocket`, no Node.js, no MeshCentral |
 | §8.3 | Storage (SQLite / Postgres) | ⬜ | In-memory only; no persistence |
 | §8.4 | REST API | 🔶 | Hub `/status` endpoint ✅; Portal `/api/hubs` endpoint ✅; no `/api/v1/*` endpoints |
 | §8.5 | Multiplexing | ⬜ | No channel multiplexing |

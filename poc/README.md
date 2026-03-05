@@ -1,3 +1,6 @@
+> **⚠️ HISTORICAL DOCUMENT — POC ONLY**
+> This document describes the original Node.js proof-of-concept (`hub.js`). The current implementation uses `telahubd` (Go). For current deployment, see [README.md](../README.md), [IMPLEMENTATION.md](../IMPLEMENTATION.md), and the [`howto/`](../howto/) directory.
+
 # Tela — Secure Remote Access via WireGuard over WebSocket
 
 Tela tunnels TCP services (SSH, RDP, HTTP, etc.) through a WireGuard L3
@@ -10,7 +13,7 @@ privileges required on either end.
 graph LR
     Client["Native Client<br/>(SSH, RDP, …)"]
     Tela["tela<br/>localhost listener<br/>10.77.0.2/24"]
-    Hub["hub.js<br/>relay"]
+    Hub["hub.js (legacy)<br/>relay"]
     UDP["UDP 41820<br/>(optional relay)"]
     Telad["telad<br/>WireGuard agent<br/>10.77.0.1/24"]
     Services["Local Services<br/>(SSH, RDP, …)"]
@@ -36,7 +39,7 @@ graph LR
 |-----------|----------|------|
 | **tela** | Go | Client — WireGuard endpoint, auto-binds localhost listeners for each advertised port |
 | **telad** | Go | Agent/daemon — WireGuard endpoint, forwards tunnel traffic to local services |
-| **hub.js** | Node.js | Relay — pairs agents and clients, relays WS frames, optional UDP relay |
+| **hub.js** | Node.js | *(Legacy POC relay — replaced by `telahubd` in Go)* |
 | **serve.js** | Node.js | Test web server (for quick smoke tests only) |
 
 ### Security

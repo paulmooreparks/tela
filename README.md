@@ -128,7 +128,7 @@ tela login https://your-portal.example
 tela connect -hub your-hub -machine barn
 ```
 
-See [IMPLEMENTATION.md](IMPLEMENTATION.md) §8 for the full Docker Compose setup and Caddyfile.
+See [IMPLEMENTATION.md](IMPLEMENTATION.md) §8 for the full Docker Compose setup.
 
 ## Security
 
@@ -175,7 +175,6 @@ cmd/telahubd/      Hub server binary
 internal/service/   Cross-platform OS service management (Windows SCM, systemd, launchd)
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
 howto/             Guides (hub setup, services, networking, use cases)
-poc/hub.js         Legacy hub relay (Node.js)
 poc/www/           Hub console (web UI)
 docker/gohub/      Dockerfile for telahubd
 docker/            Caddyfile, docker-compose, cloudflared config

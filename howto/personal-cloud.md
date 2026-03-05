@@ -11,7 +11,7 @@ It covers two supported deployment patterns:
 
 ## What you’ll end up with
 
-- A reachable **Hub** URL (example: `wss://owlsnest-hub.example.com`).
+- A reachable **Hub** URL (example: `wss://gohub.parkscomputing.com` or your own hostname).
 - One or more registered **Machines** with a list of **Services** (SSH, RDP, HTTP, etc.).
 - On-demand access from any client using the `tela` CLI.
 
@@ -26,7 +26,7 @@ It covers two supported deployment patterns:
 
 ### Software
 
-- Hub: Tela Hub service (in this repo, currently `poc/hub.js`, typically run via Docker Compose).
+- Hub: `telahubd` (Go binary), typically run via Docker Compose.
 - Agent: `telad` (run on endpoints or a gateway).
 - Client: `tela` (download/run on-demand from GitHub Releases, or build from source).
 
@@ -49,14 +49,12 @@ docker compose up --build -d
 
 This brings up:
 
-- `hub` (HTTP + WebSocket + console)
-- `telad` (an example agent config from `poc/telad.yaml`, if you keep it enabled)
-- `caddy` (reverse proxy / TLS, if configured)
+- `gohub` (`telahubd` — HTTP + WebSocket + hub console)
 
 Verify locally:
 
-- Hub console: `http://<host>:3000/`
-- Hub API: `http://<host>:3000/api/status`
+- Hub console: `http://<host>:3002/`
+- Hub API: `http://<host>:3002/api/status`
 
 If you’re using a public hostname + TLS, your browser URL will typically be `https://.../` and `tela` will connect using `wss://...`.
 

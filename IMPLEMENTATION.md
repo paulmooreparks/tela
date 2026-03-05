@@ -1,4 +1,4 @@
-# Tela / Awan Satu — Local Implementation & Deployment Runbook (POC)
+﻿# Tela / Awan Satu — Local Implementation & Deployment Runbook (POC)
 
 This document is a **practical runbook** for implementing and running Tela locally, exposing a Hub for internet access, and starting a POC path toward Awan Satu.
 
@@ -59,46 +59,28 @@ A practical rule:
 
 To keep Cloudflare optional, keep your internal deployment consistent and swap only the ingress method.
 
-**Current setup (3 containers):**
+**Current setup (1 container):**
 
-- `hub` — Node.js application, listens on `:8080` (HTTP/WS) and `:41820` (UDP relay).
-- `caddy` — reverse proxy with auto TLS (DNS-01 via Cloudflare API), terminates TLS on `:443`.
-- `telad` — Go WireGuard agent, connects to hub over internal `ws://hub:8080`.
-- optional: `cloudflared` points at `caddy` for tunnel ingress.
+- `gohub` (`telahubd`) — Go hub, listens on `:8080` (HTTP/WS) and `:41820` (UDP relay). Published on the host as `3002:8080` and `41821:41820/udp`.
+- TLS is terminated externally by **Cloudflare Tunnel** (no reverse proxy container needed).
+- `cloudflared` (host service, not a container) routes `gohub.parkscomputing.com` → `http://localhost:3002`.
 
 This yields:
 
-- Direct mode: Internet → `caddy:443` (via port-forward) → `hub:8080`
-- Tunnel mode: Internet → Cloudflare → `cloudflared` → `caddy:443` → `hub:8080`
+- Tunnel mode: Internet → Cloudflare → `cloudflared` (host) → `gohub:3002` → `telahubd:8080`
 
 ---
 
-## 3) TLS (`wss://`) and reverse proxy choices
+## 3) TLS (`wss://`) and reverse proxy
 
-### Option A: Caddy (recommended for “boring simple” TLS)
+TLS is terminated at **Cloudflare Tunnel** (cloudflared). No separate reverse proxy (Caddy, Nginx, etc.) is needed. The hub container exposes its plain HTTP/WS listener internally; cloudflared handles the public `wss://` endpoint and certificate.
 
-Pros:
-- Very small config.
-- Automatic Let’s Encrypt.
+This means:
+- No Let's Encrypt configuration required.
+- No inbound port exposure on the host -- cloudflared makes an outbound connection to Cloudflare.
+- Certificate pinning (see Â§6) is applied between hub and agent, not at the TLS edge.
 
-Cons:
-- Requires inbound reachability for HTTP-01/ALPN challenges (direct mode) unless you use DNS-based issuance.
-
-### Option B: Nginx
-
-Pros:
-- Common and well understood.
-
-Cons:
-- More manual certificate management.
-
-### Option C: Terminate TLS at Cloudflare only
-
-Pros:
-- Easy in tunnel mode.
-
-Cons:
-- Creates a hard interaction with strict certificate pinning (see §6).
+The Docker Compose service maps `3002:8080` (host:container) for local development access.
 
 ---
 
@@ -203,64 +185,31 @@ For a POC, option (1) is often the fastest while preserving the long-term direct
 
 ---
 
-## 8) Docker Compose skeleton (proxy + hub)
+## 8) Docker Compose skeleton
 
 **Current production setup** — see `docker-compose.yml` in the repo root:
 
 ```yaml
 services:
-  caddy:
-    # Caddy with cloudflare-dns plugin for DNS-01 ACME
-    build:
-      context: ./docker/caddy
-    ports:
-      - "443:443"
-    volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-    environment:
-      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
-    depends_on:
-      - hub
-
-  hub:
+  gohub:
     build:
       context: .
-      dockerfile: docker/hub/Dockerfile
+      dockerfile: docker/gohub/Dockerfile
+    container_name: tela-gohub
     ports:
-      - "3000:8080"          # HTTP + WebSocket
-      - "41820:41820/udp"    # UDP relay for WireGuard datagrams
+      - "3002:8080"         # HTTP + WebSocket (cloudflared points here)
+      - "41821:41820/udp"   # UDP relay for WireGuard datagrams
     environment:
       - HUB_PORT=8080
       - HUB_UDP_PORT=41820
-
-  telad:
-    build:
-      context: .
-      dockerfile: docker/hub/Dockerfile
-    entrypoint: ["/usr/local/bin/telad"]
-    command: ["-config", "/etc/tela/telad.yaml"]
-    volumes:
-      - ./poc/telad.yaml:/etc/tela/telad.yaml:ro
-    depends_on:
-      - hub
-```
-
-Example `Caddyfile` (DNS-01 with Cloudflare for direct-access TLS):
-
-```caddyfile
-tela-local.awansatu.net {
-  reverse_proxy hub:8080
-  tls {
-    dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-  }
-}
+      - HUB_NAME=gohub
+    restart: unless-stopped
 ```
 
 Notes:
-- Caddy automatically handles WebSocket upgrade when `reverse_proxy` is used.
-- The `hub` image is a multi-stage Docker build that also compiles `tela` and `telad` (Go binaries).
-- UDP port 41820 must be published for the WireGuard UDP relay optimisation.
-- The `telad` service reuses the same image but overrides the entrypoint.
+- TLS is terminated by Cloudflare Tunnel (`cloudflared` host service routes `gohub.parkscomputing.com` → `http://localhost:3002`).
+- UDP port 41821 must be published for the WireGuard UDP relay optimisation.
+- The image is a multi-stage build: Go builder stage → minimal Alpine runtime with `telahubd` + static console files.
 
 ---
 
@@ -279,41 +228,40 @@ If you do this, try to keep the local origin stable:
 
 ---
 
-## 10) Practical POC workflow (current state)
+## 10) Live data path and workflow (current state)
 
-The POC has evolved well beyond the original Node.js prototype.
-The live data path is now:
+The live data path is:
 
 ```
-tela.exe (Go, WireGuard client) ──wss──▶ hub.js (Node.js relay) ◀──ws── telad (Go, WireGuard agent)
-                                              ▲
-                                         UDP 41820 (optional relay)
+tela.exe (Go, WireGuard client) --wss--> telahubd (Go relay) <--ws-- telad (Go, WireGuard agent)
+                                               ^
+                                          UDP 41820 (optional relay)
 ```
 
 ### Running locally (development)
 
-1. **Build Go binaries:** `go build ./cmd/tela && go build ./cmd/telad`
-2. **Start the hub:** `node poc/hub.js` (listens on `:8080` HTTP/WS + `:41820` UDP)
-3. **Start telad:** `./telad -hub ws://localhost:8080 -machine mybox -ports "22,3389"`
+1. **Build Go binaries:** `go build ./cmd/tela && go build ./cmd/telad && go build ./cmd/telahubd`
+2. **Start the hub:** `./telahubd` (listens on `:8080` HTTP/WS + `:41820` UDP)
+3. **Start telad:** `./telad -hub ws://localhost:8080 -machine mybox -ports "22:SSH:SSH server,3389:RDP:Remote Desktop"`
 4. **Start tela:** `./tela -hub ws://localhost:8080 -machine mybox`
-5. Connect to `localhost:<advertised-port>` for SSH/RDP — traffic flows through the WireGuard tunnel.
+5. Connect to `localhost:<advertised-port>` -- traffic flows through the WireGuard tunnel.
 
 ### Running via Docker (production)
 
 ```bash
 docker compose up --build -d
 
-# Option 1: Use full URL
-./tela connect -hub wss://tela-local.awansatu.net -machine barn
+# Connect by hub URL
+./tela connect -hub wss://gohub.parkscomputing.com -machine barn
 
-# Option 2: Log in to portal and use hub names
+# Or log in to portal and use hub names
 tela login https://awansatu.net
-tela connect -hub owlsnest -machine barn
+tela connect barn
 ```
 
 ### Remaining iteration targets
 
-- Binary multiplexed framing (DESIGN.md §6.3)
+- Binary multiplexed framing (DESIGN.md Â§6.3)
 - Multiple simultaneous sessions per machine
 
 ---
