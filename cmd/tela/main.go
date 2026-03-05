@@ -580,6 +580,7 @@ func serviceLabel(s hubService) string {
 func cmdMachines(args []string) {
 	fs := flag.NewFlagSet("machines", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
 	*hubURL = mustResolveHub(*hubURL)
@@ -590,7 +591,7 @@ func cmdMachines(args []string) {
 		os.Exit(1)
 	}
 
-	data, err := fetchHubStatus(*hubURL)
+	data, err := fetchHubStatusWithToken(*hubURL, *token)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -638,6 +639,7 @@ func cmdServices(args []string) {
 	fs := flag.NewFlagSet("services", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	machineID := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID (env: TELA_MACHINE)")
+	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
 	*hubURL = mustResolveHub(*hubURL)
@@ -648,7 +650,7 @@ func cmdServices(args []string) {
 		os.Exit(1)
 	}
 
-	data, err := fetchHubStatus(*hubURL)
+	data, err := fetchHubStatusWithToken(*hubURL, *token)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -697,6 +699,7 @@ func cmdServices(args []string) {
 func cmdStatus(args []string) {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
 	*hubURL = mustResolveHub(*hubURL)
@@ -707,7 +710,7 @@ func cmdStatus(args []string) {
 		os.Exit(1)
 	}
 
-	data, err := fetchHubStatus(*hubURL)
+	data, err := fetchHubStatusWithToken(*hubURL, *token)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -741,34 +744,6 @@ func cmdStatus(args []string) {
 }
 
 // ── Hub API client ─────────────────────────────────────────────────
-
-// fetchHubStatus queries the hub's /api/status HTTP endpoint.
-// The hubURL may be a ws:// or wss:// URL; we convert to http(s).
-func fetchHubStatus(hubURL string) (*hubStatusResponse, error) {
-	apiURL := wsToHTTP(hubURL) + "/api/status"
-
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{},
-		},
-	}
-	resp, err := client.Get(apiURL)
-	if err != nil {
-		return nil, fmt.Errorf("could not reach hub: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("hub returned HTTP %d", resp.StatusCode)
-	}
-
-	var data hubStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, fmt.Errorf("invalid JSON from hub: %w", err)
-	}
-	return &data, nil
-}
 
 // wsToHTTP converts a ws:// or wss:// URL to http:// or https://.
 func wsToHTTP(wsURL string) string {
