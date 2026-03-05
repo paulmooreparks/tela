@@ -321,4 +321,4 @@ Notes:
 - You can manage this file by:
   - Editing it directly, or
   - Using the portal UI (which calls `POST /api/hubs` and `DELETE /api/hubs`).
-- Set `TELA_API_TOKEN` on the portal server to require `Authorization: Bearer <token>`.
+- Set `AWANSATU_API_TOKEN` on the portal server to require `Authorization: Bearer <token>`.
