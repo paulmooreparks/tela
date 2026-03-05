@@ -202,7 +202,7 @@ cmd/telahubd/      Hub server binary
 internal/service/   Cross-platform OS service management (Windows SCM, systemd, launchd)
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
 howto/             Guides (hub setup, services, networking, use cases)
-poc/www/           Hub console (web UI)
+www/               Hub console (web UI)
 docker/gohub/      Dockerfile for telahubd
 docker/            Caddyfile, docker-compose, cloudflared config
 ```
@@ -228,7 +228,6 @@ docker/            Caddyfile, docker-compose, cloudflared config
 - [IMPLEMENTATION.md](IMPLEMENTATION.md) — Deployment runbook
 - [TODO.md](TODO.md) — Roadmap
 - [STATUS.md](STATUS.md) — Traceability matrix (design → implementation)
-- [poc/README.md](poc/README.md) — Detailed CLI reference and troubleshooting
 
 ## License
 

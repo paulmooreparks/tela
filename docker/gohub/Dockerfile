@@ -39,7 +39,7 @@ WORKDIR /app
 COPY --from=builder /out/telahubd /usr/local/bin/telahubd
 
 # Copy hub console static files
-COPY poc/www/ ./www/
+COPY www/ ./www/
 
 ENV HUB_PORT=8080
 ENV HUB_UDP_PORT=41820

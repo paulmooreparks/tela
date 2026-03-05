@@ -394,8 +394,7 @@ Nagle's algorithm batches small TCP writes into larger segments, adding up
 to 40 ms of delay per write on each TCP socket in the path. Disabling it
 with `TCP_NODELAY` is the single biggest quick-win for interactive feel.
 
-**Status:** Applied in `poc/agent.js` (`setNoDelay(true)`) and
-`helper/main.go` (`SetNoDelay(true)`) as of the current build.
+**Status:** Applied in `telad` and `tela` (`SetNoDelay(true)`) as of the current build.
 
 ### 13.2 Cloudflare round-trip
 
