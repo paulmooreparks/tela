@@ -61,11 +61,13 @@ var version = "dev"
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	Port    int        `yaml:"port"`              // HTTP+WS listen port (default 8080)
-	UDPPort int        `yaml:"udpPort"`           // UDP relay port (default 41820)
-	Name    string     `yaml:"name"`              // Display name for this hub
-	WWWDir  string     `yaml:"wwwDir"`            // Static file directory (default ./www)
-	Auth    authConfig `yaml:"auth,omitempty"`    // Token-based access control
+	Port      int        `yaml:"port"`              // HTTP+WS listen port (default 8080)
+	UDPPort   int        `yaml:"udpPort"`           // UDP relay port (default 41820)
+	Name      string     `yaml:"name"`              // Display name for this hub
+	WWWDir    string     `yaml:"wwwDir"`            // Static file directory (default ./www)
+	PublicURL string     `yaml:"publicURL"`         // Externally reachable URL (for portal registration)
+	PortalURL string     `yaml:"portalURL"`         // Awan Satu portal URL (self-registration target)
+	Auth      authConfig `yaml:"auth,omitempty"`    // Token-based access control
 }
 
 // loadHubConfig reads a telahubd YAML config file.
@@ -97,6 +99,12 @@ func applyHubConfig(cfg *hubConfig) {
 		if cfg.WWWDir != "" {
 			wwwDir = cfg.WWWDir
 		}
+		if cfg.PublicURL != "" {
+			publicURL = cfg.PublicURL
+		}
+		if cfg.PortalURL != "" {
+			portalURL = cfg.PortalURL
+		}
 	}
 
 	// Env vars override config file
@@ -104,6 +112,8 @@ func applyHubConfig(cfg *hubConfig) {
 	udpPort = envInt("HUB_UDP_PORT", udpPort)
 	hubName = envStr("HUB_NAME", hubName)
 	wwwDir = envStr("HUB_WWW_DIR", wwwDir)
+	publicURL = envStr("HUB_PUBLIC_URL", publicURL)
+	portalURL = envStr("HUB_PORTAL_URL", portalURL)
 }
 
 func envInt(key string, def int) int {
@@ -127,6 +137,8 @@ var (
 	udpPort     = 41820
 	hubName     = ""
 	wwwDir      = "./www"
+	publicURL   = ""  // externally reachable URL (for portal registration)
+	portalURL   = ""  // Awan Satu portal URL (self-registration target)
 	globalAuth  = newAuthStore(nil) // replaced at startup; open hub until config is loaded
 	globalCfg   *hubConfig         // live config; mutated by admin API
 	globalCfgMu sync.Mutex         // protects globalCfg + config file writes
@@ -1158,6 +1170,68 @@ func main() {
 	runHub(nil)
 }
 
+// ── Portal self-registration ───────────────────────────────────────
+
+// registerWithPortal POSTs the hub's name, public URL, and viewer token
+// to the Awan Satu portal so it can proxy status requests server-side.
+func registerWithPortal() {
+	if portalURL == "" || hubName == "" {
+		return
+	}
+	viewerToken := globalAuth.consoleViewerToken()
+	hubURL := publicURL
+	if hubURL == "" {
+		// Fall back to hubName-based assumption — won't work in many cases,
+		// but provides a visible log entry so operators can add HUB_PUBLIC_URL.
+		log.Printf("[hub] WARNING: HUB_PUBLIC_URL not set; portal registration may use wrong URL")
+		hubURL = fmt.Sprintf("https://%s", hubName)
+	}
+
+	body := map[string]string{
+		"name":        hubName,
+		"url":         hubURL,
+		"viewerToken": viewerToken,
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		log.Printf("[hub] portal registration marshal error: %v", err)
+		return
+	}
+
+	target := strings.TrimRight(portalURL, "/") + "/api/hub-register"
+	resp, err := http.Post(target, "application/json", strings.NewReader(string(data)))
+	if err != nil {
+		log.Printf("[hub] portal registration failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		log.Printf("[hub] registered with portal %s", portalURL)
+	} else {
+		log.Printf("[hub] portal registration returned HTTP %d", resp.StatusCode)
+	}
+}
+
+// startPortalHeartbeat runs registerWithPortal immediately and then
+// every 60 seconds. Stops when done channel closes.
+func startPortalHeartbeat(done <-chan struct{}) {
+	if portalURL == "" {
+		return
+	}
+	registerWithPortal()
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			registerWithPortal()
+		case <-done:
+			return
+		}
+	}
+}
+
 // runHub starts the hub server and blocks until shutdown.
 // If stopCh is non-nil, shutdown is triggered when it closes (service mode).
 // If stopCh is nil, shutdown is triggered by SIGINT/SIGTERM (interactive mode).
@@ -1197,12 +1271,17 @@ func runHub(stopCh <-chan struct{}) {
 	// Start keepalive pinger
 	go runKeepalive()
 
+	// Start portal heartbeat (self-registration with Awan Satu)
+	portalDone := make(chan struct{})
+	go startPortalHeartbeat(portalDone)
+
 	// Graceful shutdown
 	if stopCh != nil {
 		// Service mode: stop when SCM/systemd signals
 		go func() {
 			<-stopCh
 			log.Println("[hub] service stop received, shutting down")
+			close(portalDone)
 			server.Close()
 		}()
 	} else {
@@ -1212,6 +1291,7 @@ func runHub(stopCh <-chan struct{}) {
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 			sig := <-sigCh
 			log.Printf("[hub] received %v, shutting down", sig)
+			close(portalDone)
 			server.Close()
 		}()
 	}
@@ -1220,6 +1300,9 @@ func runHub(stopCh <-chan struct{}) {
 	log.Printf("[hub] static site: %s", wwwDir)
 	if hubName != "" {
 		log.Printf("[hub] hub name: %s", hubName)
+	}
+	if portalURL != "" {
+		log.Printf("[hub] portal registration: %s (heartbeat every 60s)", portalURL)
 	}
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
