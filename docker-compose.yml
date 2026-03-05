@@ -21,8 +21,6 @@ services:
       - HUB_PORT=8080
       - HUB_UDP_PORT=41820
       - HUB_NAME=gohub
-      - HUB_PUBLIC_URL=https://gohub.parkscomputing.com
-      - HUB_PORTAL_URL=https://awansatu.net
       - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
     volumes:
       - hub-data:/app/data
