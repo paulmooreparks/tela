@@ -88,10 +88,10 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅. No user auth, no session tokens, no metadata |
+| §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅, admin REST API ✅. No user auth (browser), no session tokens, no metadata |
 | §8.2 | Implementation (Go) | ✅ | `telahubd` — Go, `gorilla/websocket`, no Node.js, no MeshCentral |
-| §8.3 | Storage (SQLite / Postgres) | ⬜ | In-memory only; no persistence |
-| §8.4 | REST API | 🔶 | Hub `/status` endpoint ✅; Portal `/api/hubs` endpoint ✅; no `/api/v1/*` endpoints |
+| §8.3 | Storage (SQLite / Postgres) | 🔶 | Auth config persisted to YAML (hot-reload); session/machine state is in-memory only |
+| §8.4 | REST API | 🔶 | Hub `/status` ✅, `/api/history` ✅, `/api/admin/*` ✅ (token/ACL management); Portal `/api/hubs` ✅; no `/api/v1/*` endpoints |
 | §8.5 | Multiplexing | ⬜ | No channel multiplexing |
 | §8.6 | Logging & Observability | 🔶 | Console logging; no structured logs or metrics |
 | §8.7 | Updates | ⬜ | No update mechanism |
@@ -128,7 +128,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §11.1 | Purpose & Rationale | 🔶 | `tela` binary serves as both client and proto-CLI |
-| §11.2 | Core Commands | 🔶 | `login`/`logout` ✅, `machines` ✅, `services` ✅, `status` ✅, `connect` ✅. Portal-based hub name resolution ✅. Local `hubs.yaml` fallback ✅. |
+| §11.2 | Core Commands | 🔶 | `login`/`logout` ✅, `machines` ✅, `services` ✅, `status` ✅, `connect` ✅, `admin` ✅ (remote token/ACL management). Portal-based hub name resolution ✅. Local `hubs.yaml` fallback ✅. |
 
 ---
 
@@ -138,7 +138,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 |---------|-------|--------|-------|
 | §12.1 | Identity (Ed25519 agent keys) | ⬜ | No agent identity; machineId is a plain string |
 | §12.2 | Certificate Pinning | ⬜ | Neither agent nor client validates cert fingerprint |
-| §12.3 | Session Tokens | 🔶 | Shared-secret token auth (`-token` flag) ✅; not JWTs, not single-use |
+| §12.3 | Session Tokens | 🔶 | Named token identities with role-based ACL (owner/admin/user) ✅; per-machine register/connect ACLs ✅; env-var bootstrap ✅; admin REST API ✅; hot-reload ✅. Not JWTs, not single-use |
 | §12.4 | Transport Security (TLS 1.3) | 🔶 | TLS via Cloudflare + Caddy (direct); internal hub↔agent is plain WS |
 | §12.5 | E2E Encryption | ✅ | WireGuard provides full E2E encryption (Curve25519 + ChaCha20-Poly1305). Hub is zero-knowledge relay |
 | §12.6 | Threat Model | 📄 | Design guidance |
@@ -149,7 +149,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §13.1 | Tela Standalone (bcrypt, SQLite, cookies, TOTP) | 🔶 | Shared-secret token auth exists; no bcrypt/SQLite/cookies/TOTP |
+| §13.1 | Tela Standalone (bcrypt, SQLite, cookies, TOTP) | 🔶 | Named token identities with RBAC ✅; YAML-persisted auth config ✅; admin REST API ✅; `tela admin` CLI ✅; env-var bootstrap ✅. No bcrypt/cookies/TOTP (spec vision), but functional token-based auth is complete |
 | §13.2 | Awan Satu (SSO) | 🔮 | — |
 
 ---
@@ -158,7 +158,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §14.1 | Setup (Tela Standalone) | 🔶 | Hub deployed ✅, Cloudflare Tunnel ✅, Caddy direct ✅, agent registered ✅. No user creation, no provisioning tokens |
+| §14.1 | Setup (Tela Standalone) | 🔶 | Hub deployed ✅, Cloudflare Tunnel ✅, Caddy direct ✅, agent registered ✅, token auth + ACL ✅, env-var bootstrap ✅, remote admin ✅. No browser-based user creation |
 | §14.2 | Accessing from Locked-Down Laptop | ✅ | Full path validated: download tela → run → SSH ✅, RDP ✅ (via WireGuard L3 tunnel) |
 | §14.3 | In-Browser Fallback | ⬜ | — |
 
@@ -234,8 +234,8 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 | Status | Count | Meaning |
 |--------|-------|---------|
 | ✅ Done | 17 | Working implementation |
-| 🔶 Partial | 19 | POC covers some aspects |
-| ⬜ Not started | 19 | No implementation |
+| 🔶 Partial | 20 | POC covers some aspects |
+| ⬜ Not started | 18 | No implementation |
 | 🔮 Future | 8 | Awan Satu / Phase 3+ |
 | 📄 Doc-only | 14 | No code artifact needed |
 
@@ -244,7 +244,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 1. **WireGuard L3 tunnel** — E2E encrypted, zero-admin, zero-install on both sides (gVisor netstack)
 2. **UDP relay** — Eliminates TCP-over-TCP; auto-fallback to WebSocket; asymmetric bridging
 3. **Multi-port forwarding** — telad advertises ports, tela auto-binds local listeners
-4. **Token auth** — Shared-secret `-token` flag on both sides, hub validates
+4. **Token auth with RBAC** — Named identities (owner/admin/user), per-machine ACLs, env-var bootstrap for Docker, remote management via `tela admin` CLI and admin REST API, hot-reload (no restart needed)
 5. **Auto-reconnect** — Both tela and telad reconnect on disconnect
 6. **Cross-platform client** — Windows, Linux, macOS (Intel + ARM) binaries served from hub
 7. **Dual ingress** — Cloudflare Tunnel (`tela.awansatu.net`) + Caddy direct (`tela-local.awansatu.net`)
@@ -257,10 +257,9 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 1. **Channel multiplexing** (§6.2) — One WS per session; spec requires muxed channels
 2. **Framed binary protocol** (§6.3) — Raw WS messages; spec requires 12-byte frame header
-3. **Full authentication** (§13.1) — Shared-secret tokens; spec requires bcrypt + cookies + TOTP
-4. **Session tokens / JWT** (§6.5) — No signed token issuance; client connects with machineId + shared secret
+3. **Browser-based user auth** (§13.1) — Token-based CLI/API auth is complete; spec envisions bcrypt + cookies + TOTP for browser users
+4. **Session tokens / JWT** (§6.5) — No signed token issuance; client connects with machineId + bearer token
 5. **Agent identity** (§12.1) — No Ed25519 keys; agents identified by string only
 6. **Certificate pinning** (§12.2) — Neither side validates Hub cert fingerprint
-7. **REST API** (§8.4) — Only `/status`; spec requires full `/api/v1/*`
-8. **Test suite** (§20) — No automated tests
-9. **Multiple simultaneous sessions** — One session per machine at a time
+7. **Test suite** (§20) — No automated tests
+8. **Multiple simultaneous sessions** — One session per machine at a time

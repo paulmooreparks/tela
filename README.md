@@ -130,12 +130,36 @@ tela connect -hub your-hub -machine barn
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) §8 for the full Docker Compose setup.
 
-## Security
+### Enable authentication (recommended)
+
+```bash
+# 1. Generate an owner token
+openssl rand -hex 32
+
+# 2. Add to docker-compose.yml environment:
+#    - TELA_OWNER_TOKEN=<your-token>
+
+# 3. Redeploy
+docker compose up --build -d
+
+# 4. Manage remotely from any workstation:
+tela admin list-tokens  -hub wss://your-hub -token <owner-token>
+tela admin add-token bob -hub wss://your-hub -token <owner-token>
+tela admin grant bob barn -hub wss://your-hub -token <owner-token>
+```
+
+See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admin` reference.
+
+## Authentication & security
 
 - **End-to-end encryption**: WireGuard (Curve25519 key exchange, ChaCha20-Poly1305 data) between tela and telad. The hub is a blind relay.
-- **Token authentication**: `-token` flag on both sides; hub validates before pairing.
+- **Token-based auth**: Named token identities with role-based access control (owner/admin/user). Per-machine ACLs control who can register and connect. When no tokens are configured, the hub runs in open mode (backward compatible).
+- **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin` — no shell access to the hub required.
+- **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
 - **No admin required**: gVisor netstack operates entirely in userspace — no TUN device, no root/Administrator.
 - **Outbound-only**: Both tela and telad initiate outbound connections to the hub. No inbound ports needed on either end.
+
+See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and admin API reference.
 
 ## Transport upgrade cascade
 
@@ -169,7 +193,7 @@ See [howto/services.md](howto/services.md) for full details.
 ## Project structure
 
 ```
-cmd/tela/          Client binary (subcommands: connect, machines, services, status, login, logout)
+cmd/tela/          Client binary (subcommands: connect, machines, services, status, login, logout, admin)
 cmd/telad/         Daemon binary
 cmd/telahubd/      Hub server binary
 internal/service/   Cross-platform OS service management (Windows SCM, systemd, launchd)

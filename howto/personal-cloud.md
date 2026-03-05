@@ -68,7 +68,36 @@ Requirements:
 - WebSockets must be supported (most tunnels/proxies support this).
 
 ---
+## Step 1.5 — Enable authentication (recommended)
 
+By default the hub runs in open mode. For any Internet-exposed hub, you should enable token-based auth.
+
+### Quick path (Docker)
+
+```bash
+# Generate an owner token on your local machine
+openssl rand -hex 32
+
+# Add to docker-compose.yml environment:
+#   - TELA_OWNER_TOKEN=<your-token>
+
+# Redeploy
+docker compose up --build -d
+```
+
+The hub creates an `owner` identity on first startup, then you manage everything remotely:
+
+```bash
+# From any workstation with tela installed:
+tela admin add-token barn-agent -hub wss://YOUR-HUB-HOSTNAME -token <owner-token>
+# → save the printed token for use in telad.yaml
+
+tela admin grant barn-agent barn -hub wss://YOUR-HUB-HOSTNAME -token <owner-token>
+```
+
+See [hub.md](hub.md) for the full list of `tela admin` commands.
+
+---
 ## Step 2 — Register a home machine (choose a pattern)
 
 ### Pattern A — Run `telad` on the home machine (recommended)
@@ -83,20 +112,21 @@ Use this when you can run `telad` directly on the machine that hosts the service
 2. Start `telad` using flags (example):
 
 ```bash
-./telad -hub wss://YOUR-HUB-HOSTNAME -machine barn -ports "22,3389"
+./telad -hub wss://YOUR-HUB-HOSTNAME -machine barn -ports "22,3389" -token <agent-token>
 ```
 
 3. Verify from another machine:
 
 ```bash
-./tela machines -hub wss://YOUR-HUB-HOSTNAME
-./tela services -hub wss://YOUR-HUB-HOSTNAME -machine barn
+./tela machines -hub wss://YOUR-HUB-HOSTNAME -token <your-token>
+./tela services -hub wss://YOUR-HUB-HOSTNAME -machine barn -token <your-token>
 ```
 
 Notes:
 
 - For production, prefer using a config file and running `telad` as a service.
 - Keep service exposure minimal: only the ports you need.
+- If the hub has auth enabled, the token must be a valid identity token (generated via `tela admin add-token`).
 
 ### Pattern B — Run `telad` on a gateway that can reach the home machines
 

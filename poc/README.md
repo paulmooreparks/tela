@@ -45,7 +45,7 @@ graph LR
 ### Security
 
 - **End-to-end encryption:** WireGuard (Curve25519 + ChaCha20-Poly1305) between tela and telad. The hub sees only ciphertext.
-- **Token auth:** Both tela and telad authenticate to the hub with a shared secret (`HUB_TOKEN` / `-token`).
+- **Token auth:** Named token identities with role-based ACL (owner/admin/user). Per-machine access control. Remote management via `tela admin` CLI and admin REST API. Env-var bootstrap for Docker (`TELA_OWNER_TOKEN`). When no tokens configured, hub runs in open mode (backward compatible).
 - **No admin/TUN:** Both sides use gVisor netstack — pure userspace, no elevated privileges.
 
 ## Prerequisites
@@ -207,6 +207,37 @@ tela status -hub <url> [-token <secret>] [-json]
 tela status                # uses $TELA_HUB
 ```
 
+#### tela admin
+
+Remote hub auth management. All admin sub-commands require an owner or admin token.
+
+```
+tela admin <sub-command> [options]
+```
+
+| Sub-command | Description |
+|------------|-------------|
+| `list-tokens` | List all token identities on the hub |
+| `add-token <id> [-role admin]` | Add a new token identity (prints the token once) |
+| `remove-token <id>` | Remove a token identity |
+| `grant <id> <machineId>` | Grant connect access to a machine |
+| `revoke <id> <machineId>` | Revoke connect access to a machine |
+| `rotate <id>` | Regenerate token for an identity |
+
+All sub-commands accept `-hub` and `-token` flags (or `TELA_HUB` / `TELA_TOKEN` env vars).
+
+Examples:
+
+```bash
+tela admin list-tokens -hub wss://myhub -token <owner-token>
+tela admin add-token alice -hub wss://myhub -token <owner-token>
+tela admin add-token bob -hub wss://myhub -token <owner-token> -role admin
+tela admin grant alice barn -hub wss://myhub -token <owner-token>
+tela admin revoke alice barn -hub wss://myhub -token <owner-token>
+tela admin rotate alice -hub wss://myhub -token <owner-token>
+tela admin remove-token alice -hub wss://myhub -token <owner-token>
+```
+
 ### telad (agent)
 
 **Config-file mode** (recommended for production and multi-machine):
@@ -284,7 +315,8 @@ Default port: `3000`. Serves a static test page.
 - The outbound-only hub relay model works across NATs and firewalls
 - UDP relay provides a fast path when available, with automatic WS fallback
 - Asymmetric UDP mode (one side UDP, other side WS) works via hub bridging
-- Token authentication prevents unauthorized pairing
+- Token-based RBAC with per-machine ACLs secures hub access without external dependencies
+- Remote auth management via REST API + CLI works for Docker deployments (no shell access needed)
 - Auto-reconnect keeps sessions resilient
 - Hub Console provides live visibility into registered machines and services
 

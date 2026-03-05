@@ -76,6 +76,95 @@ curl http://localhost:8080/api/history
 telahubd version
 ```
 
+## Enable authentication (recommended)
+
+By default, the hub runs in **open mode** — any agent or client can connect without credentials. To lock it down, enable token-based authentication.
+
+### Docker deployment (env-var bootstrap)
+
+The simplest path for Docker:
+
+```bash
+# 1. Generate an owner token on your local machine
+openssl rand -hex 32
+
+# 2. Add to docker-compose.yml environment block:
+#    - TELA_OWNER_TOKEN=<your-token>
+
+# 3. Redeploy
+docker compose up --build -d
+```
+
+On first startup the hub creates an `owner` identity, persists it, and is ready for remote management.
+
+### Bare-metal / direct deployment
+
+If running `telahubd` directly (not in Docker), you can either:
+
+1. Set `TELA_OWNER_TOKEN` as an environment variable before starting, or
+2. Create a `telahubd.yaml` config file with an `auth:` block (see [CONFIGURATION.md](../CONFIGURATION.md))
+
+### Managing tokens remotely with `tela admin`
+
+Once the owner token exists, manage everything from any workstation:
+
+```bash
+# List identities on the hub
+tela admin list-tokens -hub wss://your-hub.example.com -token <owner-token>
+
+# Add a user identity
+tela admin add-token alice -hub wss://your-hub.example.com -token <owner-token>
+# → Save the printed token!
+
+# Add an admin
+tela admin add-token bob -hub wss://your-hub.example.com -token <owner-token> -role admin
+
+# Grant connect access to a machine
+tela admin grant alice barn -hub wss://your-hub.example.com -token <owner-token>
+
+# Revoke access
+tela admin revoke alice barn -hub wss://your-hub.example.com -token <owner-token>
+
+# Rotate a compromised token
+tela admin rotate alice -hub wss://your-hub.example.com -token <owner-token>
+
+# Remove an identity entirely
+tela admin remove-token alice -hub wss://your-hub.example.com -token <owner-token>
+```
+
+All changes take effect immediately (hot-reload) — no hub restart required.
+
+### Using `telad` with auth
+
+When the hub has auth enabled, agents must provide a valid token:
+
+```yaml
+# telad.yaml
+hub: wss://your-hub.example.com
+token: "<token-for-this-agent>"
+
+machines:
+  - name: barn
+    ports: [22, 3389]
+```
+
+```bash
+telad -config telad.yaml
+```
+
+Or with a flag: `telad -hub wss://... -machine barn -ports "22,3389" -token <token>`
+
+### Using `tela` (client) with auth
+
+```bash
+tela connect -hub wss://your-hub.example.com -machine barn -token <your-token>
+
+# Or set env vars:
+export TELA_HUB=wss://your-hub.example.com
+export TELA_TOKEN=<your-token>
+tela connect -machine barn
+```
+
 ## What must be reachable
 
 Minimum (required):

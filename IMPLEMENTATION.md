@@ -203,6 +203,7 @@ services:
       - HUB_PORT=8080
       - HUB_UDP_PORT=41820
       - HUB_NAME=gohub
+      # - TELA_OWNER_TOKEN=<hex>   # uncomment to enable auth (see §8.1)
     restart: unless-stopped
 ```
 
@@ -210,6 +211,84 @@ Notes:
 - TLS is terminated by Cloudflare Tunnel (`cloudflared` host service routes `gohub.parkscomputing.com` → `http://localhost:3002`).
 - UDP port 41821 must be published for the WireGuard UDP relay optimisation.
 - The image is a multi-stage build: Go builder stage → minimal Alpine runtime with `telahubd` + static console files.
+
+---
+
+## 8.1) Authentication bootstrap (Docker)
+
+The hub supports token-based authentication with named identities and per-machine ACLs. For Docker deployments where you don't have shell access to the hub container, authentication is bootstrapped via an environment variable.
+
+### Quick start (enable auth)
+
+```bash
+# 1. Generate an owner token
+openssl rand -hex 32
+# Example output: a1b2c3d4e5f6...
+
+# 2. Add to docker-compose.yml:
+#    environment:
+#      - TELA_OWNER_TOKEN=a1b2c3d4e5f6...
+
+# 3. Redeploy
+docker compose up --build -d
+```
+
+On first startup (when no tokens exist in the hub config), the hub automatically:
+- Creates an `owner` identity with the provided token
+- Adds a wildcard `*` machine ACL granting the owner full access
+- Persists the auth config to disk (inside the container)
+
+On subsequent restarts, the env var is ignored — tokens already exist in the persisted config.
+
+### Managing tokens remotely
+
+Once bootstrapped, use `tela admin` from any workstation:
+
+```bash
+# List identities
+tela admin list-tokens -hub wss://gohub.parkscomputing.com -token <owner-token>
+
+# Add a user
+tela admin add-token alice -hub wss://gohub.parkscomputing.com -token <owner-token>
+# → prints the new token (save it!)
+
+# Grant connect access to a machine
+tela admin grant alice barn -hub wss://gohub.parkscomputing.com -token <owner-token>
+
+# Revoke access
+tela admin revoke alice barn -hub wss://gohub.parkscomputing.com -token <owner-token>
+
+# Rotate a compromised token
+tela admin rotate alice -hub wss://gohub.parkscomputing.com -token <owner-token>
+
+# Remove an identity entirely
+tela admin remove-token alice -hub wss://gohub.parkscomputing.com -token <owner-token>
+```
+
+All changes take effect immediately (hot-reload) — no hub restart required.
+
+### Using environment variables to avoid repeating flags
+
+```bash
+export TELA_HUB=wss://gohub.parkscomputing.com
+export TELA_TOKEN=<owner-token>
+
+tela admin list-tokens
+tela admin add-token alice
+tela admin grant alice barn
+```
+
+### Auth model summary
+
+| Concept | Description |
+|---------|-------------|
+| **Identity** | A named token entry (`id` + `token` + optional `hubRole`) |
+| **Role** | `owner` (full control), `admin` (can manage tokens), or empty (regular user) |
+| **Machine ACL** | Per-machine `registerToken` and `connectTokens` lists |
+| **Wildcard** | `"*"` machine key applies to all machines |
+| **Open mode** | When no tokens are configured, the hub allows all connections (backward compatible) |
+
+See [CONFIGURATION.md](CONFIGURATION.md) for the full YAML schema and admin API reference.
 
 ---
 

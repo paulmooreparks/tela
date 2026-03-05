@@ -903,13 +903,27 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 ---
 
-# **13. Authentication** *(NOT YET IMPLEMENTED)*
+# **13. Authentication**
 
-> **Status:** No user authentication exists in the current implementation. The hub has no user database, no login page, no sessions, and no cookies. The token system (§12.3) is a per-machine shared secret, not a user authentication mechanism.
+> **Status:** Token-based authentication is implemented. The hub supports named token identities with role-based access control (owner/admin/user), per-machine ACLs, environment-variable bootstrap for Docker deployments, an admin REST API for remote management, and a `tela admin` CLI. When no tokens are configured, the hub runs in open mode (backward compatible). The spec's vision of bcrypt + cookies + TOTP for browser-based user auth is not yet implemented — the current system is token-based (like SSH `authorized_keys`).
 
 ## **13.1 Tela Standalone (Before Awan Satu)**
 
-Tela Hub includes a minimal local authentication system:
+### Current implementation (token-based)
+
+The hub stores named **token identities** in its YAML config file:
+
+- Each identity has an `id`, a hex `token`, and an optional `hubRole` (owner, admin, or user).
+- Per-machine **ACLs** control which tokens can register or connect to each machine.
+- A `"*"` wildcard key applies to all machines.
+- An **admin REST API** (`/api/admin/*`) allows remote token and ACL management.
+- `tela admin` CLI commands provide a convenient interface to the admin API.
+- `TELA_OWNER_TOKEN` env var bootstraps the first owner identity for Docker deployments.
+- Changes via the admin API take effect immediately (hot-reload) — no hub restart needed.
+
+### Future (spec vision)
+
+Tela Hub will include a minimal local authentication system for browser-based access:
 
 - bcrypt‑hashed passwords
 - SQLite storage
