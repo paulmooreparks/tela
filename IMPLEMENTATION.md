@@ -271,7 +271,8 @@ All changes take effect immediately (hot-reload) — no hub restart required.
 
 ```bash
 export TELA_HUB=wss://gohub.parkscomputing.com
-export TELA_TOKEN=<owner-token>
+export TELA_OWNER_TOKEN=<owner-token>   # used by tela admin
+export TELA_TOKEN=<your-user-token>      # used by tela connect
 
 tela admin list-tokens
 tela admin add-token alice

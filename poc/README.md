@@ -224,7 +224,8 @@ tela admin <sub-command> [options]
 | `revoke <id> <machineId>` | Revoke connect access to a machine |
 | `rotate <id>` | Regenerate token for an identity |
 
-All sub-commands accept `-hub` and `-token` flags (or `TELA_HUB` / `TELA_TOKEN` env vars).
+All sub-commands accept `-hub` and `-token` flags.
+Token resolution order: `-token` flag > `TELA_OWNER_TOKEN` env var > `TELA_TOKEN` env var.
 
 Examples:
 

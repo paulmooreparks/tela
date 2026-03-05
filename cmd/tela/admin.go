@@ -5,7 +5,7 @@
 // SSH or shell access to the hub required.
 //
 // All commands require an owner or admin token passed via -token flag
-// or TELA_TOKEN environment variable.
+// or TELA_OWNER_TOKEN environment variable (falls back to TELA_TOKEN).
 
 package main
 
@@ -66,8 +66,13 @@ Commands:
   revoke         Revoke connect access to a machine
   rotate         Regenerate token for an identity
 
-All commands require -hub and -token (or TELA_HUB / TELA_TOKEN env vars).
+All commands require -hub and -token.
 The token must belong to an owner or admin identity.
+
+Token resolution (in order):
+  1. -token flag
+  2. TELA_OWNER_TOKEN env var
+  3. TELA_TOKEN env var
 
 Examples:
   tela admin list-tokens -hub gohub -token <owner-token>
@@ -77,7 +82,19 @@ Examples:
   tela admin revoke alice my-desktop -hub gohub -token <owner-token>
   tela admin remove-token alice -hub gohub -token <owner-token>
   tela admin rotate alice -hub gohub -token <owner-token>
+
+Tip: set TELA_OWNER_TOKEN in your shell profile so you don't need -token
+every time.  Use a separate TELA_TOKEN for day-to-day tela connect usage.
 `)
+}
+
+// adminTokenDefault returns the best available admin token from env vars.
+// Prefers TELA_OWNER_TOKEN, falls back to TELA_TOKEN.
+func adminTokenDefault() string {
+	if v := os.Getenv("TELA_OWNER_TOKEN"); v != "" {
+		return v
+	}
+	return os.Getenv("TELA_TOKEN")
 }
 
 // adminHTTP performs an HTTP request against the hub's admin API.
@@ -130,7 +147,7 @@ func adminParseHubAndToken(fs *flag.FlagSet) (string, string) {
 		os.Exit(1)
 	}
 	if token == "" {
-		fmt.Fprintln(os.Stderr, "Error: -token is required (or set TELA_TOKEN)")
+		fmt.Fprintln(os.Stderr, "Error: -token is required (or set TELA_OWNER_TOKEN)")
 		os.Exit(1)
 	}
 	return hubURL, token
@@ -153,7 +170,7 @@ func adminCheckError(status int, result map[string]any) {
 func cmdAdminListTokens(args []string) {
 	fs := flag.NewFlagSet("admin list-tokens", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Admin token (env: TELA_TOKEN)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
 	_ = hubURL
@@ -201,7 +218,7 @@ func cmdAdminListTokens(args []string) {
 func cmdAdminAddToken(args []string) {
 	fs := flag.NewFlagSet("admin add-token", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Admin token (env: TELA_TOKEN)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	role := fs.String("role", "", "Role: owner, admin, or omit for user")
 	fs.Parse(args)
 	_ = hubURL
@@ -243,7 +260,7 @@ func cmdAdminAddToken(args []string) {
 func cmdAdminRemoveToken(args []string) {
 	fs := flag.NewFlagSet("admin remove-token", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Admin token (env: TELA_TOKEN)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	fs.Parse(args)
 	_ = hubURL
 	_ = token
@@ -271,7 +288,7 @@ func cmdAdminRemoveToken(args []string) {
 func cmdAdminGrant(args []string) {
 	fs := flag.NewFlagSet("admin grant", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Admin token (env: TELA_TOKEN)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	fs.Parse(args)
 	_ = hubURL
 	_ = token
@@ -307,7 +324,7 @@ func cmdAdminGrant(args []string) {
 func cmdAdminRevoke(args []string) {
 	fs := flag.NewFlagSet("admin revoke", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Admin token (env: TELA_TOKEN)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	fs.Parse(args)
 	_ = hubURL
 	_ = token
@@ -338,7 +355,7 @@ func cmdAdminRevoke(args []string) {
 func cmdAdminRotate(args []string) {
 	fs := flag.NewFlagSet("admin rotate", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Admin token (env: TELA_TOKEN)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	fs.Parse(args)
 	_ = hubURL
 	_ = token
