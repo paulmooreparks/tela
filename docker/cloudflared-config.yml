@@ -30,6 +30,10 @@ ingress:
   - hostname: owlsnest-cfhub.parkscomputing.com
     service: http://localhost:3000
 
+  # Tela Go Hub — parallel test deployment (docker-compose publishes 3002->8080)
+  - hostname: gohub.parkscomputing.com
+    service: http://localhost:3002
+
   # Awan Satu portal
   - hostname: awansatu.net
     service: http://localhost:3001

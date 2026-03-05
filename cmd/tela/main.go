@@ -32,6 +32,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -208,7 +209,9 @@ func cmdConnect(args []string) {
 	}
 
 	for {
-		runSession(*hubURL, *machineID, *token, mappings)
+		if err := runSession(*hubURL, *machineID, *token, mappings); errors.Is(err, errFatal) {
+			os.Exit(1)
+		}
 		log.Println("reconnecting in 3 seconds...")
 		time.Sleep(3 * time.Second)
 	}
@@ -459,14 +462,17 @@ func wsToHTTP(wsURL string) string {
 	return strings.TrimRight(s, "/")
 }
 
-func runSession(hubURL, machineID, token string, overrideMappings []portMapping) {
+// errFatal is returned by runSession when the error is not worth retrying.
+var errFatal = fmt.Errorf("fatal")
+
+func runSession(hubURL, machineID, token string, overrideMappings []portMapping) error {
 	log.Printf("connecting to hub: %s", hubURL)
 
 	// Connect to Hub via WebSocket
 	wsConn, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
 	if err != nil {
 		log.Printf("websocket dial failed: %v", err)
-		return
+		return err
 	}
 	defer wsConn.Close()
 
@@ -474,7 +480,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		log.Printf("keygen failed: %v", err)
-		return
+		return err
 	}
 	privKeyHex := hex.EncodeToString(privKey.Bytes())
 	pubKeyHex := hex.EncodeToString(privKey.PublicKey().Bytes())
@@ -486,7 +492,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	connectMsg := controlMessage{Type: "connect", MachineID: machineID, WGPubKey: pubKeyHex, Token: token}
 	if err := wsConn.WriteJSON(&connectMsg); err != nil {
 		log.Printf("failed to send connect: %v", err)
-		return
+		return nil
 	}
 
 	// Wait for "ready" and daemon's public key + port list
@@ -500,7 +506,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 		_, rawMsg, err := wsConn.ReadMessage()
 		if err != nil {
 			log.Printf("failed reading from hub: %v", err)
-			return
+			return nil
 		}
 
 		var msg controlMessage
@@ -525,7 +531,18 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 			log.Printf("received UDP relay offer (port %d)", udpPort)
 		case "error":
 			log.Printf("hub error: %s", msg.Message)
-			return
+			lower := strings.ToLower(msg.Message)
+			if strings.Contains(lower, "not found") || strings.Contains(lower, "invalid token") {
+				// Provide actionable diagnostics
+				if strings.Contains(lower, "not found") {
+					httpURL := wsToHTTP(hubURL)
+					log.Printf("machine %q is not registered on this hub", machineID)
+					log.Printf("check available machines: tela machines -hub %s", httpURL)
+					log.Printf("or run: curl %s/api/status", httpURL)
+				}
+				return errFatal
+			}
+			return fmt.Errorf("hub error: %s", msg.Message)
 		}
 
 		// Need both ready and agent pubkey to proceed
@@ -542,7 +559,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	)
 	if err != nil {
 		log.Printf("netstack creation failed: %v", err)
-		return
+		return nil
 	}
 
 	// Create wsBind — WireGuard datagrams go through the WebSocket
@@ -570,13 +587,13 @@ persistent_keepalive_interval=25
 	if err := dev.IpcSet(ipcConf); err != nil {
 		log.Printf("WireGuard IPC config failed: %v", err)
 		dev.Close()
-		return
+		return nil
 	}
 
 	if err := dev.Up(); err != nil {
 		log.Printf("WireGuard device up failed: %v", err)
 		dev.Close()
-		return
+		return nil
 	}
 	log.Printf("WireGuard tunnel up — client=%s daemon=%s", helperIP, agentIP)
 
@@ -607,7 +624,7 @@ persistent_keepalive_interval=25
 	if len(mappings) == 0 {
 		log.Printf("daemon did not advertise any ports — use -port and -target-port")
 		dev.Close()
-		return
+		return nil
 	}
 
 	// Bind local listeners
@@ -647,7 +664,7 @@ persistent_keepalive_interval=25
 	if len(listeners) == 0 {
 		log.Printf("no ports could be bound")
 		dev.Close()
-		return
+		return nil
 	}
 
 	// Wait for WebSocket to close (session end) or signal
@@ -657,6 +674,7 @@ persistent_keepalive_interval=25
 		l.Close()
 	}
 	dev.Close()
+	return nil
 }
 
 // portMapping pairs a local listener port with the remote agent port.

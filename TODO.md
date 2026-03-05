@@ -22,6 +22,9 @@
 scenario). Same-NAT tests fail because most routers don't support hairpin NAT.
 When peers are on the same LAN, the relay path is already low-latency.
 
+## Awan Satu
+- [x] "How it Works" section on the Awan Satu landing page is missing a step about creating/deploying a hub — a user must have a hub before they can begin step 1 (installing the agent)
+
 ## Later
 - [ ] Mesh networking (multi-peer)
 - [ ] ACL policies

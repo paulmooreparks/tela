@@ -97,6 +97,16 @@ jobs:
             -o dist/telad-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
             ./cmd/telad
 
+      - name: Build telahubd
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
+            -o dist/telahubd-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
+            ./cmd/telahubd
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -132,7 +142,7 @@ jobs:
           VERSION="${{ steps.version.outputs.tag }}"
           echo "{\"version\":\"${VERSION}\",\"binaries\":{" > release.json
           first=true
-          for f in tela-* telad-*; do
+          for f in tela-* telad-* telahubd-*; do
             hash=$(sha256sum "$f" | cut -d' ' -f1)
             size=$(stat -c%s "$f")
             if [ "$first" = true ]; then

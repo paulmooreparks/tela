@@ -6,8 +6,8 @@ This doc makes the **reachability assumptions** explicit for Tela.
 
 | Component | Needs inbound from Internet | Needs outbound | Default ports / protocols |
 |----------|------------------------------|---------------|---------------------------|
-| Hub (service) | Yes | No (special) | Public: TCP 443 for HTTPS+WebSockets; Optional: UDP 41820 for UDP relay. Implementation note: current hub implementation uses `HUB_PORT` (default `8080`) and `HUB_UDP_PORT` (default `41820`). |
-| Agent (`telad`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `HUB_UDP_PORT` |
+| Hub (`telahubd`) | Yes | No (special) | Public: TCP 443 for HTTPS+WebSockets; Optional: UDP 41820 for UDP relay. The hub listens on `HUB_PORT` (default `8080`) and `HUB_UDP_PORT` (default `41820`). |
+| Daemon (`telad`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `HUB_UDP_PORT` |
 | Client (`tela`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `HUB_UDP_PORT` |
 | Portal (browser UI) | n/a | Yes | Browser fetches `https://<hub>/api/status` and `https://<hub>/api/history` (cross-origin) |
 
@@ -19,7 +19,7 @@ Minimum:
 
 - Inbound TCP for **HTTPS + WebSockets**.
   - The hub serves HTTPS + WebSockets on a single public origin (typically TCP 443).
-  - Implementation note: the current hub implementation serves HTTP+WS on a single port (`HUB_PORT`, default `8080`) and is commonly published on 443 via a reverse proxy / tunnel.
+  - Implementation note: the hub serves HTTP+WS on a single port (`HUB_PORT`, default `8080`) and is commonly published on 443 via a reverse proxy / tunnel.
   - In most deployments you publish this via a reverse proxy / tunnel on **TCP 443**.
 - The Hub must allow WebSocket upgrade end-to-end (reverse proxy must forward `Upgrade` / `Connection` headers).
 
@@ -33,9 +33,9 @@ Portal visibility:
 - For Awan Satu (or any browser-based portal) to display hub cards/metrics, the hub must expose:
   - `GET /api/status` (and/or `/status`)
   - `GET /api/history`
-- Cross-origin portal fetches require CORS. The current hub implementation replies with `Access-Control-Allow-Origin: *` for these endpoints.
+- Cross-origin portal fetches require CORS. The hub replies with `Access-Control-Allow-Origin: *` for these endpoints.
 
-## Agent (`telad`) requirements
+## Daemon (`telad`) requirements
 
 `telad` is designed to work in “outbound-only” environments, but it still has two key reachability needs:
 
@@ -45,9 +45,9 @@ Portal visibility:
 
 2) **Reachability to the services it exposes**
 
-- Endpoint pattern (agent runs on the target host): services are usually on `localhost`.
-- Gateway/bridge pattern (agent runs somewhere else): the agent host must be able to reach the target’s service ports.
-  - Example: `target: host.docker.internal` bridges from a containerized agent to services running on the Docker host.
+- Endpoint pattern (daemon runs on the target host): services are usually on `localhost`.
+- Gateway/bridge pattern (daemon runs somewhere else): the daemon host must be able to reach the target's service ports.
+  - Example: `target: host.docker.internal` bridges from a containerized daemon to services running on the Docker host.
 
 Optional:
 
@@ -69,6 +69,6 @@ When something “can’t connect”, check these in order:
 
 - Hub is reachable on TCP 443 (or wherever you publish `HUB_PORT`).
 - Reverse proxy supports WebSockets.
-- Agent can reach the hub URL from where it runs.
-- Agent can reach its `target` host and the service ports behind it.
-- If you expect UDP relay: hub UDP port reachable + outbound UDP allowed from client/agent.
+- Daemon can reach the hub URL from where it runs.
+- Daemon can reach its `target` host and the service ports behind it.
+- If you expect UDP relay: hub UDP port reachable + outbound UDP allowed from client/daemon.

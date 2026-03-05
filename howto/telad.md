@@ -1,12 +1,12 @@
 # How to set up `telad` (machines + services + connectivity)
 
-`telad` is the agent that registers one or more “machines” with a Hub and exposes services (SSH/RDP/etc.) to clients.
+`telad` is the daemon that registers one or more "machines" with a Hub and exposes services (SSH/RDP/etc.) to clients.
 
 This doc focuses on **what must be reachable** and how that changes between deployment patterns.
 
 ## Two deployment patterns
 
-### 1) Endpoint agent (direct)
+### 1) Endpoint daemon (direct)
 
 - `telad` runs on the machine that actually hosts the services.
 - Services are usually reachable on `localhost`.
@@ -16,9 +16,9 @@ Connectivity:
 - `telad` needs **outbound** connectivity to the Hub (`ws://` or `wss://`).
 - No inbound Internet ports required on the endpoint.
 
-### 2) Gateway / bridge agent
+### 2) Gateway / bridge daemon
 
-- `telad` runs on a gateway (VM/container) and “points at” a target machine.
+- `telad` runs on a gateway (VM/container) and "points at" a target machine.
 - Services must be reachable from the gateway.
 
 Connectivity:
@@ -26,7 +26,7 @@ Connectivity:
 - `telad` needs **outbound** connectivity to the Hub.
 - The gateway host must be able to reach the target host on the service ports.
 
-A common Docker variant is bridging from an agent container to services running on the Docker host:
+A common Docker variant is bridging from a daemon container to services running on the Docker host:
 
 - `target: host.docker.internal`
 
@@ -54,7 +54,7 @@ Notes:
 
 - `hub:` must be reachable from where `telad` runs.
   - For local development (no TLS), a `ws://localhost:8080` hub URL is typical.
-- If `target:` is omitted, `telad` assumes the services are local to the agent host.
+- If `target:` is omitted, `telad` assumes the services are local to the daemon host.
 
 ## Service reachability checklist
 
@@ -74,6 +74,6 @@ If the Hub advertises UDP relay, `telad` may send UDP to the hub’s UDP port.
 
 - Machine never appears in hub status:
   - check the hub URL in `hub:` (DNS + firewall)
-  - check the Hub is actually reachable from the agent network
+  - check the Hub is actually reachable from the daemon's network
 - Services show but connect fails:
-  - in gateway mode, confirm reachability from agent → target on the service port
+  - in gateway mode, confirm reachability from daemon → target on the service port

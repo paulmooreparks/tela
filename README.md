@@ -6,7 +6,7 @@ Secure remote access to TCP services (SSH, RDP, HTTP, etc.) through an encrypted
 graph LR
     Client["Native Client"]
     Tela["tela"]
-    Hub["hub.js"]
+    Hub["telahubd"]
     Telad["telad"]
     Services["Local Services"]
 
@@ -39,23 +39,24 @@ The hub never sees plaintext — it relays opaque WireGuard ciphertext.
 |-----------|----------|-------------|
 | **tela** | Go | Client — connects to hub, establishes WG tunnel, binds localhost listeners |
 | **telad** | Go | Daemon — registers with hub, exposes local services through WG tunnel |
-| **hub.js** | Node.js | Relay — pairs agents with clients, relays WS/UDP, serves hub console |
+| **telahubd** | Go | Hub server — pairs daemons with clients, relays WS/UDP, serves hub console |
+| **hub.js** | Node.js | Legacy hub (identical functionality to telahubd, still operational) |
 
 ## Networking & port requirements
 
-Tela is outbound-only for agents and clients, but the **Hub must be reachable**.
+Tela is outbound-only for daemons and clients, but the **Hub must be reachable**.
 
 At a minimum:
 
-- The **Hub** must accept inbound HTTPS/WebSocket traffic from both `tela` (client) and `telad` (agent).
+- The **Hub** must accept inbound HTTPS/WebSocket traffic from both `tela` (client) and `telad` (daemon).
 - `telad` must be able to reach the **services** it exposes (either on `localhost` or via `target:` in gateway/bridge mode).
 
 Common requirements by component:
 
 | Component | Needs inbound from Internet | Needs outbound | Notes |
 |----------|------------------------------|---------------|------|
-| **Hub** (`hub.js`) | TCP 443 (recommended) for HTTPS + WebSockets | none special | Optional: UDP 41820 for UDP relay (faster than WS when available). |
-| **Agent** (`telad`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 (UDP relay) and outbound UDP to STUN (direct P2P). |
+| **Hub** (`telahubd`) | TCP 443 (recommended) for HTTPS + WebSockets | none special | Optional: UDP 41820 for UDP relay (faster than WS when available). |
+| **Daemon** (`telad`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 (UDP relay) and outbound UDP to STUN (direct P2P). |
 | **Client** (`tela`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 and STUN. Binds `127.0.0.1:<port>` locally for apps (SSH/RDP/etc.). |
 | **Portal (browser)** | n/a | HTTPS to each Hub’s `/api/status` and `/api/history` | Cross-origin fetch requires CORS from the Hub (the current hub implementation sets `Access-Control-Allow-Origin: *` for these endpoints). |
 
@@ -72,14 +73,14 @@ See also:
 ```bash
 go build -o tela ./cmd/tela
 go build -o telad ./cmd/telad
-cd poc && npm install
+go build -o telahubd ./cmd/telahubd
 ```
 
 ### Run locally (3 terminals)
 
 ```bash
 # Terminal 1 — Hub
-node poc/hub.js
+./telahubd
 
 # Terminal 2 — Daemon (exposes SSH + RDP)
 ./telad -hub ws://localhost:8080 -machine mybox -ports "22,3389"
@@ -151,19 +152,21 @@ The cascade is fully automatic. Each tier falls through on failure with no user 
 ```
 cmd/tela/          Client binary (subcommands: connect, machines, services, status, login, logout)
 cmd/telad/         Daemon binary
+cmd/telahubd/      Hub server binary
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
-poc/hub.js         Hub relay server
+poc/hub.js         Legacy hub relay (Node.js)
 poc/www/           Hub console (web UI)
-docker/            Dockerfile and Caddyfile for production
+docker/gohub/      Dockerfile for telahubd
+docker/            Caddyfile, docker-compose, cloudflared config
 ```
 
 ## Glossary
 
 | Term | Meaning |
 |------|---------|
-| **Hub** | Central relay that pairs agents with clients. Serves the hub console. |
+| **Hub** | Central relay (`telahubd`) that pairs daemons with clients. Serves the hub console. |
 | **Hub Console** | Web interface for a hub (e.g., `https://tela.awansatu.net/`). |
-| **Agent / telad** | Long-lived daemon on a managed machine that registers with the hub. |
+| **Daemon / telad** | Long-lived daemon on a managed machine that registers with the hub. |
 | **Client / tela** | Binary on the user's laptop that tunnels through the hub to an agent. |
 | **Machine** | A named resource registered by an agent (e.g., `barn`). |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |

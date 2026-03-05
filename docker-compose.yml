@@ -45,6 +45,24 @@ services:
       - HUB_NAME=owlsnest
     restart: unless-stopped
 
+  gohub:
+    # Go hub (telahubd) — parallel test deployment of the Go-native hub.
+    # Runs alongside the Node hub; reachable via gohub.parkscomputing.com.
+    build:
+      context: .
+      dockerfile: docker/gohub/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+    container_name: tela-gohub
+    ports:
+      - "3002:8080"
+      - "41821:41820/udp"
+    environment:
+      - HUB_PORT=8080
+      - HUB_UDP_PORT=41820
+      - HUB_NAME=gohub
+    restart: unless-stopped
+
   telad:
     # WireGuard L3 daemon — end-to-end encrypted, multi-port, multi-machine.
     # Uses gVisor netstack (pure userspace, no TUN, no admin).

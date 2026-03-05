@@ -294,7 +294,7 @@ See `TODO.md` for the full roadmap.
 
 ## Troubleshooting
 
-**"Agent not found"** — Start telad before tela. The agent must register first.
+**"Machine not found"** — Start telad before tela. The machine’s daemon must register first.
 
 **"auth failed"** — Token mismatch. Ensure `-token` matches `HUB_TOKEN`.
 

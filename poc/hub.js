@@ -365,9 +365,9 @@ function handleConnect(ws, machineId, wgPubKey, token) {
 
   const entry = machines.get(machineId);
   if (!entry || !entry.agentWs || entry.agentWs.readyState !== 1) {
-    console.log(`[hub] helper requested ${machineId} — agent not found`);
-    ws.send(JSON.stringify({ type: 'error', message: 'Agent not found' }));
-    ws.close(1008, 'Agent not found');
+    console.log(`[hub] helper requested ${machineId} — machine not found`);
+    ws.send(JSON.stringify({ type: 'error', message: 'Machine not found' }));
+    ws.close(1008, 'Machine not found');
     return;
   }
 
