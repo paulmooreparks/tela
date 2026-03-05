@@ -727,7 +727,7 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	clientWS := entry.ClientWS
 	entry.mu.Unlock()
 
-	log.Printf("[hub] agent registered: %s ports=%v%s", machineID, ports, tokenLog(msg.Token))
+	log.Printf("[hub] agent registered: %s ports=%v version=%q%s", machineID, ports, msg.AgentVersion, tokenLog(msg.Token))
 	recordEvent(machineID, "agent-register", fmt.Sprintf("ports=%v", ports))
 
 	reply, _ := json.Marshal(map[string]string{"type": "registered", "machineId": machineID})
@@ -844,7 +844,7 @@ func pair(machineID string) {
 		ss = cs.SessionDetail
 	}
 	wsStatesMu.RUnlock()
-	recordEvent(machineID, "session-start", ss)
+	recordEvent(machineID, "client-connect", ss)
 
 	// Signal agent: session-start (with client's WG public key if present)
 	sessionStart := map[string]any{"type": "session-start"}
@@ -935,24 +935,41 @@ func handleDisconnect(ws *websocket.Conn) {
 	}
 	entry.mu.Unlock()
 
-	// Close peer
-	wsStatesMu.RLock()
+	wsStatesMu.Lock()
 	peer := state.Peer
-	wsStatesMu.RUnlock()
+	// Clear pairing on this side
+	state.Paired = false
+	state.Peer = nil
+	// Clear pairing on peer side
 	if peer != nil {
-		peer.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseGoingAway, state.Role+" disconnected"))
-		peer.Close()
+		if peerState, ok := wsStates[peer]; ok {
+			peerState.Paired = false
+			peerState.Peer = nil
+		}
 	}
+	wsStatesMu.Unlock()
 
-	entry.mu.Lock()
 	if state.Role == "agent" {
+		// Agent left — close the client (can't function without agent)
+		if peer != nil {
+			peer.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseGoingAway, "agent disconnected"))
+			peer.Close()
+		}
+		entry.mu.Lock()
 		entry.AgentWS = nil
 		entry.LastSeen = time.Now()
-	} else if state.Role == "client" {
+		entry.mu.Unlock()
+	} else if state.Role == "client" || state.Role == "helper" {
+		// Client/helper left — notify agent but keep it connected
+		if peer != nil {
+			msg, _ := json.Marshal(map[string]string{"type": "session-end"})
+			peer.WriteMessage(websocket.TextMessage, msg)
+		}
+		entry.mu.Lock()
 		entry.ClientWS = nil
+		entry.mu.Unlock()
 	}
-	entry.mu.Unlock()
 }
 
 func sendError(ws *websocket.Conn, message string) {

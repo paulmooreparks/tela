@@ -650,18 +650,21 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 				return
 			}
 			lg.Printf("session starting — helper pubkey: %s...", helperPubKey[:8])
-			handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports)
-			return // reconnect after session ends
+			cleanEnd := handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports)
+			if !cleanEnd {
+				return // WS error — reconnect
+			}
+			lg.Printf("waiting for next session")
 		}
 	}
 }
 
-func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16) {
+func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16) bool {
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		lg.Printf("keygen failed: %v", err)
-		return
+		return false
 	}
 	privKeyHex := hex.EncodeToString(privKey.Bytes())
 	pubKeyHex := hex.EncodeToString(privKey.PublicKey().Bytes())
@@ -670,7 +673,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports}
 	if err := ws.WriteJSON(&keyMsg); err != nil {
 		lg.Printf("failed to send pubkey: %v", err)
-		return
+		return false
 	}
 	lg.Printf("sent agent pubkey: %s...", pubKeyHex[:8])
 
@@ -682,7 +685,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	)
 	if err != nil {
 		lg.Printf("netstack creation failed: %v", err)
-		return
+		return false
 	}
 
 	// Create wsBind — WireGuard datagrams go through the WebSocket
@@ -710,21 +713,22 @@ persistent_keepalive_interval=25
 	if err := dev.IpcSet(ipcConf); err != nil {
 		lg.Printf("WireGuard IPC config failed: %v", err)
 		dev.Close()
-		return
+		return false
 	}
 
 	if err := dev.Up(); err != nil {
 		lg.Printf("WireGuard device up failed: %v", err)
 		dev.Close()
-		return
+		return false
 	}
 	lg.Printf("WireGuard tunnel up — agent=%s helper=%s", agentIP, helperIP)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
+	sessionEnded := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		wsReader(lg, ws, bind, hubURL)
+		wsReader(lg, ws, bind, hubURL, sessionEnded)
 	}()
 
 	// Listen on each port inside netstack
@@ -752,19 +756,28 @@ persistent_keepalive_interval=25
 		}(listener, port)
 	}
 
-	// Wait for WebSocket to close (session end)
+	// Wait for session to end (either session-end message or WS error)
 	<-done
+
+	cleanEnd := false
+	select {
+	case <-sessionEnded:
+		cleanEnd = true
+	default:
+	}
+
 	lg.Println("session ended — tearing down WireGuard")
 	for _, l := range listeners {
 		l.Close()
 	}
 	dev.Close()
+	return cleanEnd
 }
 
 // wsReader reads from the WebSocket and dispatches:
 //   - Binary messages → wsBind.RecvCh (WireGuard datagrams)
 //   - Text messages → parsed for control commands (udp-offer, peer-endpoint), else logged
-func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
+func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL string, sessionEnded chan struct{}) {
 	for {
 		msgType, data, err := ws.ReadMessage()
 		if err != nil {
@@ -801,6 +814,10 @@ func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL stri
 						}
 					}()
 				}
+			case "session-end":
+				lg.Println("client disconnected — ending session")
+				close(sessionEnded)
+				return
 			default:
 				logVerbose(lg, "text message during session: %s", string(data))
 			}

@@ -376,11 +376,11 @@ tela logout                                            # remove stored credentia
       var container = document.getElementById('history-content');
 
       var EVENT_LABELS = {
-        'session-start': '\uD83D\uDD17 Session started',
+        'client-connect': '\uD83D\uDD17 Client connected',
         'agent-register': '\u2705 Machine registered',
         'agent-disconnect': '\u274C Machine disconnected',
-        'client-disconnect': '\uD83D\uDD0C Session ended',
-        'helper-disconnect': '\uD83D\uDD0C Session ended',
+        'client-disconnect': '\uD83D\uDD0C Client disconnected',
+        'helper-disconnect': '\uD83D\uDD0C Client disconnected',
       };
 
       function formatEventDetail(ev) {
