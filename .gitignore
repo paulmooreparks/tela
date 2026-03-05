@@ -5,3 +5,7 @@ node_modules/
 *.exe
 tela.exe
 telad.exe
+
+# Local service configs (may contain tokens/credentials — live in %ProgramData%\Tela\ or /etc/tela/)
+*-telad.yaml
+*-telahubd.yaml
