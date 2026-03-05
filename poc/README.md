@@ -138,6 +138,7 @@ logged into via `tela login`, (2) falling back to a local `hubs.yaml` file.
 | `TELA_HUB` | Default hub URL or name (overridden by `-hub`) |
 | `TELA_MACHINE` | Default machine ID (overridden by `-machine`) |
 | `TELA_TOKEN` | Default auth token (overridden by `-token`) |
+| `TELA_OWNER_TOKEN` | Preferred by `tela admin` commands (falls back to `TELA_TOKEN`) |
 
 #### tela connect
 
@@ -155,7 +156,10 @@ tela connect
 |------|---------|-------------|
 | `-hub` | `$TELA_HUB` | Hub WebSocket URL (`ws://` or `wss://`) or hub name |
 | `-machine` | `$TELA_MACHINE` | Machine name to connect to |
-| `-token` | `$TELA_TOKEN` | Authentication token (must match `HUB_TOKEN`) |
+| `-token` | `$TELA_TOKEN` | Authentication token |
+| `-services` | | Comma-separated service names, resolved via hub API (e.g. `ssh,rdp`) |
+| `-ports` | | Comma-separated `local:remote` port mappings |
+| `-profile` | | Named connection profile from `~/.tela/profiles/<name>.yaml` |
 
 #### tela login
 
@@ -332,7 +336,7 @@ See `TODO.md` for the full roadmap.
 
 **"Machine not found"** — Start telad before tela. The machine’s daemon must register first.
 
-**"auth failed"** — Token mismatch. Ensure `-token` matches `HUB_TOKEN`.
+**"auth failed"** — Token mismatch. Ensure `-token` matches a valid token in the hub's auth config. For the POC `hub.js`, the token must match `HUB_TOKEN`. For `telahubd`, the token must be a valid identity in the hub's YAML config.
 
 **Connection hangs after pairing** — Check that the WireGuard handshake completes. Look for `[wg] handshake complete` in the logs. If missing, there may be a WebSocket framing issue.
 

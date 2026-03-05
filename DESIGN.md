@@ -663,10 +663,16 @@ Multi‑node deployments, HA, multi‑tenant environments. Required for HA Hub (
 
 ## **8.4 REST API**
 
-- `/api/v1/login`
-- `/api/v1/machines`
-- `/api/v1/session`
-- `/api/v1/token`
+Current hub endpoints:
+
+- `GET /api/status` — machine + hub status
+- `GET /api/history` — session event history
+- `GET /api/admin/tokens` — list token identities (owner/admin only)
+- `POST /api/admin/tokens` — add a token identity
+- `DELETE /api/admin/tokens?id=<id>` — remove a token identity
+- `POST /api/admin/grant` — grant connect access to a machine
+- `POST /api/admin/revoke` — revoke connect access
+- `POST /api/admin/rotate/<id>` — regenerate a token
 
 Additive‑only changes. 12‑month deprecation window.
 
@@ -811,6 +817,9 @@ Phase 1:
 - `tela machines` — list registered machines and their online/offline status.
 - `tela services -machine <machineId>` — list exposed services on a machine.
 - `tela connect -hub <name-or-url> -machine <machineId>` — establish a WireGuard tunnel, bind local listeners.
+  - `-ports` — comma-separated `local:remote` port mappings.
+  - `-services` — comma-separated service names (resolved via hub API, e.g. `ssh,rdp`).
+  - `-profile` — named connection profile from `~/.tela/profiles/<name>.yaml`.
 - `tela status` — show current Hub connection and active sessions.
 - `tela version` — print version and exit.
 
@@ -905,7 +914,7 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 # **13. Authentication**
 
-> **Status:** Token-based authentication is implemented. The hub supports named token identities with role-based access control (owner/admin/user), per-machine ACLs, environment-variable bootstrap for Docker deployments, an admin REST API for remote management, and a `tela admin` CLI. When no tokens are configured, the hub runs in open mode (backward compatible). The spec's vision of bcrypt + cookies + TOTP for browser-based user auth is not yet implemented — the current system is token-based (like SSH `authorized_keys`).
+> **Status:** Token-based authentication is implemented. The hub supports named token identities with role-based access control (owner/admin/user/viewer), per-machine ACLs, environment-variable bootstrap for Docker deployments, an admin REST API for remote management, and a `tela admin` CLI. A `console-viewer` identity is auto-generated at startup for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible). The spec's vision of bcrypt + cookies + TOTP for browser-based user auth is not yet implemented — the current system is token-based (like SSH `authorized_keys`).
 
 ## **13.1 Tela Standalone (Before Awan Satu)**
 
@@ -913,7 +922,8 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 The hub stores named **token identities** in its YAML config file:
 
-- Each identity has an `id`, a hex `token`, and an optional `hubRole` (owner, admin, or user).
+- Each identity has an `id`, a hex `token`, and an optional `hubRole` (owner, admin, viewer, or empty for regular user).
+- The hub auto-generates a `console-viewer` identity (viewer role) at startup for the built-in web console.
 - Per-machine **ACLs** control which tokens can register or connect to each machine.
 - A `"*"` wildcard key applies to all machines.
 - An **admin REST API** (`/api/admin/*`) allows remote token and ACL management.

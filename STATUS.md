@@ -91,7 +91,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅, admin REST API ✅. No user auth (browser), no session tokens, no metadata |
 | §8.2 | Implementation (Go) | ✅ | `telahubd` — Go, `gorilla/websocket`, no Node.js, no MeshCentral |
 | §8.3 | Storage (SQLite / Postgres) | 🔶 | Auth config persisted to YAML (hot-reload); session/machine state is in-memory only |
-| §8.4 | REST API | 🔶 | Hub `/status` ✅, `/api/history` ✅, `/api/admin/*` ✅ (token/ACL management); Portal `/api/hubs` ✅; no `/api/v1/*` endpoints |
+| §8.4 | REST API | 🔶 | Hub `/status` ✅, `/api/history` ✅, `/api/admin/*` ✅ (token/ACL management); no `/api/v1/*` endpoints |
 | §8.5 | Multiplexing | ⬜ | No channel multiplexing |
 | §8.6 | Logging & Observability | 🔶 | Console logging; no structured logs or metrics |
 | §8.7 | Updates | ⬜ | No update mechanism |
@@ -128,7 +128,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §11.1 | Purpose & Rationale | 🔶 | `tela` binary serves as both client and proto-CLI |
-| §11.2 | Core Commands | 🔶 | `login`/`logout` ✅, `machines` ✅, `services` ✅, `status` ✅, `connect` ✅, `admin` ✅ (remote token/ACL management). Portal-based hub name resolution ✅. Local `hubs.yaml` fallback ✅. |
+| §11.2 | Core Commands | 🔶 | `login`/`logout` ✅, `machines` ✅, `services` ✅, `status` ✅, `connect` ✅ (with `-services`, `-ports`, `-profile` flags), `admin` ✅ (remote token/ACL management, prefers `TELA_OWNER_TOKEN`). Portal-based hub name resolution ✅. Local `hubs.yaml` fallback ✅. |
 
 ---
 
@@ -138,7 +138,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 |---------|-------|--------|-------|
 | §12.1 | Identity (Ed25519 agent keys) | ⬜ | No agent identity; machineId is a plain string |
 | §12.2 | Certificate Pinning | ⬜ | Neither agent nor client validates cert fingerprint |
-| §12.3 | Session Tokens | 🔶 | Named token identities with role-based ACL (owner/admin/user) ✅; per-machine register/connect ACLs ✅; env-var bootstrap ✅; admin REST API ✅; hot-reload ✅. Not JWTs, not single-use |
+| §12.3 | Session Tokens | 🔶 | Named token identities with role-based ACL (owner/admin/user/viewer) ✅; auto-generated `console-viewer` token ✅; per-machine register/connect ACLs ✅; env-var bootstrap ✅; admin REST API ✅; hot-reload ✅. Not JWTs, not single-use |
 | §12.4 | Transport Security (TLS 1.3) | 🔶 | TLS via Cloudflare + Caddy (direct); internal hub↔agent is plain WS |
 | §12.5 | E2E Encryption | ✅ | WireGuard provides full E2E encryption (Curve25519 + ChaCha20-Poly1305). Hub is zero-knowledge relay |
 | §12.6 | Threat Model | 📄 | Design guidance |

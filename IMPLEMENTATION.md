@@ -204,7 +204,12 @@ services:
       - HUB_UDP_PORT=41820
       - HUB_NAME=gohub
       # - TELA_OWNER_TOKEN=<hex>   # uncomment to enable auth (see §8.1)
+    volumes:
+      - hub-data:/app/data
     restart: unless-stopped
+
+volumes:
+  hub-data:
 ```
 
 Notes:
@@ -236,7 +241,7 @@ docker compose up --build -d
 On first startup (when no tokens exist in the hub config), the hub automatically:
 - Creates an `owner` identity with the provided token
 - Adds a wildcard `*` machine ACL granting the owner full access
-- Persists the auth config to disk (inside the container)
+- Persists the auth config to `/app/data/telahubd.yaml` on a named Docker volume (`hub-data`), so data survives container recreation.
 
 On subsequent restarts, the env var is ignored — tokens already exist in the persisted config.
 
@@ -284,7 +289,7 @@ tela admin grant alice barn
 | Concept | Description |
 |---------|-------------|
 | **Identity** | A named token entry (`id` + `token` + optional `hubRole`) |
-| **Role** | `owner` (full control), `admin` (can manage tokens), or empty (regular user) |
+| **Role** | `owner` (full control), `admin` (can manage tokens), `viewer` (read-only API access), or empty (regular user) |
 | **Machine ACL** | Per-machine `registerToken` and `connectTokens` lists |
 | **Wildcard** | `"*"` machine key applies to all machines |
 | **Open mode** | When no tokens are configured, the hub allows all connections (backward compatible) |
@@ -323,7 +328,7 @@ tela.exe (Go, WireGuard client) --wss--> telahubd (Go relay) <--ws-- telad (Go, 
 1. **Build Go binaries:** `go build ./cmd/tela && go build ./cmd/telad && go build ./cmd/telahubd`
 2. **Start the hub:** `./telahubd` (listens on `:8080` HTTP/WS + `:41820` UDP)
 3. **Start telad:** `./telad -hub ws://localhost:8080 -machine mybox -ports "22:SSH:SSH server,3389:RDP:Remote Desktop"`
-4. **Start tela:** `./tela -hub ws://localhost:8080 -machine mybox`
+4. **Start tela:** `./tela connect -hub ws://localhost:8080 -machine mybox`
 5. Connect to `localhost:<advertised-port>` -- traffic flows through the WireGuard tunnel.
 
 ### Running via Docker (production)
@@ -336,7 +341,7 @@ docker compose up --build -d
 
 # Or log in to portal and use hub names
 tela login https://awansatu.net
-tela connect barn
+tela connect -hub barn-hub -machine barn
 ```
 
 ### Remaining iteration targets

@@ -57,7 +57,7 @@ Common requirements by component:
 | **Hub** (`telahubd`) | TCP 443 (recommended) for HTTPS + WebSockets | none special | Optional: UDP 41820 for UDP relay (faster than WS when available). |
 | **Daemon** (`telad`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 (UDP relay) and outbound UDP to STUN (direct P2P). |
 | **Client** (`tela`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 and STUN. Binds `127.0.0.1:<port>` locally for apps (SSH/RDP/etc.). |
-| **Portal (browser)** | n/a | HTTPS to each Hub’s `/api/status` and `/api/history` | Cross-origin fetch requires CORS from the Hub (the current hub implementation sets `Access-Control-Allow-Origin: *` for these endpoints). |
+| **Portal (server)** | TCP 80/443 for portal UI + API | HTTPS to each Hub's `/api/status` and `/api/history` | Portal proxies hub requests server-side using a stored viewer token. Browsers never contact hubs directly. |
 
 See also:
 
@@ -89,6 +89,9 @@ go build -o telahubd ./cmd/telahubd
 
 # Terminal 3 — Connect to a machine
 ./tela connect -hub ws://localhost:8080 -machine mybox
+
+# Connect by service name instead of port
+./tela connect -hub ws://localhost:8080 -machine mybox -services ssh
 ```
 
 Or set environment variables to skip repeating flags:
@@ -153,7 +156,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admi
 ## Authentication & security
 
 - **End-to-end encryption**: WireGuard (Curve25519 key exchange, ChaCha20-Poly1305 data) between tela and telad. The hub is a blind relay.
-- **Token-based auth**: Named token identities with role-based access control (owner/admin/user). Per-machine ACLs control who can register and connect. When no tokens are configured, the hub runs in open mode (backward compatible).
+- **Token-based auth**: Named token identities with role-based access control (owner/admin/user/viewer). Per-machine ACLs control who can register and connect. A `console-viewer` token is auto-generated for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible).
 - **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin` — no shell access to the hub required.
 - **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
 - **No admin required**: gVisor netstack operates entirely in userspace — no TUN device, no root/Administrator.

@@ -63,6 +63,8 @@ Or use Docker Compose (see the `gohub` service in `docker-compose.yml`):
 docker compose up -d --build gohub
 ```
 
+The Docker Compose setup uses a named volume (`hub-data`) to persist the hub config at `/app/data/telahubd.yaml`, so auth configuration survives container recreation.
+
 ### Verify
 
 ```bash
@@ -95,7 +97,7 @@ openssl rand -hex 32
 docker compose up --build -d
 ```
 
-On first startup the hub creates an `owner` identity, persists it, and is ready for remote management.
+On first startup the hub creates an `owner` identity and a `console-viewer` identity (viewer role for the built-in web console), persists them, and is ready for remote management.
 
 ### Bare-metal / direct deployment
 
@@ -218,7 +220,7 @@ See the `docker-compose.yml` and `docker/caddy/Caddyfile` in the Tela repo for a
 Once the hub is reachable, add it to an Awan Satu portal so users and the CLI can find it by short name:
 
 1. Open the portal and click **Add Hub**.
-2. Enter a short name (e.g., `myhub`) and the hub's public URL (e.g., `https://your-hub.example.com`).
+2. Enter a short name (e.g., `myhub`), the hub's public URL (e.g., `https://your-hub.example.com`), and optionally a **viewer token** (so the portal can proxy hub status server-side).
 3. The hub will appear in the portal dashboard and be resolvable by the CLI:
    ```bash
    tela login https://awansatu.net
@@ -239,7 +241,7 @@ From a machine on the Internet (or at least outside your LAN), verify:
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | `telad` never appears | Hub unreachable or WebSocket upgrade blocked | Confirm the hub URL is reachable externally (TCP 443 + WS) |
-| Portal cards stay empty | CORS or connectivity | Confirm `https://<hub>/api/status` is reachable from the browser and returns CORS headers |
+| Portal cards stay empty | Portal missing viewer token, or hub unreachable from portal server | Ensure the hub entry in the portal includes a valid viewer token |
 | UDP relay not working | TCP-only tunnel or firewall | Confirm UDP `HUB_UDP_PORT` is open inbound on the hub and outbound from both sides |
 | "Machine not found" | Machine isn't registered | Run `tela machines -hub <hub>` to list available machines; confirm `telad` is running and connected |
 
