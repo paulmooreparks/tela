@@ -457,6 +457,15 @@ func handleAPIHistory(w http.ResponseWriter, r *http.Request) {
 
 	callerToken := tokenFromRequest(r)
 
+	// Auth: if enabled and no valid token provided, return 401.
+	if globalAuth.isEnabled() && globalAuth.identityID(callerToken) == "" {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{"error": "auth_required", "events": []any{}})
+		return
+	}
+
 	historyMu.Lock()
 	events := make([]historyEvent, 0, len(history))
 	for _, e := range history {
@@ -505,6 +514,25 @@ func handleStatic(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.NotFound(w, r)
 			return
+		}
+	}
+
+	// For index.html, inject the console viewer token so the page can
+	// call /api/status and /api/history without user authentication.
+	if filepath.Base(filePath) == "index.html" {
+		viewerToken := globalAuth.consoleViewerToken()
+		if viewerToken != "" {
+			data, readErr := os.ReadFile(filePath)
+			if readErr == nil {
+				injection := fmt.Sprintf(
+					`<script>window.TELA_CONSOLE_TOKEN=%q;</script>`,
+					viewerToken,
+				)
+				html := strings.Replace(string(data), "</head>", injection+"\n</head>", 1)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write([]byte(html))
+				return
+			}
 		}
 	}
 
@@ -1117,6 +1145,12 @@ func main() {
 		globalCfgPath = "data/telahubd.yaml"
 		os.MkdirAll("data", 0o755)
 		_ = writeHubConfig(globalCfgPath, cfg)
+	}
+
+	// Ensure a console-viewer token exists for the built-in hub console.
+	// This handles upgrades where auth was previously bootstrapped without one.
+	if ensureConsoleViewer(cfg, globalCfgPath) {
+		log.Println("[hub] created console-viewer token for hub console")
 	}
 
 	globalAuth = newAuthStore(&cfg.Auth)

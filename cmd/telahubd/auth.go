@@ -145,8 +145,36 @@ func (s *authStore) canConnect(token, machineID string) bool {
 }
 
 // canViewMachine returns true when the token may see machineID in API responses.
+// Viewer-role tokens can see all machines (read-only console access).
 func (s *authStore) canViewMachine(token, machineID string) bool {
+	if s.isViewer(token) {
+		return true
+	}
 	return s.canConnect(token, machineID)
+}
+
+// isViewer returns true when the token has the "viewer" hub role.
+func (s *authStore) isViewer(token string) bool {
+	if !s.enabled || token == "" {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	e, ok := s.byToken[token]
+	return ok && e.HubRole == "viewer"
+}
+
+// consoleViewerToken returns the token value of the first viewer-role
+// identity, or "" if none exists.
+func (s *authStore) consoleViewerToken() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, e := range s.byToken {
+		if e.HubRole == "viewer" {
+			return e.Token
+		}
+	}
+	return ""
 }
 
 func inTokenList(list []string, target string) bool {
@@ -230,8 +258,19 @@ func bootstrapFromEnv(cfg *hubConfig, cfgPath string) bool {
 		return false
 	}
 
+	// Generate a viewer token for the built-in hub console.
+	viewerToken, err := generateToken()
+	if err != nil {
+		viewerToken = "" // non-fatal; console will show empty
+	}
+
 	cfg.Auth.Tokens = []tokenEntry{
 		{ID: "owner", Token: ownerToken, HubRole: "owner"},
+	}
+	if viewerToken != "" {
+		cfg.Auth.Tokens = append(cfg.Auth.Tokens, tokenEntry{
+			ID: "console-viewer", Token: viewerToken, HubRole: "viewer",
+		})
 	}
 	if cfg.Auth.Machines == nil {
 		cfg.Auth.Machines = make(map[string]machineACL)
@@ -241,6 +280,31 @@ func bootstrapFromEnv(cfg *hubConfig, cfgPath string) bool {
 	}
 
 	// Persist so the token survives container restarts.
+	if cfgPath != "" {
+		_ = writeHubConfig(cfgPath, cfg)
+	}
+	return true
+}
+
+// ensureConsoleViewer checks whether auth is enabled and a viewer-role
+// token already exists. If not, it creates one, appends it to the
+// config, and persists. Returns true if a new viewer was created.
+func ensureConsoleViewer(cfg *hubConfig, cfgPath string) bool {
+	if len(cfg.Auth.Tokens) == 0 {
+		return false // auth disabled
+	}
+	for _, t := range cfg.Auth.Tokens {
+		if t.HubRole == "viewer" {
+			return false // already have one
+		}
+	}
+	viewerToken, err := generateToken()
+	if err != nil {
+		return false
+	}
+	cfg.Auth.Tokens = append(cfg.Auth.Tokens, tokenEntry{
+		ID: "console-viewer", Token: viewerToken, HubRole: "viewer",
+	})
 	if cfgPath != "" {
 		_ = writeHubConfig(cfgPath, cfg)
 	}

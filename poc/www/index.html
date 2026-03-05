@@ -270,6 +270,15 @@ tela logout                                            # remove stored credentia
     // Detect hub URL for connect commands
     var hubWsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 
+    // Authenticated fetch: append console viewer token if injected by the hub.
+    function authFetch(url) {
+      if (window.TELA_CONSOLE_TOKEN) {
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        url += sep + 'token=' + encodeURIComponent(window.TELA_CONSOLE_TOKEN);
+      }
+      return fetch(url);
+    }
+
     // ── Copy to clipboard ───────────────────────────────────────────
     function copyConnect(machineId, btn) {
       var cmd = 'tela connect -hub ' + hubWsUrl + ' -machine ' + machineId;
@@ -300,7 +309,7 @@ tela logout                                            # remove stored credentia
       var hubDot = document.getElementById('hub-dot');
 
       function refresh() {
-        fetch('/api/status')
+        authFetch('/api/status')
           .then(function (r) { return r.json(); })
           .then(function (data) {
             hubDot.className = 'dot green';
@@ -382,7 +391,7 @@ tela logout                                            # remove stored credentia
       }
 
       function refreshHistory() {
-        fetch('/api/history')
+        authFetch('/api/history')
           .then(function (r) { return r.json(); })
           .then(function (data) {
             var events = data.events || [];
