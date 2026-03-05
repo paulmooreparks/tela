@@ -1,31 +1,11 @@
 # Tela — Docker Compose
 #
-# Runs the Go hub (telahubd), Caddy reverse proxy, and
-# telad (WireGuard daemon) that tunnels services on the host.
+# Runs the Go hub (telahubd). All external traffic is routed via cloudflared.
 #
 # Usage:
 #   docker compose up --build
 
 services:
-  caddy:
-    # Reverse proxy with auto TLS for direct (non-Cloudflare) access.
-    # Uses DNS-01 challenge via Cloudflare API — no port 80 needed.
-    # Token stored in .env (not committed).
-    build:
-      context: ./docker/caddy
-    container_name: tela-caddy
-    ports:
-      - "443:443"
-    volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
-    depends_on:
-      - gohub
-    restart: unless-stopped
-
   gohub:
     # Go hub (telahubd) — reachable via gohub.parkscomputing.com.
     build:
@@ -42,7 +22,3 @@ services:
       - HUB_UDP_PORT=41820
       - HUB_NAME=gohub
     restart: unless-stopped
-
-volumes:
-  caddy_data:
-  caddy_config:
