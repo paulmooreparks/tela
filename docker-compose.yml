@@ -21,4 +21,5 @@ services:
       - HUB_PORT=8080
       - HUB_UDP_PORT=41820
       - HUB_NAME=gohub
+      - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
     restart: unless-stopped
