@@ -613,6 +613,21 @@ persistent_keepalive_interval=25
 		wsReader(wsConn, bind, hubURL)
 	}()
 
+	// Warm up the WireGuard handshake immediately so the first real
+	// connection (e.g. SSH) doesn't pay the round-trip cost.
+	if len(agentPorts) > 0 {
+		go func() {
+			warmupAddr := netip.AddrPortFrom(netip.MustParseAddr(agentIP), agentPorts[0])
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			c, err := tnet.DialContextTCPAddrPort(ctx, warmupAddr)
+			if err == nil {
+				c.Close()
+			}
+			logVerbose("WireGuard handshake warmup done (port %d)", agentPorts[0])
+		}()
+	}
+
 	// Attempt UDP relay upgrade (if hub offered it)
 	if udpTokenHex != "" && udpPort > 0 {
 		tryUDPUpgrade(bind, hubURL, udpTokenHex, udpPort)
