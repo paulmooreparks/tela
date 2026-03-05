@@ -61,10 +61,11 @@ var version = "dev"
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	Port    int    `yaml:"port"`     // HTTP+WS listen port (default 8080)
-	UDPPort int    `yaml:"udpPort"`  // UDP relay port (default 41820)
-	Name    string `yaml:"name"`     // Display name for this hub
-	WWWDir  string `yaml:"wwwDir"`   // Static file directory (default ./www)
+	Port    int        `yaml:"port"`              // HTTP+WS listen port (default 8080)
+	UDPPort int        `yaml:"udpPort"`           // UDP relay port (default 41820)
+	Name    string     `yaml:"name"`              // Display name for this hub
+	WWWDir  string     `yaml:"wwwDir"`            // Static file directory (default ./www)
+	Auth    authConfig `yaml:"auth,omitempty"`    // Token-based access control
 }
 
 // loadHubConfig reads a telahubd YAML config file.
@@ -122,10 +123,11 @@ func envStr(key, def string) string {
 }
 
 var (
-	httpPort = 8080
-	udpPort  = 41820
-	hubName  = ""
-	wwwDir   = "./www"
+	httpPort   = 8080
+	udpPort    = 41820
+	hubName    = ""
+	wwwDir     = "./www"
+	globalAuth = newAuthStore(nil) // replaced at startup; open hub until config is loaded
 )
 
 // ── Data structures ────────────────────────────────────────────────
@@ -324,13 +326,31 @@ var startTime = time.Now()
 func corsHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+}
+
+// tokenFromRequest extracts the caller token from Authorization: Bearer or ?token= query param.
+func tokenFromRequest(r *http.Request) string {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimPrefix(auth, "Bearer ")
+	}
+	return r.URL.Query().Get("token")
 }
 
 func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		corsHeaders(w)
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Auth: if enabled and no valid token provided, return 401.
+	callerToken := tokenFromRequest(r)
+	if globalAuth.isEnabled() && globalAuth.identityID(callerToken) == "" {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{"error": "auth_required", "machines": []any{}})
 		return
 	}
 
@@ -353,6 +373,10 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 
 	list := make([]statusMachine, 0, len(machines))
 	for id, entry := range machines {
+		// Filter: skip machines the caller cannot view.
+		if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, id) {
+			continue
+		}
 		entry.mu.Lock()
 		sm := statusMachine{
 			ID:             id,
@@ -428,9 +452,16 @@ func handleAPIHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	callerToken := tokenFromRequest(r)
+
 	historyMu.Lock()
-	events := make([]historyEvent, len(history))
-	copy(events, history)
+	events := make([]historyEvent, 0, len(history))
+	for _, e := range history {
+		if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, e.MachineID) {
+			continue
+		}
+		events = append(events, e)
+	}
 	historyMu.Unlock()
 
 	corsHeaders(w)
@@ -603,6 +634,17 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	state.Role = "agent"
 	state.MachineID = machineID
 
+	// Auth check: is this token allowed to register this machine?
+	if globalAuth.isEnabled() && !globalAuth.canRegister(msg.Token, machineID) {
+		id := globalAuth.identityID(msg.Token)
+		if id == "" {
+			id = "unknown"
+		}
+		log.Printf("[hub] agent register denied: %s (identity: %s)", machineID, id)
+		sendError(ws, "Access denied")
+		return
+	}
+
 	now := time.Now()
 
 	machinesMu.Lock()
@@ -694,8 +736,18 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 		return
 	}
 
-	// Token validation
-	if entryToken != "" && entryToken != msg.Token {
+	// Token / auth validation
+	if globalAuth.isEnabled() {
+		if !globalAuth.canConnect(msg.Token, machineID) {
+			id := globalAuth.identityID(msg.Token)
+			if id == "" {
+				id = "unknown"
+			}
+			log.Printf("[hub] client connect denied: %s (identity: %s)", machineID, id)
+			sendError(ws, "Access denied")
+			return
+		}
+	} else if entryToken != "" && entryToken != msg.Token {
 		log.Printf("[hub] client token mismatch for %s", machineID)
 		errMsg, _ := json.Marshal(map[string]string{"type": "error", "message": "Invalid token"})
 		ws.WriteMessage(websocket.TextMessage, errMsg)
@@ -997,6 +1049,12 @@ func main() {
 		return
 	}
 
+	// Handle user/auth management subcommand.
+	if len(os.Args) > 1 && os.Args[1] == "user" {
+		handleUserCommand()
+		return
+	}
+
 	// If launched by Windows SCM, enter service mode automatically.
 	if service.IsWindowsService() {
 		runAsWindowsService()
@@ -1024,6 +1082,13 @@ func main() {
 
 	// Apply config (file values, then env overrides)
 	applyHubConfig(cfg)
+
+	// Initialize the auth store (nil cfg => open/disabled).
+	if cfg != nil {
+		globalAuth = newAuthStore(&cfg.Auth)
+	} else {
+		globalAuth = newAuthStore(nil)
+	}
 
 	runHub(nil)
 }
@@ -1311,6 +1376,7 @@ func serviceRunHub(stopCh <-chan struct{}) {
 
 	log.Printf("[hub] loaded config from %s", yamlPath)
 	applyHubConfig(cfg)
+	globalAuth = newAuthStore(&cfg.Auth)
 
 	runHub(stopCh)
 }
@@ -1338,4 +1404,443 @@ func runAsWindowsService() {
 	if err := service.RunAsService("telahubd", handler); err != nil {
 		log.Fatalf("service failed: %v", err)
 	}
+}
+
+// ── User / auth management subcommand ──────────────────────────────
+
+// handleUserCommand implements "telahubd user <subcmd>".
+func handleUserCommand() {
+	if len(os.Args) < 3 {
+		printUserUsage()
+		os.Exit(1)
+	}
+	subcmd := os.Args[2]
+	switch subcmd {
+	case "bootstrap":
+		cmdUserBootstrap()
+	case "list":
+		cmdUserList()
+	case "add":
+		cmdUserAdd()
+	case "remove":
+		cmdUserRemove()
+	case "grant":
+		cmdUserGrant()
+	case "revoke":
+		cmdUserRevoke()
+	case "rotate":
+		cmdUserRotate()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown user subcommand: %s\n", subcmd)
+		printUserUsage()
+		os.Exit(1)
+	}
+}
+
+func printUserUsage() {
+	fmt.Fprintf(os.Stderr, `telahubd user — manage auth tokens
+
+Usage:
+  telahubd user bootstrap [-config <path>]         First-run: generate owner token
+  telahubd user list [-config <path>]               List all token identities
+  telahubd user add <id> [-config <path>] [-role owner|admin]
+                                                     Add a new token identity
+  telahubd user remove <id> [-config <path>]        Remove a token identity
+  telahubd user grant <id> <machineId> [-config <path>]
+                                                     Grant connect access to a machine
+  telahubd user revoke <id> <machineId> [-config <path>]
+                                                     Revoke connect access to a machine
+  telahubd user rotate <id> [-config <path>]        Regenerate token for identity
+`)
+}
+
+// userCmdConfigPath returns the config file path from -config flag or
+// the system default.
+func userCmdConfigPath() string {
+	for i, arg := range os.Args {
+		if arg == "-config" && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+	}
+	return service.BinaryConfigPath("telahubd")
+}
+
+// loadOrCreateHubConfig reads an existing config or returns a blank one
+// if the file doesn't exist.
+func loadOrCreateHubConfig(path string) (*hubConfig, error) {
+	cfg, err := loadHubConfig(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &hubConfig{
+				Port:    8080,
+				UDPPort: 41820,
+				WWWDir:  "./www",
+			}, nil
+		}
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// saveUserConfig writes the hub config back to disk.
+func saveUserConfig(path string, cfg *hubConfig) error {
+	return writeHubConfig(path, cfg)
+}
+
+// findTokenEntry returns a pointer to the tokenEntry with the given ID, or nil.
+func findTokenEntry(cfg *hubConfig, id string) *tokenEntry {
+	for i := range cfg.Auth.Tokens {
+		if cfg.Auth.Tokens[i].ID == id {
+			return &cfg.Auth.Tokens[i]
+		}
+	}
+	return nil
+}
+
+func cmdUserBootstrap() {
+	cfgPath := userCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Refuse if tokens already exist
+	if len(cfg.Auth.Tokens) > 0 {
+		fmt.Fprintln(os.Stderr, "error: auth is already bootstrapped (tokens exist in config)")
+		fmt.Fprintln(os.Stderr, "Use 'telahubd user add' to create additional identities.")
+		os.Exit(1)
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	cfg.Auth.Tokens = []tokenEntry{
+		{ID: "owner", Token: token, HubRole: "owner"},
+	}
+	// Default machine ACL: wildcard allows the owner token to connect everywhere
+	if cfg.Auth.Machines == nil {
+		cfg.Auth.Machines = make(map[string]machineACL)
+	}
+	cfg.Auth.Machines["*"] = machineACL{
+		ConnectTokens: []string{token},
+	}
+
+	if err := saveUserConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error saving config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Auth bootstrapped successfully.")
+	fmt.Printf("  Config:  %s\n", cfgPath)
+	fmt.Printf("  Owner token: %s\n", token)
+	fmt.Println()
+	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("Restart the hub to activate auth enforcement.")
+}
+
+func cmdUserList() {
+	cfgPath := userCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(cfg.Auth.Tokens) == 0 {
+		fmt.Println("No auth tokens configured. Run 'telahubd user bootstrap' to get started.")
+		return
+	}
+
+	fmt.Printf("%-20s %-10s %s\n", "ID", "ROLE", "TOKEN (first 8)")
+	fmt.Printf("%-20s %-10s %s\n", "----", "----", "--------")
+	for _, t := range cfg.Auth.Tokens {
+		role := t.HubRole
+		if role == "" {
+			role = "user"
+		}
+		preview := t.Token
+		if len(preview) > 8 {
+			preview = preview[:8] + "..."
+		}
+		fmt.Printf("%-20s %-10s %s\n", t.ID, role, preview)
+	}
+}
+
+func cmdUserAdd() {
+	if len(os.Args) < 4 {
+		fmt.Fprintln(os.Stderr, "usage: telahubd user add <id> [-config <path>] [-role owner|admin]")
+		os.Exit(1)
+	}
+	id := os.Args[3]
+
+	// Parse optional -role flag
+	role := ""
+	for i, arg := range os.Args {
+		if arg == "-role" && i+1 < len(os.Args) {
+			role = os.Args[i+1]
+		}
+	}
+	if role != "" && role != "owner" && role != "admin" {
+		fmt.Fprintf(os.Stderr, "error: role must be 'owner' or 'admin' (omit for regular user)\n")
+		os.Exit(1)
+	}
+
+	cfgPath := userCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if findTokenEntry(cfg, id) != nil {
+		fmt.Fprintf(os.Stderr, "error: identity '%s' already exists\n", id)
+		os.Exit(1)
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	cfg.Auth.Tokens = append(cfg.Auth.Tokens, tokenEntry{
+		ID:      id,
+		Token:   token,
+		HubRole: role,
+	})
+
+	if err := saveUserConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Added identity '%s'", id)
+	if role != "" {
+		fmt.Printf(" (role: %s)", role)
+	}
+	fmt.Println()
+	fmt.Printf("  Token: %s\n", token)
+	fmt.Println()
+	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("Restart the hub to apply changes.")
+}
+
+func cmdUserRemove() {
+	if len(os.Args) < 4 {
+		fmt.Fprintln(os.Stderr, "usage: telahubd user remove <id> [-config <path>]")
+		os.Exit(1)
+	}
+	id := os.Args[3]
+
+	cfgPath := userCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	found := false
+	var removedToken string
+	filtered := make([]tokenEntry, 0, len(cfg.Auth.Tokens))
+	for _, t := range cfg.Auth.Tokens {
+		if t.ID == id {
+			found = true
+			removedToken = t.Token
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+	if !found {
+		fmt.Fprintf(os.Stderr, "error: identity '%s' not found\n", id)
+		os.Exit(1)
+	}
+	cfg.Auth.Tokens = filtered
+
+	// Remove the token from any machine ACL connectTokens / registerToken
+	for name, acl := range cfg.Auth.Machines {
+		changed := false
+		if acl.RegisterToken == removedToken {
+			acl.RegisterToken = ""
+			changed = true
+		}
+		newCT := make([]string, 0, len(acl.ConnectTokens))
+		for _, ct := range acl.ConnectTokens {
+			if ct == removedToken {
+				changed = true
+				continue
+			}
+			newCT = append(newCT, ct)
+		}
+		if changed {
+			acl.ConnectTokens = newCT
+			cfg.Auth.Machines[name] = acl
+		}
+	}
+
+	if err := saveUserConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Removed identity '%s' and cleaned up machine ACLs.\n", id)
+	fmt.Println("Restart the hub to apply changes.")
+}
+
+func cmdUserGrant() {
+	if len(os.Args) < 5 {
+		fmt.Fprintln(os.Stderr, "usage: telahubd user grant <id> <machineId> [-config <path>]")
+		os.Exit(1)
+	}
+	id := os.Args[3]
+	machineID := os.Args[4]
+
+	cfgPath := userCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	entry := findTokenEntry(cfg, id)
+	if entry == nil {
+		fmt.Fprintf(os.Stderr, "error: identity '%s' not found\n", id)
+		os.Exit(1)
+	}
+
+	if cfg.Auth.Machines == nil {
+		cfg.Auth.Machines = make(map[string]machineACL)
+	}
+	acl := cfg.Auth.Machines[machineID]
+
+	// Check if already granted
+	for _, ct := range acl.ConnectTokens {
+		if ct == entry.Token {
+			fmt.Printf("Identity '%s' already has connect access to '%s'.\n", id, machineID)
+			return
+		}
+	}
+	acl.ConnectTokens = append(acl.ConnectTokens, entry.Token)
+	cfg.Auth.Machines[machineID] = acl
+
+	if err := saveUserConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Granted '%s' connect access to '%s'.\n", id, machineID)
+	fmt.Println("Restart the hub to apply changes.")
+}
+
+func cmdUserRevoke() {
+	if len(os.Args) < 5 {
+		fmt.Fprintln(os.Stderr, "usage: telahubd user revoke <id> <machineId> [-config <path>]")
+		os.Exit(1)
+	}
+	id := os.Args[3]
+	machineID := os.Args[4]
+
+	cfgPath := userCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	entry := findTokenEntry(cfg, id)
+	if entry == nil {
+		fmt.Fprintf(os.Stderr, "error: identity '%s' not found\n", id)
+		os.Exit(1)
+	}
+
+	acl, exists := cfg.Auth.Machines[machineID]
+	if !exists {
+		fmt.Fprintf(os.Stderr, "error: no ACL entry for machine '%s'\n", machineID)
+		os.Exit(1)
+	}
+
+	found := false
+	newCT := make([]string, 0, len(acl.ConnectTokens))
+	for _, ct := range acl.ConnectTokens {
+		if ct == entry.Token {
+			found = true
+			continue
+		}
+		newCT = append(newCT, ct)
+	}
+	if !found {
+		fmt.Fprintf(os.Stderr, "error: identity '%s' does not have connect access to '%s'\n", id, machineID)
+		os.Exit(1)
+	}
+	acl.ConnectTokens = newCT
+	cfg.Auth.Machines[machineID] = acl
+
+	if err := saveUserConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Revoked '%s' connect access to '%s'.\n", id, machineID)
+	fmt.Println("Restart the hub to apply changes.")
+}
+
+func cmdUserRotate() {
+	if len(os.Args) < 4 {
+		fmt.Fprintln(os.Stderr, "usage: telahubd user rotate <id> [-config <path>]")
+		os.Exit(1)
+	}
+	id := os.Args[3]
+
+	cfgPath := userCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	entry := findTokenEntry(cfg, id)
+	if entry == nil {
+		fmt.Fprintf(os.Stderr, "error: identity '%s' not found\n", id)
+		os.Exit(1)
+	}
+
+	oldToken := entry.Token
+	newToken, err := generateToken()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	entry.Token = newToken
+
+	// Update machine ACLs that reference the old token
+	for name, acl := range cfg.Auth.Machines {
+		changed := false
+		if acl.RegisterToken == oldToken {
+			acl.RegisterToken = newToken
+			changed = true
+		}
+		for i, ct := range acl.ConnectTokens {
+			if ct == oldToken {
+				acl.ConnectTokens[i] = newToken
+				changed = true
+			}
+		}
+		if changed {
+			cfg.Auth.Machines[name] = acl
+		}
+	}
+
+	if err := saveUserConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Rotated token for '%s'.\n", id)
+	fmt.Printf("  New token: %s\n", newToken)
+	fmt.Println()
+	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("Restart the hub to apply changes.")
 }

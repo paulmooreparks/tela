@@ -196,6 +196,7 @@ docker/            Caddyfile, docker-compose, cloudflared config
 
 ## Documentation
 
+- [CONFIGURATION.md](CONFIGURATION.md) — Configuration file schemas (`hubs.yaml`, `telad.yaml`, `telahubd.yaml`, portal `config.json`)
 - [DESIGN.md](DESIGN.md) — Architecture specification (includes full glossary)
 - [IMPLEMENTATION.md](IMPLEMENTATION.md) — Deployment runbook
 - [TODO.md](TODO.md) — Roadmap
