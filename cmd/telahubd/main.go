@@ -1073,13 +1073,24 @@ func main() {
 	configPath := flag.String("config", "", "Path to YAML config file")
 	flag.Parse()
 
-	// Load config file if given
+	// Load config file if given, or auto-detect persisted config from a
+	// previous env-var bootstrap.
 	var cfg *hubConfig
 	if *configPath != "" {
 		var err error
 		cfg, err = loadHubConfig(*configPath)
 		if err != nil {
 			log.Fatalf("config: %v", err)
+		}
+	} else {
+		// Check for previously persisted config (from env bootstrap / admin API)
+		const defaultDataConfig = "data/telahubd.yaml"
+		if _, err := os.Stat(defaultDataConfig); err == nil {
+			cfg, _ = loadHubConfig(defaultDataConfig)
+			if cfg != nil {
+				*configPath = defaultDataConfig
+				log.Printf("[hub] loaded persisted config from %s", defaultDataConfig)
+			}
 		}
 	}
 
@@ -1098,6 +1109,16 @@ func main() {
 
 	globalCfg = cfg
 	globalCfgPath = *configPath
+
+	// If no config path was specified but we have auth config (e.g. from env
+	// bootstrap), default to "telahubd.yaml" in a data directory so that
+	// admin API mutations and bootstrap changes persist to disk.
+	if globalCfgPath == "" && len(cfg.Auth.Tokens) > 0 {
+		globalCfgPath = "data/telahubd.yaml"
+		os.MkdirAll("data", 0o755)
+		_ = writeHubConfig(globalCfgPath, cfg)
+	}
+
 	globalAuth = newAuthStore(&cfg.Auth)
 
 	runHub(nil)
