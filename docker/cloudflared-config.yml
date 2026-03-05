@@ -22,15 +22,7 @@ ingress:
   - hostname: www.padmajairam.com
     service: http://localhost:8085
 
-  # Tela Hub — HTTP + WebSocket on one port (docker-compose publishes 3000->8080)
-  - hostname: tela.awansatu.net
-    service: http://localhost:3000
-
-  # Tela Hub — HTTP + WebSocket on one port (docker-compose publishes 3000->8080)
-  - hostname: owlsnest-cfhub.parkscomputing.com
-    service: http://localhost:3000
-
-  # Tela Go Hub — parallel test deployment (docker-compose publishes 3002->8080)
+  # Tela Hub (docker-compose publishes 3002->8080)
   - hostname: gohub.parkscomputing.com
     service: http://localhost:3002
 

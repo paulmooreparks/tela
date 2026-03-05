@@ -490,6 +490,15 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 
 	// Send connect request with our public key and token
 	connectMsg := controlMessage{Type: "connect", MachineID: machineID, WGPubKey: pubKeyHex, Token: token}
+	if len(overrideMappings) > 0 {
+		// Hint to the hub which service port(s) this session intends to use.
+		// (When not provided, the hub treats the session as covering all advertised services.)
+		ports := make([]uint16, 0, len(overrideMappings))
+		for _, m := range overrideMappings {
+			ports = append(ports, m.remote)
+		}
+		connectMsg.Ports = ports
+	}
 	if err := wsConn.WriteJSON(&connectMsg); err != nil {
 		log.Printf("failed to send connect: %v", err)
 		return nil

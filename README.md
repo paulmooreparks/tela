@@ -40,7 +40,6 @@ The hub never sees plaintext — it relays opaque WireGuard ciphertext.
 | **tela** | Go | Client — connects to hub, establishes WG tunnel, binds localhost listeners |
 | **telad** | Go | Daemon — registers with hub, exposes local services through WG tunnel |
 | **telahubd** | Go | Hub server — pairs daemons with clients, relays WS/UDP, serves hub console |
-| **hub.js** | Node.js | Legacy hub (identical functionality to telahubd, still operational) |
 
 ## Networking & port requirements
 

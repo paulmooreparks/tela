@@ -154,6 +154,4 @@ From a machine on the Internet (or at least outside your LAN), verify:
 | UDP relay not working | TCP-only tunnel or firewall | Confirm UDP `HUB_UDP_PORT` is open inbound on the hub and outbound from both sides |
 | "Machine not found" | Machine isn't registered | Run `tela machines -hub <hub>` to list available machines; confirm `telad` is running and connected |
 
-## Legacy: Node.js hub (`poc/hub.js`)
 
-The original hub implementation at `poc/hub.js` is a Node.js server with identical functionality. It is still operational but `telahubd` is the recommended hub server going forward.

@@ -1,11 +1,3 @@
-owlsnest-hub.parkscomputing.com {
-	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-	}
-
-	reverse_proxy hub:8080
-}
-
 gohub.parkscomputing.com {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}

@@ -86,6 +86,7 @@
     .history-time { color: #aaa; min-width: 80px; }
     .history-machine { font-weight: 600; color: #2d7d46; min-width: 80px; }
     .history-event { color: #555; }
+    .history-detail { color: #888; }
     .history-none { color: #999; font-style: italic; padding: 8px 0; }
 
     /* Download section */
@@ -367,10 +368,18 @@ tela logout                                            # remove stored credentia
 
       var EVENT_LABELS = {
         'session-start': '\uD83D\uDD17 Session started',
-        'agent-register': '\u2705 Agent registered',
-        'agent-disconnect': '\u274C Agent disconnected',
-        'helper-disconnect': '\uD83D\uDD0C Client disconnected',
+        'agent-register': '\u2705 Machine registered',
+        'agent-disconnect': '\u274C Machine disconnected',
+        'client-disconnect': '\uD83D\uDD0C Session ended',
+        'helper-disconnect': '\uD83D\uDD0C Session ended',
       };
+
+      function formatEventDetail(ev) {
+        if (!ev || !ev.detail) return '';
+        var d = String(ev.detail);
+        if (d.indexOf('services=') === 0) return d.slice('services='.length);
+        return d;
+      }
 
       function refreshHistory() {
         fetch('/api/history')
@@ -385,10 +394,11 @@ tela logout                                            # remove stored credentia
             // Show up to 20 most recent
             events.slice(0, 20).forEach(function (ev) {
               var label = EVENT_LABELS[ev.event] || ev.event;
+              var detail = formatEventDetail(ev);
               html += '<li>'
                 + '<span class="history-time">' + timeAgo(ev.timestamp) + '</span>'
                 + '<span class="history-machine">' + escHtml(ev.machineId) + '</span>'
-                + '<span class="history-event">' + label + '</span>'
+                + '<span class="history-event">' + label + (detail ? ' <span class="history-detail">(' + escHtml(detail) + ')</span>' : '') + '</span>'
                 + '</li>';
             });
             html += '</ul>';
