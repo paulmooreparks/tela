@@ -341,7 +341,7 @@ tela logout                                            # remove stored credentia
                 var meta = [];
                 if (m.hostname) meta.push('<span>\uD83D\uDCBB ' + escHtml(m.hostname) + '</span>');
                 if (m.os)       meta.push('<span>' + escHtml(m.os) + '</span>');
-                if (m.agentVersion) meta.push('<span>v' + escHtml(m.agentVersion) + '</span>');
+                if (m.agentVersion) meta.push('<span>' + escHtml(m.agentVersion) + '</span>');
                 var tags = (m.tags || []).map(function (t) { return '<span class="tag">' + escHtml(t) + '</span>'; }).join('');
                 if (tags) meta.push(tags);
                 if (meta.length > 0) name += '<div class="machine-meta">' + meta.join('') + '</div>';
