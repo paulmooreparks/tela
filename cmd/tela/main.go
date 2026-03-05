@@ -108,6 +108,8 @@ func main() {
 		cmdLogin(os.Args[2:])
 	case "logout":
 		cmdLogout(os.Args[2:])
+	case "admin":
+		cmdAdmin(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Printf("tela %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 	case "help", "-h", "--help":
@@ -132,6 +134,7 @@ Commands:
   status    Show hub status summary
   login     Authenticate with a Tela portal
   logout    Remove stored portal credentials
+  admin     Remote hub auth management (tokens, ACLs)
   version   Print version and exit
 
 Environment Variables:
@@ -612,21 +615,6 @@ persistent_keepalive_interval=25
 		defer close(done)
 		wsReader(wsConn, bind, hubURL)
 	}()
-
-	// Warm up the WireGuard handshake immediately so the first real
-	// connection (e.g. SSH) doesn't pay the round-trip cost.
-	if len(agentPorts) > 0 {
-		go func() {
-			warmupAddr := netip.AddrPortFrom(netip.MustParseAddr(agentIP), agentPorts[0])
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			c, err := tnet.DialContextTCPAddrPort(ctx, warmupAddr)
-			if err == nil {
-				c.Close()
-			}
-			logVerbose("WireGuard handshake warmup done (port %d)", agentPorts[0])
-		}()
-	}
 
 	// Attempt UDP relay upgrade (if hub offered it)
 	if udpTokenHex != "" && udpPort > 0 {

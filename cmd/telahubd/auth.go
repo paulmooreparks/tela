@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"sync"
 )
 
@@ -166,4 +167,82 @@ func generateToken() (string, error) {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// ── Hot-reload ──────────────────────────────────────────────────────────────
+
+// reload replaces the store's internal state from a new authConfig.
+// Existing WebSocket connections are unaffected; only subsequent checks
+// use the new data. This is safe to call concurrently.
+func (s *authStore) reload(cfg *authConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.byToken = make(map[string]*tokenEntry)
+	s.machines = make(map[string]machineACL)
+
+	if cfg == nil || len(cfg.Tokens) == 0 {
+		s.enabled = false
+		return
+	}
+	s.enabled = true
+	for i := range cfg.Tokens {
+		e := &cfg.Tokens[i]
+		if e.Token != "" {
+			s.byToken[e.Token] = e
+		}
+	}
+	for name, acl := range cfg.Machines {
+		s.machines[name] = acl
+	}
+}
+
+// toConfig exports the current auth state as an authConfig value
+// suitable for persisting to YAML.
+func (s *authStore) toConfig() authConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cfg := authConfig{
+		Machines: make(map[string]machineACL, len(s.machines)),
+	}
+	for _, e := range s.byToken {
+		cfg.Tokens = append(cfg.Tokens, *e)
+	}
+	for name, acl := range s.machines {
+		cfg.Machines[name] = acl
+	}
+	return cfg
+}
+
+// ── Environment-variable bootstrap ──────────────────────────────────────────
+
+// bootstrapFromEnv checks for TELA_OWNER_TOKEN. If the hub has no auth
+// configured and the env var is set, it creates the owner identity and
+// writes the config. Returns true if bootstrap occurred.
+func bootstrapFromEnv(cfg *hubConfig, cfgPath string) bool {
+	ownerToken := os.Getenv("TELA_OWNER_TOKEN")
+	if ownerToken == "" {
+		return false
+	}
+	if len(cfg.Auth.Tokens) > 0 {
+		// Already bootstrapped — env var is ignored.
+		return false
+	}
+
+	cfg.Auth.Tokens = []tokenEntry{
+		{ID: "owner", Token: ownerToken, HubRole: "owner"},
+	}
+	if cfg.Auth.Machines == nil {
+		cfg.Auth.Machines = make(map[string]machineACL)
+	}
+	cfg.Auth.Machines["*"] = machineACL{
+		ConnectTokens: []string{ownerToken},
+	}
+
+	// Persist so the token survives container restarts.
+	if cfgPath != "" {
+		_ = writeHubConfig(cfgPath, cfg)
+	}
+	return true
 }

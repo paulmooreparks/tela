@@ -123,11 +123,14 @@ func envStr(key, def string) string {
 }
 
 var (
-	httpPort   = 8080
-	udpPort    = 41820
-	hubName    = ""
-	wwwDir     = "./www"
-	globalAuth = newAuthStore(nil) // replaced at startup; open hub until config is loaded
+	httpPort    = 8080
+	udpPort     = 41820
+	hubName     = ""
+	wwwDir      = "./www"
+	globalAuth  = newAuthStore(nil) // replaced at startup; open hub until config is loaded
+	globalCfg   *hubConfig         // live config; mutated by admin API
+	globalCfgMu sync.Mutex         // protects globalCfg + config file writes
+	globalCfgPath string           // path to YAML config file (for admin API persistence)
 )
 
 // ── Data structures ────────────────────────────────────────────────
@@ -325,7 +328,7 @@ var startTime = time.Now()
 
 func corsHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
@@ -1084,11 +1087,18 @@ func main() {
 	applyHubConfig(cfg)
 
 	// Initialize the auth store (nil cfg => open/disabled).
-	if cfg != nil {
-		globalAuth = newAuthStore(&cfg.Auth)
-	} else {
-		globalAuth = newAuthStore(nil)
+	if cfg == nil {
+		cfg = &hubConfig{Port: httpPort, UDPPort: udpPort, WWWDir: wwwDir}
 	}
+
+	// Env-var bootstrap: TELA_OWNER_TOKEN
+	if bootstrapFromEnv(cfg, *configPath) {
+		log.Println("[hub] auth bootstrapped from TELA_OWNER_TOKEN")
+	}
+
+	globalCfg = cfg
+	globalCfgPath = *configPath
+	globalAuth = newAuthStore(&cfg.Auth)
 
 	runHub(nil)
 }
@@ -1102,6 +1112,10 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/status", handleAPIStatus)
 	mux.HandleFunc("/status", handleAPIStatus)
 	mux.HandleFunc("/api/history", handleAPIHistory)
+	mux.HandleFunc("/api/admin/tokens", handleAdminTokens)
+	mux.HandleFunc("/api/admin/grant", handleAdminGrant)
+	mux.HandleFunc("/api/admin/revoke", handleAdminRevoke)
+	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate) // /api/admin/rotate/{id}
 	mux.HandleFunc("/ws", handleWS)
 
 	// WebSocket upgrade on root path too (agents/clients connect to /)
@@ -1376,6 +1390,14 @@ func serviceRunHub(stopCh <-chan struct{}) {
 
 	log.Printf("[hub] loaded config from %s", yamlPath)
 	applyHubConfig(cfg)
+
+	// Env-var bootstrap: TELA_OWNER_TOKEN
+	if bootstrapFromEnv(cfg, yamlPath) {
+		log.Println("[hub] auth bootstrapped from TELA_OWNER_TOKEN")
+	}
+
+	globalCfg = cfg
+	globalCfgPath = yamlPath
 	globalAuth = newAuthStore(&cfg.Auth)
 
 	runHub(stopCh)
