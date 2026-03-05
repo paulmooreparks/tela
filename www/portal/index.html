@@ -267,7 +267,7 @@
       results.forEach(function (r) {
         var machines = r.data.machines || [];
         var online = machines.filter(function (m) { return m.agentConnected; }).length;
-        var sessions = machines.filter(function (m) { return m.hasSession; }).length;
+        var sessions = machines.reduce(function (sum, m) { return sum + (m.sessionCount || 0); }, 0);
         var svcs = machines.reduce(function (sum, m) { return sum + (m.services || []).length; }, 0);
 
         totalMachines += machines.length;

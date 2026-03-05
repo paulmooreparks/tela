@@ -14,10 +14,10 @@ Purpose:
 	Single-machine mode (flags):
 	  telad -hub ws://hub:8080 -machine barn -ports 22,3389
 
-Network:
+Network (per-session addressing):
 
-	Daemon IP: 10.77.0.1/24  (inside netstack, per machine)
-	Client IP: 10.77.0.2/24  (inside netstack, per machine)
+	Agent IP:  10.77.{N}.1/32  (N = session index, 1-254)
+	Client IP: 10.77.{N}.2/32
 */
 package main
 
@@ -53,9 +53,7 @@ import (
 )
 
 const (
-	agentIP  = "10.77.0.1"
-	helperIP = "10.77.0.2"
-	mtu      = 1420
+	mtu = 1420
 )
 
 var version = "dev"
@@ -77,6 +75,8 @@ type controlMessage struct {
 	Services  []serviceDescriptor `json:"services,omitempty"`
 	Token     string   `json:"token,omitempty"`
 	Port      int      `json:"port,omitempty"` // single port (udp-offer)
+	SessionID  string `json:"sessionId,omitempty"`
+	SessionIdx int    `json:"sessionIdx,omitempty"`
 }
 
 type serviceDescriptor struct {
@@ -626,7 +626,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		return
 	}
 
-	// Read control messages until session-start
+	// Read control messages on the control WS
 	for {
 		_, raw, err := ws.ReadMessage()
 		if err != nil {
@@ -641,30 +641,71 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 
 		switch msg.Type {
 		case "registered":
-			lg.Printf("registered as: %s — waiting for session", msg.MachineID)
+			lg.Printf("registered as: %s — waiting for sessions", msg.MachineID)
 
-		case "session-start":
-			helperPubKey := msg.WGPubKey
-			if helperPubKey == "" {
-				lg.Printf("session-start missing helper public key")
-				return
-			}
-			lg.Printf("session starting — helper pubkey: %s...", helperPubKey[:8])
-			cleanEnd := handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports)
-			if !cleanEnd {
-				return // WS error — reconnect
-			}
-			lg.Printf("waiting for next session")
+		case "session-request":
+			sessionID := msg.SessionID
+			sessionIdx := msg.SessionIdx
+			wgPubKey := msg.WGPubKey
+			lg.Printf("session-request: session=%s idx=%d", sessionID[:8], sessionIdx)
+			go runSessionWorker(lg, hubURL, reg, targetHost, sessionID, sessionIdx, wgPubKey)
 		}
 	}
 }
 
-func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16) bool {
+// runSessionWorker opens a dedicated WebSocket for one client session.
+func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHost string, sessionID string, sessionIdx int, helperPubKey string) {
+	lg.Printf("[session %s] dialing hub for session WS", sessionID[:8])
+
+	ws, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
+	if err != nil {
+		lg.Printf("[session %s] dial failed: %v", sessionID[:8], err)
+		return
+	}
+	defer ws.Close()
+
+	// Send session-join to associate this WS with the session
+	joinMsg := controlMessage{
+		Type:      "session-join",
+		MachineID: reg.MachineID,
+		SessionID: sessionID,
+	}
+	if err := ws.WriteJSON(&joinMsg); err != nil {
+		lg.Printf("[session %s] session-join send failed: %v", sessionID[:8], err)
+		return
+	}
+
+	// Wait for session-start from hub (confirms pairing)
+	_, raw, err := ws.ReadMessage()
+	if err != nil {
+		lg.Printf("[session %s] waiting for session-start: %v", sessionID[:8], err)
+		return
+	}
+	var msg controlMessage
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "session-start" {
+		lg.Printf("[session %s] unexpected message (wanted session-start): %s", sessionID[:8], string(raw))
+		return
+	}
+
+	// Per-session IP addressing: 10.77.{idx+1}.1 / 10.77.{idx+1}.2
+	subnet := sessionIdx + 1
+	if subnet > 254 {
+		subnet = 254
+	}
+	sessionAgentIP := fmt.Sprintf("10.77.%d.1", subnet)
+	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)
+
+	lg.Printf("[session %s] starting — agent=%s helper=%s", sessionID[:8], sessionAgentIP, sessionHelperIP)
+	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, sessionAgentIP, sessionHelperIP)
+	lg.Printf("[session %s] ended", sessionID[:8])
+}
+
+func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, sessionAgentIP, sessionHelperIP string) {
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		lg.Printf("keygen failed: %v", err)
-		return false
+		return
 	}
 	privKeyHex := hex.EncodeToString(privKey.Bytes())
 	pubKeyHex := hex.EncodeToString(privKey.PublicKey().Bytes())
@@ -673,19 +714,19 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports}
 	if err := ws.WriteJSON(&keyMsg); err != nil {
 		lg.Printf("failed to send pubkey: %v", err)
-		return false
+		return
 	}
 	lg.Printf("sent agent pubkey: %s...", pubKeyHex[:8])
 
 	// Create netstack TUN (pure userspace — no admin needed)
 	tunDev, tnet, err := netstack.CreateNetTUN(
-		[]netip.Addr{netip.MustParseAddr(agentIP)},
+		[]netip.Addr{netip.MustParseAddr(sessionAgentIP)},
 		nil, // no DNS
 		mtu,
 	)
 	if err != nil {
 		lg.Printf("netstack creation failed: %v", err)
-		return false
+		return
 	}
 
 	// Create wsBind — WireGuard datagrams go through the WebSocket
@@ -708,20 +749,20 @@ public_key=%s
 endpoint=ws:0
 allowed_ip=%s/32
 persistent_keepalive_interval=25
-`, privKeyHex, helperPubKeyHex, helperIP)
+`, privKeyHex, helperPubKeyHex, sessionHelperIP)
 
 	if err := dev.IpcSet(ipcConf); err != nil {
 		lg.Printf("WireGuard IPC config failed: %v", err)
 		dev.Close()
-		return false
+		return
 	}
 
 	if err := dev.Up(); err != nil {
 		lg.Printf("WireGuard device up failed: %v", err)
 		dev.Close()
-		return false
+		return
 	}
-	lg.Printf("WireGuard tunnel up — agent=%s helper=%s", agentIP, helperIP)
+	lg.Printf("WireGuard tunnel up — agent=%s helper=%s", sessionAgentIP, sessionHelperIP)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	sessionEnded := make(chan struct{})
@@ -734,7 +775,7 @@ persistent_keepalive_interval=25
 	// Listen on each port inside netstack
 	var listeners []net.Listener
 	for _, port := range ports {
-		listenAddr := netip.AddrPortFrom(netip.MustParseAddr(agentIP), port)
+		listenAddr := netip.AddrPortFrom(netip.MustParseAddr(sessionAgentIP), port)
 		listener, err := tnet.ListenTCPAddrPort(listenAddr)
 		if err != nil {
 			lg.Printf("netstack listen failed on %s: %v", listenAddr, err)
@@ -759,19 +800,11 @@ persistent_keepalive_interval=25
 	// Wait for session to end (either session-end message or WS error)
 	<-done
 
-	cleanEnd := false
-	select {
-	case <-sessionEnded:
-		cleanEnd = true
-	default:
-	}
-
-	lg.Println("session ended — tearing down WireGuard")
+	lg.Println("session ended \u2014 tearing down WireGuard")
 	for _, l := range listeners {
 		l.Close()
 	}
 	dev.Close()
-	return cleanEnd
 }
 
 // wsReader reads from the WebSocket and dispatches:

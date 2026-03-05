@@ -331,8 +331,8 @@ tela logout                                            # remove stored credentia
                   var label = s.name || s.label || ('port ' + s.port);
                   return '<span class="service-tag">' + escHtml(label) + ' :' + s.port + '</span>';
                 }).join('') || '<span style="color:#aaa">\u2014</span>';
-                var sess = m.hasSession
-                  ? '<span class="dot green"></span> Active'
+                var sess = m.sessionCount > 0
+                  ? '<span class="dot green"></span> ' + m.sessionCount + ' active'
                   : '<span style="color:#aaa">\u2014</span>';
                 var seen = timeAgo(m.lastSeen);
 

@@ -135,12 +135,21 @@ var (
 
 // ── Data structures ────────────────────────────────────────────────
 
+// clientSession tracks one active client↔agent session on a machine.
+type clientSession struct {
+	SessionID  string
+	SessionIdx int
+	ClientWS   *websocket.Conn
+	AgentWS    *websocket.Conn // agent's per-session WS (opened via session-join)
+	UDPTokens  []string
+}
+
 // machineEntry stores the state of a registered machine.
 type machineEntry struct {
 	mu sync.Mutex
 
-	AgentWS  *websocket.Conn
-	ClientWS *websocket.Conn
+	ControlWS *websocket.Conn            // agent's registration/signaling channel
+	Sessions  map[string]*clientSession   // sessionID → active session
 
 	// Metadata from registration
 	Ports        []int
@@ -155,9 +164,6 @@ type machineEntry struct {
 	Tags         []string
 	Location     string
 	Owner        string
-
-	// UDP relay tokens (hex) — cleaned up on disconnect
-	UDPTokens []string
 }
 
 type serviceDesc struct {
@@ -177,8 +183,9 @@ type historyEvent struct {
 
 // wsState is stored per WebSocket connection.
 type wsState struct {
-	Role      string // "agent" or "client"
+	Role      string // "agent", "client", or "agent-session"
 	MachineID string
+	SessionID string // non-empty for session-specific connections
 	Paired    bool
 	Peer      *websocket.Conn
 	WGPubKey  string // client's WireGuard public key
@@ -368,7 +375,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		Location       *string       `json:"location"`
 		Owner          *string       `json:"owner"`
 		AgentConnected bool          `json:"agentConnected"`
-		HasSession     bool          `json:"hasSession"`
+		SessionCount   int           `json:"sessionCount"`
 		RegisteredAt   *string       `json:"registeredAt"`
 		LastSeen       *string       `json:"lastSeen"`
 		Services       []serviceDesc `json:"services"`
@@ -384,8 +391,8 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		sm := statusMachine{
 			ID:             id,
 			Tags:           entry.Tags,
-			AgentConnected: entry.AgentWS != nil,
-			HasSession:     entry.ClientWS != nil,
+			AgentConnected: entry.ControlWS != nil,
+			SessionCount:   len(entry.Sessions),
 			Services:       normalizeServices(entry.Ports, entry.Services),
 		}
 		if entry.DisplayName != "" {
@@ -567,6 +574,8 @@ type signalingMsg struct {
 	Location     string        `json:"location,omitempty"`
 	Owner        string        `json:"owner,omitempty"`
 
+	SessionID string `json:"sessionId,omitempty"`
+
 	// Forwarded through (peer-endpoint, wg-pubkey, etc.)
 	Message string `json:"message,omitempty"`
 }
@@ -652,6 +661,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			handleRegister(ws, state, &msg)
 		case "connect":
 			handleConnect(ws, state, &msg)
+		case "session-join":
+			handleSessionJoin(ws, state, &msg)
 		default:
 			ws.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseProtocolError, "Unknown message type"))
@@ -689,10 +700,13 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	machinesMu.Unlock()
 
 	entry.mu.Lock()
-	entry.AgentWS = ws
+	entry.ControlWS = ws
 	entry.Token = msg.Token
 	entry.Ports = msg.Ports
 	entry.Services = msg.Services
+	if entry.Sessions == nil {
+		entry.Sessions = make(map[string]*clientSession)
+	}
 	if msg.DisplayName != "" {
 		entry.DisplayName = msg.DisplayName
 	}
@@ -724,7 +738,6 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	for i, s := range normalized {
 		ports[i] = s.Port
 	}
-	clientWS := entry.ClientWS
 	entry.mu.Unlock()
 
 	log.Printf("[hub] agent registered: %s ports=%v version=%q%s", machineID, ports, msg.AgentVersion, tokenLog(msg.Token))
@@ -732,11 +745,6 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 
 	reply, _ := json.Marshal(map[string]string{"type": "registered", "machineId": machineID})
 	ws.WriteMessage(websocket.TextMessage, reply)
-
-	// If a client is already waiting, pair them
-	if clientWS != nil {
-		pair(machineID)
-	}
 }
 
 func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
@@ -758,11 +766,11 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	}
 
 	entry.mu.Lock()
-	agentWS := entry.AgentWS
+	controlWS := entry.ControlWS
 	entryToken := entry.Token
 	entry.mu.Unlock()
 
-	if agentWS == nil {
+	if controlWS == nil {
 		sendError(ws, "Machine not found")
 		return
 	}
@@ -787,27 +795,77 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 		return
 	}
 
+	// Generate session ID
+	sidBytes := make([]byte, 8)
+	rand.Read(sidBytes)
+	sessionID := hex.EncodeToString(sidBytes)
+	state.SessionID = sessionID
+
+	// Store session (client side; agent WS added when agent joins)
+	session := &clientSession{
+		SessionID: sessionID,
+		ClientWS:  ws,
+	}
 	entry.mu.Lock()
-	entry.ClientWS = ws
+	if entry.Sessions == nil {
+		entry.Sessions = make(map[string]*clientSession)
+	}
+	entry.Sessions[sessionID] = session
+	sessionIdx := len(entry.Sessions)
+	session.SessionIdx = sessionIdx
 	entry.mu.Unlock()
 
-	log.Printf("[hub] client connected for: %s%s", machineID, wgLog(msg.WGPubKey))
-	pair(machineID)
+	log.Printf("[hub] client connected for: %s session=%s%s", machineID, sessionID[:8], wgLog(msg.WGPubKey))
+
+	// Ask the agent to open a session WebSocket
+	req := map[string]any{
+		"type":      "session-request",
+		"sessionId": sessionID,
+		"wgPubKey":  msg.WGPubKey,
+		"sessionIdx": sessionIdx,
+	}
+	data, _ := json.Marshal(req)
+	controlWS.WriteMessage(websocket.TextMessage, data)
 }
 
-func pair(machineID string) {
+func handleSessionJoin(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
+	machineID := msg.MachineID
+	sessionID := msg.SessionID
+	state.Role = "agent-session"
+	state.MachineID = machineID
+	state.SessionID = sessionID
+
 	machinesMu.RLock()
 	entry, exists := machines[machineID]
 	machinesMu.RUnlock()
 	if !exists {
+		sendError(ws, "Machine not found")
 		return
 	}
 
 	entry.mu.Lock()
-	agentWS := entry.AgentWS
-	clientWS := entry.ClientWS
+	session, ok := entry.Sessions[sessionID]
+	if !ok || session == nil {
+		entry.mu.Unlock()
+		sendError(ws, "Session not found")
+		return
+	}
+	session.AgentWS = ws
+	clientWS := session.ClientWS
 	entry.mu.Unlock()
 
+	if clientWS == nil {
+		sendError(ws, "Client gone")
+		return
+	}
+
+	log.Printf("[hub] agent joined session %s for: %s", sessionID[:8], machineID)
+	pairSession(machineID, entry, session)
+}
+
+func pairSession(machineID string, entry *machineEntry, session *clientSession) {
+	agentWS := session.AgentWS
+	clientWS := session.ClientWS
 	if agentWS == nil || clientWS == nil {
 		return
 	}
@@ -837,7 +895,7 @@ func pair(machineID string) {
 	}
 	wsStatesMu.Unlock()
 
-	log.Printf("[hub] paired agent <-> client for: %s", machineID)
+	log.Printf("[hub] paired agent <-> client for: %s session=%s", machineID, session.SessionID[:8])
 	ss := ""
 	wsStatesMu.RLock()
 	if cs := wsStates[clientWS]; cs != nil {
@@ -846,7 +904,7 @@ func pair(machineID string) {
 	wsStatesMu.RUnlock()
 	recordEvent(machineID, "client-connect", ss)
 
-	// Signal agent: session-start (with client's WG public key if present)
+	// Signal agent session WS: session-start (with client's WG public key)
 	sessionStart := map[string]any{"type": "session-start"}
 	if wgPubKey != "" {
 		sessionStart["wgPubKey"] = wgPubKey
@@ -854,8 +912,8 @@ func pair(machineID string) {
 	data, _ := json.Marshal(sessionStart)
 	agentWS.WriteMessage(websocket.TextMessage, data)
 
-	// Signal client: ready
-	ready, _ := json.Marshal(map[string]string{"type": "ready"})
+	// Signal client: ready (include session index for per-session IP addressing)
+	ready, _ := json.Marshal(map[string]any{"type": "ready", "sessionIdx": session.SessionIdx})
 	clientWS.WriteMessage(websocket.TextMessage, ready)
 
 	// Generate UDP relay tokens and send udp-offer to both sides
@@ -883,7 +941,7 @@ func pair(machineID string) {
 	udpSessionsMu.Unlock()
 
 	entry.mu.Lock()
-	entry.UDPTokens = []string{agentTokenHex, clientTokenHex}
+	session.UDPTokens = []string{agentTokenHex, clientTokenHex}
 	entry.mu.Unlock()
 
 	// Send udp-offer to both sides
@@ -897,7 +955,7 @@ func pair(machineID string) {
 	clientOffer, _ := json.Marshal(offer)
 	clientWS.WriteMessage(websocket.TextMessage, clientOffer)
 
-	log.Printf("[hub] sent udp-offer to both sides for: %s (port %d)", machineID, udpPort)
+	log.Printf("[hub] sent udp-offer to both sides for: %s session=%s (port %d)", machineID, session.SessionID[:8], udpPort)
 }
 
 func handleDisconnect(ws *websocket.Conn) {
@@ -915,61 +973,99 @@ func handleDisconnect(ws *websocket.Conn) {
 		return
 	}
 
-	log.Printf("[hub] %s disconnected: %s", state.Role, state.MachineID)
+	log.Printf("[hub] %s disconnected: %s (session=%s)", state.Role, state.MachineID, state.SessionID)
 	detail := state.SessionDetail
 	if detail == "" {
 		detail = state.Role + " disconnected"
 	}
 	recordEvent(state.MachineID, state.Role+"-disconnect", detail)
 
-	// Clean up UDP session tokens
-	entry.mu.Lock()
-	if entry.UDPTokens != nil {
+	switch state.Role {
+	case "agent":
+		// Agent control WS disconnected — close ALL sessions for this machine
+		entry.mu.Lock()
+		entry.ControlWS = nil
+		entry.LastSeen = time.Now()
+		sessions := make(map[string]*clientSession, len(entry.Sessions))
+		for k, v := range entry.Sessions {
+			sessions[k] = v
+		}
+		entry.Sessions = make(map[string]*clientSession)
+		entry.mu.Unlock()
+
+		for _, sess := range sessions {
+			cleanupSession(state.MachineID, sess)
+			if sess.ClientWS != nil {
+				sess.ClientWS.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseGoingAway, "agent disconnected"))
+				sess.ClientWS.Close()
+			}
+			if sess.AgentWS != nil {
+				sess.AgentWS.Close()
+			}
+		}
+
+	case "agent-session":
+		// Agent session WS disconnected — remove session, close its client
+		sid := state.SessionID
+		entry.mu.Lock()
+		sess := entry.Sessions[sid]
+		delete(entry.Sessions, sid)
+		entry.mu.Unlock()
+
+		if sess != nil {
+			cleanupSession(state.MachineID, sess)
+			if sess.ClientWS != nil {
+				sess.ClientWS.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseGoingAway, "agent session ended"))
+				sess.ClientWS.Close()
+			}
+		}
+
+	case "client", "helper":
+		// Client disconnected — remove session, notify agent session WS
+		sid := state.SessionID
+		entry.mu.Lock()
+		sess := entry.Sessions[sid]
+		delete(entry.Sessions, sid)
+		entry.mu.Unlock()
+
+		if sess != nil {
+			cleanupSession(state.MachineID, sess)
+			if sess.AgentWS != nil {
+				msg, _ := json.Marshal(map[string]string{"type": "session-end"})
+				sess.AgentWS.WriteMessage(websocket.TextMessage, msg)
+				sess.AgentWS.Close()
+			}
+		}
+	}
+}
+
+// cleanupSession removes UDP tokens and clears WS peer state for a session.
+func cleanupSession(machineID string, sess *clientSession) {
+	if sess.UDPTokens != nil {
 		udpSessionsMu.Lock()
-		for _, tokenHex := range entry.UDPTokens {
+		for _, tokenHex := range sess.UDPTokens {
 			delete(udpSessions, tokenHex)
 		}
 		udpSessionsMu.Unlock()
-		entry.UDPTokens = nil
-		log.Printf("[hub] cleaned up UDP sessions for: %s", state.MachineID)
+		log.Printf("[hub] cleaned up UDP sessions for: %s session=%s", machineID, sess.SessionID[:8])
 	}
-	entry.mu.Unlock()
 
 	wsStatesMu.Lock()
-	peer := state.Peer
-	// Clear pairing on this side
-	state.Paired = false
-	state.Peer = nil
-	// Clear pairing on peer side
-	if peer != nil {
-		if peerState, ok := wsStates[peer]; ok {
-			peerState.Paired = false
-			peerState.Peer = nil
+	if sess.AgentWS != nil {
+		if as, ok := wsStates[sess.AgentWS]; ok {
+			as.Paired = false
+			as.Peer = nil
+		}
+	}
+	if sess.ClientWS != nil {
+		if cs, ok := wsStates[sess.ClientWS]; ok {
+			cs.Paired = false
+			cs.Peer = nil
 		}
 	}
 	wsStatesMu.Unlock()
-
-	if state.Role == "agent" {
-		// Agent left — close the client (can't function without agent)
-		if peer != nil {
-			peer.WriteMessage(websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseGoingAway, "agent disconnected"))
-			peer.Close()
-		}
-		entry.mu.Lock()
-		entry.AgentWS = nil
-		entry.LastSeen = time.Now()
-		entry.mu.Unlock()
-	} else if state.Role == "client" || state.Role == "helper" {
-		// Client/helper left — notify agent but keep it connected
-		if peer != nil {
-			msg, _ := json.Marshal(map[string]string{"type": "session-end"})
-			peer.WriteMessage(websocket.TextMessage, msg)
-		}
-		entry.mu.Lock()
-		entry.ClientWS = nil
-		entry.mu.Unlock()
-	}
 }
 
 func sendError(ws *websocket.Conn, message string) {
@@ -1077,8 +1173,8 @@ func runKeepalive() {
 		machinesMu.RLock()
 		for _, entry := range machines {
 			entry.mu.Lock()
-			if entry.AgentWS != nil {
-				entry.AgentWS.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
+			if entry.ControlWS != nil {
+				entry.ControlWS.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
 			}
 			entry.mu.Unlock()
 		}

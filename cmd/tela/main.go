@@ -22,10 +22,10 @@ Purpose:
 	  TELA_MACHINE  — target machine ID
 	  TELA_TOKEN    — authentication token
 
-Network:
+Network (per-session addressing):
 
-	Daemon IP: 10.77.0.1/24
-	Client IP: 10.77.0.2/24
+	Agent IP:  10.77.{N}.1/32   (N = session index, 1-254)
+	Client IP: 10.77.{N}.2/32
 */
 package main
 
@@ -68,19 +68,18 @@ import (
 var version = "dev"
 
 const (
-	agentIP  = "10.77.0.1"
-	helperIP = "10.77.0.2"
-	mtu      = 1420
+	mtu = 1420
 )
 
 type controlMessage struct {
-	Type      string   `json:"type"`
-	MachineID string   `json:"machineId,omitempty"`
-	Message   string   `json:"message,omitempty"`
-	WGPubKey  string   `json:"wgPubKey,omitempty"`
-	Ports     []uint16 `json:"ports,omitempty"`
-	Token     string   `json:"token,omitempty"`
-	Port      int      `json:"port,omitempty"` // single port (udp-offer)
+	Type       string   `json:"type"`
+	MachineID  string   `json:"machineId,omitempty"`
+	Message    string   `json:"message,omitempty"`
+	WGPubKey   string   `json:"wgPubKey,omitempty"`
+	Ports      []uint16 `json:"ports,omitempty"`
+	Token      string   `json:"token,omitempty"`
+	Port       int      `json:"port,omitempty"` // single port (udp-offer)
+	SessionIdx int      `json:"sessionIdx,omitempty"`
 }
 
 // Well-known port names for friendly display.
@@ -551,7 +550,7 @@ type hubMachine struct {
 	Owner          string       `json:"owner,omitempty"`
 	LastSeen       string       `json:"lastSeen,omitempty"`
 	AgentConnected bool         `json:"agentConnected"`
-	HasSession     bool         `json:"hasSession"`
+	SessionCount   int          `json:"sessionCount"`
 	RegisteredAt   string       `json:"registeredAt"`
 	Services       []hubService `json:"services"`
 }
@@ -625,8 +624,8 @@ func cmdMachines(args []string) {
 			svcStr = "—"
 		}
 		sess := "—"
-		if m.HasSession {
-			sess = "active"
+		if m.SessionCount > 0 {
+			sess = fmt.Sprintf("%d active", m.SessionCount)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.ID, status, svcStr, sess)
 	}
@@ -730,8 +729,8 @@ func cmdStatus(args []string) {
 		if m.AgentConnected {
 			online++
 		}
-		if m.HasSession {
-			sessions++
+		if m.SessionCount > 0 {
+			sessions += m.SessionCount
 		}
 		totalSvcs += len(m.Services)
 	}
@@ -799,6 +798,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	var agentPorts []uint16
 	var udpTokenHex string
 	var udpPort int
+	var sessionIdx int
 	ready := false
 
 	for {
@@ -816,7 +816,8 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 		switch msg.Type {
 		case "ready":
 			ready = true
-			log.Printf("tunnel ready signal received")
+			sessionIdx = msg.SessionIdx
+			log.Printf("tunnel ready signal received (session %d)", sessionIdx)
 		case "wg-pubkey":
 			agentPubKeyHex = msg.WGPubKey
 			agentPorts = msg.Ports
@@ -850,9 +851,20 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 		}
 	}
 
+	// Per-session IP addressing: 10.77.{idx}.1 (agent) / 10.77.{idx}.2 (client)
+	subnet := sessionIdx
+	if subnet < 1 {
+		subnet = 1
+	}
+	if subnet > 254 {
+		subnet = 254
+	}
+	sessionAgentIP := fmt.Sprintf("10.77.%d.1", subnet)
+	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)
+
 	// Create netstack TUN (pure userspace, no admin)
 	tunDev, tnet, err := netstack.CreateNetTUN(
-		[]netip.Addr{netip.MustParseAddr(helperIP)},
+		[]netip.Addr{netip.MustParseAddr(sessionHelperIP)},
 		nil, // no DNS
 		mtu,
 	)
@@ -881,7 +893,7 @@ public_key=%s
 endpoint=ws:0
 allowed_ip=%s/32
 persistent_keepalive_interval=25
-`, privKeyHex, agentPubKeyHex, agentIP)
+`, privKeyHex, agentPubKeyHex, sessionAgentIP)
 
 	if err := dev.IpcSet(ipcConf); err != nil {
 		log.Printf("WireGuard IPC config failed: %v", err)
@@ -894,7 +906,7 @@ persistent_keepalive_interval=25
 		dev.Close()
 		return nil
 	}
-	log.Printf("WireGuard tunnel up — client=%s daemon=%s", helperIP, agentIP)
+	log.Printf("WireGuard tunnel up — client=%s daemon=%s", sessionHelperIP, sessionAgentIP)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	done := make(chan struct{})
@@ -955,7 +967,7 @@ persistent_keepalive_interval=25
 				if tc, ok := localConn.(*net.TCPConn); ok {
 					tc.SetNoDelay(true)
 				}
-				go handleNetstackClient(tnet, localConn, int(remote))
+				go handleNetstackClient(tnet, localConn, int(remote), sessionAgentIP)
 			}
 		}(listener, m.remote)
 	}
@@ -992,11 +1004,11 @@ func portLabel(port uint16) string {
 
 // handleNetstackClient dials the agent through the WireGuard tunnel
 // (via netstack) and pipes data bidirectionally.
-func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int) {
+func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int, sessionAgentIP string) {
 	defer localConn.Close()
 
 	// Dial through the WireGuard tunnel to the agent's netstack
-	agentAddr := netip.AddrPortFrom(netip.MustParseAddr(agentIP), uint16(targetPort))
+	agentAddr := netip.AddrPortFrom(netip.MustParseAddr(sessionAgentIP), uint16(targetPort))
 	tunnelConn, err := tnet.DialContextTCPAddrPort(context.Background(), agentAddr)
 	if err != nil {
 		log.Printf("tunnel dial failed (%s): %v", agentAddr, err)
