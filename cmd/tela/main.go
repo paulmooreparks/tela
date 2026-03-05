@@ -7,10 +7,15 @@ Purpose:
 	with the target daemon, and establishes an encrypted L3 tunnel.
 
 	Subcommands:
-	  tela connect  — connect to a machine
+	  tela connect  — connect to a machine (ad-hoc or via profile)
 	  tela machines — list registered machines and their services
 	  tela services — list services on a specific machine
 	  tela status   — show hub status summary
+
+	Service selection (connect):
+	  -ports    — comma-separated port numbers or local:remote pairs
+	  -services — comma-separated service names (resolved via hub API)
+	  -profile  — load a named connection profile (multiple hubs in parallel)
 
 	Environment variables (provide defaults so flags can be omitted):
 	  TELA_HUB      — hub WebSocket URL
@@ -165,6 +170,14 @@ Examples:
   tela machines -hub owlsnest
   tela connect  -hub wss://tela.awansatu.net -machine barn
 
+  # Select specific ports or services:
+  tela connect -hub owlsnest -machine barn -ports 22,5432
+  tela connect -hub owlsnest -machine barn -ports 2222:22,15432:5432
+  tela connect -hub owlsnest -machine barn -services ssh,postgres
+
+  # Use a connection profile (all connections in parallel):
+  tela connect -profile mixed-env
+
   # Or set env vars and skip the flags:
   export TELA_HUB=owlsnest TELA_MACHINE=barn
   tela connect          # uses env defaults
@@ -181,10 +194,21 @@ func cmdConnect(args []string) {
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
 	machineID := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Target machine ID (env: TELA_MACHINE)")
 	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
-	localPort := fs.Int("port", 0, "Local TCP port (advanced: single-port override)")
-	targetPort := fs.Int("target-port", 0, "Target port on daemon (advanced: with -port)")
+	portsFlag := fs.String("ports", "", "Comma-separated ports or local:remote pairs (e.g. 22,2222:22,5432)")
+	servicesFlag := fs.String("services", "", "Comma-separated service names (e.g. ssh,postgres)")
+	profileFlag := fs.String("profile", "", "Connection profile name (from ~/.tela/profiles/<name>.yaml)")
+	// Legacy single-port flags (kept for backward compat)
+	localPort := fs.Int("port", 0, "Local TCP port (legacy; prefer -ports)")
+	targetPort := fs.Int("target-port", 0, "Target port on daemon (legacy; with -port)")
 	fs.BoolVar(&verbose, "v", false, "Verbose logging")
 	fs.Parse(args)
+
+	// ── Profile mode: load YAML and run parallel connections ──
+	if *profileFlag != "" {
+		runProfile(*profileFlag)
+		return
+	}
+
 	*hubURL = mustResolveHub(*hubURL)
 
 	if *hubURL == "" || *machineID == "" {
@@ -193,9 +217,11 @@ func cmdConnect(args []string) {
 		os.Exit(1)
 	}
 
-	singlePortMode := *localPort != 0
-	if singlePortMode && *targetPort == 0 {
-		*targetPort = *localPort
+	// Build port mappings from flags
+	mappings, err := buildMappings(*portsFlag, *servicesFlag, *localPort, *targetPort, *hubURL, *machineID, *token)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	sigCh := make(chan os.Signal, 1)
@@ -206,11 +232,6 @@ func cmdConnect(args []string) {
 		os.Exit(0)
 	}()
 
-	var mappings []portMapping
-	if singlePortMode {
-		mappings = []portMapping{{local: uint16(*localPort), remote: uint16(*targetPort)}}
-	}
-
 	for {
 		if err := runSession(*hubURL, *machineID, *token, mappings); errors.Is(err, errFatal) {
 			os.Exit(1)
@@ -218,6 +239,297 @@ func cmdConnect(args []string) {
 		log.Println("reconnecting in 3 seconds...")
 		time.Sleep(3 * time.Second)
 	}
+}
+
+// ── Port/service mapping helpers ────────────────────────────────────
+
+// buildMappings consolidates -ports, -services, and legacy -port/-target-port
+// flags into a single []portMapping. Service names are resolved via the hub API.
+func buildMappings(portsFlag, servicesFlag string, legacyLocal, legacyTarget int, hubURL, machineID, token string) ([]portMapping, error) {
+	var mappings []portMapping
+
+	// Legacy single-port mode
+	if legacyLocal != 0 {
+		if legacyTarget == 0 {
+			legacyTarget = legacyLocal
+		}
+		mappings = append(mappings, portMapping{local: uint16(legacyLocal), remote: uint16(legacyTarget)})
+	}
+
+	// Parse -ports flag: "22,2222:22,5432" → [{22,22},{2222,22},{5432,5432}]
+	if portsFlag != "" {
+		parsed, err := parsePorts(portsFlag)
+		if err != nil {
+			return nil, err
+		}
+		mappings = append(mappings, parsed...)
+	}
+
+	// Resolve -services flag: "ssh,postgres" → port numbers via hub API
+	if servicesFlag != "" {
+		resolved, err := resolveServiceNames(servicesFlag, hubURL, machineID, token)
+		if err != nil {
+			return nil, err
+		}
+		mappings = append(mappings, resolved...)
+	}
+
+	return mappings, nil
+}
+
+// parsePorts parses a comma-separated port spec: "22,2222:22,5432"
+// Each element is either "port" (local=remote) or "local:remote".
+func parsePorts(spec string) ([]portMapping, error) {
+	var mappings []portMapping
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if idx := strings.Index(part, ":"); idx >= 0 {
+			local, err := parsePort(part[:idx])
+			if err != nil {
+				return nil, fmt.Errorf("invalid local port in %q: %w", part, err)
+			}
+			remote, err := parsePort(part[idx+1:])
+			if err != nil {
+				return nil, fmt.Errorf("invalid remote port in %q: %w", part, err)
+			}
+			mappings = append(mappings, portMapping{local: local, remote: remote})
+		} else {
+			p, err := parsePort(part)
+			if err != nil {
+				return nil, fmt.Errorf("invalid port %q: %w", part, err)
+			}
+			mappings = append(mappings, portMapping{local: p, remote: p})
+		}
+	}
+	return mappings, nil
+}
+
+// parsePort converts a string to a uint16 port number.
+func parsePort(s string) (uint16, error) {
+	s = strings.TrimSpace(s)
+	var n int
+	_, err := fmt.Sscanf(s, "%d", &n)
+	if err != nil || n < 1 || n > 65535 {
+		return 0, fmt.Errorf("%q is not a valid port number", s)
+	}
+	return uint16(n), nil
+}
+
+// resolveServiceNames queries the hub's /api/status endpoint to translate
+// service names (e.g. "ssh,postgres") into port mappings.
+func resolveServiceNames(servicesFlag, hubURL, machineID, token string) ([]portMapping, error) {
+	names := strings.Split(servicesFlag, ",")
+	for i := range names {
+		names[i] = strings.TrimSpace(names[i])
+	}
+
+	// Fetch machine's service list from the hub
+	data, err := fetchHubStatusWithToken(hubURL, token)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve service names: %w", err)
+	}
+
+	var machine *hubMachine
+	for i := range data.Machines {
+		if data.Machines[i].ID == machineID {
+			machine = &data.Machines[i]
+			break
+		}
+	}
+	if machine == nil {
+		return nil, fmt.Errorf("machine %q not found on hub (cannot resolve service names)", machineID)
+	}
+
+	// Build name→port lookup (case-insensitive)
+	svcMap := make(map[string]int) // lowercase name → port
+	for _, s := range machine.Services {
+		if s.Name != "" {
+			svcMap[strings.ToLower(s.Name)] = s.Port
+		}
+		if s.Label != "" {
+			svcMap[strings.ToLower(s.Label)] = s.Port
+		}
+	}
+
+	var mappings []portMapping
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		port, ok := svcMap[strings.ToLower(name)]
+		if !ok {
+			// List available services in error message
+			var available []string
+			for _, s := range machine.Services {
+				available = append(available, fmt.Sprintf("%s:%d", serviceLabel(s), s.Port))
+			}
+			return nil, fmt.Errorf("service %q not found on machine %q (available: %s)", name, machineID, strings.Join(available, ", "))
+		}
+		mappings = append(mappings, portMapping{local: uint16(port), remote: uint16(port)})
+	}
+	return mappings, nil
+}
+
+// fetchHubStatusWithToken queries /api/status with an optional auth token.
+func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
+	apiURL := wsToHTTP(hubURL) + "/api/status"
+	if token != "" {
+		apiURL += "?token=" + url.QueryEscape(token)
+	}
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{},
+		},
+	}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("could not reach hub: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("hub returned 401 unauthorized — check your -token")
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("hub returned HTTP %d", resp.StatusCode)
+	}
+
+	var data hubStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, fmt.Errorf("invalid JSON from hub: %w", err)
+	}
+	return &data, nil
+}
+
+// ── Connection profiles ─────────────────────────────────────────────
+
+// connectionProfile is the YAML schema for ~/.tela/profiles/<name>.yaml.
+type connectionProfile struct {
+	Connections []profileConnection `yaml:"connections"`
+}
+
+// profileConnection defines one hub+machine+services entry in a profile.
+type profileConnection struct {
+	Hub      string           `yaml:"hub"`
+	Machine  string           `yaml:"machine"`
+	Token    string           `yaml:"token"`
+	Services []profileService `yaml:"services,omitempty"`
+}
+
+// profileService defines a port mapping within a profile connection.
+type profileService struct {
+	Remote int    `yaml:"remote"`          // required: remote port
+	Local  int    `yaml:"local,omitempty"` // optional: local port (defaults to remote)
+	Name   string `yaml:"name,omitempty"`  // alternative: resolve by service name
+}
+
+// profilesDir returns the directory containing connection profiles.
+func profilesDir() string {
+	return filepath.Join(telaConfigDir(), "profiles")
+}
+
+// loadProfile reads a connection profile from ~/.tela/profiles/<name>.yaml.
+func loadProfile(name string) (*connectionProfile, error) {
+	// Try exact path first, then profiles directory
+	path := name
+	if !strings.Contains(name, string(filepath.Separator)) && !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+		path = filepath.Join(profilesDir(), name+".yaml")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read profile %q: %w", path, err)
+	}
+
+	// Expand environment variables in the YAML (for ${TOKEN} references)
+	expanded := os.ExpandEnv(string(data))
+
+	var profile connectionProfile
+	if err := yaml.Unmarshal([]byte(expanded), &profile); err != nil {
+		return nil, fmt.Errorf("invalid profile %q: %w", path, err)
+	}
+	if len(profile.Connections) == 0 {
+		return nil, fmt.Errorf("profile %q has no connections defined", path)
+	}
+	return &profile, nil
+}
+
+// runProfile loads a connection profile and runs all connections in parallel.
+// It blocks until all connections exit (Ctrl+C kills the process via signal handler).
+func runProfile(name string) {
+	profile, err := loadProfile(name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("shutting down all connections")
+		os.Exit(0)
+	}()
+
+	log.Printf("loaded profile with %d connection(s)", len(profile.Connections))
+
+	var wg sync.WaitGroup
+	for i, conn := range profile.Connections {
+		hubURL := mustResolveHub(conn.Hub)
+		token := conn.Token
+		machine := conn.Machine
+
+		if hubURL == "" || machine == "" {
+			log.Printf("[profile:%d] skipping: hub and machine are required", i+1)
+			continue
+		}
+
+		// Build mappings from profile services
+		var mappings []portMapping
+		var serviceNames []string
+		for _, svc := range conn.Services {
+			if svc.Name != "" {
+				serviceNames = append(serviceNames, svc.Name)
+			} else if svc.Remote > 0 {
+				local := svc.Local
+				if local == 0 {
+					local = svc.Remote
+				}
+				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote)})
+			}
+		}
+
+		// Resolve service names to ports
+		if len(serviceNames) > 0 {
+			resolved, err := resolveServiceNames(strings.Join(serviceNames, ","), hubURL, machine, token)
+			if err != nil {
+				log.Printf("[profile:%d] %v", i+1, err)
+				continue
+			}
+			mappings = append(mappings, resolved...)
+		}
+
+		wg.Add(1)
+		go func(idx int, hub, mach, tok string, maps []portMapping) {
+			defer wg.Done()
+			log.Printf("[profile:%d] connecting to %s → %s", idx, hub, mach)
+			for {
+				if err := runSession(hub, mach, tok, maps); errors.Is(err, errFatal) {
+					log.Printf("[profile:%d] fatal error, stopping", idx)
+					return
+				}
+				log.Printf("[profile:%d] reconnecting in 3 seconds...", idx)
+				time.Sleep(3 * time.Second)
+			}
+		}(i+1, hubURL, machine, token, mappings)
+	}
+
+	wg.Wait()
 }
 
 // ── "tela machines" ────────────────────────────────────────────────
