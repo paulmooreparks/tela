@@ -32,6 +32,15 @@ Tela supports two common real-world deployment patterns. Most use cases below wo
 
 **Scenario:** You have machines at home (NAS, media server, dev workstation) and want to reach them from anywhere: a hotel, a coffee shop, a corporate laptop that won't let you install a VPN.
 
+**How-to (at a glance):**
+
+- Pick a deployment pattern: **Endpoint agent** (telad runs on the target) or **Gateway/bridge** (telad runs on a reachable gateway).
+- Run a hub that both sides can reach (public `wss://...` is typical).
+- Run `telad` to register your machine/services.
+- Download `tela` on the client machine and run `tela machines` then `tela connect`.
+
+Detailed HOWTO: `howto/personal-cloud.md`
+
 **How Tela works here:**
 
 - `telad` runs on your home machines, connecting outbound to your hub. No port forwarding, no dynamic DNS.
@@ -54,6 +63,15 @@ Tela supports two common real-world deployment patterns. Most use cases below wo
 
 **Scenario:** A dev team spans multiple offices and remote workers. Developers need to access shared dev/staging machines (databases, test servers, CI runners) without a full corporate VPN.
 
+**How-to (at a glance):**
+
+- Decide whether you deploy `telad` on every server (endpoint pattern) or on a site gateway (bridge pattern).
+- Stand up one hub per environment (`dev`, `staging`, `prod`) or per site.
+- Register machines/services with `telad`.
+- Developers use `tela machines/services/connect` to reach SSH/RDP/DB ports.
+
+Detailed HOWTO: `howto/distributed-teams.md`
+
 **How Tela works here:**
 
 - `telad` runs on each dev/staging machine, registering outbound to the hub. IT doesn't need to open inbound ports or manage VPN concentrators.
@@ -75,6 +93,15 @@ Tela supports two common real-world deployment patterns. Most use cases below wo
 
 **Scenario:** You deploy devices (Raspberry Pi, industrial controllers, kiosks) on customer sites behind NATs and firewalls you don't control. You need to SSH in for maintenance.
 
+**How-to (at a glance):**
+
+- Run a hub reachable from the public Internet (or reachable from your clients).
+- Install and run `telad` on each device (or run a gateway `telad` inside the customer site).
+- Expose SSH (and any other needed ports) as services.
+- Use `tela connect` from your laptop and SSH to localhost.
+
+Detailed HOWTO: `howto/iot-edge.md`
+
 **How Tela works here:**
 
 - `telad` is a static Go binary. Cross-compile for ARM, drop it on the device, point it at your hub. It connects outbound and stays registered.
@@ -94,6 +121,15 @@ Tela supports two common real-world deployment patterns. Most use cases below wo
 ## 4. Production Service Access (Bastion Replacement)
 
 **Scenario:** A small team runs production services (databases, internal APIs) on cloud VMs. Today they use SSH bastion hosts or VPN to access them.
+
+**How-to (at a glance):**
+
+- Prefer the **endpoint agent** pattern for production VMs (least moving parts).
+- Expose only required ports (SSH, DB, admin HTTP) as services.
+- Restrict and rotate hub credentials.
+- Operators use `tela` to connect to services without opening inbound ports.
+
+Detailed HOWTO: `howto/production-access.md`
 
 **How Tela works here:**
 
@@ -116,6 +152,15 @@ Tela supports two common real-world deployment patterns. Most use cases below wo
 
 **Scenario:** A managed service provider supports dozens of small businesses, each with a few machines needing periodic maintenance.
 
+**How-to (at a glance):**
+
+- Use one hub per customer (simplest isolation) or one hub with strict naming/tagging.
+- Deploy `telad` on customer machines (endpoint) or at the customer edge (gateway).
+- Expose RDP/SSH and any required admin ports.
+- Technicians use `tela` on-demand from anywhere.
+
+Detailed HOWTO: `howto/msp-it-support.md`
+
 **How Tela works here:**
 
 - Install `telad` on each customer's machines. Each customer gets a hub (or shares one with per-customer machine tagging).
@@ -135,6 +180,15 @@ Tela supports two common real-world deployment patterns. Most use cases below wo
 ## 6. Education / Lab Environments
 
 **Scenario:** A university runs a computer lab with specialized software. Students need to access lab machines remotely.
+
+**How-to (at a glance):**
+
+- Stand up one hub per lab (or per course) and register lab machines.
+- Expose RDP/VNC/SSH as services.
+- Students download `tela` and connect to assigned machines.
+- Use naming conventions to keep assignment simple.
+
+Detailed HOWTO: `howto/education-labs.md`
 
 **How Tela works here:**
 
