@@ -68,7 +68,10 @@ import (
 var version = "dev"
 
 const (
-	mtu = 1420
+	mtu            = 1420
+	wsPingInterval = 20 * time.Second
+	wsPongWait     = 45 * time.Second
+	wsWriteWait    = 5 * time.Second
 )
 
 type controlMessage struct {
@@ -751,6 +754,52 @@ func wsToHTTP(wsURL string) string {
 	return strings.TrimRight(s, "/")
 }
 
+func startWSKeepalive(ws *websocket.Conn) func() {
+	_ = ws.SetReadDeadline(time.Now().Add(wsPongWait))
+
+	prevPingHandler := ws.PingHandler()
+	prevPongHandler := ws.PongHandler()
+
+	ws.SetPingHandler(func(appData string) error {
+		logVerbose("ws keepalive: received ping")
+		_ = ws.SetReadDeadline(time.Now().Add(wsPongWait))
+		if prevPingHandler != nil {
+			return prevPingHandler(appData)
+		}
+		return nil
+	})
+	ws.SetPongHandler(func(appData string) error {
+		logVerbose("ws keepalive: received pong")
+		_ = ws.SetReadDeadline(time.Now().Add(wsPongWait))
+		if prevPongHandler != nil {
+			return prevPongHandler(appData)
+		}
+		return nil
+	})
+
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(wsPingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				logVerbose("ws keepalive: sending ping")
+				if err := ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(wsWriteWait)); err != nil {
+					logVerbose("ws keepalive: ping failed: %v", err)
+					return
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	return func() {
+		close(stop)
+	}
+}
+
 // errFatal is returned by runSession when the error is not worth retrying.
 var errFatal = fmt.Errorf("fatal")
 
@@ -764,6 +813,8 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 		return err
 	}
 	defer wsConn.Close()
+	stopKeepalive := startWSKeepalive(wsConn)
+	defer stopKeepalive()
 
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)

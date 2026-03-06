@@ -53,7 +53,10 @@ import (
 )
 
 const (
-	mtu = 1420
+	mtu            = 1420
+	wsPingInterval = 20 * time.Second
+	wsPongWait     = 45 * time.Second
+	wsWriteWait    = 5 * time.Second
 )
 
 var version = "dev"
@@ -595,6 +598,52 @@ func parsePortSpecs(s string) []serviceDescriptor {
 	return services
 }
 
+func startWSKeepalive(ws *websocket.Conn) func() {
+	_ = ws.SetReadDeadline(time.Now().Add(wsPongWait))
+
+	prevPingHandler := ws.PingHandler()
+	prevPongHandler := ws.PongHandler()
+
+	ws.SetPingHandler(func(appData string) error {
+		logVerbose(log.Default(), "ws keepalive: received ping")
+		_ = ws.SetReadDeadline(time.Now().Add(wsPongWait))
+		if prevPingHandler != nil {
+			return prevPingHandler(appData)
+		}
+		return nil
+	})
+	ws.SetPongHandler(func(appData string) error {
+		logVerbose(log.Default(), "ws keepalive: received pong")
+		_ = ws.SetReadDeadline(time.Now().Add(wsPongWait))
+		if prevPongHandler != nil {
+			return prevPongHandler(appData)
+		}
+		return nil
+	})
+
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(wsPingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				logVerbose(log.Default(), "ws keepalive: sending ping")
+				if err := ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(wsWriteWait)); err != nil {
+					logVerbose(log.Default(), "ws keepalive: ping failed: %v", err)
+					return
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	return func() {
+		close(stop)
+	}
+}
+
 func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string) {
 	lg.Printf("connecting to hub: %s", hubURL)
 
@@ -604,6 +653,8 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		return
 	}
 	defer ws.Close()
+	stopKeepalive := startWSKeepalive(ws)
+	defer stopKeepalive()
 
 	// Register with hub (include ports/services + metadata for the registry)
 	lg.Printf("connected, registering as: %s", reg.MachineID)
@@ -663,6 +714,8 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 		return
 	}
 	defer ws.Close()
+	stopKeepalive := startWSKeepalive(ws)
+	defer stopKeepalive()
 
 	// Send session-join to associate this WS with the session
 	joinMsg := controlMessage{
