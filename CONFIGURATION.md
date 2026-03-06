@@ -332,4 +332,4 @@ Notes:
 - You can manage this file by:
   - Using the portal UI "Add Hub" form (which calls `POST /api/hubs`), or
   - Editing it directly.
-- Set `AWANSATU_API_TOKEN` on the portal server to require `Authorization: Bearer <token>` for the `/api/hubs` endpoint.
+- Set `AWANSAYA_API_TOKEN` on the portal server (via a `.env` file) to require `Authorization: Bearer <token>` for adding/removing hubs. Reading the hub directory (`GET /api/hubs`) is always open.
