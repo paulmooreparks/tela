@@ -22,7 +22,7 @@
     }
     .hub-name-label { color: #888; font-weight: 400; }
     .hub-name-value { color: #2d7d46; font-weight: 700; }
-    .subtitle { color: #666; margin-bottom: 24px; font-size: 0.95rem; }
+
     .card {
       background: #fff;
       border: 1px solid #e0e0e0;
@@ -147,7 +147,6 @@
     <span class="hub-name-value" id="hub-name-value"></span>
   </div>
   <h1 id="hub-title">Tela Hub Console</h1>
-  <p class="subtitle" id="hub-subtitle">Connectivity fabric for your network</p>
 
   <!-- Machines & Services -->
   <div class="card">
@@ -228,7 +227,7 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
     </dl>
   </div>
 
-  <footer>Tela Hub Console</footer>
+  <footer><a href="https://github.com/paulmooreparks/tela">Tela Hub Console</a></footer>
 
   <script>
     // ── Utility: relative time ──────────────────────────────────────
@@ -313,7 +312,6 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
             if (data.hubName) {
               document.getElementById('hub-name-value').textContent = data.hubName;
               document.getElementById('hub-name-bar').style.display = 'flex';
-              document.getElementById('hub-subtitle').innerHTML = 'Connectivity fabric for <strong>' + escHtml(data.hubName) + '</strong>';
               document.title = data.hubName + ' \u2014 Tela Hub Console';
             }
             if (!data.machines || data.machines.length === 0) {
