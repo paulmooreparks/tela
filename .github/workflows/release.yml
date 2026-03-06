@@ -2,7 +2,7 @@
 # and attach everything to a GitHub Release.
 #
 # Triggers:
-#   - Push to main: creates release v0.1.<run_number>
+#   - Push to main: creates release v0.2.<run_number>
 #   - Push a v* tag:  uses the tag name as-is
 #
 # What this proves to users:
@@ -69,7 +69,7 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=v0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "tag=v0.2.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Go
@@ -124,7 +124,7 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=v0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "tag=v0.2.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Download all artifacts
