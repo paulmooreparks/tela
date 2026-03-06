@@ -313,7 +313,6 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
             if (data.hubName) {
               document.getElementById('hub-name-value').textContent = data.hubName;
               document.getElementById('hub-name-bar').style.display = 'flex';
-              document.getElementById('hub-subtitle').innerHTML = 'Connectivity fabric for <strong>' + escHtml(data.hubName) + '</strong>';
               document.title = data.hubName + ' \u2014 Tela Hub Console';
             }
             if (!data.machines || data.machines.length === 0) {
@@ -328,8 +327,8 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
                   var label = s.name || s.label || ('port ' + s.port);
                   return '<span class="service-tag">' + escHtml(label) + ' :' + s.port + '</span>';
                 }).join('') || '<span style="color:#aaa">\u2014</span>';
-                var sess = m.sessionCount > 0
-                  ? '<span class="dot green"></span> ' + m.sessionCount + ' active'
+                var sess = m.hasSession
+                  ? '<span class="dot green"></span> Active'
                   : '<span style="color:#aaa">\u2014</span>';
                 var seen = timeAgo(m.lastSeen);
 

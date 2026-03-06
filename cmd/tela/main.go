@@ -152,8 +152,8 @@ Hub Name Resolution:
   The -hub flag accepts a full URL (wss://...) or a short hub name.
   Short names are resolved by querying the portal you logged into:
 
-    tela login https://awansaya.net   # authenticate once
-    tela connect -hub owlsnest -machine barn
+    tela login https://your-portal.example   # authenticate once
+    tela connect -hub myhub -machine mybox
 
   Names can also be defined locally in a config file (used as fallback):
     Linux/macOS:  ~/.tela/hubs.yaml
@@ -164,21 +164,21 @@ Hub Name Resolution:
       myHub: wss://example.com
 
 Examples:
-  tela login https://awansaya.net
-  tela connect  -hub owlsnest -machine barn
-  tela machines -hub owlsnest
-  tela connect  -hub wss://tela.awansaya.net -machine barn
+  tela login https://your-portal.example
+  tela connect  -hub myhub -machine mybox
+  tela machines -hub myhub
+  tela connect  -hub wss://hub.example.com -machine mybox
 
   # Select specific ports or services:
-  tela connect -hub owlsnest -machine barn -ports 22,5432
-  tela connect -hub owlsnest -machine barn -ports 2222:22,15432:5432
-  tela connect -hub owlsnest -machine barn -services ssh,postgres
+  tela connect -hub myhub -machine mybox -ports 22,5432
+  tela connect -hub myhub -machine mybox -ports 2222:22,15432:5432
+  tela connect -hub myhub -machine mybox -services ssh,postgres
 
   # Use a connection profile (all connections in parallel):
   tela connect -profile mixed-env
 
   # Or set env vars and skip the flags:
-  export TELA_HUB=owlsnest TELA_MACHINE=barn
+  export TELA_HUB=myhub TELA_MACHINE=mybox
   tela connect          # uses env defaults
   tela machines         # only needs TELA_HUB
 
@@ -1326,7 +1326,7 @@ func cmdLogin(args []string) {
 
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: tela login <portal-url>")
-		fmt.Fprintln(os.Stderr, "Example: tela login https://awansaya.net")
+		fmt.Fprintln(os.Stderr, "Example: tela login https://your-portal.example")
 		os.Exit(1)
 	}
 

@@ -247,7 +247,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 4. **Token auth with RBAC** — Named identities (owner/admin/user), per-machine ACLs, env-var bootstrap for Docker, remote management via `tela admin` CLI and admin REST API, hot-reload (no restart needed)
 5. **Auto-reconnect** — Both tela and telad reconnect on disconnect
 6. **Cross-platform client** — Windows, Linux, macOS (Intel + ARM) binaries served from hub
-7. **Dual ingress** — Cloudflare Tunnel (`tela.awansaya.net`) + Caddy direct (`tela-local.awansaya.net`)
+7. **Dual ingress** — Cloudflare Tunnel + Caddy direct
 8. **Hub /status API** — JSON endpoint for monitoring
 9. **Direct tunnel (P2P)** — STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
 10. **CLI login/logout** — `tela login` authenticates with a portal, `tela logout` removes credentials

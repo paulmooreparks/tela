@@ -214,7 +214,7 @@
 
     // Try to load additional hubs from localStorage
     try {
-      var extra = JSON.parse(localStorage.getItem('awansaya-hubs') || '[]');
+      var extra = JSON.parse(localStorage.getItem('tela-extra-hubs') || '[]');
       if (Array.isArray(extra)) HUBS = HUBS.concat(extra);
     } catch (e) {}
 

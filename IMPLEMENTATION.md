@@ -1,4 +1,4 @@
-# Tela / Awan Saya — Local Implementation & Deployment Runbook (POC)
+﻿# Tela / Awan Saya — Local Implementation & Deployment Runbook (POC)
 
 This document is a **practical runbook** for implementing and running Tela locally, exposing a Hub for internet access, and starting a POC path toward Awan Saya.
 
@@ -339,8 +339,8 @@ docker compose up --build -d
 # Connect by hub URL
 ./tela connect -hub wss://gohub.parkscomputing.com -machine barn
 
-# Or log in to portal and use hub names
-tela login https://awansaya.net
+# Or log in to a portal and use hub names
+tela login https://your-portal.example
 tela connect -hub barn-hub -machine barn
 ```
 
@@ -405,11 +405,11 @@ proximity. There is no way to reduce this while using the tunnel.
 **Mitigation:**
 
 - **Direct mode (done)** — Caddy with DNS-01 (Cloudflare API) serves
-  `tela-local.awansaya.net` with valid Let's Encrypt TLS, bypassing the
+  a direct hostname with valid Let's Encrypt TLS, bypassing the
   Cloudflare edge entirely. This is the recommended path for local and
   LAN-adjacent use.
-- **Tunnel mode** — still available via `tela.awansaya.net` through
-  Cloudflare Tunnel for scenarios where inbound ports are blocked.
+- **Tunnel mode** — still available via Cloudflare Tunnel for scenarios
+  where inbound ports are blocked.
 - Long-term: allow the Hub to advertise both URLs and let the client
   prefer the direct path automatically.
 

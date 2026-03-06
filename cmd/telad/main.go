@@ -160,7 +160,7 @@ Usage:
 Examples:
   telad -config telad.yaml
   telad -hub ws://hub:8080 -machine barn -ports 22:SSH,3389:RDP
-  telad -hub wss://tela.awansaya.net -machine barn -ports "22:SSH,3389:RDP,12345:Prometheus" -token s3cret
+  telad -hub wss://hub.example.com -machine barn -ports "22:SSH,3389:RDP,12345:Prometheus" -token s3cret
 
 Options:
 `)
