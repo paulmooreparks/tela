@@ -152,7 +152,7 @@ Hub Name Resolution:
   The -hub flag accepts a full URL (wss://...) or a short hub name.
   Short names are resolved by querying the portal you logged into:
 
-    tela login https://awansatu.net   # authenticate once
+    tela login https://awansaya.net   # authenticate once
     tela connect -hub owlsnest -machine barn
 
   Names can also be defined locally in a config file (used as fallback):
@@ -164,10 +164,10 @@ Hub Name Resolution:
       myHub: wss://example.com
 
 Examples:
-  tela login https://awansatu.net
+  tela login https://awansaya.net
   tela connect  -hub owlsnest -machine barn
   tela machines -hub owlsnest
-  tela connect  -hub wss://tela.awansatu.net -machine barn
+  tela connect  -hub wss://tela.awansaya.net -machine barn
 
   # Select specific ports or services:
   tela connect -hub owlsnest -machine barn -ports 22,5432
@@ -1326,7 +1326,7 @@ func cmdLogin(args []string) {
 
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: tela login <portal-url>")
-		fmt.Fprintln(os.Stderr, "Example: tela login https://awansatu.net")
+		fmt.Fprintln(os.Stderr, "Example: tela login https://awansaya.net")
 		os.Exit(1)
 	}
 

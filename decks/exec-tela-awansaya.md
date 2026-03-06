@@ -1,6 +1,6 @@
 ---
 marp: true
-title: Tela + Awan Satu — Secure Remote Access Without VPN
+title: Tela + Awan Saya — Secure Remote Access Without VPN
 description: Executive overview for IT leadership
 paginate: true
 size: 16:9
@@ -13,12 +13,12 @@ How to export (VS Code):
 3) Ctrl+Shift+P → "Marp: Export slide deck..." → PPTX (or PDF/HTML)
 -->
 
-# Tela + Awan Satu
+# Tela + Awan Saya
 ## Secure remote access to TCP services — without VPN friction
 
 **Tela:** connectivity fabric (engine)
 
-**Awan Satu:** platform layer (portal + hub directory)
+**Awan Saya:** platform layer (portal + hub directory)
 
 ---
 
@@ -106,11 +106,11 @@ No existing tool hits this exact combination:
 
 ---
 
-# Awan Satu: the platform layer for Tela
+# Awan Saya: the platform layer for Tela
 
 Tela is the tool you run.
 
-Awan Satu turns it into a service:
+Awan Saya turns it into a service:
 
 - **Portal dashboard**: one view across many hubs (machines, services, sessions)
 - **Hub directory API**: `GET /api/hubs` enables short hub names in the CLI
@@ -120,17 +120,17 @@ Awan Satu turns it into a service:
 
 Analogy used in the docs:
 
-**Tela : Awan Satu :: git : GitHub**
+**Tela : Awan Saya :: git : GitHub**
 
 ---
 
-# How Awan Satu makes Tela easy to use
+# How Awan Saya makes Tela easy to use
 
 1) Stand up one or more hubs (each hub must be reachable over HTTPS/WebSockets)
-2) Register hubs in Awan Satu’s directory (today: file-backed `www/portal/config.json`)
+2) Register hubs in Awan Saya’s directory (today: file-backed `www/portal/config.json`)
 3) Users do a one-time login, then operate by name:
 
-- `tela login https://awansatu.net`
+- `tela login https://awansaya.net`
 - `tela machines -hub owlsnest`
 - `tela connect -hub owlsnest -machine barn`
 
@@ -144,7 +144,7 @@ Portal reality check:
 
 - **Start small:** one hub + one team + 2–3 services (SSH/RDP/DB)
 - **Prove outcomes:** faster access, fewer inbound rules, smaller blast radius than VPN
-- **Scale out:** one hub per environment/site/customer; add Awan Satu for multi-hub visibility and hub name resolution
+- **Scale out:** one hub per environment/site/customer; add Awan Saya for multi-hub visibility and hub name resolution
 - **Standardize:** move from ad-hoc access to a repeatable “connectivity fabric + platform” model
 
 ---
@@ -157,5 +157,5 @@ Portal reality check:
   - MSP customer support
 - Decide deployment pattern (endpoint vs gateway/bridge)
 - Stand up a hub and validate reachability (`/api/status`, `/api/history`)
-- Register the hub in Awan Satu and onboard 3–5 users
+- Register the hub in Awan Saya and onboard 3–5 users
 

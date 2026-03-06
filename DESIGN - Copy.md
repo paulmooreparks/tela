@@ -36,14 +36,14 @@ Represents a woven mesh of nodes, tunnels, and services.
 
 ## **1.2 Role in the ecosystem**
 Tela is the **engine**.
-Awan Satu is the **platform**.
+Awan Saya is the **platform**.
 
-Tela : Awan Satu :: Docker : Kubernetes
-Tela : Awan Satu :: WireGuard : Tailscale
-Tela : Awan Satu :: git : GitHub
+Tela : Awan Saya :: Docker : Kubernetes
+Tela : Awan Saya :: WireGuard : Tailscale
+Tela : Awan Saya :: git : GitHub
 
 Tela is stable, minimal, self‑hostable.
-Awan Satu is orchestrated, multi‑service, monetizable.
+Awan Saya is orchestrated, multi‑service, monetizable.
 
 ---
 
@@ -57,11 +57,11 @@ Awan Satu is orchestrated, multi‑service, monetizable.
 - Browser TCP bridge
 - Long‑term backward compatibility
 - Minimal dependencies
-- Serve as substrate for Awan Satu
+- Serve as substrate for Awan Saya
 
 ## **2.2 Non‑Goals**
 - No dashboards or orchestration in Tela
-- No identity providers (belongs to Awan Satu)
+- No identity providers (belongs to Awan Saya)
 - No trendy frameworks
 - No microservices
 - No protocol churn
@@ -75,7 +75,7 @@ Awan Satu is orchestrated, multi‑service, monetizable.
 - **Tela Hub** — Node.js LTS, MeshCentral‑derived
 - **Tela Web** — Vanilla JS
 - **Tela CLI** — Go static binary
-- **Awan Satu** — future control plane
+- **Awan Saya** — future control plane
 
 ## **3.2 Data Flow**
 1. Agent → outbound TLS+WebSocket → Hub
@@ -275,7 +275,7 @@ Does not protect against:
 - REST API
 
 ## **8.2 Authentication (Standalone Tela)**
-Before Awan Satu exists, Tela Hub uses:
+Before Awan Saya exists, Tela Hub uses:
 
 ### **Local Auth Model**
 - bcrypt‑hashed passwords
@@ -288,7 +288,7 @@ Before Awan Satu exists, Tela Hub uses:
 - Self‑contained
 - No external dependencies
 
-Awan Satu will later replace this with SSO.
+Awan Saya will later replace this with SSO.
 
 ---
 
@@ -322,7 +322,7 @@ The CLI is intentionally **not** part of the core runtime.
 
 ---
 
-# **11. End‑to‑End Usage Flow (Before Awan Satu)**
+# **11. End‑to‑End Usage Flow (Before Awan Saya)**
 
 ## **11.1 Setup**
 1. Deploy Tela Hub on VPS
@@ -348,7 +348,7 @@ Traffic flows:
 
 ---
 
-# **12. Tela as Substrate for Awan Satu**
+# **12. Tela as Substrate for Awan Saya**
 
 Tela provides:
 - universal agent
@@ -358,7 +358,7 @@ Tela provides:
 - metadata
 - identity at machine level
 
-Awan Satu orchestrates:
+Awan Saya orchestrates:
 - identity
 - RBAC
 - service catalogs
@@ -370,7 +370,7 @@ Awan Satu orchestrates:
 - billing
 
 Tela is the Docker‑layer.
-Awan Satu is the Kubernetes‑layer.
+Awan Saya is the Kubernetes‑layer.
 
 ---
 
@@ -392,14 +392,14 @@ Awan Satu is the Kubernetes‑layer.
 - Service exposure API
 - In‑browser RDP/SSH fallback
 
-## **13.3 Substrate for Awan Satu (6–12 months)**
+## **13.3 Substrate for Awan Saya (6–12 months)**
 - HA Hub
 - Postgres backend
 - Node grouping
 - Capability discovery
 - Metrics + logs channels
 
-## **13.4 Awan Satu v0.1 (12–18 months)**
+## **13.4 Awan Saya v0.1 (12–18 months)**
 - Identity (Cloudflare Access)
 - Provisioning tokens
 - Machine inventory

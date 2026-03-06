@@ -25,7 +25,7 @@ This glossary defines terms as they are used in Tela.
 | Term | Definition (Tela meaning) |
 | --- | --- |
 | **Agent (telad)** | The long‑lived daemon on a managed machine that makes an outbound connection to the Hub and exposes local services. Binary: \	elad\. |
-| **Awan Satu** | The cloud platform/service built on top of Tela. Provides hub registry, relay infrastructure, hosted hubs, SSO, and dashboards. Not part of Tela core. See §18. |
+| **Awan Saya** | The cloud platform/service built on top of Tela. Provides hub registry, relay infrastructure, hosted hubs, SSO, and dashboards. Not part of Tela core. See §18. |
 | **Certificate pinning** | The agent/client refuses to connect unless the Hub presents the expected TLS certificate fingerprint, preventing MITM even when a proxy can issue “valid” certificates. |
 | **Channel** | A logical stream within a single WebSocket connection (e.g., one proxied TCP connection) identified by a channel ID and managed via \open\/\close\. |
 | **Client (tela)** | The binary on the user’s laptop that connects through the Hub to an agent, establishes a WireGuard tunnel, and binds localhost listeners. Binary: \	ela\. Replaces the earlier “Helper” concept. |
@@ -36,7 +36,7 @@ This glossary defines terms as they are used in Tela.
 | **Fingerprint (certificate fingerprint)** | A short hash derived from the Hub’s TLS certificate (or public key) used for pinning; must match the expected value exactly. |
 | **Frame** | One protocol unit on the wire: a fixed header plus a payload (control JSON, TCP data, or heartbeat). |
 | **Hub** | The central relay/coordinator that accepts agent and client connections, brokers sessions, allocates channels, and routes frames between parties. Binary: `telahubd`. |
-| **Hub Console** | The web interface served by a Hub (e.g., \https://tela.awansatu.net/\). Shows registered machines, services, and session status. |
+| **Hub Console** | The web interface served by a Hub (e.g., \https://tela.awansaya.net/\). Shows registered machines, services, and session status. |
 | **HTTP** | Hypertext Transfer Protocol; commonly tunneled to validate connectivity (e.g., a static page). |
 | **Locked‑down environment** | A network or workstation that restricts inbound ports, VPNs, and/or installation, but still allows outbound HTTPS/WebSocket traffic. |
 | **Machine** | A named resource registered by an agent (e.g., \arn-wg\). One agent registers one machine. |
@@ -45,10 +45,10 @@ This glossary defines terms as they are used in Tela.
 | **Multiplexing** | Carrying multiple channels (control + multiple TCP streams) over a single WebSocket connection using a framing header and channel IDs. |
 | **NAT** | Network Address Translation; a common reason inbound connections to a machine are not possible without port forwarding. |
 | **Outbound‑only** | Agents and clients initiate connections out to the Hub; no inbound ports are required on managed machines. |
-| **Portal** | The Awan Satu multi‑hub dashboard at `awansatu.net/`. Aggregates machines, services, and sessions across all hubs a user has been granted access to. Provides SSO, RBAC, and centralized management. Distinct from the single‑hub Console. See §18.7–18.11. |
+| **Portal** | The Awan Saya multi‑hub dashboard at `awansaya.net/`. Aggregates machines, services, and sessions across all hubs a user has been granted access to. Provides SSO, RBAC, and centralized management. Distinct from the single‑hub Console. See §18.7–18.11. |
 | **RDP** | Microsoft Remote Desktop Protocol (typically TCP/3389); a primary example of a tunneled service. |
-| **Registry** | The directory of Hubs maintained by Awan Satu (§18.2). Maps hub identifiers to live connections. |
-| **Relay** | Awan Satu’s rendezvous service for self‑hosted Hubs (§18.3). Transparently forwards WebSocket frames. |
+| **Registry** | The directory of Hubs maintained by Awan Saya (§18.2). Maps hub identifiers to live connections. |
+| **Relay** | Awan Saya’s rendezvous service for self‑hosted Hubs (§18.3). Transparently forwards WebSocket frames. |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). Identified by port (and proto), with optional name/description metadata. |
 | **Session** | An active encrypted tunnel between a client and an agent, brokered by the Hub. |
 | **Session token** | A short‑lived, single‑use credential issued by the Hub that authorizes a client for a specific session. |
@@ -70,18 +70,18 @@ Short, global‑friendly, SEA‑rooted, and brandable.
 
 ## **1.2 Positioning**
 
-Tela is the **engine**. Awan Satu is the **platform**.
+Tela is the **engine**. Awan Saya is the **platform**.
 
-- **Tela : Awan Satu :: Docker : Kubernetes**
-- **Tela : Awan Satu :: WireGuard : Tailscale**
-- **Tela : Awan Satu :: git : GitHub**
+- **Tela : Awan Saya :: Docker : Kubernetes**
+- **Tela : Awan Saya :: WireGuard : Tailscale**
+- **Tela : Awan Saya :: git : GitHub**
 
 Tela is the runtime, the connectivity substrate, the stable, boring, long‑lived layer.
-Awan Satu is the orchestrator, the identity and policy layer, the multi‑service cloud platform.
+Awan Saya is the orchestrator, the identity and policy layer, the multi‑service cloud platform.
 
-Critically, Awan Satu is also a **connectivity service**: it can serve as a rendezvous relay for self‑hosted Hubs (eliminating the need for Cloudflare Tunnels, port forwarding, or static IPs), or it can host Hubs directly as a managed service. Users choose their deployment model; Tela's protocol is identical across all of them. See §18.
+Critically, Awan Saya is also a **connectivity service**: it can serve as a rendezvous relay for self‑hosted Hubs (eliminating the need for Cloudflare Tunnels, port forwarding, or static IPs), or it can host Hubs directly as a managed service. Users choose their deployment model; Tela's protocol is identical across all of them. See §18.
 
-Tela must remain small, stable, and protocol‑frozen so Awan Satu can evolve rapidly above it.
+Tela must remain small, stable, and protocol‑frozen so Awan Saya can evolve rapidly above it.
 
 ## **1.3 What Tela Is**
 
@@ -97,10 +97,10 @@ Apache 2.0 is chosen because:
 
 - Permissive enough to encourage adoption and contribution.
 - Includes an explicit patent grant (protects contributors and users).
-- Compatible with Awan Satu being a proprietary or differently‑licensed commercial layer.
+- Compatible with Awan Saya being a proprietary or differently‑licensed commercial layer.
 - Widely understood in the FOSS ecosystem.
 
-**All contributions to the Tela project must be licensed under Apache 2.0.** The Awan Satu platform may use a different license.
+**All contributions to the Tela project must be licensed under Apache 2.0.** The Awan Saya platform may use a different license.
 
 ---
 
@@ -118,13 +118,13 @@ Tela must:
 - Support **protocol‑agnostic multiplexed TCP channels**.
 - Maintain **long‑term backward compatibility**.
 - Use **minimal dependencies** and "boring tech."
-- Serve as the **substrate for Awan Satu**.
+- Serve as the **substrate for Awan Saya**.
 
 ## **2.2 Non‑Goals**
 
 Tela must not:
 
-- Implement dashboards, RBAC, or identity providers (Awan Satu's domain).
+- Implement dashboards, RBAC, or identity providers (Awan Saya's domain).
 - Become a monolithic remote‑desktop suite.
 - Adopt trendy frameworks or complex build systems.
 - Introduce microservices.
@@ -174,7 +174,7 @@ These invariants shape every architectural decision.
 - **telahubd** — Go HTTP+WebSocket server (Hub). Central coordination point. Serves hub console, `/api/status`, `/api/history`.
 - **tela** — Go static binary (client). Connects through the Hub to an agent, establishes WireGuard tunnel, binds localhost listeners.
 - **Tela Web** — Vanilla JS browser UI. Orchestration only.
-- **Awan Satu** — Future control plane and optional connectivity/hosting service. Not part of Tela core. See §18.
+- **Awan Saya** — Future control plane and optional connectivity/hosting service. Not part of Tela core. See §18.
 
 > **Implementation note:** The original design specified separate "Agent" (C/C++), "Hub" (Node.js), "Helper" (Go), and "CLI" (Go) binaries. The implementation consolidates these into three Go binaries: `telad` (agent/daemon), `telahubd` (hub), and `tela` (client/helper/CLI).
 
@@ -246,7 +246,7 @@ Tela replaces all MeshCentral components that are UI‑heavy, RDP‑specific, op
 - **Local‑client ephemeral port mechanism** — unique to Tela.
 - **Service exposure API** — MeshCentral is RDP‑centric; Tela exposes arbitrary TCP services.
 - **Metadata & tagging system** — new, lightweight model.
-- **Authentication model** — Tela uses local auth (standalone) or SSO (Awan Satu).
+- **Authentication model** — Tela uses local auth (standalone) or SSO (Awan Saya).
 - **Protocol specification** — Tela freezes v1 for long‑term stability; MeshCentral evolves faster.
 
 ## **5.3 Rationale**
@@ -486,7 +486,7 @@ The Hub never sees private keys and cannot decrypt tunnel traffic (**zero‑know
 - **ChaCha20‑Poly1305** AEAD encryption
 - **BLAKE2s** MAC
 - Combined with TLS on the WebSocket: defense‑in‑depth
-- Even if TLS is terminated at a relay (Cloudflare, Awan Satu), WireGuard encryption protects all data end‑to‑end (see §12.5)
+- Even if TLS is terminated at a relay (Cloudflare, Awan Saya), WireGuard encryption protects all data end‑to‑end (see §12.5)
 
 ### UDP Relay Mode (Latency Optimization)
 
@@ -623,7 +623,7 @@ Connection events, errors, channel lifecycle events, service access events. Loca
 
 ## **7.6 Updates**
 
-Manual, explicit, version‑pinned. Awan Satu may later introduce remote updates and staged rollouts. Tela core remains manual.
+Manual, explicit, version‑pinned. Awan Saya may later introduce remote updates and staged rollouts. Tela core remains manual.
 
 ---
 
@@ -641,7 +641,7 @@ The Hub is the central coordination point. It is intentionally lightweight and m
 - Maintain basic device metadata.
 - Expose a minimal REST API.
 
-The Hub is **not** an identity provider, dashboard engine, policy engine, orchestration system, or multi‑tenant platform. Those belong to Awan Satu.
+The Hub is **not** an identity provider, dashboard engine, policy engine, orchestration system, or multi‑tenant platform. Those belong to Awan Saya.
 
 ## **8.2 Implementation**
 
@@ -659,7 +659,7 @@ Users, agent registry, metadata, session logs. Simple, reliable, dependency‑mi
 
 ### Postgres (Phase 3+)
 
-Multi‑node deployments, HA, multi‑tenant environments. Required for HA Hub (Phase 3) before Awan Satu exists. Tela’s single‑node standalone mode remains SQLite‑based.
+Multi‑node deployments, HA, multi‑tenant environments. Required for HA Hub (Phase 3) before Awan Saya exists. Tela’s single‑node standalone mode remains SQLite‑based.
 
 ## **8.4 REST API**
 
@@ -686,7 +686,7 @@ Agent connections, helper connections, authentication events, session creation, 
 
 ## **8.7 Updates**
 
-Manual, explicit, version‑pinned. Awan Satu may later introduce rolling updates and multi‑node orchestration.
+Manual, explicit, version‑pinned. Awan Saya may later introduce rolling updates and multi‑node orchestration.
 
 ---
 
@@ -916,7 +916,7 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 > **Status:** Token-based authentication is implemented. The hub supports named token identities with role-based access control (owner/admin/user/viewer), per-machine ACLs, environment-variable bootstrap for Docker deployments, an admin REST API for remote management, and a `tela admin` CLI. A `console-viewer` identity is auto-generated at startup for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible). The spec's vision of bcrypt + cookies + TOTP for browser-based user auth is not yet implemented — the current system is token-based (like SSH `authorized_keys`).
 
-## **13.1 Tela Standalone (Before Awan Satu)**
+## **13.1 Tela Standalone (Before Awan Saya)**
 
 ### Current implementation (token-based)
 
@@ -942,9 +942,9 @@ Tela Hub will include a minimal local authentication system for browser-based ac
 
 Intentionally simple and self‑contained. No external dependencies.
 
-## **13.2 Awan Satu (Future)**
+## **13.2 Awan Saya (Future)**
 
-Awan Satu replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise identity providers. Tela Hub becomes a **resource server**, not an identity provider.
+Awan Saya replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise identity providers. Tela Hub becomes a **resource server**, not an identity provider.
 
 ---
 
@@ -1183,7 +1183,7 @@ This phase delivers the core Tela substrate. The 3‑month timeline is feasible 
 - Improved logging
 - E2E encryption (optional)
 
-## **17.3 Phase 3 — Substrate for Awan Satu (6–12 months)**
+## **17.3 Phase 3 — Substrate for Awan Saya (6–12 months)**
 
 - Postgres backend
 - HA Hub
@@ -1192,11 +1192,11 @@ This phase delivers the core Tela substrate. The 3‑month timeline is feasible 
 - Node grouping
 - Service catalogs (read‑only)
 
-## **17.4 Phase 4 — Awan Satu v0.1 (12–18 months)**
+## **17.4 Phase 4 — Awan Saya v0.1 (12–18 months)**
 
-- Hub registry (users register self‑hosted Hubs with Awan Satu)
-- Relay infrastructure (Awan Satu provides stable, publicly‑reachable relay endpoints)
-- Hosted Hub option (Awan Satu runs a Hub as a managed service)
+- Hub registry (users register self‑hosted Hubs with Awan Saya)
+- Relay infrastructure (Awan Saya provides stable, publicly‑reachable relay endpoints)
+- Hosted Hub option (Awan Saya runs a Hub as a managed service)
 - Cloudflare Access / OIDC SSO
 - RBAC
 - Provisioning tokens
@@ -1209,15 +1209,15 @@ Tela remains stable and unchanged except for additive features. See §18 for arc
 
 ---
 
-# **18. Awan Satu Architecture**
+# **18. Awan Saya Architecture**
 
-This section previews how Awan Satu extends Tela from a self‑hosted tool into a cloud service. Detailed Awan Satu specifications will live in a separate document; this section establishes the architectural contract between Tela and Awan Satu.
+This section previews how Awan Saya extends Tela from a self‑hosted tool into a cloud service. Detailed Awan Saya specifications will live in a separate document; this section establishes the architectural contract between Tela and Awan Saya.
 
 ## **18.1 Three Connectivity Models**
 
 Tela's protocol is identical regardless of deployment model. The Hub does not know or care how it became reachable. This is the key architectural invariant that allows the three models below to coexist.
 
-### Model A: Direct / Standalone (no Awan Satu)
+### Model A: Direct / Standalone (no Awan Saya)
 
 ```mermaid
 flowchart LR
@@ -1226,18 +1226,18 @@ flowchart LR
 
 The user deploys a Hub, obtains a TLS certificate (Let's Encrypt, self‑signed, etc.), and exposes it directly via port forwarding, VPN, or LAN. No external service is involved. This is the base Tela experience defined in the rest of this document.
 
-### Model B: Self‑Hosted Hub + Awan Satu Relay
+### Model B: Self‑Hosted Hub + Awan Saya Relay
 
 ```mermaid
 flowchart LR
-  Hub -->|persistent WSS| Relay["Awan Satu relay"]
-  Helper -->|"wss://relay.awansatu.net/hub/&lt;id&gt;"| Relay
-  Agent -->|"wss://relay.awansatu.net/hub/&lt;id&gt;"| Relay
+  Hub -->|persistent WSS| Relay["Awan Saya relay"]
+  Helper -->|"wss://relay.awansaya.net/hub/&lt;id&gt;"| Relay
+  Agent -->|"wss://relay.awansaya.net/hub/&lt;id&gt;"| Relay
   Relay -->|routed| Hub
   Hub --> Agent2[Agent] --> Service
 ```
 
-The user runs their own Hub but registers it with Awan Satu. The Hub maintains a persistent outbound connection to an Awan Satu relay endpoint. Agents and helpers connect to the Awan Satu relay URL; Awan Satu routes traffic to the correct registered Hub.
+The user runs their own Hub but registers it with Awan Saya. The Hub maintains a persistent outbound connection to an Awan Saya relay endpoint. Agents and helpers connect to the Awan Saya relay URL; Awan Saya routes traffic to the correct registered Hub.
 
 This eliminates the need for:
 
@@ -1246,31 +1246,31 @@ This eliminates the need for:
 - Port forwarding or firewall changes
 - Manual DNS and TLS certificate management
 
-The user's Hub is reachable via a stable Awan Satu‑provided URL without exposing any inbound ports.
+The user's Hub is reachable via a stable Awan Saya‑provided URL without exposing any inbound ports.
 
-### Model C: Awan Satu‑Hosted Hub (Fully Managed)
+### Model C: Awan Saya‑Hosted Hub (Fully Managed)
 
 ```mermaid
 flowchart LR
-  Helper -->|"wss://awansatu.net/hub/&lt;id&gt;"| Hub["Hub\n(hosted)"] --> Agent --> Service
-  Agent2[Agent] -->|"wss://awansatu.net/hub/&lt;id&gt;"| Hub
+  Helper -->|"wss://awansaya.net/hub/&lt;id&gt;"| Hub["Hub\n(hosted)"] --> Agent --> Service
+  Agent2[Agent] -->|"wss://awansaya.net/hub/&lt;id&gt;"| Hub
 ```
 
-Awan Satu runs the Hub on the user's behalf. The user registers agents and creates sessions through the Awan Satu dashboard or API. No self‑hosting required.
+Awan Saya runs the Hub on the user's behalf. The user registers agents and creates sessions through the Awan Saya dashboard or API. No self‑hosting required.
 
 This is the "Tailscale experience" — sign up, install agents, connect.
 
 ## **18.2 Hub Registry**
 
-Awan Satu maintains a **Hub registry**: a directory of Hubs, their owners, connectivity endpoints, and online/offline status.
+Awan Saya maintains a **Hub registry**: a directory of Hubs, their owners, connectivity endpoints, and online/offline status.
 
-- **Self‑hosted Hubs** register by establishing a persistent control connection to Awan Satu and proving ownership via a registration token or keypair.
-- **Managed Hubs** are created and lifecycle‑managed by Awan Satu directly.
+- **Self‑hosted Hubs** register by establishing a persistent control connection to Awan Saya and proving ownership via a registration token or keypair.
+- **Managed Hubs** are created and lifecycle‑managed by Awan Saya directly.
 - The registry maps stable Hub identifiers to live relay connections or managed instances.
 
 ## **18.3 Relay Protocol**
 
-The Awan Satu relay is transparent to the Tela protocol:
+The Awan Saya relay is transparent to the Tela protocol:
 
 - It forwards WebSocket frames between clients (agents/helpers) and the target Hub.
 - It does not inspect, modify, or interpret Tela frames.
@@ -1283,31 +1283,31 @@ From Tela's perspective, the relay is equivalent to a reverse proxy. No changes 
 
 ## **18.4 What Changes in Tela (Nothing)**
 
-This is the critical point: **Tela's protocol, agent, helper, and Hub implementations do not change.** The relay is an infrastructure layer below Tela; the Hub registry and managed hosting are Awan Satu features above Tela. Tela remains the stable substrate.
+This is the critical point: **Tela's protocol, agent, helper, and Hub implementations do not change.** The relay is an infrastructure layer below Tela; the Hub registry and managed hosting are Awan Saya features above Tela. Tela remains the stable substrate.
 
 | Concern | Owner |
 |---------|-------|
 | Frame format, multiplexing, channels | Tela (frozen) |
 | Agent/helper protocol, handshake | Tela (frozen) |
 | Hub session brokering, auth | Tela Hub |
-| Relay routing, Hub registry | Awan Satu |
-| Managed Hub provisioning | Awan Satu |
-| SSO, RBAC, billing, dashboards | Awan Satu |
+| Relay routing, Hub registry | Awan Saya |
+| Managed Hub provisioning | Awan Saya |
+| SSO, RBAC, billing, dashboards | Awan Saya |
 
 ## **18.5 Eliminating External Dependencies**
 
-Awan Satu as a connectivity service means users no longer need:
+Awan Saya as a connectivity service means users no longer need:
 
 | Self‑hosting requirement | Replaced by |
 |--------------------------|-------------|
-| Cloudflare Tunnel | Awan Satu relay (Model B) |
-| Static IP / DDNS | Awan Satu relay URL |
+| Cloudflare Tunnel | Awan Saya relay (Model B) |
+| Static IP / DDNS | Awan Saya relay URL |
 | Port forwarding | Hub connects outbound to relay |
-| TLS certificate management | Awan Satu handles TLS termination |
+| TLS certificate management | Awan Saya handles TLS termination |
 | Reverse proxy (Caddy/nginx) | Not needed for relay or managed model |
-| DNS configuration | Awan Satu provides stable URLs |
+| DNS configuration | Awan Saya provides stable URLs |
 
-Users who prefer full control continue using Model A (direct/standalone). Awan Satu is always optional.
+Users who prefer full control continue using Model A (direct/standalone). Awan Saya is always optional.
 
 ## **18.6 Analogy Summary**
 
@@ -1316,33 +1316,33 @@ Users who prefer full control continue using Model A (direct/standalone). Awan S
 | git | local repo | **GitHub** |
 | WireGuard | self‑hosted mesh | **Tailscale** |
 | Docker | local engine | **Docker Hub / ECS** |
-| **Tela** | local Hub (Model A) | **Awan Satu** (Models B & C) |
+| **Tela** | local Hub (Model A) | **Awan Saya** (Models B & C) |
 
 ## **18.7 Portal — The Multi‑Hub Aggregation Layer**
 
-Awan Satu provides a **Portal** at `awansatu.net/` — a centralized dashboard that aggregates status, machines, and services across all Hubs registered to a user's account.
+Awan Saya provides a **Portal** at `awansaya.net/` — a centralized dashboard that aggregates status, machines, and services across all Hubs registered to a user's account.
 
 The Portal is architecturally separate from the Hub Console:
 
-| | Hub Console | Awan Satu Portal |
+| | Hub Console | Awan Saya Portal |
 |---|-----------|-----------------|
-| **URL** | Served by each hub (e.g. `/`) | `awansatu.net/` (separate service) |
+| **URL** | Served by each hub (e.g. `/`) | `awansaya.net/` (separate service) |
 | **Scope** | Single hub — its machines, sessions, history | All hubs the user can access |
 | **Auth** | Hub‑local (token, cookie, optional TOTP) | SSO / OIDC (centralized identity) |
-| **Owner** | Tela (part of the hub runtime) | Awan Satu (platform layer) |
-| **Requires AS** | No — works standalone | Yes — is Awan Satu |
+| **Owner** | Tela (part of the hub runtime) | Awan Saya (platform layer) |
+| **Requires AS** | No — works standalone | Yes — is Awan Saya |
 
 The Portal queries each registered hub's standard API endpoints (`/api/status`, `/api/history`) and presents a unified view. The hub does not need to know it is being aggregated.
 
 ## **18.8 Path‑Based Hub Routing**
 
-Awan Satu uses **path‑based routing** under a single domain rather than per‑hub subdomains:
+Awan Saya uses **path‑based routing** under a single domain rather than per‑hub subdomains:
 
 ```
-awansatu.net/                     → Portal dashboard
-awansatu.net/hub/<name>/          → Hub console (proxied)
-awansatu.net/hub/<name>/api/...   → Hub API (proxied)
-wss://awansatu.net/hub/<name>/ws  → WebSocket endpoint (agent + client)
+awansaya.net/                     → Portal dashboard
+awansaya.net/hub/<name>/          → Hub console (proxied)
+awansaya.net/hub/<name>/api/...   → Hub API (proxied)
+wss://awansaya.net/hub/<name>/ws  → WebSocket endpoint (agent + client)
 ```
 
 Benefits over subdomains:
@@ -1351,49 +1351,49 @@ Benefits over subdomains:
 - One Cloudflare Tunnel (or reverse proxy), single ingress.
 - One origin for cookies, CORS, and CSP.
 - Adding a hub is a config/database row, not a DNS record.
-- Self‑hosted hubs still use their own domain (e.g. `tela.mycompany.com`); path‑based routing applies only to Awan Satu‑managed or relay‑connected hubs.
+- Self‑hosted hubs still use their own domain (e.g. `tela.mycompany.com`); path‑based routing applies only to Awan Saya‑managed or relay‑connected hubs.
 
 ## **18.9 User‑Centric Access Model**
 
-In standalone Tela, a user must know the hub URL and any access token. In Awan Satu, the user sees **machines, not infrastructure**.
+In standalone Tela, a user must know the hub URL and any access token. In Awan Saya, the user sees **machines, not infrastructure**.
 
 ### Roles
 
 | Role | Can do |
 |------|--------|
-| **Hub owner** | Registers a hub with Awan Satu, manages its machines, grants access to users |
-| **User** | Logs into Awan Satu, sees machines they've been granted access to, connects |
+| **Hub owner** | Registers a hub with Awan Saya, manages its machines, grants access to users |
+| **User** | Logs into Awan Saya, sees machines they've been granted access to, connects |
 | **Org admin** | Manages users, roles, and access policies across hubs owned by the org |
 
 ### Access grant flow
 
-1. Hub owner registers their hub with Awan Satu (outbound connection or managed instance).
+1. Hub owner registers their hub with Awan Saya (outbound connection or managed instance).
 2. Hub owner grants user X access to machine(s) on that hub via the Portal.
-3. User X logs into Awan Satu (SSO) and sees all machines across all hubs where they have grants.
+3. User X logs into Awan Saya (SSO) and sees all machines across all hubs where they have grants.
 4. User X connects — they never see a hub URL, IP address, or token.
 
 ### What the user sees
 
 ```
-> tela machines -portal https://awansatu.net
+> tela machines -portal https://awansaya.net
 MACHINE      HUB              STATUS  SERVICES
 api-gw       Acme Production  online  HTTPS:443
 nas          Paul's Home      online  Postgres:5432, MinIO:9000
 workstation  Paul's Home      online  ML:8090
 
-> tela connect -portal https://awansatu.net -machine nas
-Authenticating via awansatu.net... OK
+> tela connect -portal https://awansaya.net -machine nas
+Authenticating via awansaya.net... OK
 Routing through hub "Paul's Home"...
 Connected. Listening:
   localhost:5432 → nas:5432 (Postgres)
   localhost:9000 → nas:9000 (MinIO)
 ```
 
-The user does not know or care that "Paul's Home" hub is at `192.168.1.50` behind NAT, reached via the Awan Satu relay. Awan Satu resolves the machine name to the correct hub, establishes the relay path, and handles authentication.
+The user does not know or care that "Paul's Home" hub is at `192.168.1.50` behind NAT, reached via the Awan Saya relay. Awan Saya resolves the machine name to the correct hub, establishes the relay path, and handles authentication.
 
-## **18.10 CLI Integration — `tela` Talks to Awan Satu**
+## **18.10 CLI Integration — `tela` Talks to Awan Saya**
 
-There is **one CLI**: `tela`. It gains an optional `-portal` flag (and `TELA_PORTAL` environment variable) that points to an Awan Satu instance. No separate `awansatu` CLI is needed.
+There is **one CLI**: `tela`. It gains an optional `-portal` flag (and `TELA_PORTAL` environment variable) that points to an Awan Saya instance. No separate `awansaya` CLI is needed.
 
 ### Direct mode (standalone, no AS)
 
@@ -1402,14 +1402,14 @@ tela connect  -hub wss://hub.example.com -machine mybox
 tela machines -hub wss://hub.example.com
 ```
 
-The user specifies the hub directly. Authentication is hub‑local (token, cookie). This is the base Tela experience and always works without Awan Satu.
+The user specifies the hub directly. Authentication is hub‑local (token, cookie). This is the base Tela experience and always works without Awan Saya.
 
 ### Portal mode (via AS)
 
 ```
-tela connect  -portal https://awansatu.net -machine mybox
-tela machines -portal https://awansatu.net
-tela hubs     -portal https://awansatu.net
+tela connect  -portal https://awansaya.net -machine mybox
+tela machines -portal https://awansaya.net
+tela hubs     -portal https://awansaya.net
 ```
 
 The client contacts the portal, authenticates (OAuth2 device flow or cached token), resolves the machine to its hub, and connects through the relay. The user never provides a hub URL.
@@ -1424,15 +1424,15 @@ When both `-hub` and `-portal` are omitted, `tela` checks environment variables:
 
 When `-portal` is used, discovery flow is:
 
-1. `tela` calls `GET https://awansatu.net/api/resolve?machine=<name>` with an OAuth2 bearer token.
-2. Awan Satu returns the hub's relay WebSocket URL (e.g. `wss://awansatu.net/hub/pauls-home/ws`) and any session metadata.
+1. `tela` calls `GET https://awansaya.net/api/resolve?machine=<name>` with an OAuth2 bearer token.
+2. Awan Saya returns the hub's relay WebSocket URL (e.g. `wss://awansaya.net/hub/pauls-home/ws`) and any session metadata.
 3. `tela` connects to that URL as if it were a direct hub connection. The hub sees a normal client WebSocket — no protocol changes.
 
 ### Authentication flow
 
 For portal mode, `tela` uses **OAuth2 Device Authorization Grant** (RFC 8628):
 
-1. `tela` requests a device code from `https://awansatu.net/oauth/device`.
+1. `tela` requests a device code from `https://awansaya.net/oauth/device`.
 2. User opens a browser URL and enters the code (or scans a QR code).
 3. `tela` polls for the token, then caches it locally.
 4. Subsequent commands use the cached token until it expires.
@@ -1443,9 +1443,9 @@ This avoids embedding browser windows in the CLI and works on headless machines.
 
 A critical distinction: the person who runs a hub is not necessarily the person who uses machines on it.
 
-**Example:** A company's IT department runs a hub on a cloud VM. They register it with Awan Satu and grant access to 50 employees. Each employee sees only the machines they're authorized for. The employees never SSH into the hub VM, never see its IP, and never manage it. They just run `tela connect -machine dev-server` and work.
+**Example:** A company's IT department runs a hub on a cloud VM. They register it with Awan Saya and grant access to 50 employees. Each employee sees only the machines they're authorized for. The employees never SSH into the hub VM, never see its IP, and never manage it. They just run `tela connect -machine dev-server` and work.
 
-This separation is what makes Awan Satu a **platform** rather than just a prettier standalone hub. The hub is infrastructure; the portal is the user‑facing product.
+This separation is what makes Awan Saya a **platform** rather than just a prettier standalone hub. The hub is infrastructure; the portal is the user‑facing product.
 
 ## **18.12 Hub Aliases — Named Hubs**
 
@@ -1468,7 +1468,7 @@ When the `-hub` flag (or `TELA_HUB` env var) does not start with `ws://` or `wss
 
 ```yaml
 hubs:
-  owlsnest: wss://tela-local.awansatu.net
+  owlsnest: wss://tela-local.awansaya.net
   work:     wss://hub.corp.example.com
 ```
 
@@ -1477,7 +1477,7 @@ hubs:
 ### Portal Login
 
 ```
-tela login https://awansatu.net    # authenticate, store portal URL + token
+tela login https://awansaya.net    # authenticate, store portal URL + token
 tela logout                        # remove stored credentials
 ```
 
@@ -1496,7 +1496,7 @@ Authorization: Bearer <token>    (optional; omitted in open mode)
 ### Usage
 
 ```
-tela login https://awansatu.net
+tela login https://awansaya.net
 tela connect  -hub owlsnest -machine barn
 tela machines -hub owlsnest
 export TELA_HUB=owlsnest
@@ -1518,7 +1518,7 @@ This keeps the CLI ergonomic for daily use while preserving full URL support for
 
 ## **19.2 Platform Risks**
 
-- **Scope creep** → mitigated by Tela/Awan Satu separation.
+- **Scope creep** → mitigated by Tela/Awan Saya separation.
 - **Identity complexity** → mitigated by deferring to Cloudflare Access.
 - **MeshCentral drift** → mitigated by explicit integration boundary (§5).
 - **Helper execution blocks** → mitigated by in‑browser fallback (§10.5).
@@ -1559,5 +1559,5 @@ These tests are **mandatory before any release** and must run against every supp
 
 - UI testing (Tela Web is minimal; manual verification is acceptable for Phase 1).
 - Performance benchmarking (deferred to Phase 3).
-- Multi‑tenant isolation (Awan Satu’s domain).
+- Multi‑tenant isolation (Awan Saya’s domain).
 

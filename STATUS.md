@@ -6,7 +6,7 @@ Traceability matrix mapping each DESIGN.md section to current implementation sta
 - ✅ **Done** — Implemented (at least POC-level working code)
 - 🔶 **Partial** — Some aspects implemented, gaps remain
 - ⬜ **Not started** — No implementation yet
-- 🔮 **Future** — Awan Satu scope or Phase 3+
+- 🔮 **Future** — Awan Saya scope or Phase 3+
 - 📄 **Doc-only** — Informational section, no implementation required
 
 Last updated: 2026-03-05
@@ -35,7 +35,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §4.1 | Components | 🔶 | `telad` (Go agent ✅), `telahubd` (Go hub ✅), `tela` (Go client ✅), Web (landing page + downloads ✅), CLI (⬜), Awan Satu (🔮) |
+| §4.1 | Components | 🔶 | `telad` (Go agent ✅), `telahubd` (Go hub ✅), `tela` (Go client ✅), Web (landing page + downloads ✅), CLI (⬜), Awan Saya (🔮) |
 | §4.2 | Data Flow — Agent Connection | ✅ | `telad`: outbound WS, register, reconnect, token auth |
 | §4.2 | Data Flow — Browser Orchestration | 🔶 | Landing page with OS-detected download links; no login, session tokens, or machine list |
 | §4.2 | Data Flow — Client Connection | ✅ | `tela`: WS connect, WireGuard tunnel, auto-bind local listeners, reconnect |
@@ -150,7 +150,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §13.1 | Tela Standalone (bcrypt, SQLite, cookies, TOTP) | 🔶 | Named token identities with RBAC ✅; YAML-persisted auth config ✅; admin REST API ✅; `tela admin` CLI ✅; env-var bootstrap ✅. No bcrypt/cookies/TOTP (spec vision), but functional token-based auth is complete |
-| §13.2 | Awan Satu (SSO) | 🔮 | — |
+| §13.2 | Awan Saya (SSO) | 🔮 | — |
 
 ---
 
@@ -192,16 +192,16 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 |---------|-------|--------|-------|
 | §17.1 | Phase 1 — Minimum Viable Fabric | 🔶 | Core WG tunnel works, reconnect ✅, token auth ✅, multi-port ✅, UDP relay ✅. Protocol/mux/full-auth not started |
 | §17.2 | Phase 2 — Fabric Extensions | ⬜ | — |
-| §17.3 | Phase 3 — Substrate for Awan Satu | 🔮 | — |
-| §17.4 | Phase 4 — Awan Satu v0.1 | 🔮 | — |
+| §17.3 | Phase 3 — Substrate for Awan Saya | 🔮 | — |
+| §17.4 | Phase 4 — Awan Saya v0.1 | 🔮 | — |
 
 ---
 
-## §18 — Awan Satu Architecture
+## §18 — Awan Saya Architecture
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §18.1 | Three Connectivity Models | 🔶 | Model A (direct) demonstrated via Cloudflare Tunnel + Caddy direct; Models B & C are Awan Satu scope |
+| §18.1 | Three Connectivity Models | 🔶 | Model A (direct) demonstrated via Cloudflare Tunnel + Caddy direct; Models B & C are Awan Saya scope |
 | §18.2 | Hub Registry | 🔮 | — |
 | §18.3 | Relay Protocol | 🔮 | — |
 | §18.4 | What Changes in Tela (Nothing) | 📄 | — |
@@ -236,7 +236,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 | ✅ Done | 17 | Working implementation |
 | 🔶 Partial | 20 | POC covers some aspects |
 | ⬜ Not started | 18 | No implementation |
-| 🔮 Future | 8 | Awan Satu / Phase 3+ |
+| 🔮 Future | 8 | Awan Saya / Phase 3+ |
 | 📄 Doc-only | 14 | No code artifact needed |
 
 ### What's working now (POC)
@@ -247,7 +247,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 4. **Token auth with RBAC** — Named identities (owner/admin/user), per-machine ACLs, env-var bootstrap for Docker, remote management via `tela admin` CLI and admin REST API, hot-reload (no restart needed)
 5. **Auto-reconnect** — Both tela and telad reconnect on disconnect
 6. **Cross-platform client** — Windows, Linux, macOS (Intel + ARM) binaries served from hub
-7. **Dual ingress** — Cloudflare Tunnel (`tela.awansatu.net`) + Caddy direct (`tela-local.awansatu.net`)
+7. **Dual ingress** — Cloudflare Tunnel (`tela.awansaya.net`) + Caddy direct (`tela-local.awansaya.net`)
 8. **Hub /status API** — JSON endpoint for monitoring
 9. **Direct tunnel (P2P)** — STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
 10. **CLI login/logout** — `tela login` authenticates with a portal, `tela logout` removes credentials

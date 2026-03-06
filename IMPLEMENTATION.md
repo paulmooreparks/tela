@@ -1,6 +1,6 @@
-﻿# Tela / Awan Satu — Local Implementation & Deployment Runbook (POC)
+# Tela / Awan Saya — Local Implementation & Deployment Runbook (POC)
 
-This document is a **practical runbook** for implementing and running Tela locally, exposing a Hub for internet access, and starting a POC path toward Awan Satu.
+This document is a **practical runbook** for implementing and running Tela locally, exposing a Hub for internet access, and starting a POC path toward Awan Saya.
 
 It complements the authoritative specification in `DESIGN.md`.
 
@@ -17,7 +17,7 @@ It complements the authoritative specification in `DESIGN.md`.
 ## Non-goals (what this runbook does not cover)
 
 - Full Tela Hub implementation details (auth, tokens, multiplex framing).
-- Full Awan Satu features (RBAC, policy, SSO, dashboards).
+- Full Awan Saya features (RBAC, policy, SSO, dashboards).
 - High availability / multi-hub clustering.
 
 ---
@@ -340,7 +340,7 @@ docker compose up --build -d
 ./tela connect -hub wss://gohub.parkscomputing.com -machine barn
 
 # Or log in to portal and use hub names
-tela login https://awansatu.net
+tela login https://awansaya.net
 tela connect -hub barn-hub -machine barn
 ```
 
@@ -405,10 +405,10 @@ proximity. There is no way to reduce this while using the tunnel.
 **Mitigation:**
 
 - **Direct mode (done)** — Caddy with DNS-01 (Cloudflare API) serves
-  `tela-local.awansatu.net` with valid Let's Encrypt TLS, bypassing the
+  `tela-local.awansaya.net` with valid Let's Encrypt TLS, bypassing the
   Cloudflare edge entirely. This is the recommended path for local and
   LAN-adjacent use.
-- **Tunnel mode** — still available via `tela.awansatu.net` through
+- **Tunnel mode** — still available via `tela.awansaya.net` through
   Cloudflare Tunnel for scenarios where inbound ports are blocked.
 - Long-term: allow the Hub to advertise both URLs and let the client
   prefer the direct path automatically.

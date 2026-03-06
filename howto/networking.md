@@ -30,7 +30,7 @@ Optional (performance / transport):
 
 Portal visibility:
 
-- For Awan Satu (or any browser-based portal) to display hub cards/metrics, the hub must expose:
+- For Awan Saya (or any browser-based portal) to display hub cards/metrics, the hub must expose:
   - `GET /api/status` (and/or `/status`)
   - `GET /api/history`
 - Cross-origin portal fetches require CORS. The hub replies with `Access-Control-Allow-Origin: *` for these endpoints.

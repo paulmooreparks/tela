@@ -5,7 +5,7 @@ This document describes the configuration files used by the Tela stack:
 - Local CLI config files used by `tela` (portal login + hub aliases)
 - Daemon config used by `telad`
 - Hub config used by `telahubd`
-- Portal hub directory config used by Awan Satu
+- Portal hub directory config used by Awan Saya
 
 If you’re specifically looking for how to create/edit `hubs.yaml`, start at: **`hubs.yaml` (hub aliases)**.
 
@@ -63,7 +63,7 @@ hubs:
 
 ```yaml
 hubs:
-  owlsnest: wss://tela.awansatu.net
+  owlsnest: wss://tela.awansaya.net
   gohub: wss://gohub.parkscomputing.com
 ```
 
@@ -96,7 +96,7 @@ hubs:
 
 ```yaml
 portal:
-  url: https://awansatu.net
+  url: https://awansaya.net
   token: ""   # empty token = open-mode portal
 ```
 
@@ -160,7 +160,7 @@ Notes:
 **Example (two machines):**
 
 ```yaml
-hub: wss://tela.awansatu.net
+hub: wss://tela.awansaya.net
 token: "shared-secret"
 
 machines:
@@ -306,11 +306,11 @@ When running as an OS service, `telad` and `telahubd` read their YAML from a sys
 - Windows: `%ProgramData%\Tela\telad.yaml` and `%ProgramData%\Tela\telahubd.yaml`
 - Linux/macOS: `/etc/tela/telad.yaml` and `/etc/tela/telahubd.yaml`
 
-## Awan Satu: `portal/config.json` (hub directory)
+## Awan Saya: `portal/config.json` (hub directory)
 
-**Repo:** Awan Satu
+**Repo:** Awan Saya
 
-**File location:** `awansatu/www/portal/config.json`
+**File location:** `awansaya/www/portal/config.json`
 
 **Purpose:** The portal’s hub directory, served at `GET /api/hubs`.
 
@@ -319,7 +319,7 @@ When running as an OS service, `telad` and `telahubd` read their YAML from a sys
 ```json
 {
   "hubs": [
-    { "name": "owlsnest", "url": "https://tela.awansatu.net", "viewerToken": "<hex>" }
+    { "name": "owlsnest", "url": "https://tela.awansaya.net", "viewerToken": "<hex>" }
   ]
 }
 ```

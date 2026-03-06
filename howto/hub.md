@@ -14,7 +14,7 @@ A **Tela Hub** is the rendezvous + relay point that:
 
 ### Download
 
-Pre-built binaries for Windows, Linux, and macOS are available on the [GitHub Releases](https://github.com/paulmooreparks/tela/releases) page, or from the [Awan Satu download section](https://awansatu.net/#download).
+Pre-built binaries for Windows, Linux, and macOS are available on the [GitHub Releases](https://github.com/paulmooreparks/tela/releases) page, or from the [Awan Saya download section](https://awansaya.net/#download).
 
 ### Build from source
 
@@ -217,13 +217,13 @@ See the `docker-compose.yml` and `docker/caddy/Caddyfile` in the Tela repo for a
 
 ## Register with a portal
 
-Once the hub is reachable, add it to an Awan Satu portal so users and the CLI can find it by short name:
+Once the hub is reachable, add it to an Awan Saya portal so users and the CLI can find it by short name:
 
 1. Open the portal and click **Add Hub**.
 2. Enter a short name (e.g., `myhub`), the hub's public URL (e.g., `https://your-hub.example.com`), and optionally a **viewer token** (so the portal can proxy hub status server-side).
 3. The hub will appear in the portal dashboard and be resolvable by the CLI:
    ```bash
-   tela login https://awansatu.net
+   tela login https://awansaya.net
    tela machines -hub myhub
    tela connect -hub myhub -machine mybox
    ```

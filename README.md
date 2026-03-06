@@ -107,10 +107,10 @@ Then connect: `ssh localhost` or `mstsc /v:localhost`
 
 ### Portal login (hub name resolution)
 
-If your hubs are registered on a portal (e.g., Awan Satu), log in once and use short hub names:
+If your hubs are registered on a portal (e.g., Awan Saya), log in once and use short hub names:
 
 ```bash
-tela login https://awansatu.net    # authenticate once, config stored locally
+tela login https://awansaya.net    # authenticate once, config stored locally
 tela machines -hub owlsnest         # hub name resolved via portal
 tela connect -hub owlsnest -machine barn
 tela logout                         # remove stored credentials
@@ -212,14 +212,14 @@ docker/            Caddyfile, docker-compose, cloudflared config
 | Term | Meaning |
 |------|---------|
 | **Hub** | Central relay (`telahubd`) that pairs daemons with clients. Serves the hub console. |
-| **Hub Console** | Web interface for a hub (e.g., `https://tela.awansatu.net/`). |
+| **Hub Console** | Web interface for a hub (e.g., `https://tela.awansaya.net/`). |
 | **Daemon / telad** | Long-lived daemon on a managed machine that registers with the hub. |
 | **Client / tela** | Binary on the user's laptop that tunnels through the hub to an agent. |
 | **Machine** | A named resource registered by an agent (e.g., `barn`). |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
 | **Session** | An active encrypted tunnel between a client and an agent. |
-| **Portal** | Multi-hub dashboard (e.g., Awan Satu). The CLI resolves hub names via the portal API. |
-| **Awan Satu** | Cloud platform built on Tela (hub registry, relay, hosted hubs). |
+| **Portal** | Multi-hub dashboard (e.g., Awan Saya). The CLI resolves hub names via the portal API. |
+| **Awan Saya** | Cloud platform built on Tela (hub registry, relay, hosted hubs). |
 
 ## Documentation
 

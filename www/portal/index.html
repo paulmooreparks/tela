@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Awan Satu Portal</title>
+  <title>Awan Saya Portal</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -139,7 +139,7 @@
 
   <div class="container">
     <h1>Dashboard</h1>
-    <p class="page-desc">Awan Satu portal &mdash; multi-hub management for Tela connectivity fabric</p>
+    <p class="page-desc">Awan Saya portal &mdash; multi-hub management for Tela connectivity fabric</p>
 
     <!-- Summary stats -->
     <div class="stats">
@@ -202,7 +202,7 @@
     </div>
   </div>
 
-  <footer>Awan Satu Portal &middot; Powered by Tela</footer>
+  <footer>Awan Saya Portal &middot; Powered by Tela</footer>
 
   <script>
     // ── Hub registry ────────────────────────────────────────────────
@@ -214,7 +214,7 @@
 
     // Try to load additional hubs from localStorage
     try {
-      var extra = JSON.parse(localStorage.getItem('awansatu-hubs') || '[]');
+      var extra = JSON.parse(localStorage.getItem('awansaya-hubs') || '[]');
       if (Array.isArray(extra)) HUBS = HUBS.concat(extra);
     } catch (e) {}
 
