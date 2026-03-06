@@ -4,158 +4,226 @@ title: Tela + Awan Saya — Secure Remote Access Without VPN
 description: Executive overview for IT leadership
 paginate: true
 size: 16:9
+theme: default
 ---
 
 <!--
-How to export (VS Code):
-1) Install extension: "Marp for VS Code" (Marp Team)
+Export in VS Code:
+1) Install "Marp for VS Code"
 2) Open this file
-3) Ctrl+Shift+P → "Marp: Export slide deck..." → PPTX (or PDF/HTML)
+3) Run "Marp: Export slide deck..."
 -->
 
+<style>
+section {
+  font-size: 28px;
+}
+.lead {
+  font-size: 1.25em;
+}
+.small {
+  font-size: 0.8em;
+}
+.center {
+  text-align: center;
+}
+</style>
+
 # Tela + Awan Saya
-## Secure remote access to TCP services — without VPN friction
+## Secure remote access without VPN friction
 
-**Tela:** connectivity fabric (engine)
+<div class="lead">
 
-**Awan Saya:** platform layer (portal + hub directory)
+**Tela** = connectivity fabric
+**Awan Saya** = platform layer
 
----
-
-# What IT teams are up against
-
-- Remote work + contractors + distributed teams are normal
-- Critical systems sit behind NAT, firewalls, and segmented networks
-- Endpoints are increasingly locked down (no admin, no drivers, no VPN clients)
-- Traditional approaches widen blast radius ("full network" VPN) or add brittle infrastructure (bastions)
-
-**Result:** access becomes slow, risky, and operationally expensive.
+</div>
 
 ---
 
-# Why the status quo breaks down
+# Executive summary
 
-- **VPN / mesh VPNs**: great when you can install and create a TUN device; often blocked on managed corporate devices
-- **Bastion / jump hosts**: SSH-centric, adds a choke point to maintain, and still requires opening inbound paths somewhere
-- **HTTP-only tunnels**: strong for web apps; awkward for raw TCP (RDP/SSH/DB)
-- **Enterprise ZT access platforms**: powerful, but heavy to deploy and operate for many teams
+- IT teams need access to systems that are **private, segmented, and locked down**
+- Traditional approaches often mean **too much network access** or **too much operational overhead**
+- **Tela** provides narrow access to specific TCP services
+- **Awan Saya** adds multi-hub visibility, discovery, access control, and onboarding on top
 
-IT needs something that works in locked-down reality.
+**Bottom line:** simpler remote access, smaller blast radius, less VPN friction.
+
+---
+
+# The problem
+
+- Teams are distributed
+- Infrastructure is behind NAT and firewalls
+- Corporate endpoints often block admin installs, drivers, and TUN devices
+- Security teams want **least privilege**, not flat network access
+
+**Result:** remote access is slow to roll out and hard to control.
+
+---
+
+# Why existing approaches fall short
+
+- **VPNs / mesh VPNs**
+  Often require admin rights, drivers, or broad network trust
+
+- **Bastions / jump hosts**
+  Add infrastructure and create choke points
+
+- **HTTP tunnels**
+  Great for web apps, awkward for raw TCP services
+
+- **Large ZT platforms**
+  Powerful, but often heavy and expensive for small or mid-sized teams
 
 ---
 
 # Tela in one slide
 
-**Tela provides secure remote access to TCP services (SSH, RDP, HTTP, etc.)**
+**Tela gives users secure access to TCP services without requiring a traditional VPN.**
 
-- **End-to-end encrypted** userspace WireGuard tunnel between `tela` (client) and `telad` (agent)
-- Hub relays **ciphertext only** (never sees plaintext)
-- **Outbound-only** from both client and agent (works through HTTPS/WebSockets)
-- **No admin privileges or TUN devices required** on either end
-- Local apps connect to `127.0.0.1:<port>` (SSH/RDP/DB clients work unchanged)
+- End-to-end encrypted userspace WireGuard tunnel
+- Hub relays **ciphertext only**
+- Client and agent are both **outbound-only**
+- No admin privileges or TUN devices required
+- Existing tools keep working through `localhost`
 
-Simple path:
-
-`App → localhost → tela → (wss) hub → telad → local service`
-
----
-
-# What makes Tela different
-
-No existing tool hits this exact combination:
-
-1) **Zero-install, no-admin client** (works on locked-down machines)
-2) **Protocol-agnostic TCP tunneling** (not just SSH, not just HTTP)
-3) **Outbound-only agents** (works behind NAT/firewalls you don’t control)
-4) **End-to-end WireGuard encryption** (hub is a blind relay)
-5) **Lightweight single-binary deployment** (minimal moving parts)
+**Path:**
+App → localhost → `tela` → hub → `telad` → target service
 
 ---
 
-# Use cases that map to IT pain
+# Why Tela is different
 
-- **Distributed dev teams**: access dev/staging/prod machines by name; expose only needed services
-- **Production access (bastion replacement)**: SSH/DB/admin ports without opening inbound ports on prod VMs
-- **MSP / IT support**: reach customer endpoints behind NAT without screen-sharing tooling or per-seat licensing
-- **IoT / edge management**: maintain devices on customer sites you don’t control; persistent outbound registration
-- **Education / labs**: students connect to assigned lab machines without VPN infrastructure
-- **Personal cloud / homelab**: same mechanics; validates the model in hostile networks (hotel, café, corporate Wi‑Fi)
+1. **Zero-install, no-admin client**
+2. **Protocol-agnostic TCP tunneling**
+3. **Outbound-only connectivity**
+4. **End-to-end encryption through a blind relay**
+5. **Single-binary, lightweight deployment**
 
----
-
-# Operational model (keeps blast radius small)
-
-**Two deployment patterns (both supported):**
-
-- **Endpoint agent (canonical)**: `telad` runs on each machine that hosts services (strongest last-hop story)
-- **Gateway / bridge agent**: `telad` runs on a gateway that can reach targets over LAN/VPC (useful for locked-down endpoints)
-
-**Service-level granularity**
-
-- You expose only declared ports (e.g., `22`, `3389`, `5432`) instead of a whole network segment.
+This combination is what makes Tela practical in locked-down environments.
 
 ---
 
-# Security & controls (what an exec should care about)
+# Where it fits best
 
-- **Encryption:** WireGuard end-to-end; hub relays opaque ciphertext
-- **Auth:** token-based authentication supported (treat as secrets; rotate)
-- **Network exposure:** agents and clients are outbound-only; no inbound ports required on managed machines
-- **Environment boundaries:** simplest control is dedicated hubs per environment/customer
-- **Audit trail:** hubs expose `/api/history` (who connected, when, to what)
-
----
-
-# Awan Saya: the platform layer for Tela
-
-Tela is the tool you run.
-
-Awan Saya turns it into a service:
-
-- **Portal dashboard**: one view across many hubs (machines, services, sessions)
-- **Hub directory API**: `GET /api/hubs` enables short hub names in the CLI
-- **Onboarding**: one login, then connect by hub name
-- **Federation model**: any hub exposing the standard API can be registered
-- **SSO & RBAC**: planned (centralized authentication and access control)
-
-Analogy used in the docs:
-
-**Tela : Awan Saya :: git : GitHub**
+- **Developer access** to staging or production systems
+- **Bastion replacement** for SSH, RDP, and database access
+- **MSP / IT support** for customer environments behind NAT
+- **IoT and edge** deployments in networks you do not control
+- **Training labs / classrooms** without VPN rollout overhead
 
 ---
 
-# How Awan Saya makes Tela easy to use
+# Operating model
 
-1) Stand up one or more hubs (each hub must be reachable over HTTPS/WebSockets)
-2) Register hubs in Awan Saya’s directory (today: file-backed `www/portal/config.json`)
-3) Users do a one-time login, then operate by name:
+## Two supported patterns
 
-- `tela login https://awansaya.net`
-- `tela machines -hub owlsnest`
-- `tela connect -hub owlsnest -machine barn`
+- **Endpoint agent**
+  `telad` runs on each managed machine
 
-Portal reality check:
+- **Gateway / bridge agent**
+  `telad` runs on a gateway that can reach internal targets
 
-- The portal runs in the browser and fetches `/api/status` and `/api/history` directly from each hub.
+## Control surface stays small
 
----
-
-# A practical adoption path
-
-- **Start small:** one hub + one team + 2–3 services (SSH/RDP/DB)
-- **Prove outcomes:** faster access, fewer inbound rules, smaller blast radius than VPN
-- **Scale out:** one hub per environment/site/customer; add Awan Saya for multi-hub visibility and hub name resolution
-- **Standardize:** move from ad-hoc access to a repeatable “connectivity fabric + platform” model
+- Expose only the specific service ports you want
+- Avoid exposing an entire subnet or network segment
 
 ---
 
-# What to do next
+# Security view
 
-- Pick an initial use case:
-  - production bastion replacement, or
-  - developer access to staging, or
-  - MSP customer support
-- Decide deployment pattern (endpoint vs gateway/bridge)
-- Stand up a hub and validate reachability (`/api/status`, `/api/history`)
-- Register the hub in Awan Saya and onboard 3–5 users
+- **Encryption:** end-to-end WireGuard tunnel
+- **Exposure:** outbound-only from both sides
+- **Authentication:** token-based today; rotate and manage as secrets
+- **Segmentation:** one hub per environment, site, or customer is straightforward
+- **Auditability:** hubs expose connection history and status APIs
+
+For leadership, the key idea is simple: **less network exposure, tighter scope, easier review**.
+
+---
+
+# Awan Saya’s role
+
+Tela is the engine.
+
+Awan Saya adds the platform features around it:
+
+- Multi-hub dashboard
+- Hub directory and name resolution
+- Easier onboarding
+- Shared view of machines, services, and sessions
+- Foundation for centralized auth and RBAC
+
+**Analogy:** Tela : Awan Saya :: git : GitHub
+
+---
+
+# What the platform changes for users
+
+Without a platform layer:
+
+- users need to know specific hub URLs
+- onboarding is manual
+- multi-hub visibility is fragmented
+
+With Awan Saya:
+
+- users log in once
+- hubs can be discovered by name
+- one dashboard shows fleet-wide status
+
+---
+
+# Adoption path
+
+## Start narrow
+
+- One hub
+- One team
+- Two or three services
+
+## Prove value
+
+- Faster access setup
+- Fewer inbound firewall changes
+- Smaller blast radius than VPN
+
+## Then scale
+
+- One hub per environment, site, or customer
+- Add Awan Saya for centralized visibility and discovery
+
+---
+
+# Recommended first pilot
+
+Choose one:
+
+1. **Developer access to staging**
+2. **Production bastion replacement**
+3. **MSP support into customer networks**
+
+Pilot success metrics:
+
+- time to onboard a user
+- number of inbound rules avoided
+- time to reach a target machine or service
+- auditability of who connected and when
+
+---
+
+# Next steps
+
+- Stand up a hub
+- Validate reachability and audit endpoints
+- Connect one or two target services
+- Onboard a small user group
+- Add Awan Saya when multi-hub discovery and visibility become useful
+
+## Goal
+
+Move from ad hoc remote access to a **repeatable connectivity fabric + platform model**.
 
