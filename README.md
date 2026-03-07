@@ -193,6 +193,18 @@ telahubd service restart
 
 See [howto/services.md](howto/services.md) for full details.
 
+## Registering with a portal
+
+Hub operators can register their hub with a Tela portal (like [Awan Saya](https://awansaya.net)) so that users who query the portal can discover the hub:
+
+```bash
+telahubd portal add awansaya https://awansaya.net
+telahubd portal list
+telahubd portal remove awansaya
+```
+
+The `portal add` command discovers the portal's hub directory endpoint via `/.well-known/tela` (RFC 8615), registers the hub via its API, and stores the association in the hub config. See the DESIGN document §8.5 for details.
+
 ## Project structure
 
 ```

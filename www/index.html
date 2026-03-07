@@ -231,15 +231,16 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
 
   <script>
     // ── Utility: relative time ──────────────────────────────────────
-    function timeAgo(isoStr) {
+    function isoTime(isoStr) {
       if (!isoStr) return '\u2014';
-      var diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
-      if (diff < 0) diff = 0;
-      if (diff < 5)    return 'just now';
-      if (diff < 60)   return Math.floor(diff) + 's ago';
-      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-      return Math.floor(diff / 86400) + 'd ago';
+      var d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '\u2014';
+      return d.getFullYear()
+        + '-' + String(d.getMonth() + 1).padStart(2, '0')
+        + '-' + String(d.getDate()).padStart(2, '0')
+        + ' ' + String(d.getHours()).padStart(2, '0')
+        + ':' + String(d.getMinutes()).padStart(2, '0')
+        + ':' + String(d.getSeconds()).padStart(2, '0');
     }
 
     // Staleness threshold: if lastSeen > 60s ago but agent says connected, show yellow
@@ -329,7 +330,7 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
                 var sess = m.sessionCount > 0
                   ? '<span class="dot green"></span> ' + m.sessionCount + ' active'
                   : '<span style="color:#aaa">\u2014</span>';
-                var seen = timeAgo(m.lastSeen);
+                var seen = isoTime(m.lastSeen);
 
                 // Machine name + metadata sub-line
                 var name = '<div class="machine-name">' + escHtml(m.displayName || m.id) + '</div>';
@@ -400,7 +401,7 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
               var label = EVENT_LABELS[ev.event] || ev.event;
               var detail = formatEventDetail(ev);
               html += '<li>'
-                + '<span class="history-time">' + timeAgo(ev.timestamp) + '</span>'
+                + '<span class="history-time">' + isoTime(ev.timestamp) + '</span>'
                 + '<span class="history-machine">' + escHtml(ev.machineId) + '</span>'
                 + '<span class="history-event">' + label + (detail ? ' <span class="history-detail">(' + escHtml(detail) + ')</span>' : '') + '</span>'
                 + '</li>';

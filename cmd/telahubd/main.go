@@ -29,11 +29,13 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"mime"
 	"net"
@@ -59,13 +61,21 @@ var version = "dev"
 
 // ── Configuration ──────────────────────────────────────────────────
 
+// portalEntry stores a registered portal association.
+type portalEntry struct {
+	URL          string `yaml:"url"`                     // Portal base URL
+	Token        string `yaml:"token,omitempty"`         // API token for portal authentication
+	HubDirectory string `yaml:"hubDirectory,omitempty"` // Discovered hub directory path
+}
+
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	Port      int        `yaml:"port"`              // HTTP+WS listen port (default 8080)
-	UDPPort   int        `yaml:"udpPort"`           // UDP relay port (default 41820)
-	Name      string     `yaml:"name"`              // Display name for this hub
-	WWWDir    string     `yaml:"wwwDir"`            // Static file directory (default ./www)
-	Auth      authConfig `yaml:"auth,omitempty"`    // Token-based access control
+	Port      int                    `yaml:"port"`              // HTTP+WS listen port (default 8080)
+	UDPPort   int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
+	Name      string                 `yaml:"name"`              // Display name for this hub
+	WWWDir    string                 `yaml:"wwwDir"`            // Static file directory (default ./www)
+	Auth      authConfig             `yaml:"auth,omitempty"`    // Token-based access control
+	Portals   map[string]portalEntry `yaml:"portals,omitempty"` // Registered portals
 }
 
 // loadHubConfig reads a telahubd YAML config file.
@@ -1199,6 +1209,12 @@ func main() {
 		return
 	}
 
+	// Handle portal management subcommand.
+	if len(os.Args) > 1 && os.Args[1] == "portal" {
+		handlePortalCommand()
+		return
+	}
+
 	// If launched by Windows SCM, enter service mode automatically.
 	if service.IsWindowsService() {
 		runAsWindowsService()
@@ -1592,6 +1608,335 @@ func runAsWindowsService() {
 	}
 	if err := service.RunAsService("telahubd", handler); err != nil {
 		log.Fatalf("service failed: %v", err)
+	}
+}
+
+// ── Portal management subcommand ───────────────────────────────────
+
+// telaWellKnown is the JSON shape returned by /.well-known/tela (RFC 8615).
+type telaWellKnown struct {
+	HubDirectory string `json:"hub_directory"`
+}
+
+// discoverHubDirectory queries /.well-known/tela to discover the hub directory
+// endpoint. Returns the path (e.g. "/api/hubs") or falls back to the conventional
+// default if the well-known endpoint is not available.
+func discoverHubDirectory(baseURL string, token string) string {
+	const fallback = "/api/hubs"
+	wkURL := strings.TrimRight(baseURL, "/") + "/.well-known/tela"
+
+	req, err := http.NewRequest("GET", wkURL, nil)
+	if err != nil {
+		return fallback
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fallback
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fallback
+	}
+
+	var wk telaWellKnown
+	if err := json.NewDecoder(resp.Body).Decode(&wk); err != nil {
+		return fallback
+	}
+
+	if wk.HubDirectory == "" {
+		return fallback
+	}
+	return wk.HubDirectory
+}
+
+// handlePortalCommand implements "telahubd portal <subcmd>".
+func handlePortalCommand() {
+	if len(os.Args) < 3 {
+		printPortalUsage()
+		os.Exit(1)
+	}
+	subcmd := os.Args[2]
+	switch subcmd {
+	case "add":
+		cmdPortalAdd()
+	case "remove", "rm":
+		cmdPortalRemove()
+	case "list", "ls":
+		cmdPortalList()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown portal subcommand: %s\n", subcmd)
+		printPortalUsage()
+		os.Exit(1)
+	}
+}
+
+func printPortalUsage() {
+	fmt.Fprintf(os.Stderr, `telahubd portal — manage portal registrations
+
+Register this hub with one or more Tela portals (like Awan Saya) so that
+users who query the portal can discover it.
+
+Usage:
+  telahubd portal add <name> <url> [-config <path>]    Register with a portal
+  telahubd portal remove <name> [-config <path>]        Unregister from a portal
+  telahubd portal list [-config <path>]                  List portal registrations
+
+Examples:
+  telahubd portal add awansaya https://awansaya.net
+  telahubd portal remove awansaya
+  telahubd portal list
+`)
+}
+
+// portalCmdConfigPath returns the config file path for portal commands.
+func portalCmdConfigPath() string {
+	for i, arg := range os.Args {
+		if arg == "-config" && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+	}
+	// Check for persisted config in data dir
+	const dataConfig = "data/telahubd.yaml"
+	if _, err := os.Stat(dataConfig); err == nil {
+		return dataConfig
+	}
+	return service.BinaryConfigPath("telahubd")
+}
+
+func cmdPortalAdd() {
+	if len(os.Args) < 5 {
+		fmt.Fprintln(os.Stderr, "Usage: telahubd portal add <name> <url> [-config <path>]")
+		fmt.Fprintln(os.Stderr, "Example: telahubd portal add awansaya https://awansaya.net")
+		os.Exit(1)
+	}
+
+	name := os.Args[3]
+	portalURL := strings.TrimRight(os.Args[4], "/")
+
+	// Validate URL
+	if !strings.HasPrefix(portalURL, "http://") && !strings.HasPrefix(portalURL, "https://") {
+		portalURL = "https://" + portalURL
+	}
+
+	// Prompt for API token
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("API token for %s (press Enter for none): ", portalURL)
+	token, _ := reader.ReadString('\n')
+	token = strings.TrimSpace(token)
+
+	// Discover hub directory endpoint via /.well-known/tela (RFC 8615)
+	fmt.Printf("Discovering %s... ", portalURL)
+	hubDirectory := discoverHubDirectory(portalURL, token)
+	fmt.Printf("%s\n", hubDirectory)
+
+	// Load config
+	cfgPath := portalCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if cfg.Portals == nil {
+		cfg.Portals = make(map[string]portalEntry)
+	}
+
+	// Determine hub name and URL for registration
+	regHubName := cfg.Name
+	if regHubName == "" {
+		regHubName = hubName
+	}
+	if regHubName == "" {
+		fmt.Print("Hub name for registration: ")
+		regHubName, _ = reader.ReadString('\n')
+		regHubName = strings.TrimSpace(regHubName)
+	}
+
+	regHubURL := ""
+	fmt.Printf("Hub public URL (e.g. https://gohub.example.com): ")
+	regHubURL, _ = reader.ReadString('\n')
+	regHubURL = strings.TrimSpace(regHubURL)
+	if regHubURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: hub URL is required for portal registration")
+		os.Exit(1)
+	}
+
+	// Build the viewer token to include if the hub has auth
+	viewerToken := ""
+	if len(cfg.Auth.Tokens) > 0 {
+		// Look for "console-viewer" token or prompt
+		for _, t := range cfg.Auth.Tokens {
+			if t.ID == "console-viewer" {
+				viewerToken = t.Token
+				break
+			}
+		}
+		if viewerToken == "" {
+			fmt.Print("Hub viewer token for portal (press Enter to skip): ")
+			viewerToken, _ = reader.ReadString('\n')
+			viewerToken = strings.TrimSpace(viewerToken)
+		}
+	}
+
+	// Register with the portal: POST to hub directory endpoint
+	apiURL := portalURL + hubDirectory
+	payload := map[string]string{
+		"name": regHubName,
+		"url":  regHubURL,
+	}
+	if viewerToken != "" {
+		payload["viewerToken"] = viewerToken
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	fmt.Printf("Registering %q at %s... ", regHubName, portalURL)
+
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(string(payloadBytes)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+		os.Exit(1)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError: could not reach %s: %v\n", portalURL, err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == 401 {
+		fmt.Fprintln(os.Stderr, "\nError: unauthorized — check your API token")
+		os.Exit(1)
+	}
+	if resp.StatusCode == 409 {
+		// Hub already registered — treat as success (idempotent)
+		fmt.Println("already registered")
+	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		fmt.Fprintf(os.Stderr, "\nError: portal returned HTTP %d: %s\n", resp.StatusCode, string(body))
+		os.Exit(1)
+	} else {
+		fmt.Println("ok")
+	}
+
+	// Save portal association to config
+	cfg.Portals[name] = portalEntry{
+		URL:          portalURL,
+		Token:        token,
+		HubDirectory: hubDirectory,
+	}
+
+	if err := writeHubConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Portal %q added (%s)\n", name, portalURL)
+	fmt.Printf("Config saved to %s\n", cfgPath)
+}
+
+func cmdPortalRemove() {
+	if len(os.Args) < 4 {
+		fmt.Fprintln(os.Stderr, "Usage: telahubd portal remove <name> [-config <path>]")
+		os.Exit(1)
+	}
+
+	name := os.Args[3]
+	cfgPath := portalCmdConfigPath()
+
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if cfg.Portals == nil || cfg.Portals[name] == (portalEntry{}) {
+		fmt.Fprintf(os.Stderr, "Error: portal %q not found\n", name)
+		os.Exit(1)
+	}
+
+	// Optionally deregister from the portal (best-effort)
+	portal := cfg.Portals[name]
+	if portal.URL != "" && portal.Token != "" && cfg.Name != "" {
+		hubDir := portal.HubDirectory
+		if hubDir == "" {
+			hubDir = "/api/hubs"
+		}
+		apiURL := portal.URL + hubDir + "?name=" + cfg.Name
+		req, _ := http.NewRequest("DELETE", apiURL, nil)
+		if req != nil {
+			req.Header.Set("Authorization", "Bearer "+portal.Token)
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp, err := client.Do(req)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == 200 {
+					fmt.Printf("Deregistered from %s\n", portal.URL)
+				}
+			}
+		}
+	}
+
+	delete(cfg.Portals, name)
+
+	if err := writeHubConfig(cfgPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Portal %q removed.\n", name)
+}
+
+func cmdPortalList() {
+	cfgPath := portalCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if cfg.Portals == nil || len(cfg.Portals) == 0 {
+		fmt.Println("No portals configured.")
+		fmt.Println("Add one with: telahubd portal add <name> <url>")
+		return
+	}
+
+	fmt.Printf("%-20s %-40s %s\n", "NAME", "URL", "TOKEN")
+	fmt.Printf("%-20s %-40s %s\n", "----", "---", "-----")
+
+	// Sort for deterministic output
+	var names []string
+	for n := range cfg.Portals {
+		names = append(names, n)
+	}
+	for i := 0; i < len(names); i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[i] > names[j] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+	for _, n := range names {
+		p := cfg.Portals[n]
+		tokenDisplay := "(none)"
+		if p.Token != "" {
+			if len(p.Token) > 4 {
+				tokenDisplay = "****" + p.Token[len(p.Token)-4:]
+			} else {
+				tokenDisplay = "****"
+			}
+		}
+		fmt.Printf("%-20s %-40s %s\n", n, p.URL, tokenDisplay)
 	}
 }
 

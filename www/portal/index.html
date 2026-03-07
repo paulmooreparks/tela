@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Awan Saya Portal</title>
   <style>
+    /* ── Reset & base ──────────────────────────────────────────── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -12,63 +13,148 @@
       line-height: 1.6;
       background: #f4f5f7;
     }
+    a { color: #0f5cc0; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+    a:hover { color: #0b4692; }
+    .hidden { display: none !important; }
 
-    /* Top nav */
+    /* ── Top nav ───────────────────────────────────────────────── */
     .topnav {
-      background: #1a1a2e;
-      color: #fff;
-      padding: 0 24px;
-      display: flex;
-      align-items: center;
-      height: 52px;
-      gap: 24px;
+      background: #1a1a2e; color: #fff; padding: 0 24px;
+      display: flex; align-items: center; height: 52px; gap: 24px;
     }
-    .topnav .logo { font-weight: 700; font-size: 1.1rem; letter-spacing: 0.5px; }
+    .topnav .logo { font-weight: 700; font-size: 1.1rem; letter-spacing: 0.5px; text-decoration: none; color: #fff; }
     .topnav .logo em { color: #5ee89e; font-style: normal; }
     .topnav nav { display: flex; gap: 16px; font-size: 0.9rem; }
-    .topnav nav a { color: #ccc; text-decoration: none; padding: 4px 0; }
-    .topnav nav a:hover, .topnav nav a.active { color: #fff; border-bottom: 2px solid #5ee89e; }
+    .topnav nav a { color: #ccc; padding: 4px 0; }
+    .topnav nav a:hover, .topnav nav a.active { color: #fff; text-decoration-color: #5ee89e; text-decoration-thickness: 2px; }
     .topnav .user-area { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: #aaa; }
     .topnav .user-area .avatar {
       width: 30px; height: 30px; border-radius: 50%; background: #5ee89e; color: #1a1a2e;
       display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;
     }
+    .topnav .user-area a { color: #ddd; font-size: 0.85rem; font-weight: 600; padding: 4px 0; }
+    .topnav .user-area a:hover { color: #fff; text-decoration-color: #5ee89e; text-decoration-thickness: 2px; }
 
-    /* Layout */
-    .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
-    h1 { font-size: 1.4rem; margin-bottom: 4px; }
-    .page-desc { color: #666; font-size: 0.9rem; margin-bottom: 24px; }
-
-    /* Summary stats */
-    .stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-    .stat-card {
-      background: #fff;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 16px 24px;
-      min-width: 160px;
-      flex: 1;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    /* ── User dropdown menu ── */
+    .user-menu { position: relative; }
+    .user-menu-trigger {
+      display: flex; align-items: center; gap: 8px; background: transparent;
+      border: 1px solid transparent; border-radius: 6px;
+      padding: 4px 10px 4px 4px; cursor: pointer; color: #ddd;
+      font-size: 0.85rem; font-weight: 600; line-height: 1; transition: border-color 0.15s;
     }
-    .stat-card .label { font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-    .stat-card .value { font-size: 1.6rem; font-weight: 700; color: #222; margin-top: 4px; }
-    .stat-card .value.green { color: #2d7d46; }
+    .user-menu-trigger:hover, .user-menu-trigger:focus-visible { border-color: #445; color: #fff; }
+    .user-menu-trigger .avatar {
+      width: 28px; height: 28px; border-radius: 50%; background: #5ee89e; color: #1a1a2e;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
+    }
+    .user-menu-trigger .chevron { font-size: 0.7rem; opacity: 0.7; margin-left: 2px; }
+    .user-dropdown {
+      display: none; position: absolute; top: calc(100% + 6px); right: 0;
+      min-width: 180px; background: #fff; border: 1px solid #d8e0ea;
+      border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      z-index: 200; overflow: hidden; padding: 4px 0;
+    }
+    .user-dropdown.open { display: block; }
+    .topnav .user-dropdown a, .topnav .user-dropdown button {
+      display: block; box-sizing: border-box; width: 100%; margin: 0;
+      padding: 10px 16px; font-family: inherit; font-size: 0.88rem; font-weight: 500;
+      line-height: 1.4; color: #334155; background: none; border: none; border-radius: 0;
+      text-align: left; text-decoration: none; cursor: pointer;
+    }
+    .topnav .user-dropdown a:hover, .topnav .user-dropdown button:hover { background: #f4f6f9; color: #0b4692; }
+    .topnav .user-dropdown a + button, .topnav .user-dropdown button + a { border-top: 1px solid #eef1f5; }
 
-    /* Cards */
+    /* ── Layout ────────────────────────────────────────────────── */
+    .container { max-width: 1180px; margin: 0 auto; padding: 28px 24px; }
+    .page-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start; }
+    .page-main { min-width: 0; }
+    .side-nav { position: sticky; top: 76px; align-self: start; }
+    .side-nav-panel {
+      border: 1px solid #d8e0ea; border-radius: 10px;
+      background: #fff; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .side-nav-title { color: #6b7280; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+    .side-nav-links { display: grid; gap: 6px; }
+    .side-nav-links a { display: block; padding: 8px 10px; border-radius: 8px; color: #334155; font-size: 0.94rem; font-weight: 600; text-decoration: none; }
+    .side-nav-links a:hover, .side-nav-links a:focus-visible { background: #f8fbff; color: #0b4692; outline: none; }
+
+    h1 { font-size: 1.7rem; margin-bottom: 6px; }
+    .page-desc { color: #666; font-size: 0.98rem; margin-bottom: 28px; }
+    .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+    .page-head-copy { min-width: 0; }
+
+    /* ── Cards ──────────────────────────────────────────────────── */
     .card {
-      background: #fff;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 20px;
-      margin: 16px 0;
+      background: #fff; border: 1px solid #e0e0e0; border-radius: 10px;
+      padding: 22px 22px 20px; margin: 18px 0;
       box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
-    .card h2 { font-size: 1.05rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+    .card-head-copy { min-width: 0; }
+    .card-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .card h2 { font-size: 1.12rem; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
 
-    /* Hub table */
+    /* ── Info-tip ───────────────────────────────────────────────── */
+    .info-heading { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .info-tip { position: relative; display: inline-flex; align-items: center; }
+    .info-tip-trigger {
+      width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+      padding: 0; border: 1px solid #c7d2e0; border-radius: 999px; background: #fff;
+      color: #64748b; font-size: 0.72rem; font-weight: 700; line-height: 1; cursor: help;
+    }
+    .info-tip-trigger:hover { background: #f8fbff; color: #0b4692; border-color: #9eb6d4; }
+    .info-tip-popup {
+      position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+      width: min(280px, calc(100vw - 48px)); padding: 10px 12px; border-radius: 8px;
+      background: #1f2937; color: #fff; font-size: 0.82rem; line-height: 1.45;
+      text-transform: none !important; letter-spacing: normal !important; font-weight: 400 !important;
+      box-shadow: 0 14px 32px rgba(15,23,42,0.22); opacity: 0; visibility: hidden; pointer-events: none; z-index: 40;
+    }
+    .info-tip-popup, .info-tip-popup * { text-transform: none !important; letter-spacing: normal !important; font-variant: normal !important; }
+    .info-tip-popup::before {
+      content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+      border: 6px solid transparent; border-bottom-color: #1f2937;
+    }
+    .info-tip:hover .info-tip-popup, .info-tip:focus-within .info-tip-popup { opacity: 1; visibility: visible; }
+
+    /* ── Panel action button ───────────────────────────────────── */
+    .panel-action-button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 8px 12px; border: 1px solid #cdd7e4; border-radius: 999px; background: #fff;
+      color: #0f5cc0; font-size: 0.9rem; font-weight: 600; font-family: inherit; line-height: 1.2; cursor: pointer;
+    }
+    .panel-action-button:hover { background: #f8fbff; color: #0b4692; }
+    .panel-action-button:disabled { cursor: wait; color: #7a8190; border-color: #c9ced8; background: #eef2f7; }
+
+    /* ── Ops / access mega-cards ───────────────────────────────── */
+    #operations {
+      background: #f6f8fc; border-color: #d7deea;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .access-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+    .access-summary-card { min-width: 0; border: 1px solid #d8e0ea; border-radius: 10px; background: #fff; padding: 16px; }
+    .access-summary-card .label {
+      color: #6b7280; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em;
+      display: flex; align-items: center;
+    }
+    .access-summary-card .label .info-heading { gap: 6px; }
+    .access-summary-card .value { margin-top: 6px; color: #1f2937; font-size: 1.55rem; font-weight: 700; }
+    .access-summary-card .value .online-count { color: #2d7d46; font-size: 1.1rem; font-weight: 600; }
+
+    .section-stack { display: grid; gap: 18px; }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    .subcard {
+      min-width: 0; border: 1px solid #d8e0ea; border-radius: 10px;
+      padding: 18px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    }
+    .subcard h3 { font-size: 1rem; margin-bottom: 8px; }
+
+    /* ── Tables ─────────────────────────────────────────────────── */
     .hub-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    .hub-table th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #e0e0e0; color: #555; font-weight: 600; }
-    .hub-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .hub-table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; color: #555; font-weight: 600; }
+    .hub-table td { padding: 12px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
     .hub-table tr:last-child td { border-bottom: none; }
 
     .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
@@ -77,16 +163,15 @@
     .dot.yellow { background: #e6a817; }
     .dot.gray { background: #aaa; }
 
-    .hub-name { font-weight: 600; }
-    .hub-url { color: #888; font-size: 0.8rem; }
+    .hub-name { font-weight: 700; font-size: 1.02rem; }
+    .hub-url { color: #888; font-size: 0.87rem; }
 
-    /* Machine list (aggregated) */
     .machine-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    .machine-table th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #e0e0e0; color: #555; font-weight: 600; }
-    .machine-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .machine-table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; color: #555; font-weight: 600; }
+    .machine-table td { padding: 12px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
     .machine-table tr:last-child td { border-bottom: none; }
-    .machine-name { font-weight: 600; }
-    .machine-meta { font-size: 0.78rem; color: #888; margin-top: 2px; }
+    .machine-name { font-weight: 700; }
+    .machine-meta { font-size: 0.82rem; color: #888; margin-top: 4px; }
     .machine-meta span { margin-right: 10px; }
     .service-tag {
       display: inline-block; background: #e8f5e9; color: #2d7d46;
@@ -95,114 +180,139 @@
     }
     .tag { display: inline-block; background: #f0f0f0; color: #555; padding: 1px 6px; border-radius: 3px; font-size: 0.75rem; margin: 1px 2px; }
 
-    .btn-console {
-      display: inline-block; background: #1a1a2e; color: #fff; border: none;
-      padding: 3px 10px; border-radius: 4px; font-size: 0.78rem;
-      cursor: pointer; text-decoration: none; transition: background 0.15s;
-    }
-    .btn-console:hover { background: #333; }
+    .btn-console { display: inline-block; color: #0f5cc0; padding: 3px 0; font-size: 0.82rem; font-weight: 600; }
+    .btn-console:hover { color: #0b4692; }
 
-    /* Auth placeholder */
-    .auth-placeholder {
-      text-align: center; padding: 32px 16px; color: #888;
-    }
-    .auth-placeholder .icon { font-size: 2rem; margin-bottom: 8px; }
-
-    /* History */
-    .history-list { list-style: none; padding: 0; font-size: 0.85rem; max-height: 280px; overflow-y: auto; }
-    .history-list li { padding: 4px 0; border-bottom: 1px solid #f0f0f0; display: flex; gap: 12px; }
+    /* ── History ────────────────────────────────────────────────── */
+    .history-list { list-style: none; padding: 0; font-size: 0.9rem; max-height: 320px; overflow-y: auto; }
+    .history-list li { padding: 8px 0; border-bottom: 1px solid #f0f0f0; display: flex; gap: 12px; }
     .history-list li:last-child { border-bottom: none; }
-    .history-time { color: #aaa; min-width: 80px; }
-    .history-hub { color: #555; min-width: 80px; font-size: 0.8rem; }
-    .history-machine { font-weight: 600; color: #2d7d46; min-width: 80px; }
+    .history-time { color: #aaa; min-width: 84px; }
+    .history-hub { color: #555; min-width: 84px; font-size: 0.84rem; }
+    .history-machine { font-weight: 700; color: #2d7d46; min-width: 84px; }
     .history-event { color: #555; }
+    .history-detail { color: #888; }
 
     .no-data { color: #999; font-style: italic; padding: 12px 0; }
     .last-updated { color: #aaa; font-size: 0.8rem; margin-top: 8px; }
 
-    footer { margin-top: 40px; color: #999; font-size: 0.85rem; text-align: center; padding-bottom: 24px; }
+    footer { margin-top: 40px; color: #999; font-size: 0.85rem; text-align: center; padding: 0 20px 24px; }
+    footer a { color: #666; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 980px) {
+      .page-layout { grid-template-columns: 1fr; }
+      .side-nav { position: static; }
+      .side-nav-panel { padding: 12px; }
+      .side-nav-links { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+      .access-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .access-summary-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div class="topnav">
-    <div class="logo"><em>Awan</em>Satu</div>
+    <a href="/" class="logo"><em>Awan</em>Saya</a>
     <nav>
       <a href="/portal/" class="active">Dashboard</a>
-      <a href="/portal/#hubs">Hubs</a>
-      <a href="/portal/#machines">Machines</a>
     </nav>
     <div class="user-area">
-      <span id="user-name">Guest</span>
-      <div class="avatar" id="user-avatar">G</div>
+      <div id="user-menu" class="user-menu">
+        <button class="user-menu-trigger" id="user-menu-trigger" type="button">
+          <div class="avatar" id="user-avatar">P</div>
+          <span id="user-name">paul</span>
+          <span class="chevron">&#x25BE;</span>
+        </button>
+        <div class="user-dropdown" id="user-dropdown">
+          <a href="/portal/settings/">Settings</a>
+          <button id="logout-btn" type="button">Sign out</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="container">
-    <h1>Dashboard</h1>
-    <p class="page-desc">Awan Saya portal &mdash; multi-hub management for Tela connectivity fabric</p>
+    <div class="page-layout">
+      <aside class="side-nav" aria-label="Section navigation">
+        <div class="side-nav-panel">
+          <div class="side-nav-title">On this page</div>
+          <nav class="side-nav-links">
+            <a href="/portal/">Top</a>
+            <a href="/portal/#operations">Hubs &amp; Machines</a>
+            <a href="/portal/#activity">Recent Activity</a>
+          </nav>
+        </div>
+      </aside>
 
-    <!-- Summary stats -->
-    <div class="stats">
-      <div class="stat-card">
-        <div class="label">Hubs</div>
-        <div class="value" id="stat-hubs">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Machines</div>
-        <div class="value" id="stat-machines">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Online</div>
-        <div class="value green" id="stat-online">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Services</div>
-        <div class="value" id="stat-services">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Active Sessions</div>
-        <div class="value green" id="stat-sessions">-</div>
-      </div>
-    </div>
+      <div class="page-main">
+        <div class="page-head">
+          <div class="page-head-copy">
+            <h1>Dashboard</h1>
+            <p class="page-desc">Multi-hub management for Tela connectivity fabric</p>
+          </div>
+        </div>
 
-    <!-- Hubs -->
-    <div class="card" id="hubs">
-      <h2>Hubs</h2>
-      <div id="hubs-content">
-        <p class="no-data">Loading...</p>
-      </div>
-    </div>
+        <div class="card" id="operations">
+          <div class="card-head">
+            <div class="card-head-copy">
+              <h2><span class="info-heading">&#x1F5A7; Hubs and Machines <span class="info-tip"><button class="info-tip-trigger" type="button" aria-label="About Hubs and Machines">?</button><span class="info-tip-popup" role="tooltip">At-a-glance operational totals across the Tela hubs and machines visible to you.</span></span></span></h2>
+            </div>
+            <div class="card-actions">
+              <button class="panel-action-button" id="operations-refresh-btn" type="button">Refresh</button>
+            </div>
+          </div>
+          <div class="access-summary-grid">
+            <div class="access-summary-card">
+              <div class="label"><span class="info-heading">Hubs (Online) <span class="info-tip"><button class="info-tip-trigger" type="button" aria-label="About Hubs online">?</button><span class="info-tip-popup" role="tooltip">Registered Tela hubs currently visible in this portal.</span></span></span></div>
+              <div class="value" id="stat-hubs">- <span class="online-count">(-)</span></div>
+            </div>
+            <div class="access-summary-card">
+              <div class="label"><span class="info-heading">Machines (Online) <span class="info-tip"><button class="info-tip-trigger" type="button" aria-label="About Machines online">?</button><span class="info-tip-popup" role="tooltip">Machines discovered across the visible hub fleet.</span></span></span></div>
+              <div class="value" id="stat-machines">- <span class="online-count">(-)</span></div>
+            </div>
+            <div class="access-summary-card">
+              <div class="label"><span class="info-heading">Services (Active) <span class="info-tip"><button class="info-tip-trigger" type="button" aria-label="About Active services">?</button><span class="info-tip-popup" role="tooltip">Advertised services with active sessions shown in parentheses.</span></span></span></div>
+              <div class="value" id="stat-services">- <span class="online-count">(-)</span></div>
+            </div>
+          </div>
+          <div class="section-stack">
+            <div class="subcard">
+              <h3><span class="info-heading">Visible Hubs <span class="info-tip"><button class="info-tip-trigger" type="button" aria-label="About Visible Hubs">?</button><span class="info-tip-popup" role="tooltip">Review hub reachability, fleet size, and jump into a hub console when you need deeper infrastructure detail.</span></span></span></h3>
+              <div class="table-wrap" id="hubs-content"><p class="no-data">Loading...</p></div>
+            </div>
 
-    <!-- All machines (aggregated across hubs) -->
-    <div class="card" id="machines">
-      <h2>All Machines</h2>
-      <div id="machines-content">
-        <p class="no-data">Loading...</p>
-      </div>
-      <p class="last-updated" id="last-updated"></p>
-    </div>
+            <div class="subcard">
+              <h3><span class="info-heading">All Machines <span class="info-tip"><button class="info-tip-trigger" type="button" aria-label="About All Machines">?</button><span class="info-tip-popup" role="tooltip">Fleet-wide machine view across every visible hub, including status, services, and last-seen details.</span></span></span></h3>
+              <div class="table-wrap" id="machines-content"><p class="no-data">Loading...</p></div>
+            </div>
+          </div>
+          <p class="last-updated" id="last-updated"></p>
+        </div>
 
-    <!-- Recent Activity (aggregated) -->
-    <div class="card">
-      <h2>Recent Activity</h2>
-      <div id="history-content">
-        <p class="no-data">Loading...</p>
-      </div>
-    </div>
-
-    <!-- Auth placeholder -->
-    <div class="card">
-      <h2>Authentication</h2>
-      <div class="auth-placeholder">
-        <div class="icon">&#x1F512;</div>
-        <p><strong>SSO / Identity coming soon</strong></p>
-        <p>The portal will support OAuth2/OIDC for user authentication,<br>
-           role-based access control, and API keys for automation.</p>
+        <!-- Recent Activity (aggregated) -->
+        <div class="card" id="activity">
+          <div class="card-head">
+            <div class="card-head-copy">
+              <h2><span class="info-heading">&#x1F4C8; Recent Activity <span class="info-tip"><button class="info-tip-trigger" type="button" aria-label="About Recent Activity">?</button><span class="info-tip-popup" role="tooltip">Recent machine and session events across the visible hubs, ordered from newest to oldest.</span></span></span></h2>
+            </div>
+            <div class="card-actions">
+              <button class="panel-action-button" id="activity-refresh-btn" type="button">Refresh</button>
+            </div>
+          </div>
+          <div id="history-content">
+            <p class="no-data">Loading...</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <footer>Awan Saya Portal &middot; Powered by Tela</footer>
+  <footer>
+    <a href="/">Awan Saya</a> &middot; Powered by <a href="https://github.com/paulmooreparks/tela">Tela</a>
+    &middot; <a href="https://github.com/paulmooreparks/awansaya">GitHub</a>
+  </footer>
 
   <script>
     // ── Hub registry ────────────────────────────────────────────────
@@ -222,23 +332,41 @@
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function timeAgo(isoStr) {
+    function isoTime(isoStr) {
       if (!isoStr) return '\u2014';
-      var diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
-      if (diff < 0) diff = 0;
-      if (diff < 5)    return 'just now';
-      if (diff < 60)   return Math.floor(diff) + 's ago';
-      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-      return Math.floor(diff / 86400) + 'd ago';
+      var d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '\u2014';
+      return d.getFullYear()
+        + '-' + String(d.getMonth() + 1).padStart(2, '0')
+        + '-' + String(d.getDate()).padStart(2, '0')
+        + ' ' + String(d.getHours()).padStart(2, '0')
+        + ':' + String(d.getMinutes()).padStart(2, '0')
+        + ':' + String(d.getSeconds()).padStart(2, '0');
     }
 
     var EVENT_LABELS = {
       'session-start': '\uD83D\uDD17 Session started',
-      'agent-register': '\u2705 Agent registered',
-      'agent-disconnect': '\u274C Agent disconnected',
-      'helper-disconnect': '\uD83D\uDD0C Client disconnected',
+      'agent-register': '\u2705 Machine registered',
+      'agent-disconnect': '\u274C Machine disconnected',
+      'client-disconnect': '\uD83D\uDD0C Session ended',
+      'helper-disconnect': '\uD83D\uDD0C Session ended',
     };
+
+    function formatEventDetail(ev) {
+      if (!ev || !ev.detail) return '';
+      var d = String(ev.detail);
+      if (d.indexOf('services=') === 0) return d.slice('services='.length);
+      return d;
+    }
+
+    function setButtonState(ids, loading) {
+      ids.forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = !!loading;
+        btn.textContent = loading ? 'Refreshing\u2026' : 'Refresh';
+      });
+    }
 
     // ── Fetch status + history from all hubs ────────────────────────
     function fetchAllHubs() {
@@ -250,7 +378,9 @@
           .then(function (r) { return r.json(); })
           .catch(function () { return { events: [] }; });
         return Promise.all([statusP, historyP]).then(function (results) {
-          return { hub: hub, status: results[0].machines ? 'online' : 'offline', data: results[0], history: results[1].events || [] };
+          var data = results[0];
+          var hubName = (data && data.hubName) ? data.hubName : hub.name;
+          return { hub: hub, hubName: hubName, status: data.machines ? 'online' : 'offline', data: data, history: results[1].events || [] };
         });
       }));
     }
@@ -259,10 +389,16 @@
     function render(results) {
       var totalMachines = 0, totalOnline = 0, totalServices = 0, totalSessions = 0;
 
-      // Hubs table
-      var hubsHtml = '<table class="hub-table"><thead><tr>'
-        + '<th>Hub</th><th>Status</th><th>Machines</th><th>Online</th><th>Sessions</th><th></th>'
-        + '</tr></thead><tbody>';
+      if (results.length === 0) {
+        document.getElementById('hubs-content').innerHTML = '<p class="no-data">No hubs configured.</p>';
+        document.getElementById('machines-content').innerHTML = '<p class="no-data">No machines registered across any hub.</p>';
+        document.getElementById('history-content').innerHTML = '<p class="no-data">No hubs configured.</p>';
+        document.getElementById('stat-hubs').innerHTML = '0 <span class="online-count">(0)</span>';
+        document.getElementById('stat-machines').innerHTML = '0 <span class="online-count">(0)</span>';
+        document.getElementById('stat-services').innerHTML = '0 <span class="online-count">(0)</span>';
+        document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+        return;
+      }
 
       results.forEach(function (r) {
         var machines = r.data.machines || [];
@@ -274,15 +410,32 @@
         totalOnline += online;
         totalServices += svcs;
         totalSessions += sessions;
+      });
+
+      // Stats
+      var hubsOnline = results.filter(function (r) { return r.status === 'online'; }).length;
+      document.getElementById('stat-hubs').innerHTML = results.length + ' <span class="online-count">(' + hubsOnline + ')</span>';
+      document.getElementById('stat-machines').innerHTML = totalMachines + ' <span class="online-count">(' + totalOnline + ')</span>';
+      document.getElementById('stat-services').innerHTML = totalServices + ' <span class="online-count">(' + totalSessions + ')</span>';
+
+      // Hubs table
+      var hubsHtml = '<table class="hub-table"><thead><tr>'
+        + '<th>Hub</th><th>Status</th><th>Machines</th><th>Online</th><th>Sessions</th><th></th>'
+        + '</tr></thead><tbody>';
+
+      results.forEach(function (r) {
+        var machines = r.data.machines || [];
+        var online = machines.filter(function (m) { return m.agentConnected; }).length;
+        var sessions = machines.reduce(function (sum, m) { return sum + (m.sessionCount || 0); }, 0);
 
         var dot = r.status === 'online'
           ? '<span class="dot green"></span> Online'
           : '<span class="dot red"></span> Unreachable';
 
-        var consoleLink = '<a class="btn-console" href="' + escHtml(r.hub.url) + '/" target="_blank">Console</a>';
+        var consoleLink = '<a class="btn-console" href="' + escHtml(r.hub.url) + '/" target="_blank">&#x2197; Console</a>';
 
         hubsHtml += '<tr>'
-          + '<td><span class="hub-name">' + escHtml(r.hub.name) + '</span><br><span class="hub-url">' + escHtml(r.hub.url) + '</span></td>'
+          + '<td><span class="hub-name">' + escHtml(r.hubName) + '</span><br><span class="hub-url">' + escHtml(r.hub.url) + '</span></td>'
           + '<td>' + dot + '</td>'
           + '<td>' + machines.length + '</td>'
           + '<td>' + online + '</td>'
@@ -294,18 +447,11 @@
       hubsHtml += '</tbody></table>';
       document.getElementById('hubs-content').innerHTML = hubsHtml;
 
-      // Stats
-      document.getElementById('stat-hubs').textContent = results.length;
-      document.getElementById('stat-machines').textContent = totalMachines;
-      document.getElementById('stat-online').textContent = totalOnline;
-      document.getElementById('stat-services').textContent = totalServices;
-      document.getElementById('stat-sessions').textContent = totalSessions;
-
       // Aggregated machines table
       var allMachines = [];
       results.forEach(function (r) {
         (r.data.machines || []).forEach(function (m) {
-          allMachines.push({ machine: m, hubName: r.hub.name, hubUrl: r.hub.url, hubWs: r.hub.wsUrl });
+          allMachines.push({ machine: m, hubName: r.hubName, hubUrl: r.hub.url });
         });
       });
 
@@ -337,7 +483,7 @@
           var meta = [];
           if (m.hostname) meta.push('<span>\uD83D\uDCBB ' + escHtml(m.hostname) + '</span>');
           if (m.os)       meta.push('<span>' + escHtml(m.os) + '</span>');
-          if (m.agentVersion) meta.push('<span>v' + escHtml(m.agentVersion) + '</span>');
+          if (m.agentVersion) meta.push('<span>' + escHtml(m.agentVersion) + '</span>');
           var tags = (m.tags || []).map(function (t) { return '<span class="tag">' + escHtml(t) + '</span>'; }).join('');
           if (tags) meta.push(tags);
           if (meta.length > 0) name += '<div class="machine-meta">' + meta.join('') + '</div>';
@@ -347,7 +493,7 @@
             + '<td>' + escHtml(item.hubName) + '</td>'
             + '<td>' + statusDot + '</td>'
             + '<td>' + svcs + '</td>'
-            + '<td>' + timeAgo(m.lastSeen) + '</td>'
+            + '<td>' + isoTime(m.lastSeen) + '</td>'
             + '</tr>';
         });
 
@@ -359,7 +505,7 @@
       var allEvents = [];
       results.forEach(function (r) {
         (r.history || []).forEach(function (ev) {
-          ev._hub = r.hub.name;
+          ev._hub = r.hubName;
           allEvents.push(ev);
         });
       });
@@ -372,11 +518,12 @@
         var hHtml = '<ul class="history-list">';
         items.forEach(function (ev) {
           var label = EVENT_LABELS[ev.event] || ev.event;
+          var detail = formatEventDetail(ev);
           hHtml += '<li>'
-            + '<span class="history-time">' + timeAgo(ev.timestamp) + '</span>'
+            + '<span class="history-time">' + isoTime(ev.timestamp) + '</span>'
             + '<span class="history-hub">' + escHtml(ev._hub) + '</span>'
             + '<span class="history-machine">' + escHtml(ev.machineId) + '</span>'
-            + '<span class="history-event">' + label + '</span>'
+            + '<span class="history-event">' + label + (detail ? ' <span class="history-detail">(' + escHtml(detail) + ')</span>' : '') + '</span>'
             + '</li>';
         });
         hHtml += '</ul>';
@@ -386,13 +533,39 @@
       document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
     }
 
-    // ── Poll loop ───────────────────────────────────────────────────
-    function poll() {
-      fetchAllHubs().then(render);
+    // ── Refresh + poll ──────────────────────────────────────────────
+    function refreshDashboardData() {
+      setButtonState(['operations-refresh-btn', 'activity-refresh-btn'], true);
+      return fetchAllHubs()
+        .then(function (results) { render(results); })
+        .catch(function () {
+          document.getElementById('history-content').innerHTML = '<p class="no-data">Refresh failed. Try again.</p>';
+        })
+        .then(function () {
+          setButtonState(['operations-refresh-btn', 'activity-refresh-btn'], false);
+        });
     }
 
-    poll();
-    setInterval(poll, 5000);
+    document.getElementById('operations-refresh-btn').addEventListener('click', refreshDashboardData);
+    document.getElementById('activity-refresh-btn').addEventListener('click', refreshDashboardData);
+
+    // User menu dropdown toggle
+    (function () {
+      var trigger = document.getElementById('user-menu-trigger');
+      var dropdown = document.getElementById('user-dropdown');
+      if (trigger && dropdown) {
+        trigger.addEventListener('click', function (e) {
+          e.stopPropagation();
+          dropdown.classList.toggle('open');
+        });
+        document.addEventListener('click', function () {
+          dropdown.classList.remove('open');
+        });
+      }
+    })();
+
+    refreshDashboardData();
+    setInterval(refreshDashboardData, 5000);
   </script>
 </body>
 </html>

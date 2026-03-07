@@ -648,7 +648,7 @@ The Hub is **not** an identity provider, dashboard engine, policy engine, orches
 - **Language:** Go
 - **Binary:** `telahubd` — static, cross-compiled, no CGO.
 - **Dependencies:** `gorilla/websocket` (WS+HTTP), `gopkg.in/yaml.v3` (config). No Node.js, no MeshCentral, no ORMs.
-- **Config:** YAML file (`telahubd.yaml`) with `port`, `udpPort`, `name`, `wwwDir` fields. Loaded via `-config` flag; env vars (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`, `HUB_WWW_DIR`) override file values.
+- **Config:** YAML file (`telahubd.yaml`) with `port`, `udpPort`, `name`, `wwwDir`, `auth`, and `portals` fields. Loaded via `-config` flag; env vars (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`, `HUB_WWW_DIR`) override file values.
 - **Dependency constraints:** No frontend frameworks, no complex dependency trees, no microservices, no build systems.
 
 ## **8.3 Storage**
@@ -676,15 +676,35 @@ Current hub endpoints:
 
 Additive‑only changes. 12‑month deprecation window.
 
-## **8.5 Multiplexing**
+## **8.5 Portal Management**
+
+Hub operators can register their hub with one or more Tela portals (like Awan Saya) using the `telahubd portal` subcommand:
+
+- `telahubd portal add <name> <url>` — discover the portal's hub directory via `/.well-known/tela` (RFC 8615), register the hub via `POST /api/hubs`, and store the portal association in the hub config.
+- `telahubd portal remove <name>` — deregister the hub from the portal (best-effort `DELETE /api/hubs`) and remove the association from config.
+- `telahubd portal list` — list configured portal registrations.
+
+Portals are stored in the `portals:` map in `telahubd.yaml`:
+
+```yaml
+portals:
+  awansaya:
+    url: https://awansaya.net
+    token: tela_abc123...
+    hubDirectory: /api/hubs
+```
+
+This mirrors the `tela remote` model on the client side: `tela remote add` registers a *user* with a portal, `telahubd portal add` registers a *hub* with a portal. The web-based "Add Hub" form in the portal UI remains available as an alternative for admins who don't have shell access to the hub.
+
+## **8.6 Multiplexing**
 
 Uses MeshCentral's multiplexing engine with Tela's protocol layered on top. Allocates channel IDs, routes frames, enforces channel lifecycle, detects errors, closes channels cleanly. Channel routing: Helper ↔ Hub ↔ Agent. No browser involvement in data path.
 
-## **8.6 Logging & Observability**
+## **8.7 Logging & Observability**
 
 Agent connections, helper connections, authentication events, session creation, channel lifecycle, errors. Future metrics channels (Phase 3): active sessions, channel counts, bandwidth usage, agent health.
 
-## **8.7 Updates**
+## **8.8 Updates**
 
 Manual, explicit, version‑pinned. Awan Saya may later introduce rolling updates and multi‑node orchestration.
 
