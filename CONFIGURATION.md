@@ -83,14 +83,14 @@ hubs:
 
 ## `config.yaml` (hub directory remotes)
 
-**Purpose:** Stores remote credentials so `tela` can resolve hub names via each remote's `/api/hubs` endpoint.
+**Purpose:** Stores remote credentials and discovered endpoints so `tela` can resolve hub names.
 
 **File location:**
 
 - Windows: `%APPDATA%\tela\config.yaml`
 - Linux/macOS: `~/.tela/config.yaml`
 
-**How it's created:** `tela remote add <name> <url>` prompts for a token and writes this file.
+**How it's created:** `tela remote add <name> <url>` discovers endpoints via `/.well-known/tela` (RFC 8615), prompts for a token, and writes this file.
 
 **Schema:**
 
@@ -98,13 +98,15 @@ hubs:
 remotes:
   awansaya:
     url: https://awansaya.net
-    token: ""   # empty token = open-mode remote
+    token: ""                # empty token = open-mode remote
+    hub_directory: /api/hubs # discovered via /.well-known/tela
 ```
 
 Notes:
 
 - `url` should be `http(s)://...`.
-- `token` is optional; if present it’s sent as `Authorization: Bearer <token>`.
+- `token` is optional; if present it's sent as `Authorization: Bearer <token>`.
+- `hub_directory` is auto-populated during `tela remote add` via the well-known endpoint. If `/.well-known/tela` is unavailable, defaults to `/api/hubs`.
 
 ## `telad.yaml` (daemon / agent config)
 

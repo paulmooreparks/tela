@@ -1195,8 +1195,9 @@ type hubsConfig struct {
 
 // remoteEntry is a named hub directory endpoint (like a git remote).
 type remoteEntry struct {
-	URL   string `yaml:"url"`
-	Token string `yaml:"token,omitempty"`
+	URL          string `yaml:"url"`
+	Token        string `yaml:"token,omitempty"`
+	HubDirectory string `yaml:"hub_directory,omitempty"` // discovered via /.well-known/tela
 }
 
 // telaConfig is the schema for ~/.tela/config.yaml (or %APPDATA%\tela\config.yaml).
@@ -1289,6 +1290,54 @@ func saveTelaConfig(cfg *telaConfig) error {
 	return os.WriteFile(telaConfigPath(), data, 0600)
 }
 
+// telaWellKnown is the JSON shape returned by /.well-known/tela (RFC 8615).
+type telaWellKnown struct {
+	HubDirectory string `json:"hub_directory"`
+}
+
+// discoverHubDirectory queries /.well-known/tela to discover the hub directory
+// endpoint. Returns the path (e.g. "/api/hubs") or falls back to the conventional
+// default if the well-known endpoint is not available.
+func discoverHubDirectory(baseURL string, token string) string {
+	const fallback = "/api/hubs"
+	wkURL := strings.TrimRight(baseURL, "/") + "/.well-known/tela"
+
+	req, err := http.NewRequest("GET", wkURL, nil)
+	if err != nil {
+		logVerbose("well-known discovery failed (request): %v", err)
+		return fallback
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		logVerbose("well-known discovery failed (network): %v", err)
+		return fallback
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		logVerbose("well-known discovery: HTTP %d, falling back to %s", resp.StatusCode, fallback)
+		return fallback
+	}
+
+	var wk telaWellKnown
+	if err := json.NewDecoder(resp.Body).Decode(&wk); err != nil {
+		logVerbose("well-known discovery: invalid JSON, falling back to %s", fallback)
+		return fallback
+	}
+
+	if wk.HubDirectory == "" {
+		return fallback
+	}
+
+	logVerbose("well-known discovery: hub_directory = %s", wk.HubDirectory)
+	return wk.HubDirectory
+}
+
 // remoteHubEntry matches the JSON shape from a remote hub directory's /api/hubs endpoint.
 type remoteHubEntry struct {
 	Name string `json:"name"`
@@ -1297,7 +1346,12 @@ type remoteHubEntry struct {
 
 // queryRemote queries a single remote hub directory to resolve a hub name.
 func queryRemote(remoteName string, remote remoteEntry, hubName string) (string, error) {
-	apiURL := strings.TrimRight(remote.URL, "/") + "/api/hubs"
+	// Use the discovered hub_directory path, or fall back to convention
+	hubDir := remote.HubDirectory
+	if hubDir == "" {
+		hubDir = "/api/hubs"
+	}
+	apiURL := strings.TrimRight(remote.URL, "/") + hubDir
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return "", err
@@ -1471,9 +1525,14 @@ func cmdRemoteAdd(args []string) {
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
 
-	// Test the connection
-	fmt.Printf("Verifying %s... ", remoteURL)
-	apiURL := remoteURL + "/api/hubs"
+	// Discover hub directory endpoint via /.well-known/tela (RFC 8615)
+	fmt.Printf("Discovering %s... ", remoteURL)
+	hubDirectory := discoverHubDirectory(remoteURL, token)
+	fmt.Printf("%s\n", hubDirectory)
+
+	// Verify the hub directory endpoint
+	fmt.Printf("Verifying %s%s... ", remoteURL, hubDirectory)
+	apiURL := remoteURL + hubDirectory
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
@@ -1507,7 +1566,7 @@ func cmdRemoteAdd(args []string) {
 		cfg = &telaConfig{Remotes: make(map[string]remoteEntry)}
 	}
 
-	cfg.Remotes[name] = remoteEntry{URL: remoteURL, Token: token}
+	cfg.Remotes[name] = remoteEntry{URL: remoteURL, Token: token, HubDirectory: hubDirectory}
 	if err := saveTelaConfig(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		os.Exit(1)

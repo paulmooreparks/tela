@@ -1463,14 +1463,33 @@ hubs:
 ### Managing Remotes
 
 ```
-tela remote add awansaya https://awansaya.net    # add remote, verify reachability, store URL + token
+tela remote add awansaya https://awansaya.net    # discover endpoints, verify, store
 tela remote list                                  # show configured remotes
 tela remote remove awansaya                       # remove a remote
 ```
 
-Remote credentials are stored in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`. The `add` flow verifies reachability by calling the remote's `/api/hubs` endpoint before saving.
+Remote credentials are stored in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`.
 
-**Remote `/api/hubs` endpoint (hub directory protocol):**
+### Endpoint Discovery (RFC 8615)
+
+When `tela remote add` is run, the CLI discovers hub directory endpoints via a Well-Known URI:
+
+```
+GET /.well-known/tela HTTP/1.1
+Host: awansaya.net
+
+200 OK
+Content-Type: application/json
+Cache-Control: public, max-age=86400
+
+{ "hub_directory": "/api/hubs" }
+```
+
+The `hub_directory` value tells the CLI where to query for hub listings. This is the **only** convention — the well-known path itself (governed by RFC 8615). Everything else is discovered from the response.
+
+If `/.well-known/tela` returns 404 (e.g., an older directory service), the CLI falls back to the conventional `/api/hubs` path. The discovered path is stored in the config and used for all subsequent queries.
+
+**Hub directory endpoint (discovered):**
 
 ```
 GET /api/hubs
@@ -1480,7 +1499,7 @@ Authorization: Bearer <token>    (optional; omitted in open mode)
 { "hubs": [ { "name": "owlsnest", "url": "https://owlsnest-hub.parkscomputing.com" } ] }
 ```
 
-Any service that implements this endpoint can be added as a Tela remote. Awan Saya is one such service.
+Any service that implements `/.well-known/tela` (or at minimum `GET /api/hubs`) can be added as a Tela remote. Awan Saya is one such service; others can place their hub directory at any path they choose.
 
 ### Deprecated: `tela login` / `tela logout`
 
