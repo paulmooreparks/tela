@@ -111,6 +111,8 @@ func main() {
 		cmdServices(os.Args[2:])
 	case "status":
 		cmdStatus(os.Args[2:])
+	case "remote":
+		cmdRemote(os.Args[2:])
 	case "login":
 		cmdLogin(os.Args[2:])
 	case "logout":
@@ -139,8 +141,7 @@ Commands:
   machines  List registered machines and their services
   services  List services on a specific machine
   status    Show hub status summary
-  login     Authenticate with a Tela portal
-  logout    Remove stored portal credentials
+  remote    Manage hub directory remotes (add, remove, list)
   admin     Remote hub auth management (tokens, ACLs)
   version   Print version and exit
 
@@ -153,11 +154,12 @@ Environment Variables:
 
 Hub Name Resolution:
   The -hub flag accepts a full URL (wss://...) or a short hub name.
-  Short names are resolved by querying the portal you logged into:
+  Short names are resolved by querying configured remotes:
 
-    tela login https://your-portal.example   # authenticate once
+    tela remote add awansaya https://awansaya.net  # add a remote once
     tela connect -hub myhub -machine mybox
 
+  Resolution order: configured remotes (sorted by name), then local config.
   Names can also be defined locally in a config file (used as fallback):
     Linux/macOS:  ~/.tela/hubs.yaml
     Windows:      %%APPDATA%%\tela\hubs.yaml
@@ -167,7 +169,7 @@ Hub Name Resolution:
       myHub: wss://example.com
 
 Examples:
-  tela login https://your-portal.example
+  tela remote add awansaya https://awansaya.net
   tela connect  -hub myhub -machine mybox
   tela machines -hub myhub
   tela connect  -hub wss://hub.example.com -machine mybox
@@ -1191,12 +1193,22 @@ type hubsConfig struct {
 	Hubs map[string]string `yaml:"hubs"`
 }
 
+// remoteEntry is a named hub directory endpoint (like a git remote).
+type remoteEntry struct {
+	URL   string `yaml:"url"`
+	Token string `yaml:"token,omitempty"`
+}
+
 // telaConfig is the schema for ~/.tela/config.yaml (or %APPDATA%\tela\config.yaml).
 type telaConfig struct {
-	Portal struct {
+	// Remotes is the set of named hub directory endpoints.
+	Remotes map[string]remoteEntry `yaml:"remotes,omitempty"`
+
+	// Deprecated: Portal is the legacy single-portal config. Migrated to Remotes on load.
+	Portal *struct {
 		URL   string `yaml:"url"`
 		Token string `yaml:"token"`
-	} `yaml:"portal"`
+	} `yaml:"portal,omitempty"`
 }
 
 // telaConfigDir returns the platform-appropriate tela config directory.
@@ -1237,6 +1249,7 @@ func loadHubsConfig() (*hubsConfig, error) {
 }
 
 // loadTelaConfig reads and parses the main tela config file.
+// If the legacy single-portal block is present, it is migrated to the remotes map.
 func loadTelaConfig() (*telaConfig, error) {
 	data, err := os.ReadFile(telaConfigPath())
 	if err != nil {
@@ -1245,6 +1258,18 @@ func loadTelaConfig() (*telaConfig, error) {
 	var cfg telaConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("invalid config %s: %w", telaConfigPath(), err)
+	}
+	if cfg.Remotes == nil {
+		cfg.Remotes = make(map[string]remoteEntry)
+	}
+	// Migrate legacy portal block → remote named "portal"
+	if cfg.Portal != nil && cfg.Portal.URL != "" {
+		if _, exists := cfg.Remotes["portal"]; !exists {
+			cfg.Remotes["portal"] = remoteEntry{URL: cfg.Portal.URL, Token: cfg.Portal.Token}
+		}
+		cfg.Portal = nil
+		// Best-effort save the migrated config
+		_ = saveTelaConfig(&cfg)
 	}
 	return &cfg, nil
 }
@@ -1255,6 +1280,8 @@ func saveTelaConfig(cfg *telaConfig) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
+	// Never persist the legacy portal block
+	cfg.Portal = nil
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
@@ -1262,69 +1289,94 @@ func saveTelaConfig(cfg *telaConfig) error {
 	return os.WriteFile(telaConfigPath(), data, 0600)
 }
 
-// portalHubEntry matches the JSON shape from the portal /api/hubs endpoint.
-type portalHubEntry struct {
+// remoteHubEntry matches the JSON shape from a remote hub directory's /api/hubs endpoint.
+type remoteHubEntry struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
 }
 
-// resolveHubFromPortal queries the authenticated portal to resolve a hub name.
-func resolveHubFromPortal(name string) (string, error) {
-	cfg, err := loadTelaConfig()
-	if err != nil || cfg.Portal.URL == "" {
-		return "", fmt.Errorf("not logged in to a portal (run 'tela login <url>')")
-	}
-
-	apiURL := strings.TrimRight(cfg.Portal.URL, "/") + "/api/hubs"
+// queryRemote queries a single remote hub directory to resolve a hub name.
+func queryRemote(remoteName string, remote remoteEntry, hubName string) (string, error) {
+	apiURL := strings.TrimRight(remote.URL, "/") + "/api/hubs"
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return "", err
 	}
-	if cfg.Portal.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.Portal.Token)
+	if remote.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+remote.Token)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("could not reach portal %s: %w", cfg.Portal.URL, err)
+		return "", fmt.Errorf("could not reach remote %q (%s): %w", remoteName, remote.URL, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		return "", fmt.Errorf("portal returned 401 unauthorized — try 'tela login %s'", cfg.Portal.URL)
+		return "", fmt.Errorf("remote %q returned 401 unauthorized — try 'tela remote add %s %s' with a valid token", remoteName, remoteName, remote.URL)
 	}
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("portal returned HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("remote %q returned HTTP %d", remoteName, resp.StatusCode)
 	}
 
 	var result struct {
-		Hubs []portalHubEntry `json:"hubs"`
+		Hubs []remoteHubEntry `json:"hubs"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("invalid JSON from portal: %w", err)
+		return "", fmt.Errorf("invalid JSON from remote %q: %w", remoteName, err)
 	}
 
 	for _, h := range result.Hubs {
-		if strings.EqualFold(h.Name, name) {
+		if strings.EqualFold(h.Name, hubName) {
 			// Convert https:// → wss://, http:// → ws://
 			wsURL := strings.Replace(h.URL, "https://", "wss://", 1)
 			wsURL = strings.Replace(wsURL, "http://", "ws://", 1)
-			logVerbose("resolved hub %q via portal → %s", name, wsURL)
+			logVerbose("resolved hub %q via remote %q → %s", hubName, remoteName, wsURL)
 			return wsURL, nil
 		}
 	}
 
-	var known []string
-	for _, h := range result.Hubs {
-		known = append(known, h.Name)
+	return "", fmt.Errorf("hub %q not found on remote %q", hubName, remoteName)
+}
+
+// resolveHubFromRemotes queries all configured remotes (in order) to resolve a hub name.
+func resolveHubFromRemotes(name string) (string, error) {
+	cfg, err := loadTelaConfig()
+	if err != nil || len(cfg.Remotes) == 0 {
+		return "", fmt.Errorf("no remotes configured (run 'tela remote add <name> <url>')")
 	}
-	return "", fmt.Errorf("hub %q not found on portal (known: %s)", name, strings.Join(known, ", "))
+
+	// Iterate remotes in sorted order for deterministic resolution
+	var names []string
+	for n := range cfg.Remotes {
+		names = append(names, n)
+	}
+	// sort
+	for i := 0; i < len(names); i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[i] > names[j] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+
+	var lastErr error
+	for _, rn := range names {
+		resolved, err := queryRemote(rn, cfg.Remotes[rn], name)
+		if err == nil {
+			return resolved, nil
+		}
+		logVerbose("remote %q: %v", rn, err)
+		lastErr = err
+	}
+
+	return "", fmt.Errorf("hub %q not found on any configured remote: %w", name, lastErr)
 }
 
 // resolveHubURL resolves a hub reference to a WebSocket URL.
 // If the value starts with ws:// or wss://, it is used as-is.
-// Otherwise it is resolved via: (1) portal API, (2) local hubs.yaml fallback.
+// Otherwise it is resolved via: (1) configured remotes, (2) local hubs.yaml fallback.
 func resolveHubURL(value string) (string, error) {
 	if value == "" {
 		return "", nil
@@ -1334,17 +1386,17 @@ func resolveHubURL(value string) (string, error) {
 		return value, nil
 	}
 
-	// Try portal first
-	if resolved, err := resolveHubFromPortal(value); err == nil {
+	// Try configured remotes first
+	if resolved, err := resolveHubFromRemotes(value); err == nil {
 		return resolved, nil
 	} else {
-		logVerbose("portal lookup failed: %v", err)
+		logVerbose("remote lookup failed: %v", err)
 	}
 
 	// Fallback to local hubs.yaml
 	cfg, err := loadHubsConfig()
 	if err != nil {
-		return "", fmt.Errorf("hub %q is not a URL and could not be resolved (no portal login, no local config)", value)
+		return "", fmt.Errorf("hub %q is not a URL and could not be resolved (no remotes configured, no local config)", value)
 	}
 
 	hubURL, ok := cfg.Hubs[value]
@@ -1353,7 +1405,7 @@ func resolveHubURL(value string) (string, error) {
 		for k := range cfg.Hubs {
 			known = append(known, k)
 		}
-		return "", fmt.Errorf("hub %q not found (portal unreachable, not in %s; known: %s)", value, hubsConfigPath(), strings.Join(known, ", "))
+		return "", fmt.Errorf("hub %q not found (remotes unreachable, not in %s; known: %s)", value, hubsConfigPath(), strings.Join(known, ", "))
 	}
 	logVerbose("resolved hub alias %q via local config → %s", value, hubURL)
 	return hubURL, nil
@@ -1369,34 +1421,59 @@ func mustResolveHub(value string) string {
 	return resolved
 }
 
-// ── "tela login" ───────────────────────────────────────────────────
+// ── "tela remote" ──────────────────────────────────────────────────
 
-func cmdLogin(args []string) {
-	fs := flag.NewFlagSet("login", flag.ExitOnError)
+func cmdRemote(args []string) {
+	if len(args) == 0 {
+		cmdRemoteList()
+		return
+	}
+
+	switch args[0] {
+	case "add":
+		cmdRemoteAdd(args[1:])
+	case "remove", "rm":
+		cmdRemoteRemove(args[1:])
+	case "list", "ls":
+		cmdRemoteList()
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown remote subcommand: %s\n\n", args[0])
+		fmt.Fprintln(os.Stderr, `Usage:
+  tela remote                       List configured remotes
+  tela remote add <name> <url>      Add a hub directory
+  tela remote remove <name>         Remove a hub directory
+  tela remote list                  List configured remotes`)
+		os.Exit(1)
+	}
+}
+
+func cmdRemoteAdd(args []string) {
+	fs := flag.NewFlagSet("remote add", flag.ExitOnError)
 	fs.Parse(args)
 
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela login <portal-url>")
-		fmt.Fprintln(os.Stderr, "Example: tela login https://your-portal.example")
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela remote add <name> <url>")
+		fmt.Fprintln(os.Stderr, "Example: tela remote add awansaya https://awansaya.net")
 		os.Exit(1)
 	}
 
-	portalURL := strings.TrimRight(fs.Arg(0), "/")
+	name := fs.Arg(0)
+	remoteURL := strings.TrimRight(fs.Arg(1), "/")
 
 	// Validate URL
-	if !strings.HasPrefix(portalURL, "http://") && !strings.HasPrefix(portalURL, "https://") {
-		portalURL = "https://" + portalURL
+	if !strings.HasPrefix(remoteURL, "http://") && !strings.HasPrefix(remoteURL, "https://") {
+		remoteURL = "https://" + remoteURL
 	}
 
 	// Prompt for token
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("Token for %s (press Enter for none): ", portalURL)
+	fmt.Printf("Token for %s (press Enter for none): ", remoteURL)
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
 
 	// Test the connection
-	fmt.Printf("Verifying portal... ")
-	apiURL := portalURL + "/api/hubs"
+	fmt.Printf("Verifying %s... ", remoteURL)
+	apiURL := remoteURL + "/api/hubs"
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
@@ -1409,7 +1486,7 @@ func cmdLogin(args []string) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nError: could not reach %s: %v\n", portalURL, err)
+		fmt.Fprintf(os.Stderr, "\nError: could not reach %s: %v\n", remoteURL, err)
 		os.Exit(1)
 	}
 	resp.Body.Close()
@@ -1419,36 +1496,125 @@ func cmdLogin(args []string) {
 		os.Exit(1)
 	}
 	if resp.StatusCode != 200 {
-		fmt.Fprintf(os.Stderr, "\nError: portal returned HTTP %d\n", resp.StatusCode)
+		fmt.Fprintf(os.Stderr, "\nError: remote returned HTTP %d\n", resp.StatusCode)
 		os.Exit(1)
 	}
 	fmt.Println("ok")
 
-	// Save config
-	var cfg telaConfig
-	cfg.Portal.URL = portalURL
-	cfg.Portal.Token = token
-	if err := saveTelaConfig(&cfg); err != nil {
+	// Load config and add/update remote
+	cfg, err := loadTelaConfig()
+	if err != nil {
+		cfg = &telaConfig{Remotes: make(map[string]remoteEntry)}
+	}
+
+	cfg.Remotes[name] = remoteEntry{URL: remoteURL, Token: token}
+	if err := saveTelaConfig(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Logged in to %s\n", portalURL)
+	fmt.Printf("Remote %q added (%s)\n", name, remoteURL)
 	fmt.Printf("Config saved to %s\n", telaConfigPath())
 }
 
-// ── "tela logout" ──────────────────────────────────────────────────
+func cmdRemoteRemove(args []string) {
+	fs := flag.NewFlagSet("remote remove", flag.ExitOnError)
+	fs.Parse(args)
 
-func cmdLogout(args []string) {
-	path := telaConfigPath()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		fmt.Println("Not logged in.")
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela remote remove <name>")
+		os.Exit(1)
+	}
+
+	name := fs.Arg(0)
+
+	cfg, err := loadTelaConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: no config file found (%s)\n", telaConfigPath())
+		os.Exit(1)
+	}
+
+	if _, ok := cfg.Remotes[name]; !ok {
+		fmt.Fprintf(os.Stderr, "Error: remote %q not found\n", name)
+		os.Exit(1)
+	}
+
+	delete(cfg.Remotes, name)
+	if err := saveTelaConfig(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Remote %q removed.\n", name)
+}
+
+func cmdRemoteList() {
+	cfg, err := loadTelaConfig()
+	if err != nil || len(cfg.Remotes) == 0 {
+		fmt.Println("No remotes configured.")
+		fmt.Println("Add one with: tela remote add <name> <url>")
 		return
 	}
 
-	if err := os.Remove(path); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tURL\tTOKEN")
+	// Sort for deterministic output
+	var names []string
+	for n := range cfg.Remotes {
+		names = append(names, n)
+	}
+	for i := 0; i < len(names); i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[i] > names[j] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+	for _, n := range names {
+		r := cfg.Remotes[n]
+		tokenDisplay := "(none)"
+		if r.Token != "" {
+			tokenDisplay = "****" + r.Token[max(0, len(r.Token)-4):]
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", n, r.URL, tokenDisplay)
+	}
+	w.Flush()
+}
+
+// ── Deprecated: "tela login" / "tela logout" (aliases for remote add/remove) ──
+
+func cmdLogin(args []string) {
+	fmt.Fprintln(os.Stderr, "Note: 'tela login' is deprecated. Use 'tela remote add <name> <url>' instead.")
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela login <url>")
 		os.Exit(1)
 	}
-	fmt.Println("Logged out. Portal credentials removed.")
+
+	// Treat as "tela remote add portal <url>"
+	cmdRemoteAdd([]string{"portal", fs.Arg(0)})
+}
+
+func cmdLogout(args []string) {
+	fmt.Fprintln(os.Stderr, "Note: 'tela logout' is deprecated. Use 'tela remote remove <name>' instead.")
+
+	cfg, err := loadTelaConfig()
+	if err != nil || len(cfg.Remotes) == 0 {
+		fmt.Println("No remotes configured.")
+		return
+	}
+
+	// Remove the "portal" remote if it exists (legacy behavior)
+	if _, ok := cfg.Remotes["portal"]; ok {
+		delete(cfg.Remotes, "portal")
+		if err := saveTelaConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Remote \"portal\" removed.")
+	} else {
+		fmt.Println("No remote named \"portal\" found.")
+		fmt.Println("Use 'tela remote list' to see configured remotes and 'tela remote remove <name>' to remove one.")
+	}
 }

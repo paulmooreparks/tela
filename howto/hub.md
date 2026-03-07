@@ -215,15 +215,15 @@ your-hub.example.com {
 
 See the `docker-compose.yml` and `docker/caddy/Caddyfile` in the Tela repo for a complete example using Caddy with DNS-01 TLS and Cloudflare Tunnel.
 
-## Register with a portal
+## Register with a hub directory
 
-Once the hub is reachable, add it to a portal so users and the CLI can find it by short name:
+Once the hub is reachable, add it to a hub directory (such as Awan Saya) so users and the CLI can find it by short name:
 
-1. Open the portal and click **Add Hub**.
+1. Open the portal dashboard and click **Add Hub**.
 2. Enter a short name (e.g., `myhub`), the hub's public URL (e.g., `https://your-hub.example.com`), and optionally a **viewer token** (so the portal can proxy hub status server-side).
 3. The hub will appear in the portal dashboard and be resolvable by the CLI:
    ```bash
-   tela login https://your-portal.example
+   tela remote add myportal https://your-portal.example
    tela machines -hub myhub
    tela connect -hub myhub -machine mybox
    ```

@@ -105,18 +105,18 @@ export TELA_HUB=ws://localhost:8080 TELA_MACHINE=mybox
 
 Then connect: `ssh localhost` or `mstsc /v:localhost`
 
-### Portal login (hub name resolution)
+### Hub remotes (name resolution)
 
-If your hubs are registered on a portal, log in once and use short hub names:
+If your hubs are listed on a directory service, add it as a remote:
 
 ```bash
-tela login https://your-portal.example    # authenticate once, config stored locally
-tela machines -hub myhub                   # hub name resolved via portal
+tela remote add awansaya https://awansaya.net   # configure once, credentials stored locally
+tela machines -hub myhub                         # hub name resolved via remote
 tela connect -hub myhub -machine mybox
-tela logout                                # remove stored credentials
+tela remote remove awansaya                      # remove the remote
 ```
 
-Short hub names are resolved via: (1) portal API, (2) local `hubs.yaml` fallback.
+Short hub names are resolved via: (1) configured remotes, (2) local `hubs.yaml` fallback.
 
 ### Run with Docker (production)
 
@@ -126,8 +126,8 @@ docker compose up --build -d
 # With flags:
 ./tela connect -hub wss://your-hostname -machine barn
 
-# Or log in to a portal and use hub names:
-tela login https://your-portal.example
+# Or add a remote and use hub names:
+tela remote add awansaya https://awansaya.net
 tela connect -hub your-hub -machine barn
 ```
 
@@ -196,7 +196,7 @@ See [howto/services.md](howto/services.md) for full details.
 ## Project structure
 
 ```
-cmd/tela/          Client binary (subcommands: connect, machines, services, status, login, logout, admin)
+cmd/tela/          Client binary (subcommands: connect, machines, services, status, remote, admin)
 cmd/telad/         Daemon binary
 cmd/telahubd/      Hub server binary
 internal/service/   Cross-platform OS service management (Windows SCM, systemd, launchd)
@@ -218,7 +218,7 @@ docker/            Caddyfile, docker-compose, cloudflared config
 | **Machine** | A named resource registered by an agent (e.g., `barn`). |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
 | **Session** | An active encrypted tunnel between a client and an agent. |
-| **Portal** | Multi-hub dashboard. The CLI resolves hub names via the portal API. |
+| **Portal** | Multi-hub dashboard. Implements the hub directory API (`/api/hubs`). Can be added as a remote: `tela remote add myportal https://...` |
 
 
 ## Documentation

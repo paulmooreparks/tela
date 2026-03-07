@@ -128,8 +128,8 @@ See `IMPLEMENTATION.md` §8 for the full Docker Compose skeleton and Caddyfile.
 Subcommand-based CLI. Run `tela` with no arguments for usage.
 
 **Hub name resolution** — the `-hub` flag accepts a full URL (`wss://...`) or
-a short hub name. Short names are resolved by: (1) querying the portal you
-logged into via `tela login`, (2) falling back to a local `hubs.yaml` file.
+a short hub name. Short names are resolved by: (1) querying configured remotes
+added via `tela remote add`, (2) falling back to a local `hubs.yaml` file.
 
 **Environment variables** — set these to avoid repeating flags:
 
@@ -161,24 +161,34 @@ tela connect
 | `-ports` | | Comma-separated `local:remote` port mappings |
 | `-profile` | | Named connection profile from `~/.tela/profiles/<name>.yaml` |
 
-#### tela login
+#### tela remote
 
-Authenticate with a Tela portal to enable hub name resolution.
+Manage hub directory remotes.
+
+```
+tela remote add awansaya https://awansaya.net
+tela remote list
+tela remote remove awansaya
+```
+
+`tela remote add` prompts for an API token (press Enter for open-mode directories).
+Stores remote URL and token in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`.
+
+Once configured, `-hub` accepts short hub names (e.g., `myhub`) that are
+resolved via each remote's `/api/hubs` endpoint. Local `hubs.yaml` is used as
+a fallback if all remotes are unreachable.
+
+#### tela login (deprecated)
+
+Alias for `tela remote add portal <url>`. Prints a deprecation notice.
 
 ```
 tela login https://your-portal.example
 ```
 
-Prompts for an API token (press Enter for open-mode portals). Stores portal URL
-and token in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`.
+#### tela logout (deprecated)
 
-Once logged in, `-hub` accepts short hub names (e.g., `myhub`) that are
-resolved via the portal's `/api/hubs` endpoint. Local `hubs.yaml` is used as
-a fallback if the portal is unreachable.
-
-#### tela logout
-
-Remove stored portal credentials.
+Alias for `tela remote remove portal`. Prints a deprecation notice.
 
 ```
 tela logout

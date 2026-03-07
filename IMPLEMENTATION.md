@@ -339,8 +339,8 @@ docker compose up --build -d
 # Connect by hub URL
 ./tela connect -hub wss://gohub.parkscomputing.com -machine barn
 
-# Or log in to a portal and use hub names
-tela login https://your-portal.example
+# Or add a remote and use hub names
+tela remote add myportal https://your-portal.example
 tela connect -hub barn-hub -machine barn
 ```
 

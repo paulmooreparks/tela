@@ -45,7 +45,7 @@ This glossary defines terms as they are used in Tela.
 | **Multiplexing** | Carrying multiple channels (control + multiple TCP streams) over a single WebSocket connection using a framing header and channel IDs. |
 | **NAT** | Network Address Translation; a common reason inbound connections to a machine are not possible without port forwarding. |
 | **Outbound‑only** | Agents and clients initiate connections out to the Hub; no inbound ports are required on managed machines. |
-| **Portal** | The Awan Saya multi‑hub dashboard at `awansaya.net/`. Aggregates machines, services, and sessions across all hubs a user has been granted access to. Provides SSO, RBAC, and centralized management. Distinct from the single‑hub Console. See §18.7–18.11. |
+| **Portal** | The Awan Saya multi‑hub dashboard at `awansaya.net/`. Aggregates machines, services, and sessions across all hubs a user has been granted access to. Provides SSO, RBAC, and centralized management. Distinct from the single‑hub Console. Implements the hub directory API (`/api/hubs`); the Tela CLI can add it as a remote: `tela remote add awansaya https://awansaya.net`. See §18.7–18.11. |
 | **RDP** | Microsoft Remote Desktop Protocol (typically TCP/3389); a primary example of a tunneled service. |
 | **Registry** | The directory of Hubs maintained by Awan Saya (§18.2). Maps hub identifiers to live connections. |
 | **Relay** | Awan Saya’s rendezvous service for self‑hosted Hubs (§18.3). Transparently forwards WebSocket frames. |
@@ -812,8 +812,9 @@ The CLI is intentionally not part of the core runtime.
 
 Phase 1:
 
-- `tela login <portal-url>` — authenticate with a portal, store credentials locally.
-- `tela logout` — remove stored portal credentials.
+- `tela remote add <name> <url>` — add a hub directory remote, store credentials locally.
+- `tela remote remove <name>` — remove a remote.
+- `tela remote list` — list configured remotes.
 - `tela machines` — list registered machines and their online/offline status.
 - `tela services -machine <machineId>` — list exposed services on a machine.
 - `tela connect -hub <name-or-url> -machine <machineId>` — establish a WireGuard tunnel, bind local listeners.
@@ -1391,53 +1392,38 @@ Connected. Listening:
 
 The user does not know or care that "Paul's Home" hub is at `192.168.1.50` behind NAT, reached via the Awan Saya relay. Awan Saya resolves the machine name to the correct hub, establishes the relay path, and handles authentication.
 
-## **18.10 CLI Integration — `tela` Talks to Awan Saya**
+## **18.10 CLI Integration — `tela` Talks to Hub Directories**
 
-There is **one CLI**: `tela`. It gains an optional `-portal` flag (and `TELA_PORTAL` environment variable) that points to an Awan Saya instance. No separate `awansaya` CLI is needed.
+There is **one CLI**: `tela`. It supports **remotes** — named URLs pointing to hub directory services (such as Awan Saya). No separate `awansaya` CLI is needed.
 
-### Direct mode (standalone, no AS)
+### Direct mode (standalone, no remote)
 
 ```
 tela connect  -hub wss://hub.example.com -machine mybox
 tela machines -hub wss://hub.example.com
 ```
 
-The user specifies the hub directly. Authentication is hub‑local (token, cookie). This is the base Tela experience and always works without Awan Saya.
+The user specifies the hub directly. Authentication is hub‑local (token, cookie). This is the base Tela experience and always works without any remote.
 
-### Portal mode (via AS)
+### Remote mode (via hub directory)
 
 ```
-tela connect  -portal https://awansaya.net -machine mybox
-tela machines -portal https://awansaya.net
-tela hubs     -portal https://awansaya.net
+tela remote add awansaya https://awansaya.net
+tela connect  -hub myhub -machine mybox
+tela machines -hub myhub
 ```
 
-The client contacts the portal, authenticates (OAuth2 device flow or cached token), resolves the machine to its hub, and connects through the relay. The user never provides a hub URL.
+The client queries configured remotes to resolve the hub name to a WebSocket URL, then connects as if it were a direct hub connection.
 
 ### Resolution order
 
-When both `-hub` and `-portal` are omitted, `tela` checks environment variables:
+When `-hub` is a short name (not `ws://` or `wss://`):
 
-1. `TELA_HUB` → direct mode
-2. `TELA_PORTAL` → portal mode
-3. Neither → error, must specify one
+1. **Configured remotes** — queried in alphabetical order. Each remote's `/api/hubs` endpoint is called. First match wins.
+2. **Local `hubs.yaml`** — fallback to the local config file.
+3. **Error** — if neither source resolves the name, the CLI exits with an error.
 
-When `-portal` is used, discovery flow is:
-
-1. `tela` calls `GET https://awansaya.net/api/resolve?machine=<name>` with an OAuth2 bearer token.
-2. Awan Saya returns the hub's relay WebSocket URL (e.g. `wss://awansaya.net/hub/pauls-home/ws`) and any session metadata.
-3. `tela` connects to that URL as if it were a direct hub connection. The hub sees a normal client WebSocket — no protocol changes.
-
-### Authentication flow
-
-For portal mode, `tela` uses **OAuth2 Device Authorization Grant** (RFC 8628):
-
-1. `tela` requests a device code from `https://awansaya.net/oauth/device`.
-2. User opens a browser URL and enters the code (or scans a QR code).
-3. `tela` polls for the token, then caches it locally.
-4. Subsequent commands use the cached token until it expires.
-
-This avoids embedding browser windows in the CLI and works on headless machines.
+When `-hub` is omitted, `tela` checks `TELA_HUB` (may be a URL or a short name). If unset → error.
 
 ## **18.11 Hub Owner ≠ Hub User**
 
@@ -1455,9 +1441,9 @@ Users should not need to memorize or type full WebSocket URLs. The `tela` CLI su
 
 When the `-hub` flag (or `TELA_HUB` env var) does not start with `ws://` or `wss://`, the CLI resolves the name in this order:
 
-1. **Portal API** — If the user has run `tela login <portal-url>`, the CLI queries `GET <portal>/api/hubs` (with Bearer token if set). The portal returns the hub list; a case-insensitive match on `name` yields the URL. The URL is converted from `https://` to `wss://` (or `http://` to `ws://`).
+1. **Configured remotes** — The CLI iterates all remotes (sorted alphabetically by name) and queries `GET <remote-url>/api/hubs` (with Bearer token if configured). The remote returns the hub list; a case-insensitive match on `name` yields the URL. The URL is converted from `https://` to `wss://` (or `http://` to `ws://`). First match wins.
 
-2. **Local config file** — If the portal is unreachable or the user is not logged in, the CLI falls back to a local YAML file:
+2. **Local config file** — If no remote resolves the name, the CLI falls back to a local YAML file:
 
 | Platform | Path |
 |---|---|
@@ -1474,16 +1460,17 @@ hubs:
 
 3. **Error** — If neither source resolves the name, the CLI exits with an error listing known hub names from whichever source was available.
 
-### Portal Login
+### Managing Remotes
 
 ```
-tela login https://awansaya.net    # authenticate, store portal URL + token
-tela logout                        # remove stored credentials
+tela remote add awansaya https://awansaya.net    # add remote, verify reachability, store URL + token
+tela remote list                                  # show configured remotes
+tela remote remove awansaya                       # remove a remote
 ```
 
-Portal credentials are stored in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`. The login flow verifies reachability by calling the portal's `/api/hubs` endpoint before saving.
+Remote credentials are stored in `%APPDATA%\tela\config.yaml` (Windows) or `~/.tela/config.yaml`. The `add` flow verifies reachability by calling the remote's `/api/hubs` endpoint before saving.
 
-**Portal `/api/hubs` endpoint:**
+**Remote `/api/hubs` endpoint (hub directory protocol):**
 
 ```
 GET /api/hubs
@@ -1493,17 +1480,23 @@ Authorization: Bearer <token>    (optional; omitted in open mode)
 { "hubs": [ { "name": "owlsnest", "url": "https://owlsnest-hub.parkscomputing.com" } ] }
 ```
 
+Any service that implements this endpoint can be added as a Tela remote. Awan Saya is one such service.
+
+### Deprecated: `tela login` / `tela logout`
+
+The legacy `tela login <url>` and `tela logout` commands still work as aliases for `tela remote add portal <url>` and `tela remote remove portal`, respectively, with a deprecation notice.
+
 ### Usage
 
 ```
-tela login https://awansaya.net
+tela remote add awansaya https://awansaya.net
 tela connect  -hub owlsnest -machine barn
 tela machines -hub owlsnest
 export TELA_HUB=owlsnest
 tela machines
 ```
 
-This keeps the CLI ergonomic for daily use while preserving full URL support for scripts and automation. In portal mode, users need only `tela login` once — no local config file required.
+This keeps the CLI ergonomic for daily use while preserving full URL support for scripts and automation. With a remote configured, users need only `tela remote add` once — no local config file required.
 
 ---
 

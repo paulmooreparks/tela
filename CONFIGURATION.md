@@ -27,12 +27,12 @@ Files in this directory:
 
 **Purpose:** Local, offline fallback mapping from a short hub name (alias) to a WebSocket URL.
 
-**When it’s used:** Only when the `-hub` value is **not** a `ws://` or `wss://` URL and the portal lookup fails/unavailable.
+**When it's used:** Only when the `-hub` value is **not** a `ws://` or `wss://` URL and the remote lookup fails/unavailable.
 
 Resolution order in the CLI:
 
 1. If `-hub` starts with `ws://` or `wss://` → use as-is.
-2. Else try portal lookup (requires `config.yaml` from `tela login`).
+2. Else try configured remotes (requires `config.yaml` from `tela remote add`).
 3. Else fall back to `hubs.yaml`.
 
 **File location:**
@@ -81,23 +81,24 @@ hubs:
 - Use `ws://` only for local/testing.
 - Keep aliases short and stable (they’re what you pass to `tela ... -hub <alias>`).
 
-## `config.yaml` (portal login)
+## `config.yaml` (hub directory remotes)
 
-**Purpose:** Stores portal credentials so `tela` can resolve hub names via the portal’s `/api/hubs` endpoint.
+**Purpose:** Stores remote credentials so `tela` can resolve hub names via each remote's `/api/hubs` endpoint.
 
 **File location:**
 
 - Windows: `%APPDATA%\tela\config.yaml`
 - Linux/macOS: `~/.tela/config.yaml`
 
-**How it’s created:** `tela login <portal-url>` prompts for a token and writes this file.
+**How it's created:** `tela remote add <name> <url>` prompts for a token and writes this file.
 
 **Schema:**
 
 ```yaml
-portal:
-  url: https://awansaya.net
-  token: ""   # empty token = open-mode portal
+remotes:
+  awansaya:
+    url: https://awansaya.net
+    token: ""   # empty token = open-mode remote
 ```
 
 Notes:

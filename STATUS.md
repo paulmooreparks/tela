@@ -250,8 +250,8 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 7. **Dual ingress** — Cloudflare Tunnel + Caddy direct
 8. **Hub /status API** — JSON endpoint for monitoring
 9. **Direct tunnel (P2P)** — STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
-10. **CLI login/logout** — `tela login` authenticates with a portal, `tela logout` removes credentials
-11. **Portal-based hub name resolution** — Short hub names resolved via portal `/api/hubs` with local `hubs.yaml` fallback
+10. **CLI remote management** — `tela remote add` configures a hub directory, `tela remote remove` removes it (`tela login`/`tela logout` kept as deprecated aliases)
+11. **Remote-based hub name resolution** — Short hub names resolved via configured remotes' `/api/hubs` with local `hubs.yaml` fallback
 
 ### Biggest gaps to Phase 1 spec
 
