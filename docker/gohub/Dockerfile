@@ -24,14 +24,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/telahubd ./cmd/telahubd
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w -X main.version=${VERSION}" \
-    -o /out/telad ./cmd/telad
-
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w -X main.version=${VERSION}" \
-    -o /out/tela ./cmd/tela
-
 # ── Stage 2: Runtime ───────────────────────────────────────────────
 
 FROM alpine:3.20
@@ -40,20 +32,14 @@ LABEL org.opencontainers.image.title="tela-gohub" \
       org.opencontainers.image.description="Tela Go Hub — HTTP + WebSocket + UDP relay" \
       org.opencontainers.image.source="https://github.com/paulmooreparks/tela"
 
-RUN apk add --no-cache tini curl openssh-server
+RUN apk add --no-cache tini curl
 
 WORKDIR /app
 
 COPY --from=builder /out/telahubd /usr/local/bin/telahubd
-COPY --from=builder /out/telad /usr/local/bin/telad
-COPY --from=builder /out/tela /usr/local/bin/tela
 
 # Copy hub console static files
 COPY www/ ./www/
-
-# Copy entrypoint script
-COPY docker/gohub/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 ENV HUB_PORT=8080
 ENV HUB_UDP_PORT=41820
@@ -66,4 +52,4 @@ HEALTHCHECK --interval=15s --timeout=3s --start-period=5s \
   CMD curl -f http://localhost:8080/api/status || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["/app/entrypoint.sh"]
+CMD ["telahubd"]

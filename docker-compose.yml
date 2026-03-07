@@ -22,8 +22,6 @@ services:
       - HUB_UDP_PORT=41820
       - HUB_NAME=gohub
       - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
-      - SSH_PASSWORD=${SSH_PASSWORD:-}
-      - AWANSAYA_TOKEN=${AWANSAYA_TOKEN:-}
     volumes:
       - hub-data:/app/data
     restart: unless-stopped
