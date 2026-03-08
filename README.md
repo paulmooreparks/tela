@@ -1,4 +1,4 @@
-![TelaLogo](https://raw.githubusercontent.com/paulmooreparks/tela/main/logo.png)
+![TelaLogo](https://raw.githubusercontent.com/paulmooreparks/tela/main/logo-sm.png)
 
 # Tela
 
