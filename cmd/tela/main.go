@@ -200,7 +200,7 @@ func cmdConnect(args []string) {
 	token := fs.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
 	portsFlag := fs.String("ports", "", "Comma-separated ports or local:remote pairs (e.g. 22,2222:22,5432)")
 	servicesFlag := fs.String("services", "", "Comma-separated service names (e.g. ssh,postgres)")
-	profileFlag := fs.String("profile", "", "Connection profile name (from ~/.tela/profiles/<name>.yaml)")
+	profileFlag := fs.String("profile", envOrDefault("TELA_PROFILE", ""), "Connection profile name (from ~/.tela/profiles/<name>.yaml) (env: TELA_PROFILE)")
 	// Legacy single-port flags (kept for backward compat)
 	localPort := fs.Int("port", 0, "Local TCP port (legacy; prefer -ports)")
 	targetPort := fs.Int("target-port", 0, "Target port on daemon (legacy; with -port)")
