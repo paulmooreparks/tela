@@ -120,6 +120,37 @@ tela remote remove awansaya                      # remove the remote
 
 Short hub names are resolved via: (1) configured remotes, (2) local `hubs.yaml` fallback.
 
+### Connection profiles
+
+Define all your tunnels in a single YAML file and open them in parallel with one command:
+
+```yaml
+# ~/.tela/profiles/work.yaml
+connections:
+  - hub: corp-hub
+    machine: prod-web01
+    token: ${CORP_TOKEN}
+    services:
+      - remote: 22
+        local: 2201
+      - remote: 8080
+        local: 9001
+
+  - hub: corp-hub
+    machine: staging-db
+    token: ${CORP_TOKEN}
+    services:
+      - name: postgres
+```
+
+```bash
+tela connect -profile work
+# Opens parallel tunnels to both machines; each auto-reconnects independently.
+# SSH: localhost:2201, Admin panel: localhost:9001, PostgreSQL: localhost:5432
+```
+
+Profiles support environment variable expansion (`${VAR}`), service name resolution, local port remapping, and connections across multiple hubs. See [REFERENCE.md section 7](REFERENCE.md#7-tela-the-client-cli) for the full schema.
+
 ### Run with Docker (production)
 
 ```bash
@@ -237,7 +268,7 @@ docker/            Caddyfile, docker-compose, cloudflared config
 
 ## Documentation
 
-- [REFERENCE](REFERENCE.md) - Comprehensive documentation for Tela and its command-line tools
+- [REFERENCE.md](REFERENCE.md) - Comprehensive documentation for Tela and its command-line tools
 - [CONFIGURATION.md](CONFIGURATION.md) - Configuration file schemas (`hubs.yaml`, `telad.yaml`, `telahubd.yaml`, portal `config.json`)
 - [DESIGN.md](DESIGN.md) - Architecture specification (includes full glossary)
 - [IMPLEMENTATION.md](IMPLEMENTATION.md) - Deployment runbook

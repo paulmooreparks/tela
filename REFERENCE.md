@@ -568,6 +568,130 @@ tela version
 
 `tela login <url>` and `tela logout` are deprecated aliases for `tela remote add portal <url>` and `tela remote remove portal`, respectively. They still work but print a deprecation notice.
 
+### Connection profiles
+
+A connection profile is a YAML file that defines multiple hub/machine connections in a single document. When you run `tela connect -profile <name>`, all connections launch in parallel, each with its own WireGuard tunnel and auto-reconnect. This lets you open tunnels to machines across different hubs with a single command.
+
+#### Profile location
+
+Profiles are stored in a platform-specific directory:
+
+| Platform | Path |
+|----------|------|
+| Linux/macOS | `~/.tela/profiles/<name>.yaml` |
+| Windows | `%APPDATA%\tela\profiles\<name>.yaml` |
+
+You can also pass an explicit file path: `tela connect -profile /path/to/my-profile.yaml`
+
+Set a default profile with the `TELA_PROFILE` environment variable.
+
+#### Profile schema
+
+```yaml
+connections:
+  - hub: <hub-url-or-name>
+    machine: <machine-id>
+    token: <auth-token>
+    services:                    # optional: if omitted, all ports are forwarded
+      - remote: 22               # forward by port number
+        local: 2201              # optional local port remap (defaults to remote)
+      - name: postgres           # forward by service name (resolved via hub API)
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `connections` | Yes | List of connection entries |
+| `connections[].hub` | Yes | Hub URL (`wss://...`) or short name |
+| `connections[].machine` | Yes | Machine name on this hub |
+| `connections[].token` | No | Auth token for this connection |
+| `connections[].services` | No | Port/service filter; omit to forward all |
+| `connections[].services[].remote` | * | Remote port number |
+| `connections[].services[].local` | No | Local port override (defaults to remote) |
+| `connections[].services[].name` | * | Service name to resolve via hub API |
+
+\* Each service entry needs either `remote` or `name`, not both.
+
+#### Environment variable expansion
+
+Profile YAML supports `${VAR}` expansion, so you can keep tokens out of the file:
+
+```yaml
+connections:
+  - hub: wss://hub.example.com
+    machine: web01
+    token: ${WEB_TOKEN}
+    services:
+      - remote: 22
+      - remote: 8080
+        local: 9090
+
+  - hub: wss://hub.example.com
+    machine: db01
+    token: ${DB_TOKEN}
+    services:
+      - remote: 5432
+```
+
+Then:
+
+```bash
+export WEB_TOKEN=abc123 DB_TOKEN=def456
+tela connect -profile my-env
+```
+
+#### Example: mixed-environment profile
+
+A profile that connects to machines across two different hubs:
+
+```yaml
+# ~/.tela/profiles/mixed-env.yaml
+connections:
+  # Production web server (via corporate hub)
+  - hub: wss://hub.corp.example.com
+    machine: prod-web01
+    token: ${CORP_TOKEN}
+    services:
+      - remote: 22
+        local: 2201        # SSH on localhost:2201
+      - remote: 8080
+        local: 9001        # Admin panel on localhost:9001
+
+  # Staging database (via cloud hub)
+  - hub: staging-hub       # short name resolved via remote
+    machine: staging-db
+    token: ${STAGING_TOKEN}
+    services:
+      - name: postgres     # resolved to port 5432 via hub API
+
+  # Dev box (all services)
+  - hub: wss://dev.example.com
+    machine: devbox
+    token: ${DEV_TOKEN}
+    # no services filter = forward everything the daemon advertises
+```
+
+```bash
+tela connect -profile mixed-env
+```
+
+This opens three parallel tunnels. Each reconnects independently on disconnect. Press Ctrl+C to stop all connections.
+
+#### Example: service-name-based profile
+
+If you prefer service names over port numbers:
+
+```yaml
+connections:
+  - hub: myhub
+    machine: web01
+    token: ${TOKEN}
+    services:
+      - name: ssh
+      - name: http-admin
+```
+
+Service names are resolved at connect time by querying the hub's machine registry.
+
 ### Hub name resolution
 
 When `-hub` is a short name (not starting with `ws://` or `wss://`), `tela` resolves it:
