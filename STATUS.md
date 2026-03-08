@@ -27,7 +27,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §1.4 | License | ✅ | Apache 2.0 in repo |
 | §2.1 | Goals | 🔶 | Outbound-only tunneling works; multiplexing, protocol-agnostic channels, multi-platform agents not yet |
 | §2.2 | Non-Goals | 📄 | - |
-| §3.1–3.4 | Design Philosophy & Invariants | 📄 | Guiding principles; no code artifact |
+| §3.1-3.4 | Design Philosophy & Invariants | 📄 | Guiding principles; no code artifact |
 
 ---
 
@@ -182,7 +182,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §16.1–16.3 | Hard Rules, Allowed Changes, Human Review | 📄 | Process guidance; enforced by workflow, not code |
+| §16.1-16.3 | Hard Rules, Allowed Changes, Human Review | 📄 | Process guidance; enforced by workflow, not code |
 
 ---
 
@@ -214,7 +214,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §19.1–19.2 | Risks & Mitigations | 📄 | Ongoing awareness items |
+| §19.1-19.2 | Risks & Mitigations | 📄 | Ongoing awareness items |
 
 ---
 
@@ -248,18 +248,18 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 5. **Auto-reconnect**: Both tela and telad reconnect on disconnect
 6. **Cross-platform client**: Windows, Linux, macOS (Intel + ARM) binaries served from hub
 7. **Dual ingress**: Cloudflare Tunnel + Caddy direct
-8. **Hub /status API** — JSON endpoint for monitoring
-9. **Direct tunnel (P2P)** — STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
-10. **CLI remote management** — `tela remote add` configures a hub directory, `tela remote remove` removes it (`tela login`/`tela logout` kept as deprecated aliases)
-11. **Remote-based hub name resolution** — Short hub names resolved via configured remotes' `/api/hubs` with local `hubs.yaml` fallback
+8. **Hub /status API**: JSON endpoint for monitoring
+9. **Direct tunnel (P2P)**: STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
+10. **CLI remote management**: `tela remote add` configures a hub directory, `tela remote remove` removes it (`tela login`/`tela logout` kept as deprecated aliases)
+11. **Remote-based hub name resolution**: Short hub names resolved via configured remotes' `/api/hubs` with local `hubs.yaml` fallback
 
 ### Biggest gaps to Phase 1 spec
 
-1. **Channel multiplexing** (§6.2) — One WS per session; spec requires muxed channels
-2. **Framed binary protocol** (§6.3) — Raw WS messages; spec requires 12-byte frame header
-3. **Browser-based user auth** (§13.1) — Token-based CLI/API auth is complete; spec envisions bcrypt + cookies + TOTP for browser users
-4. **Session tokens / JWT** (§6.5) — No signed token issuance; client connects with machineId + bearer token
-5. **Agent identity** (§12.1) — No Ed25519 keys; agents identified by string only
-6. **Certificate pinning** (§12.2) — Neither side validates Hub cert fingerprint
-7. **Test suite** (§20) — No automated tests
-8. **Multiple simultaneous sessions** — One session per machine at a time
+1. **Channel multiplexing** (§6.2): One WS per session; spec requires muxed channels
+2. **Framed binary protocol** (§6.3): Raw WS messages; spec requires 12-byte frame header
+3. **Browser-based user auth** (§13.1): Token-based CLI/API auth is complete; spec envisions bcrypt + cookies + TOTP for browser users
+4. **Session tokens / JWT** (§6.5): No signed token issuance; client connects with machineId + bearer token
+5. **Agent identity** (§12.1): No Ed25519 keys; agents identified by string only
+6. **Certificate pinning** (§12.2): Neither side validates Hub cert fingerprint
+7. **Test suite** (§20): No automated tests
+8. **Multiple simultaneous sessions**: One session per machine at a time

@@ -1,6 +1,6 @@
-# **Tela - Design, Architecture, and Agent‑Centric Development Strategy**
+# **Tela - Design, Architecture, and Agent-Centric Development Strategy**
 
-### *FOSS Remote‑Access & Connectivity Fabric (SEA‑rooted, Global‑ready)*
+### *FOSS Remote-Access & Connectivity Fabric (SEA-rooted, Global-ready)*
 
 ### *Version 0.4 - Authoritative Specification*
 
@@ -8,7 +8,7 @@
 
 ## **0. Purpose of This Document**
 
-Tela is a **FOSS connectivity fabric** that provides outbound‑only tunnels, multiplexed TCP channels, zero‑install client access, browser‑mediated orchestration, helper‑mediated local TCP bridging, and a stable substrate for future cloud services.
+Tela is a **FOSS connectivity fabric** that provides outbound-only tunnels, multiplexed TCP channels, zero-install client access, browser-mediated orchestration, helper-mediated local TCP bridging, and a stable substrate for future cloud services.
 
 This document defines the architecture, protocol, security model, MeshCentral integration boundary, browser TCP bridge mechanism, agent concurrency model, literate coding standards, LLM agent guardrails, and roadmap.
 
@@ -24,41 +24,41 @@ This glossary defines terms as they are used in Tela.
 
 | Term | Definition (Tela meaning) |
 | --- | --- |
-| **Agent (telad)** | The long‑lived daemon on a managed machine that makes an outbound connection to the Hub and exposes local services. Binary: \	elad\. |
+| **Agent (telad)** | The long-lived daemon on a managed machine that makes an outbound connection to the Hub and exposes local services. Binary: \	elad\. |
 | **Awan Saya** | The cloud platform/service built on top of Tela. Provides hub registry, relay infrastructure, hosted hubs, SSO, and dashboards. Not part of Tela core. See §18. |
 | **Certificate pinning** | The agent/client refuses to connect unless the Hub presents the expected TLS certificate fingerprint, preventing MITM even when a proxy can issue “valid” certificates. |
 | **Channel** | A logical stream within a single WebSocket connection (e.g., one proxied TCP connection) identified by a channel ID and managed via \open\/\close\. |
 | **Client (tela)** | The binary on the user’s laptop that connects through the Hub to an agent, establishes a WireGuard tunnel, and binds localhost listeners. Binary: \	ela\. Replaces the earlier “Helper” concept. |
-| **Connectivity fabric (fabric)** | The stable substrate that provides secure, outbound‑only connectivity and multiplexed tunnels between endpoints. |
+| **Connectivity fabric (fabric)** | The stable substrate that provides secure, outbound-only connectivity and multiplexed tunnels between endpoints. |
 | **Control plane** | Authentication, session creation, token issuance, device registry/metadata, and other “decisions” (not bulk data transport). |
-| **Data plane** | The high‑volume tunneled bytes (e.g., an RDP stream) flowing between client↔agent via the Hub. |
-| **Ephemeral port / localhost binding** | A temporary W.0.0.1:<port>\ listener created by the client so native apps (mstsc, ssh, etc.) can connect without installing anything system‑wide. |
+| **Data plane** | The high-volume tunneled bytes (e.g., an RDP stream) flowing between client↔agent via the Hub. |
+| **Ephemeral port / localhost binding** | A temporary W.0.0.1:<port>\ listener created by the client so native apps (mstsc, ssh, etc.) can connect without installing anything system-wide. |
 | **Fingerprint (certificate fingerprint)** | A short hash derived from the Hub’s TLS certificate (or public key) used for pinning; must match the expected value exactly. |
 | **Frame** | One protocol unit on the wire: a fixed header plus a payload (control JSON, TCP data, or heartbeat). |
 | **Hub** | The central relay/coordinator that accepts agent and client connections, brokers sessions, allocates channels, and routes frames between parties. Binary: `telahubd`. |
 | **Hub Console** | The web interface served by a Hub (e.g., \https://tela.awansaya.net/\). Shows registered machines, services, and session status. |
 | **HTTP** | Hypertext Transfer Protocol; commonly tunneled to validate connectivity (e.g., a static page). |
-| **Locked‑down environment** | A network or workstation that restricts inbound ports, VPNs, and/or installation, but still allows outbound HTTPS/WebSocket traffic. |
+| **Locked-down environment** | A network or workstation that restricts inbound ports, VPNs, and/or installation, but still allows outbound HTTPS/WebSocket traffic. |
 | **Machine** | A named resource registered by an agent (e.g., \arn-wg\). One agent registers one machine. |
-| **Mesh** | A connected set of agents and sessions forming a network of reachable services through the Hub (not necessarily peer‑to‑peer). |
-| **MITM (man‑in‑the‑middle)** | An attacker (or intercepting proxy) that attempts to observe/modify traffic between endpoints by inserting itself between client and server. |
+| **Mesh** | A connected set of agents and sessions forming a network of reachable services through the Hub (not necessarily peer-to-peer). |
+| **MITM (man-in-the-middle)** | An attacker (or intercepting proxy) that attempts to observe/modify traffic between endpoints by inserting itself between client and server. |
 | **Multiplexing** | Carrying multiple channels (control + multiple TCP streams) over a single WebSocket connection using a framing header and channel IDs. |
 | **NAT** | Network Address Translation; a common reason inbound connections to a machine are not possible without port forwarding. |
-| **Outbound‑only** | Agents and clients initiate connections out to the Hub; no inbound ports are required on managed machines. |
-| **Portal** | The Awan Saya multi‑hub dashboard at `awansaya.net/`. Aggregates machines, services, and sessions across all hubs a user has been granted access to. Provides SSO, RBAC, and centralized management. Distinct from the single‑hub Console. Implements the hub directory API (`/api/hubs`); the Tela CLI can add it as a remote: `tela remote add awansaya https://awansaya.net`. See §18.7–18.11. |
+| **Outbound-only** | Agents and clients initiate connections out to the Hub; no inbound ports are required on managed machines. |
+| **Portal** | The Awan Saya multi-hub dashboard at `awansaya.net/`. Aggregates machines, services, and sessions across all hubs a user has been granted access to. Provides SSO, RBAC, and centralized management. Distinct from the single-hub Console. Implements the hub directory API (`/api/hubs`); the Tela CLI can add it as a remote: `tela remote add awansaya https://awansaya.net`. See §18.7-18.11. |
 | **RDP** | Microsoft Remote Desktop Protocol (typically TCP/3389); a primary example of a tunneled service. |
 | **Registry** | The directory of Hubs maintained by Awan Saya (§18.2). Maps hub identifiers to live connections. |
-| **Relay** | Awan Saya’s rendezvous service for self‑hosted Hubs (§18.3). Transparently forwards WebSocket frames. |
+| **Relay** | Awan Saya’s rendezvous service for self-hosted Hubs (§18.3). Transparently forwards WebSocket frames. |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). Identified by port (and proto), with optional name/description metadata. |
 | **Session** | An active encrypted tunnel between a client and an agent, brokered by the Hub. |
-| **Session token** | A short‑lived, single‑use credential issued by the Hub that authorizes a client for a specific session. |
+| **Session token** | A short-lived, single-use credential issued by the Hub that authorizes a client for a specific session. |
 | **SFTP** | SSH File Transfer Protocol; a file transfer protocol that runs over SSH. |
 | **SSH** | Secure Shell (typically TCP/22); commonly used for remote terminals and file transfer (SCP/SFTP). |
 | **TCP** | Transmission Control Protocol; Tela tunnels TCP streams (RDP/SSH/HTTP/etc.) without needing to understand the application protocol. |
 | **TLS** | Transport Layer Security; provides encrypted and authenticated transport. Tela uses TLS 1.3 for Hub connections. |
-| **Tunnel** | The end‑to‑end forwarding path \client → tela → Hub → telad → service\ that makes a remote service appear local. |
+| **Tunnel** | The end-to-end forwarding path \client → tela → Hub → telad → service\ that makes a remote service appear local. |
 | **VNC** | Virtual Network Computing; another example of a TCP service that can be tunneled. |
-| **WebSocket (WS/WSS)** | A persistent full‑duplex connection over HTTP(S). Tela uses \wss://\ for secure transport once deployed. |
+| **WebSocket (WS/WSS)** | A persistent full-duplex connection over HTTP(S). Tela uses \wss://\ for secure transport once deployed. |
 
 # **1. Identity & Positioning**
 
@@ -66,7 +66,7 @@ This glossary defines terms as they are used in Tela.
 
 **Tela**: Filipino for *fabric*.
 Represents a woven mesh of nodes, tunnels, and services.
-Short, global‑friendly, SEA‑rooted, and brandable.
+Short, global-friendly, SEA-rooted, and brandable.
 
 ## **1.2 Positioning**
 
@@ -76,19 +76,19 @@ Tela is the **engine**. Awan Saya is the **platform**.
 - **Tela : Awan Saya :: WireGuard : Tailscale**
 - **Tela : Awan Saya :: git : GitHub**
 
-Tela is the runtime, the connectivity substrate, the stable, boring, long‑lived layer.
-Awan Saya is the orchestrator, the identity and policy layer, the multi‑service cloud platform.
+Tela is the runtime, the connectivity substrate, the stable, boring, long-lived layer.
+Awan Saya is the orchestrator, the identity and policy layer, the multi-service cloud platform.
 
-Critically, Awan Saya is also a **connectivity service**: it can serve as a rendezvous relay for self‑hosted Hubs (eliminating the need for Cloudflare Tunnels, port forwarding, or static IPs), or it can host Hubs directly as a managed service. Users choose their deployment model; Tela's protocol is identical across all of them. See §18.
+Critically, Awan Saya is also a **connectivity service**: it can serve as a rendezvous relay for self-hosted Hubs (eliminating the need for Cloudflare Tunnels, port forwarding, or static IPs), or it can host Hubs directly as a managed service. Users choose their deployment model; Tela's protocol is identical across all of them. See §18.
 
-Tela must remain small, stable, and protocol‑frozen so Awan Saya can evolve rapidly above it.
+Tela must remain small, stable, and protocol-frozen so Awan Saya can evolve rapidly above it.
 
 ## **1.3 What Tela Is**
 
 Tela is a **connectivity fabric**, not a remote desktop tool.
 Remote desktop is simply the first module that runs on the fabric.
 
-Tela provides access to any machine or service from any locked‑down environment with zero installation. It does this via outbound‑only agents, browser orchestration, a helper binary for local TCP binding, multiplexed WebSocket channels, and protocol‑agnostic tunneling.
+Tela provides access to any machine or service from any locked-down environment with zero installation. It does this via outbound-only agents, browser orchestration, a helper binary for local TCP binding, multiplexed WebSocket channels, and protocol-agnostic tunneling.
 ## **1.4 License**
 
 Tela is released under the **Apache License 2.0**.
@@ -97,35 +97,35 @@ Apache 2.0 is chosen because:
 
 - Permissive enough to encourage adoption and contribution.
 - Includes an explicit patent grant (protects contributors and users).
-- Compatible with Awan Saya being a proprietary or differently‑licensed commercial layer.
+- Compatible with Awan Saya being a proprietary or differently-licensed commercial layer.
 - Widely understood in the FOSS ecosystem.
 
 **All contributions to the Tela project must be licensed under Apache 2.0.** The Awan Saya platform may use a different license.
 
 ---
 
-# **2. Goals & Non‑Goals**
+# **2. Goals & Non-Goals**
 
 ## **2.1 Goals**
 
 Tela must:
 
-- Provide **zero‑install client access** for RDP, SSH, SFTP, VNC, HTTP, and arbitrary TCP services.
-- Use **outbound‑only connectivity** from agents (no inbound ports, no VPN).
+- Provide **zero-install client access** for RDP, SSH, SFTP, VNC, HTTP, and arbitrary TCP services.
+- Use **outbound-only connectivity** from agents (no inbound ports, no VPN).
 - Support **Windows, Linux, and macOS** agents.
-- Provide a **browser‑based orchestration layer**.
+- Provide a **browser-based orchestration layer**.
 - Provide a **helper binary** that exposes ephemeral `localhost:<port>` endpoints.
-- Support **protocol‑agnostic multiplexed TCP channels**.
-- Maintain **long‑term backward compatibility**.
+- Support **protocol-agnostic multiplexed TCP channels**.
+- Maintain **long-term backward compatibility**.
 - Use **minimal dependencies** and "boring tech."
 - Serve as the **substrate for Awan Saya**.
 
-## **2.2 Non‑Goals**
+## **2.2 Non-Goals**
 
 Tela must not:
 
 - Implement dashboards, RBAC, or identity providers (Awan Saya's domain).
-- Become a monolithic remote‑desktop suite.
+- Become a monolithic remote-desktop suite.
 - Adopt trendy frameworks or complex build systems.
 - Introduce microservices.
 - Allow protocol churn or dependency creep.
@@ -137,7 +137,7 @@ Tela must not:
 
 ## **3.1 Stability First**
 
-Tela must be stable enough to run for 10+ years with minimal changes: frozen protocol structures, additive‑only control messages, strict backward compatibility, minimal dependencies, predictable behavior.
+Tela must be stable enough to run for 10+ years with minimal changes: frozen protocol structures, additive-only control messages, strict backward compatibility, minimal dependencies, predictable behavior.
 
 ## **3.2 Boring Technology**
 
@@ -145,7 +145,7 @@ Go for the agent (`telad`) and Hub (`telahubd`), vanilla JS for the browser, Go 
 
 > **Implementation note:** The original design specified C/C++ for the agent and Node.js for the Hub. Both were implemented in Go, a deliberate simplification that preserves the "boring technology" intent while using a single language across all server-side components.
 
-## **3.3 Agent‑Centric Development**
+## **3.3 Agent-Centric Development**
 
 Tela assumes LLM agents will contribute code. Literate coding is mandatory, invariants must be explicit, "DO NOT MODIFY" markers must be used, concurrency models must be locked down, and protocol structures must be immutable.
 
@@ -153,13 +153,13 @@ Tela assumes LLM agents will contribute code. Literate coding is mandatory, inva
 
 Tela must always remain:
 
-- outbound‑only
-- protocol‑agnostic
-- dependency‑minimal
-- backward‑compatible
-- agent‑centric
-- browser‑accessible
-- platform‑neutral
+- outbound-only
+- protocol-agnostic
+- dependency-minimal
+- backward-compatible
+- agent-centric
+- browser-accessible
+- platform-neutral
 - stable
 
 These invariants shape every architectural decision.
@@ -191,7 +191,7 @@ These invariants shape every architectural decision.
 1. User logs into Tela Web.
 2. User selects a machine.
 3. Browser requests a session token from Hub.
-4. Browser provides helper download and a run command with pre‑filled arguments (or triggers `tela://` URI if registered).
+4. Browser provides helper download and a run command with pre-filled arguments (or triggers `tela://` URI if registered).
 5. User runs the helper.
 
 ### Helper Connection
@@ -209,7 +209,7 @@ All traffic flows through a single WebSocket per endpoint (Agent ↔ Hub, Helper
 
 ## **4.3 Component Interaction Model**
 
-Tela uses a **three‑party interaction model**:
+Tela uses a **three-party interaction model**:
 
 | Path | Purpose |
 |------|---------|
@@ -224,36 +224,36 @@ Once the helper is launched, the browser can close.
 
 # **5. MeshCentral Integration Boundary**
 
-MeshCentral is a mature, stable, widely deployed remote‑access system with a proven agent transport layer. Tela builds on selected MeshCentral components to avoid reinventing complex, battle‑tested functionality.
+MeshCentral is a mature, stable, widely deployed remote-access system with a proven agent transport layer. Tela builds on selected MeshCentral components to avoid reinventing complex, battle-tested functionality.
 
 This section defines exactly what Tela reuses, what Tela replaces, and why. This prevents the Hub from becoming an accidental fork.
 
 ## **5.1 Components Reused**
 
-Tela reuses only parts that are stable, protocol‑agnostic, dependency‑minimal, well‑tested, and unlikely to change:
+Tela reuses only parts that are stable, protocol-agnostic, dependency-minimal, well-tested, and unlikely to change:
 
 - **WebSocket multiplexing engine**: channel framing, lifecycle, binary data handling, flow control. Tela layers its own protocol on top.
 - **Agent connection lifecycle**: persistent WebSocket logic, reconnect, heartbeat, basic registration.
 - **Minimal device registry logic**: agent ID storage, basic metadata, online/offline tracking. Not the full device management model.
-- **Core agent transport code**: socket abstraction, platform‑specific networking, TLS handling, WebSocket framing. Everything above the transport layer is replaced.
+- **Core agent transport code**: socket abstraction, platform-specific networking, TLS handling, WebSocket framing. Everything above the transport layer is replaced.
 
 ## **5.2 Components Replaced**
 
-Tela replaces all MeshCentral components that are UI‑heavy, RDP‑specific, opinionated, or tied to MeshCentral's identity/device management model:
+Tela replaces all MeshCentral components that are UI-heavy, RDP-specific, opinionated, or tied to MeshCentral's identity/device management model:
 
 - **Entire Web UI**: Tela Web is new, minimal, vanilla JS.
-- **Browser TCP bridge**: MeshCentral does not have a local‑client TCP bridge. Tela's helper architecture is original.
-- **Local‑client ephemeral port mechanism**: unique to Tela.
-- **Service exposure API**: MeshCentral is RDP‑centric; Tela exposes arbitrary TCP services.
+- **Browser TCP bridge**: MeshCentral does not have a local-client TCP bridge. Tela's helper architecture is original.
+- **Local-client ephemeral port mechanism**: unique to Tela.
+- **Service exposure API**: MeshCentral is RDP-centric; Tela exposes arbitrary TCP services.
 - **Metadata & tagging system**: new, lightweight model.
 - **Authentication model**: Tela uses local auth (standalone) or SSO (Awan Saya).
-- **Protocol specification**: Tela freezes v1 for long‑term stability; MeshCentral evolves faster.
+- **Protocol specification**: Tela freezes v1 for long-term stability; MeshCentral evolves faster.
 
 ## **5.3 Rationale**
 
-> **Implementation note (§5.1–§5.3):** MeshCentral integration was not pursued. The current implementation (`telahubd`, `telad`, `tela`) is written entirely from scratch in Go, using `gorilla/websocket`, `wireguard-go`, and gVisor netstack. No MeshCentral code is integrated. The architectural intent (minimal hub, outbound-only agents, protocol-agnostic tunnels) is preserved.
+> **Implementation note (§5.1-§5.3):** MeshCentral integration was not pursued. The current implementation (`telahubd`, `telad`, `tela`) is written entirely from scratch in Go, using `gorilla/websocket`, `wireguard-go`, and gVisor netstack. No MeshCentral code is integrated. The architectural intent (minimal hub, outbound-only agents, protocol-agnostic tunnels) is preserved.
 
-MeshCentral would have solved the hardest problems (cross‑platform agent, stable WebSocket transport, NAT traversal, multiplexing, reconnect logic, TLS handling) without reinventing them. The from-scratch Go implementation achieves the same goals via a simpler architecture.
+MeshCentral would have solved the hardest problems (cross-platform agent, stable WebSocket transport, NAT traversal, multiplexing, reconnect logic, TLS handling) without reinventing them. The from-scratch Go implementation achieves the same goals via a simpler architecture.
 
 ---
 
@@ -266,11 +266,11 @@ This section is **authoritative**. All implementations must follow it exactly.
 - TLS 1.3
 - WebSocket (wss://)
 - Binary frames only
-- No compression (avoids complexity and side‑channel attacks)
+- No compression (avoids complexity and side-channel attacks)
 
-WebSocket is chosen because it works through corporate proxies, locked‑down networks, and Cloudflare Tunnel, and is supported by all browsers and MeshCentral's transport layer.
+WebSocket is chosen because it works through corporate proxies, locked-down networks, and Cloudflare Tunnel, and is supported by all browsers and MeshCentral's transport layer.
 
-**Compression caveat:** Disabling compression means all tunneled data traverses the wire at full size. For bandwidth‑heavy protocols like RDP, this is acceptable because RDP applies its own compression internally. For other protocols, the bandwidth cost of no compression is the explicit tradeoff for simplicity and side‑channel resistance. If this becomes a bottleneck in production, compression may be revisited as an opt‑in feature in a future phase, applied only to the data payload (never to headers or control messages).
+**Compression caveat:** Disabling compression means all tunneled data traverses the wire at full size. For bandwidth-heavy protocols like RDP, this is acceptable because RDP applies its own compression internally. For other protocols, the bandwidth cost of no compression is the explicit tradeoff for simplicity and side-channel resistance. If this becomes a bottleneck in production, compression may be revisited as an opt-in feature in a future phase, applied only to the data payload (never to headers or control messages).
 
 ## **6.2 Multiplexing**
 
@@ -333,7 +333,7 @@ typedef struct {
 
 ## **6.4 Control Messages**
 
-JSON, additive‑only, tolerant of unknown fields.
+JSON, additive-only, tolerant of unknown fields.
 
 ### Agent Handshake
 
@@ -371,7 +371,7 @@ Helper → Hub:
 { "type": "ready" }
 ```
 
-Helper authentication uses the single‑use session token issued by the browser flow (see §6.5). The token is invalidated immediately after validation.
+Helper authentication uses the single-use session token issued by the browser flow (see §6.5). The token is invalidated immediately after validation.
 
 ### Required Messages
 
@@ -383,13 +383,13 @@ Helper authentication uses the single‑use session token issued by the browser 
 
 ## **6.5 Session Tokens**
 
-Session tokens are short‑lived, single‑use JWTs (HS256 or EdDSA) containing: user ID, agent ID, expiration, nonce, permissions.
+Session tokens are short-lived, single-use JWTs (HS256 or EdDSA) containing: user ID, agent ID, expiration, nonce, permissions.
 
 ### Token Lifecycle
 
 1. Browser requests token from Hub.
 2. Hub validates user session and issues signed token.
-3. Browser provides token to the helper (via command‑line arguments or `tela://` URI).
+3. Browser provides token to the helper (via command-line arguments or `tela://` URI).
 4. Helper connects to Hub with token.
 5. Hub validates token.
 6. Token is invalidated immediately.
@@ -411,7 +411,7 @@ New control message types, new optional fields, new channel types, new capabilit
 
 ### Deprecation Policy
 
-- 18‑month support window for old agents.
+- 18-month support window for old agents.
 - Hub must support multiple protocol versions.
 - Agents must ignore unknown fields.
 
@@ -429,7 +429,7 @@ New control message types, new optional fields, new channel types, new capabilit
 
 ## **6.8 WireGuard L3 Transport**
 
-For protocols that bind authentication to the target hostname (e.g., RDP with NLA/CredSSP), Tela supports an alternative transport mode: **WireGuard L3 tunneling**. This replaces the TCP‑over‑WebSocket relay (§4.2, §10.4) with a full IP‑level tunnel.
+For protocols that bind authentication to the target hostname (e.g., RDP with NLA/CredSSP), Tela supports an alternative transport mode: **WireGuard L3 tunneling**. This replaces the TCP-over-WebSocket relay (§4.2, §10.4) with a full IP-level tunnel.
 
 ### Motivation
 
@@ -456,8 +456,8 @@ flowchart LR
 
 | Component | WireGuard mode | TUN required | Admin required |
 |-----------|---------------|--------------|----------------|
-| **Agent (telad)** | wireguard‑go + gVisor netstack | No (userspace) | No |
-| **Client (tela)** | wireguard‑go + gVisor netstack | No (userspace) | No |
+| **Agent (telad)** | wireguard-go + gVisor netstack | No (userspace) | No |
+| **Client (tela)** | wireguard-go + gVisor netstack | No (userspace) | No |
 | **Hub** | Unchanged; transparent binary relay | N/A | N/A |
 
 Both sides use gVisor netstack (pure userspace). Neither side requires a TUN adapter or admin privileges. This is a key differentiator from Tailscale, which requires admin for TUN creation.
@@ -472,7 +472,7 @@ WireGuard Curve25519 public keys are exchanged during the Hub signaling phase:
 4. Agent generates ephemeral keypair and sends its public key back via `wg-pubkey`.
 5. WireGuard Noise\_IK handshake follows as binary WebSocket messages.
 
-The Hub never sees private keys and cannot decrypt tunnel traffic (**zero‑knowledge relay**).
+The Hub never sees private keys and cannot decrypt tunnel traffic (**zero-knowledge relay**).
 
 ### IP Assignment
 
@@ -483,22 +483,22 @@ The Hub never sees private keys and cannot decrypt tunnel traffic (**zero‑know
 ### Security Properties
 
 - **Curve25519** ECDH key agreement
-- **ChaCha20‑Poly1305** AEAD encryption
+- **ChaCha20-Poly1305** AEAD encryption
 - **BLAKE2s** MAC
-- Combined with TLS on the WebSocket: defense‑in‑depth
-- Even if TLS is terminated at a relay (Cloudflare, Awan Saya), WireGuard encryption protects all data end‑to‑end (see §12.5)
+- Combined with TLS on the WebSocket: defense-in-depth
+- Even if TLS is terminated at a relay (Cloudflare, Awan Saya), WireGuard encryption protects all data end-to-end (see §12.5)
 
 ### UDP Relay Mode (Latency Optimization)
 
-WireGuard datagrams are natively UDP, but the WebSocket transport wraps them in TCP, creating a **TCP‑over‑TCP meltdown** scenario where competing congestion control and retransmission mechanisms interact poorly. This manifests as latency spikes and throughput degradation under packet loss.
+WireGuard datagrams are natively UDP, but the WebSocket transport wraps them in TCP, creating a **TCP-over-TCP meltdown** scenario where competing congestion control and retransmission mechanisms interact poorly. This manifests as latency spikes and throughput degradation under packet loss.
 
-To mitigate this, the Hub provides a **UDP relay** alongside the WebSocket relay. After the WebSocket signaling phase completes, the Hub sends a `udp-offer` control message to both sides containing an 8‑byte session token and the Hub's UDP port (default: 41820).
+To mitigate this, the Hub provides a **UDP relay** alongside the WebSocket relay. After the WebSocket signaling phase completes, the Hub sends a `udp-offer` control message to both sides containing an 8-byte session token and the Hub's UDP port (default: 41820).
 
 #### Protocol
 
-1. Hub generates two 8‑byte cryptographic tokens (one per side) during `pair()`.
+1. Hub generates two 8-byte cryptographic tokens (one per side) during `pair()`.
 2. Hub sends `{ type: "udp-offer", token: "<hex>", port: 41820 }` to both sides.
-3. Each side sends a probe packet `[8‑byte token]["PROBE"]` to the Hub's UDP port.
+3. Each side sends a probe packet `[8-byte token]["PROBE"]` to the Hub's UDP port.
 4. Hub records the sender's address and replies `[token]["READY"]`.
 5. On success, that side switches WireGuard `Send()` to emit `[token][datagram]` over UDP.
 6. Hub strips the token, looks up the peer's token and address, prepends the peer's token, and forwards the datagram.
@@ -510,7 +510,7 @@ Each side upgrades independently. If one side can reach the Hub via UDP (e.g. te
 - Packets from the UDP side are delivered to the WebSocket side via the peer's WebSocket connection.
 - Packets from the WebSocket side are delivered to the UDP side via the normal WebSocket relay path.
 
-This means even a half‑upgrade (only the downstream direction on UDP) reduces latency, because the heavier traffic direction (screen data, file contents) typically flows from agent to client.
+This means even a half-upgrade (only the downstream direction on UDP) reduces latency, because the heavier traffic direction (screen data, file contents) typically flows from agent to client.
 
 #### Fallback
 
@@ -542,7 +542,7 @@ When both peers have upgraded to UDP, they can attempt to establish a **direct**
 
 #### Packet Demux
 
-`TPUNCH` starts with `0x54` (`T`), which cannot conflict with WireGuard (type bytes 1–4) or STUN (first two bits `00`). This allows reliable demultiplexing on a single UDP socket.
+`TPUNCH` starts with `0x54` (`T`), which cannot conflict with WireGuard (type bytes 1-4) or STUN (first two bits `00`). This allows reliable demultiplexing on a single UDP socket.
 
 #### Send Priority
 
@@ -559,7 +559,7 @@ On timeout, the bind stays on UDP relay (or WebSocket) with zero user impact.
 
 ### Coexistence with TCP Relay
 
-Both transport modes coexist. The Hub does not distinguish between TCP‑relay binary messages and WireGuard datagrams; it relays both identically. Agents and clients negotiate the transport mode during signaling:
+Both transport modes coexist. The Hub does not distinguish between TCP-relay binary messages and WireGuard datagrams; it relays both identically. Agents and clients negotiate the transport mode during signaling:
 
 - Agents that support WireGuard include `wgPubKey` in their registration.
 - Clients detect WireGuard support from the `ready` response.
@@ -623,7 +623,7 @@ Connection events, errors, channel lifecycle events, service access events. Loca
 
 ## **7.6 Updates**
 
-Manual, explicit, version‑pinned. Awan Saya may later introduce remote updates and staged rollouts. Tela core remains manual.
+Manual, explicit, version-pinned. Awan Saya may later introduce remote updates and staged rollouts. Tela core remains manual.
 
 ---
 
@@ -641,7 +641,7 @@ The Hub is the central coordination point. It is intentionally lightweight and m
 - Maintain basic device metadata.
 - Expose a minimal REST API.
 
-The Hub is **not** an identity provider, dashboard engine, policy engine, orchestration system, or multi‑tenant platform. Those belong to Awan Saya.
+The Hub is **not** an identity provider, dashboard engine, policy engine, orchestration system, or multi-tenant platform. Those belong to Awan Saya.
 
 ## **8.2 Implementation**
 
@@ -655,11 +655,11 @@ The Hub is **not** an identity provider, dashboard engine, policy engine, orches
 
 ### SQLite (Tela Standalone)
 
-Users, agent registry, metadata, session logs. Simple, reliable, dependency‑minimal, perfect for single‑node deployments.
+Users, agent registry, metadata, session logs. Simple, reliable, dependency-minimal, perfect for single-node deployments.
 
 ### Postgres (Phase 3+)
 
-Multi‑node deployments, HA, multi‑tenant environments. Required for HA Hub (Phase 3) before Awan Saya exists. Tela’s single‑node standalone mode remains SQLite‑based.
+Multi-node deployments, HA, multi-tenant environments. Required for HA Hub (Phase 3) before Awan Saya exists. Tela’s single-node standalone mode remains SQLite-based.
 
 ## **8.4 REST API**
 
@@ -674,7 +674,7 @@ Current hub endpoints:
 - `POST /api/admin/revoke`: revoke connect access
 - `POST /api/admin/rotate/<id>`: regenerate a token
 
-Additive‑only changes. 12‑month deprecation window.
+Additive-only changes. 12-month deprecation window.
 
 ## **8.5 Portal Management**
 
@@ -706,7 +706,7 @@ Agent connections, helper connections, authentication events, session creation, 
 
 ## **8.8 Updates**
 
-Manual, explicit, version‑pinned. Awan Saya may later introduce rolling updates and multi‑node orchestration.
+Manual, explicit, version-pinned. Awan Saya may later introduce rolling updates and multi-node orchestration.
 
 ---
 
@@ -719,15 +719,15 @@ The browser UI performs **orchestration only**:
 - Authenticate user.
 - Display machine list.
 - Request session token from Hub.
-- Provide a one‑click download button for the helper binary.
+- Provide a one-click download button for the helper binary.
 - Display clear instructions for the user to run the helper manually.
 - Pass connection parameters (Hub URL, session token, target agent ID, target service) via:
-  - command‑line arguments shown to the user, or
+  - command-line arguments shown to the user, or
   - a `tela://` custom URI scheme if the helper has been registered (optional, not required).
-- Display ephemeral `localhost:<port>` once the helper reports back via a short‑lived polling endpoint or WebSocket.
-- Optionally provide in‑browser fallback clients (SSH/RDP/terminal).
+- Display ephemeral `localhost:<port>` once the helper reports back via a short-lived polling endpoint or WebSocket.
+- Optionally provide in-browser fallback clients (SSH/RDP/terminal).
 
-## **9.2 Non‑Responsibilities**
+## **9.2 Non-Responsibilities**
 
 The browser must **never**: proxy TCP traffic, hold open a data channel, participate in multiplexing, or remain open for the session to continue. Once the helper is running, the browser can close.
 
@@ -737,12 +737,12 @@ Browsers **cannot launch executables directly**. The primary UX is:
 
 1. User clicks "Connect" in Tela Web.
 2. Browser downloads the helper binary (or uses a cached copy).
-3. Browser displays: a run command with pre‑filled arguments, or triggers via `tela://` URI scheme if registered.
+3. Browser displays: a run command with pre-filled arguments, or triggers via `tela://` URI scheme if registered.
 4. User executes the helper.
 5. Helper binds `localhost:<port>` and reports the port back to the browser page.
 6. Browser displays the port; user connects with their native client.
 
-This is honest and reliable. The `tela://` URI scheme is a convenience optimization, not a requirement. First‑time users download and run manually. Repeat users may register the URI scheme for one‑click launch.
+This is honest and reliable. The `tela://` URI scheme is a convenience optimization, not a requirement. First-time users download and run manually. Repeat users may register the URI scheme for one-click launch.
 
 ## **9.3 Constraints**
 
@@ -752,7 +752,7 @@ No frameworks. No build tools. No dependency creep. Vanilla JS only.
 
 # **10. Tela Helper**
 
-The helper is the key to Tela's zero‑install local‑client access. Implemented in **Go** (same toolchain as Tela CLI; produces small static binaries with no runtime dependencies).
+The helper is the key to Tela's zero-install local-client access. Implemented in **Go** (same toolchain as Tela CLI; produces small static binaries with no runtime dependencies).
 
 ## **10.1 Responsibilities**
 
@@ -763,14 +763,14 @@ The helper is the key to Tela's zero‑install local‑client access. Implemente
 - Accept TCP connections from native clients (mstsc, ssh, sftp, vnc, etc.).
 - Forward TCP → WebSocket → Hub → Agent.
 - Handle channel lifecycle.
-- Self‑terminate when session ends.
-- Best‑effort cleanup after exit (see §10.3 Execution Model for platform caveats).
+- Self-terminate when session ends.
+- Best-effort cleanup after exit (see §10.3 Execution Model for platform caveats).
 
-## **10.2 Non‑Responsibilities**
+## **10.2 Non-Responsibilities**
 
-The helper must **not**: store credentials, store configuration, persist any state, modify system settings, install itself, run as a service, or write to protected directories. It must be a pure user‑mode, ephemeral process.
+The helper must **not**: store credentials, store configuration, persist any state, modify system settings, install itself, run as a service, or write to protected directories. It must be a pure user-mode, ephemeral process.
 
-**Exception, WireGuard L3 mode (§6.8):** Creating a TUN adapter requires one‑time admin/root elevation on the host OS. This is the same requirement as Tailscale. In TCP‑relay mode, the helper requires no admin rights.
+**Exception, WireGuard L3 mode (§6.8):** Creating a TUN adapter requires one-time admin/root elevation on the host OS. This is the same requirement as Tailscale. In TCP-relay mode, the helper requires no admin rights.
 
 ## **10.3 Distribution & Signing**
 
@@ -784,7 +784,7 @@ Served directly by the Tela Hub over HTTPS:
 
 ### Version Matching
 
-The helper must be version‑matched to the Hub. Hub v1.0 only serves helper v1.0. This prevents protocol mismatches.
+The helper must be version-matched to the Hub. Hub v1.0 only serves helper v1.0. This prevents protocol mismatches.
 
 ### Code Signing
 
@@ -798,7 +798,7 @@ Unsigned helpers will trigger SmartScreen/Gatekeeper blocks.
 
 Downloaded to a temporary directory, executed directly, receives arguments from the browser or CLI.
 
-**Cleanup:** On exit, the helper attempts to delete its own binary. On Linux/macOS this is straightforward. On Windows, a running process cannot delete its own executable; the helper uses a best‑effort deferred‑delete mechanism (e.g., a short‑lived batch wrapper or `MoveFileEx` with `MOVEFILE_DELAY_UNTIL_REBOOT`). Cleanup failure is non‑fatal. Stale helper binaries in temp directories are harmless.
+**Cleanup:** On exit, the helper attempts to delete its own binary. On Linux/macOS this is straightforward. On Windows, a running process cannot delete its own executable; the helper uses a best-effort deferred-delete mechanism (e.g., a short-lived batch wrapper or `MoveFileEx` with `MOVEFILE_DELAY_UNTIL_REBOOT`). Cleanup failure is non-fatal. Stale helper binaries in temp directories are harmless.
 
 ## **10.4 Data Path**
 
@@ -810,11 +810,11 @@ The browser is not in the data path. It only requests the session token, launche
 
 ## **10.5 Fallback Modes**
 
-If the helper cannot execute (locked‑down environment blocks downloads or execution):
+If the helper cannot execute (locked-down environment blocks downloads or execution):
 
-- Browser launches in‑browser RDP/SSH client via WebRTC DataChannel + WebAssembly.
-- Performance is lower; no local‑client mode.
-- User is informed that local‑client mode is unavailable.
+- Browser launches in-browser RDP/SSH client via WebRTC DataChannel + WebAssembly.
+- Performance is lower; no local-client mode.
+- User is informed that local-client mode is unavailable.
 
 ---
 
@@ -824,7 +824,7 @@ If the helper cannot execute (locked‑down environment blocks downloads or exec
 
 A Go static binary for administrative and automation workflows.
 
-Go is chosen because: static binaries, instant cross‑compilation, no runtime dependencies, excellent for small utilities, and avoids coupling the CLI to either the Hub (Node.js) or Agent (C/C++) codebases.
+Go is chosen because: static binaries, instant cross-compilation, no runtime dependencies, excellent for small utilities, and avoids coupling the CLI to either the Hub (Node.js) or Agent (C/C++) codebases.
 
 The CLI is intentionally not part of the core runtime.
 
@@ -850,21 +850,21 @@ Phase 2+:
 - `tela config`: manage CLI configuration (Hub URL, stored credentials).
 - `tela helper`: run the helper directly (for scripted/headless workflows).
 
-The CLI must remain additive‑only. No subcommand removals or renames after release.
+The CLI must remain additive-only. No subcommand removals or renames after release.
 
 ---
 
 # **12. Security Model**
 
-Tela's security model is intentionally simple, strong, and long‑lived. This section is the **unified security reference** across agent, helper, and Hub.
+Tela's security model is intentionally simple, strong, and long-lived. This section is the **unified security reference** across agent, helper, and Hub.
 
-> **Implementation status:** Of the security properties described in §12.1–12.3, only **WireGuard E2E encryption (§12.5) is currently implemented**. Ed25519 agent identity, certificate pinning, and signed session tokens are designed but not yet built. The hub's WebSocket endpoint currently accepts any registering agent. See §12.6 for what the current implementation does and does not protect against.
+> **Implementation status:** Of the security properties described in §12.1-12.3, only **WireGuard E2E encryption (§12.5) is currently implemented**. Ed25519 agent identity, certificate pinning, and signed session tokens are designed but not yet built. The hub's WebSocket endpoint currently accepts any registering agent. See §12.6 for what the current implementation does and does not protect against.
 
 ## **12.1 Identity** *(NOT YET IMPLEMENTED)*
 
 ### Agent Identity
 
-- Each agent generates a long‑lived **Ed25519 keypair**.
+- Each agent generates a long-lived **Ed25519 keypair**.
 - Private key stored locally.
 - Public key registered with Hub.
 - Used for agent authentication.
@@ -875,7 +875,7 @@ Tela's security model is intentionally simple, strong, and long‑lived. This se
 
 - Authenticated via session token.
 - No persistent identity.
-- No long‑term keys.
+- No long-term keys.
 
 ### Hub Identity
 
@@ -892,7 +892,7 @@ Both agent and helper must: validate Hub certificate fingerprint, refuse to conn
 
 ## **12.3 Session Tokens** *(PARTIAL - shared secret only)*
 
-Short‑lived, single‑use, signed by Hub, passed from browser → helper, validated by Hub, invalidated immediately after use. See §6.5 for full specification.
+Short-lived, single-use, signed by Hub, passed from browser → helper, validated by Hub, invalidated immediately after use. See §6.5 for full specification.
 
 *Current implementation: the `-token` flag carries a plain shared secret. The hub stores the token set by the registering `telad` and rejects clients that present a different value. Token is not signed, not time-limited, and not single-use.*
 
@@ -913,14 +913,14 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 ### Protects Against
 
 - **MITM**: TLS 1.3 + certificate pinning prevents interception by third parties.
-- **Replay attacks**: single‑use, short‑lived session tokens with nonces.
+- **Replay attacks**: single-use, short-lived session tokens with nonces.
 - **Unregistered agents**: only agents with Ed25519 keys registered at the Hub can connect. Does *not* protect against a registered agent whose key has been stolen.
 - **Forged certificates**: certificate pinning rejects certificates from a different key. Does *not* protect against compromise of the Hub's actual private key.
-- **Compromised networks**: all traffic is encrypted end‑to‑hop via TLS.
+- **Compromised networks**: all traffic is encrypted end-to-hop via TLS.
 
 ### Fails Closed In Presence Of
 
-- **TLS‑intercepting corporate proxies**: certificate pinning will cause connection failure (correct security behavior). Users in these environments must use the in‑browser fallback.
+- **TLS-intercepting corporate proxies**: certificate pinning will cause connection failure (correct security behavior). Users in these environments must use the in-browser fallback.
 
 ### Does Not Protect Against
 
@@ -935,7 +935,7 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 # **13. Authentication**
 
-> **Status:** Token-based authentication is implemented. The hub supports named token identities with role-based access control (owner/admin/user/viewer), per-machine ACLs, environment-variable bootstrap for Docker deployments, an admin REST API for remote management, and a `tela admin` CLI. A `console-viewer` identity is auto-generated at startup for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible). The spec's vision of bcrypt + cookies + TOTP for browser-based user auth is not yet implemented — the current system is token-based (like SSH `authorized_keys`).
+> **Status:** Token-based authentication is implemented. The hub supports named token identities with role-based access control (owner/admin/user/viewer), per-machine ACLs, environment-variable bootstrap for Docker deployments, an admin REST API for remote management, and a `tela admin` CLI. A `console-viewer` identity is auto-generated at startup for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible). The spec's vision of bcrypt + cookies + TOTP for browser-based user auth is not yet implemented; the current system is token-based (like SSH `authorized_keys`).
 
 ## **13.1 Tela Standalone (Before Awan Saya)**
 
@@ -956,12 +956,12 @@ The hub stores named **token identities** in its YAML config file:
 
 Tela Hub will include a minimal local authentication system for browser-based access:
 
-- bcrypt‑hashed passwords
+- bcrypt-hashed passwords
 - SQLite storage
-- Secure HTTP‑only cookies
+- Secure HTTP-only cookies
 - Optional TOTP
 
-Intentionally simple and self‑contained. No external dependencies.
+Intentionally simple and self-contained. No external dependencies.
 
 ## **13.2 Awan Saya (Future)**
 
@@ -969,7 +969,7 @@ Awan Saya replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise id
 
 ---
 
-# **14. End‑to‑End Usage Flow**
+# **14. End-to-End Usage Flow**
 
 > **Implementation status:** Steps dependent on user authentication ("Create local Tela user", "log in", "session token", "browser downloads helper") are not yet implemented. The current working flow is described in the tela README and `howto/` docs.
 
@@ -981,7 +981,7 @@ Awan Saya replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise id
 4. Run `telad -config telad.yaml` on target machines (or `telad service install -config telad.yaml` for a persisted service).
 5. *(Planned)* Register agents using provisioning tokens.
 
-## **14.2 Accessing a Machine from a Locked‑Down Laptop**
+## **14.2 Accessing a Machine from a Locked-Down Laptop**
 
 1. User opens browser → `https://tela.yourdomain.com`.
 2. User logs in.
@@ -997,19 +997,19 @@ Awan Saya replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise id
 
 Browser can close once the helper is running. No VPN. No admin rights.
 
-## **14.3 In‑Browser Fallback**
+## **14.3 In-Browser Fallback**
 
-If the helper cannot run, the browser launches an in‑browser RDP/SSH client. Performance is lower. No local‑client mode.
+If the helper cannot run, the browser launches an in-browser RDP/SSH client. Performance is lower. No local-client mode.
 
 ---
 
 # **15. Literate Coding Standards**
 
-Tela requires **literate coding** to ensure clarity, maintainability, safe LLM contributions, explicit invariants, and long‑term stability. These standards apply to **all** Tela components.
+Tela requires **literate coding** to ensure clarity, maintainability, safe LLM contributions, explicit invariants, and long-term stability. These standards apply to **all** Tela components.
 
 ## **15.1 Narrative Header Blocks**
 
-Every source file must begin with a narrative header describing: purpose, architectural role, invariants, constraints, security boundaries, backward‑compatibility requirements, and warnings for LLM agents.
+Every source file must begin with a narrative header describing: purpose, architectural role, invariants, constraints, security boundaries, backward-compatibility requirements, and warnings for LLM agents.
 
 ```c
 /*
@@ -1060,7 +1060,7 @@ Files that implement protocol logic must embed relevant protocol excerpts so LLM
 
 ## **15.4 "DO NOT MODIFY" Markers**
 
-Used for public APIs, protocol structures, security‑critical code, and concurrency primitives:
+Used for public APIs, protocol structures, security-critical code, and concurrency primitives:
 
 ```c
 // WARNING: DO NOT MODIFY THIS FUNCTION.
@@ -1084,7 +1084,7 @@ Every file must list invariants that LLM agents must not violate:
 
 All behavior must be explicit. No implicit state machines. No "clever" code.
 
-## **15.7 Language‑Specific Conventions**
+## **15.7 Language-Specific Conventions**
 
 The examples above use C. Equivalent standards apply to all Tela languages:
 
@@ -1155,10 +1155,10 @@ LLM agents may:
 - Add new metadata fields.
 - Add new CLI commands.
 - Add new documentation.
-- Fix bugs in non‑frozen, non‑security‑critical code.
+- Fix bugs in non-frozen, non-security-critical code.
 - Improve comments.
 
-All changes must be **additive** and **non‑breaking**.
+All changes must be **additive** and **non-breaking**.
 
 ## **16.3 Human Review Requirements**
 
@@ -1177,53 +1177,53 @@ Human maintainers must review:
 
 ## **17.1 Phase 1 - Minimum Viable Fabric (0-3 months)**
 
-This phase delivers the core Tela substrate. The 3‑month timeline is feasible because core transport, multiplexing, agent lifecycle, and reconnect logic are inherited from MeshCentral (see §5). Net‑new work is marked with †.
+This phase delivers the core Tela substrate. The 3-month timeline is feasible because core transport, multiplexing, agent lifecycle, and reconnect logic are inherited from MeshCentral (see §5). Net-new work is marked with †.
 
-- Outbound‑only agent (Windows + Linux) — MeshCentral‑derived transport + Tela protocol layer†
-- Multiplexed WebSocket channels — MeshCentral‑derived
+- Outbound-only agent (Windows + Linux): MeshCentral-derived transport + Tela protocol layer†
+- Multiplexed WebSocket channels: MeshCentral-derived
 - Session broker†
 - Browser orchestration†
-- Helper binary (signed, ephemeral, direct‑to‑Hub)†
-- Local‑client mode (RDP/SSH/SFTP/VNC via localhost)†
+- Helper binary (signed, ephemeral, direct-to-Hub)†
+- Local-client mode (RDP/SSH/SFTP/VNC via localhost)†
 - Minimal Tela Web UI†
 - Minimal Tela CLI†
-- SQLite‑backed Hub†
+- SQLite-backed Hub†
 - Certificate pinning
 - Session tokens†
 - Protocol conformance test suite†
 
-## **17.2 Phase 2 — Fabric Extensions (3–6 months)**
+## **17.2 Phase 2 - Fabric Extensions (3-6 months)**
 
 - macOS agent
 - Metadata + tagging
 - Service exposure API
 - File transfer channels
-- In‑browser RDP/SSH fallback
-- Helper improvements (auto‑cleanup, better UX)
+- In-browser RDP/SSH fallback
+- Helper improvements (auto-cleanup, better UX)
 - Capability discovery
 - Improved logging
 - E2E encryption (optional)
 
-## **17.3 Phase 3 — Substrate for Awan Saya (6–12 months)**
+## **17.3 Phase 3 - Substrate for Awan Saya (6-12 months)**
 
 - Postgres backend
 - HA Hub
-- Multi‑node Hub clustering
+- Multi-node Hub clustering
 - Metrics/logs channels
 - Node grouping
-- Service catalogs (read‑only)
+- Service catalogs (read-only)
 
-## **17.4 Phase 4 — Awan Saya v0.1 (12–18 months)**
+## **17.4 Phase 4 - Awan Saya v0.1 (12-18 months)**
 
-- Hub registry (users register self‑hosted Hubs with Awan Saya)
-- Relay infrastructure (Awan Saya provides stable, publicly‑reachable relay endpoints)
+- Hub registry (users register self-hosted Hubs with Awan Saya)
+- Relay infrastructure (Awan Saya provides stable, publicly-reachable relay endpoints)
 - Hosted Hub option (Awan Saya runs a Hub as a managed service)
 - Cloudflare Access / OIDC SSO
 - RBAC
 - Provisioning tokens
 - Machine inventory
 - Session initiation
-- Multi‑tenant isolation
+- Multi-tenant isolation
 - Billing foundations
 
 Tela remains stable and unchanged except for additive features. See §18 for architecture details.
@@ -1232,7 +1232,7 @@ Tela remains stable and unchanged except for additive features. See §18 for arc
 
 # **18. Awan Saya Architecture**
 
-This section previews how Awan Saya extends Tela from a self‑hosted tool into a cloud service. Detailed Awan Saya specifications will live in a separate document; this section establishes the architectural contract between Tela and Awan Saya.
+This section previews how Awan Saya extends Tela from a self-hosted tool into a cloud service. Detailed Awan Saya specifications will live in a separate document; this section establishes the architectural contract between Tela and Awan Saya.
 
 ## **18.1 Three Connectivity Models**
 
@@ -1245,9 +1245,9 @@ flowchart LR
   Helper -->|wss://hub-ip-or-domain| Hub --> Agent --> Service
 ```
 
-The user deploys a Hub, obtains a TLS certificate (Let's Encrypt, self‑signed, etc.), and exposes it directly via port forwarding, VPN, or LAN. No external service is involved. This is the base Tela experience defined in the rest of this document.
+The user deploys a Hub, obtains a TLS certificate (Let's Encrypt, self-signed, etc.), and exposes it directly via port forwarding, VPN, or LAN. No external service is involved. This is the base Tela experience defined in the rest of this document.
 
-### Model B: Self‑Hosted Hub + Awan Saya Relay
+### Model B: Self-Hosted Hub + Awan Saya Relay
 
 ```mermaid
 flowchart LR
@@ -1262,14 +1262,14 @@ The user runs their own Hub but registers it with Awan Saya. The Hub maintains a
 
 This eliminates the need for:
 
-- Cloudflare Tunnel (or any third‑party tunnel service)
+- Cloudflare Tunnel (or any third-party tunnel service)
 - Static IP addresses or dynamic DNS
 - Port forwarding or firewall changes
 - Manual DNS and TLS certificate management
 
-The user's Hub is reachable via a stable Awan Saya‑provided URL without exposing any inbound ports.
+The user's Hub is reachable via a stable Awan Saya-provided URL without exposing any inbound ports.
 
-### Model C: Awan Saya‑Hosted Hub (Fully Managed)
+### Model C: Awan Saya-Hosted Hub (Fully Managed)
 
 ```mermaid
 flowchart LR
@@ -1277,16 +1277,16 @@ flowchart LR
   Agent2[Agent] -->|"wss://awansaya.net/hub/&lt;id&gt;"| Hub
 ```
 
-Awan Saya runs the Hub on the user's behalf. The user registers agents and creates sessions through the Awan Saya dashboard or API. No self‑hosting required.
+Awan Saya runs the Hub on the user's behalf. The user registers agents and creates sessions through the Awan Saya dashboard or API. No self-hosting required.
 
-This is the "Tailscale experience" — sign up, install agents, connect.
+This is the "Tailscale experience": sign up, install agents, connect.
 
 ## **18.2 Hub Registry**
 
 Awan Saya maintains a **Hub registry**: a directory of Hubs, their owners, connectivity endpoints, and online/offline status.
 
-- **Self‑hosted Hubs** register by establishing a persistent control connection to Awan Saya and proving ownership via a registration token or keypair.
-- **Managed Hubs** are created and lifecycle‑managed by Awan Saya directly.
+- **Self-hosted Hubs** register by establishing a persistent control connection to Awan Saya and proving ownership via a registration token or keypair.
+- **Managed Hubs** are created and lifecycle-managed by Awan Saya directly.
 - The registry maps stable Hub identifiers to live relay connections or managed instances.
 
 ## **18.3 Relay Protocol**
@@ -1295,12 +1295,12 @@ The Awan Saya relay is transparent to the Tela protocol:
 
 - It forwards WebSocket frames between clients (agents/helpers) and the target Hub.
 - It does not inspect, modify, or interpret Tela frames.
-- It terminates TLS and re‑encrypts to the Hub (or, for managed Hubs, uses internal transport).
+- It terminates TLS and re-encrypts to the Hub (or, for managed Hubs, uses internal transport).
 - It adds only routing metadata (which registered Hub should receive this connection).
 
 From Tela's perspective, the relay is equivalent to a reverse proxy. No changes to Tela's frame format, handshake, or channel lifecycle are required.
 
-**E2E encryption note:** Because the relay terminates TLS, it can theoretically observe traffic in transit — the same concern that applies to any TLS‑terminating proxy (including Cloudflare). The optional E2E encryption described in §12.5 mitigates this for deployments that require zero‑trust relay transit.
+**E2E encryption note:** Because the relay terminates TLS, it can theoretically observe traffic in transit. This is the same concern that applies to any TLS-terminating proxy (including Cloudflare). The optional E2E encryption described in §12.5 mitigates this for deployments that require zero-trust relay transit.
 
 ## **18.4 What Changes in Tela (Nothing)**
 
@@ -1319,7 +1319,7 @@ This is the critical point: **Tela's protocol, agent, helper, and Hub implementa
 
 Awan Saya as a connectivity service means users no longer need:
 
-| Self‑hosting requirement | Replaced by |
+| Self-hosting requirement | Replaced by |
 |--------------------------|-------------|
 | Cloudflare Tunnel | Awan Saya relay (Model B) |
 | Static IP / DDNS | Awan Saya relay URL |
@@ -1332,32 +1332,32 @@ Users who prefer full control continue using Model A (direct/standalone). Awan S
 
 ## **18.6 Analogy Summary**
 
-| Layer | Self‑hosted | Managed service |
+| Layer | Self-hosted | Managed service |
 |-------|-------------|------------------|
 | git | local repo | **GitHub** |
-| WireGuard | self‑hosted mesh | **Tailscale** |
+| WireGuard | self-hosted mesh | **Tailscale** |
 | Docker | local engine | **Docker Hub / ECS** |
 | **Tela** | local Hub (Model A) | **Awan Saya** (Models B & C) |
 
-## **18.7 Portal — The Multi‑Hub Aggregation Layer**
+## **18.7 Portal - The Multi-Hub Aggregation Layer**
 
-Awan Saya provides a **Portal** at `awansaya.net/` — a centralized dashboard that aggregates status, machines, and services across all Hubs registered to a user's account.
+Awan Saya provides a **Portal** at `awansaya.net/`, a centralized dashboard that aggregates status, machines, and services across all Hubs registered to a user's account.
 
 The Portal is architecturally separate from the Hub Console:
 
 | | Hub Console | Awan Saya Portal |
 |---|-----------|-----------------|
 | **URL** | Served by each hub (e.g. `/`) | `awansaya.net/` (separate service) |
-| **Scope** | Single hub — its machines, sessions, history | All hubs the user can access |
-| **Auth** | Hub‑local (token, cookie, optional TOTP) | SSO / OIDC (centralized identity) |
+| **Scope** | Single hub: its machines, sessions, history | All hubs the user can access |
+| **Auth** | Hub-local (token, cookie, optional TOTP) | SSO / OIDC (centralized identity) |
 | **Owner** | Tela (part of the hub runtime) | Awan Saya (platform layer) |
-| **Requires AS** | No — works standalone | Yes — is Awan Saya |
+| **Requires AS** | No, works standalone | Yes, is Awan Saya |
 
 The Portal queries each registered hub's standard API endpoints (`/api/status`, `/api/history`) and presents a unified view. The hub does not need to know it is being aggregated.
 
-## **18.8 Path‑Based Hub Routing**
+## **18.8 Path-Based Hub Routing**
 
-Awan Saya uses **path‑based routing** under a single domain rather than per‑hub subdomains:
+Awan Saya uses **path-based routing** under a single domain rather than per-hub subdomains:
 
 ```
 awansaya.net/                     → Portal dashboard
@@ -1372,9 +1372,9 @@ Benefits over subdomains:
 - One Cloudflare Tunnel (or reverse proxy), single ingress.
 - One origin for cookies, CORS, and CSP.
 - Adding a hub is a config/database row, not a DNS record.
-- Self‑hosted hubs still use their own domain (e.g. `tela.mycompany.com`); path‑based routing applies only to Awan Saya‑managed or relay‑connected hubs.
+- Self-hosted hubs still use their own domain (e.g. `tela.mycompany.com`); path-based routing applies only to Awan Saya-managed or relay-connected hubs.
 
-## **18.9 User‑Centric Access Model**
+## **18.9 User-Centric Access Model**
 
 In standalone Tela, a user must know the hub URL and any access token. In Awan Saya, the user sees **machines, not infrastructure**.
 
@@ -1391,7 +1391,7 @@ In standalone Tela, a user must know the hub URL and any access token. In Awan S
 1. Hub owner registers their hub with Awan Saya (outbound connection or managed instance).
 2. Hub owner grants user X access to machine(s) on that hub via the Portal.
 3. User X logs into Awan Saya (SSO) and sees all machines across all hubs where they have grants.
-4. User X connects — they never see a hub URL, IP address, or token.
+4. User X connects. They never see a hub URL, IP address, or token.
 
 ### What the user sees
 
@@ -1412,9 +1412,9 @@ Connected. Listening:
 
 The user does not know or care that "Paul's Home" hub is at `192.168.1.50` behind NAT, reached via the Awan Saya relay. Awan Saya resolves the machine name to the correct hub, establishes the relay path, and handles authentication.
 
-## **18.10 CLI Integration — `tela` Talks to Hub Directories**
+## **18.10 CLI Integration - `tela` Talks to Hub Directories**
 
-There is **one CLI**: `tela`. It supports **remotes** — named URLs pointing to hub directory services (such as Awan Saya). No separate `awansaya` CLI is needed.
+There is **one CLI**: `tela`. It supports **remotes**: named URLs pointing to hub directory services (such as Awan Saya). No separate `awansaya` CLI is needed.
 
 ### Direct mode (standalone, no remote)
 
@@ -1423,7 +1423,7 @@ tela connect  -hub wss://hub.example.com -machine mybox
 tela machines -hub wss://hub.example.com
 ```
 
-The user specifies the hub directly. Authentication is hub‑local (token, cookie). This is the base Tela experience and always works without any remote.
+The user specifies the hub directly. Authentication is hub-local (token, cookie). This is the base Tela experience and always works without any remote.
 
 ### Remote mode (via hub directory)
 
@@ -1439,9 +1439,9 @@ The client queries configured remotes to resolve the hub name to a WebSocket URL
 
 When `-hub` is a short name (not `ws://` or `wss://`):
 
-1. **Configured remotes** — queried in alphabetical order. Each remote's `/api/hubs` endpoint is called. First match wins.
-2. **Local `hubs.yaml`** — fallback to the local config file.
-3. **Error** — if neither source resolves the name, the CLI exits with an error.
+1. **Configured remotes**: queried in alphabetical order. Each remote's `/api/hubs` endpoint is called. First match wins.
+2. **Local `hubs.yaml`**: fallback to the local config file.
+3. **Error**: if neither source resolves the name, the CLI exits with an error.
 
 When `-hub` is omitted, `tela` checks `TELA_HUB` (may be a URL or a short name). If unset → error.
 
@@ -1451,9 +1451,9 @@ A critical distinction: the person who runs a hub is not necessarily the person 
 
 **Example:** A company's IT department runs a hub on a cloud VM. They register it with Awan Saya and grant access to 50 employees. Each employee sees only the machines they're authorized for. The employees never SSH into the hub VM, never see its IP, and never manage it. They just run `tela connect -machine dev-server` and work.
 
-This separation is what makes Awan Saya a **platform** rather than just a prettier standalone hub. The hub is infrastructure; the portal is the user‑facing product.
+This separation is what makes Awan Saya a **platform** rather than just a prettier standalone hub. The hub is infrastructure; the portal is the user-facing product.
 
-## **18.12 Hub Aliases — Named Hubs**
+## **18.12 Hub Aliases - Named Hubs**
 
 Users should not need to memorize or type full WebSocket URLs. The `tela` CLI supports **hub names**: short identifiers that resolve to hub WebSocket URLs.
 
@@ -1461,9 +1461,9 @@ Users should not need to memorize or type full WebSocket URLs. The `tela` CLI su
 
 When the `-hub` flag (or `TELA_HUB` env var) does not start with `ws://` or `wss://`, the CLI resolves the name in this order:
 
-1. **Configured remotes** — The CLI iterates all remotes (sorted alphabetically by name) and queries `GET <remote-url>/api/hubs` (with Bearer token if configured). The remote returns the hub list; a case-insensitive match on `name` yields the URL. The URL is converted from `https://` to `wss://` (or `http://` to `ws://`). First match wins.
+1. **Configured remotes**: The CLI iterates all remotes (sorted alphabetically by name) and queries `GET <remote-url>/api/hubs` (with Bearer token if configured). The remote returns the hub list; a case-insensitive match on `name` yields the URL. The URL is converted from `https://` to `wss://` (or `http://` to `ws://`). First match wins.
 
-2. **Local config file** — If no remote resolves the name, the CLI falls back to a local YAML file:
+2. **Local config file**: If no remote resolves the name, the CLI falls back to a local YAML file:
 
 | Platform | Path |
 |---|---|
@@ -1478,7 +1478,7 @@ hubs:
   work:     wss://hub.corp.example.com
 ```
 
-3. **Error** — If neither source resolves the name, the CLI exits with an error listing known hub names from whichever source was available.
+3. **Error**: If neither source resolves the name, the CLI exits with an error listing known hub names from whichever source was available.
 
 ### Managing Remotes
 
@@ -1505,7 +1505,7 @@ Cache-Control: public, max-age=86400
 { "hub_directory": "/api/hubs" }
 ```
 
-The `hub_directory` value tells the CLI where to query for hub listings. This is the **only** convention — the well-known path itself (governed by RFC 8615). Everything else is discovered from the response.
+The `hub_directory` value tells the CLI where to query for hub listings. This is the **only** convention; the well-known path itself (governed by RFC 8615). Everything else is discovered from the response.
 
 If `/.well-known/tela` returns 404 (e.g., an older directory service), the CLI falls back to the conventional `/api/hubs` path. The discovered path is stored in the config and used for all subsequent queries.
 
@@ -1535,7 +1535,7 @@ export TELA_HUB=owlsnest
 tela machines
 ```
 
-This keeps the CLI ergonomic for daily use while preserving full URL support for scripts and automation. With a remote configured, users need only `tela remote add` once — no local config file required.
+This keeps the CLI ergonomic for daily use while preserving full URL support for scripts and automation. With a remote configured, users need only `tela remote add` once. No local config file is required.
 
 ---
 
@@ -1553,13 +1553,13 @@ This keeps the CLI ergonomic for daily use while preserving full URL support for
 - **Scope creep** → mitigated by Tela/Awan Saya separation.
 - **Identity complexity** → mitigated by deferring to Cloudflare Access.
 - **MeshCentral drift** → mitigated by explicit integration boundary (§5).
-- **Helper execution blocks** → mitigated by in‑browser fallback (§10.5).
+- **Helper execution blocks** → mitigated by in-browser fallback (§10.5).
 
 ---
 
 # **20. Testing Strategy**
 
-Tela’s emphasis on stability, backward compatibility, and 18‑month support windows requires a structured testing approach.
+Tela’s emphasis on stability, backward compatibility, and 18-month support windows requires a structured testing approach.
 
 ## **20.1 Protocol Conformance Tests**
 
@@ -1568,14 +1568,14 @@ A dedicated test suite must validate:
 - Frame serialization/deserialization (byte order, packing, payload length).
 - Handshake sequences (agent and helper variants).
 - Channel lifecycle (open, data, close, error).
-- Unknown‑field tolerance in control messages.
+- Unknown-field tolerance in control messages.
 - Backward compatibility with older protocol versions.
 
 These tests are **mandatory before any release** and must run against every supported platform.
 
 ## **20.2 Integration Tests**
 
-- Agent → Hub → Helper end‑to‑end tunnel establishment.
+- Agent → Hub → Helper end-to-end tunnel establishment.
 - Session token lifecycle (issue, use, invalidate).
 - Certificate pinning validation (accept correct, reject wrong).
 - Reconnect/heartbeat behavior.
@@ -1591,5 +1591,5 @@ These tests are **mandatory before any release** and must run against every supp
 
 - UI testing (Tela Web is minimal; manual verification is acceptable for Phase 1).
 - Performance benchmarking (deferred to Phase 3).
-- Multi‑tenant isolation (Awan Saya’s domain).
+- Multi-tenant isolation (Awan Saya’s domain).
 

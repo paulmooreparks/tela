@@ -399,7 +399,7 @@ with `TCP_NODELAY` is the single biggest quick-win for interactive feel.
 ### 13.2 Cloudflare round-trip
 
 Every WS frame transits Cloudflare edge → origin and back. This adds one
-RTT to every data exchange, typically 10–50 ms depending on edge
+RTT to every data exchange, typically 10-50 ms depending on edge
 proximity. There is no way to reduce this while using the tunnel.
 
 **Mitigation:**
@@ -415,7 +415,7 @@ proximity. There is no way to reduce this while using the tunnel.
 
 ### 13.3 WebSocket framing overhead
 
-Each TCP segment is wrapped in a WS frame (2–14 bytes header + masking on
+Each TCP segment is wrapped in a WS frame (2-14 bytes header + masking on
 client-to-server direction). For bulk transfers this is negligible, but
 for many tiny SSH packets it multiplies syscalls and copies.
 
@@ -456,7 +456,7 @@ latency via the relay.
 | Optimisation          | Latency saved   | Effort  | Status       |
 |-----------------------|-----------------|---------|--------------|
 | TCP_NODELAY           | up to ~40 ms    | trivial | **done**     |
-| Direct (skip CF)      | 10–50 ms RTT    | low     | **done** (Caddy + DNS-01) |
+| Direct (skip CF)      | 10-50 ms RTT    | low     | **done** (Caddy + DNS-01) |
 | UDP relay             | TCP-over-TCP    | medium  | **done** (hub port 41820) |
 | P2P direct connect    | full relay hop   | high    | **done** (STUN + hole punch) |
 | Binary framing        | syscall overhead | medium  | design-phase |
