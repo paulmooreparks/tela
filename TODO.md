@@ -27,7 +27,7 @@ When peers are on the same LAN, the relay path is already low-latency.
 
 ## Later
 - [ ] Mesh networking (multi-peer)
-- [ ] ACL policies
+- [x] ACL policies (per-machine token-based RBAC; advanced attribute-based policies are future work)
 - [ ] Mobile clients (iOS/Android)
 - [ ] GUI (system tray / menu bar)
 - [ ] OIDC/SSO authentication (layer on top of token auth)

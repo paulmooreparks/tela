@@ -9,7 +9,7 @@ Traceability matrix mapping each DESIGN.md section to current implementation sta
 - 🔮 **Future**: Awan Saya scope or Phase 3+
 - 📄 **Doc-only**: Informational section, no implementation required
 
-Last updated: 2026-03-05
+Last updated: 2026-03-08
 
 ---
 
@@ -35,7 +35,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §4.1 | Components | 🔶 | `telad` (Go agent ✅), `telahubd` (Go hub ✅), `tela` (Go client ✅), Web (landing page + downloads ✅), CLI (⬜), Awan Saya (🔮) |
+| §4.1 | Components | 🔶 | `telad` (Go agent ✅), `telahubd` (Go hub ✅), `tela` (Go client ✅), Web (landing page + downloads ✅), CLI (✅), Awan Saya (🔮) |
 | §4.2 | Data Flow: Agent Connection | ✅ | `telad`: outbound WS, register, reconnect, token auth |
 | §4.2 | Data Flow: Browser Orchestration | 🔶 | Landing page with OS-detected download links; no login, session tokens, or machine list |
 | §4.2 | Data Flow: Client Connection | ✅ | `tela`: WS connect, WireGuard tunnel, auto-bind local listeners, reconnect |
@@ -75,7 +75,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §7.1 | Responsibilities | 🔶 | Outbound WS ✅, register ✅, TCP proxy ✅, reconnect ✅, token auth ✅, multi-port ✅, heartbeat ⬜, service discovery ⬜, policy ⬜, metadata ⬜ |
+| §7.1 | Responsibilities | 🔶 | Outbound WS ✅, register ✅, TCP proxy ✅, reconnect ✅, token auth ✅, multi-port ✅, heartbeat 🔶 (WS ping/pong 20s/45s), metadata ✅ (displayName, hostname, os, tags, location, owner via YAML), service discovery ⬜, policy ⬜ |
 | §7.2 | Implementation (C/C++, static binary) | 🔶 | Agent is Go (telad), not C/C++. Static binary ✅, cross-compiled ✅ |
 | §7.3 | Concurrency Model (libuv) | ⬜ | N/A. Go runtime, not libuv |
 | §7.4 | Configuration (`telad.yaml`) | ✅ | YAML config file with `-config` flag. Multi-machine, per-machine token override, rich metadata fields. System path: `%ProgramData%\Tela\telad.yaml` / `/etc/tela/telad.yaml` |
@@ -88,7 +88,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅, admin REST API ✅. No user auth (browser), no session tokens, no metadata |
+| §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅, admin REST API ✅, metadata ✅ (stored and served via register message). No user auth (browser), no session tokens |
 | §8.2 | Implementation (Go) | ✅ | `telahubd`: Go, `gorilla/websocket`, no Node.js, no MeshCentral |
 | §8.3 | Storage (SQLite / Postgres) | 🔶 | Auth config persisted to YAML (hot-reload); session/machine state is in-memory only |
 | §8.4 | REST API | 🔶 | Hub `/status` ✅, `/api/history` ✅, `/api/admin/*` ✅ (token/ACL management); no `/api/v1/*` endpoints |
@@ -102,7 +102,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §9.1 | Responsibilities (auth, machine list, token, download) | 🔶 | Client download with OS detection ✅; no auth, no machine list, no session token flow |
+| §9.1 | Responsibilities (auth, machine list, token, download) | 🔶 | Client download with OS detection ✅; hub console shows machine list ✅, services ✅, session history ✅. No auth, no session token flow |
 | §9.2 | Non-Responsibilities | ✅ | Browser is not in data path |
 | §9.3 | Helper Launch Reality | 🔶 | Download + manual run ✅; no `tela://` URI scheme; no port-back reporting |
 | §9.3 | Constraints (vanilla JS) | ✅ | Landing page is vanilla JS |
@@ -158,7 +158,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §14.1 | Setup (Tela Standalone) | 🔶 | Hub deployed ✅, Cloudflare Tunnel ✅, Caddy direct ✅, agent registered ✅, token auth + ACL ✅, env-var bootstrap ✅, remote admin ✅. No browser-based user creation |
+| §14.1 | Setup (Tela Standalone) | 🔶 | Hub deployed ✅, Cloudflare Tunnel ✅, Caddy direct ✅, agent registered ✅, token auth + ACL ✅, env-var bootstrap ✅, remote admin ✅, `telad service install` ✅, `telahubd service install` ✅. No browser-based user creation |
 | §14.2 | Accessing from Locked-Down Laptop | ✅ | Full path validated: download tela → run → SSH ✅, RDP ✅ (via WireGuard L3 tunnel) |
 | §14.3 | In-Browser Fallback | ⬜ | - |
 
@@ -234,10 +234,10 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 | Status | Count | Meaning |
 |--------|-------|---------|
 | ✅ Done | 17 | Working implementation |
-| 🔶 Partial | 20 | POC covers some aspects |
-| ⬜ Not started | 18 | No implementation |
-| 🔮 Future | 8 | Awan Saya / Phase 3+ |
-| 📄 Doc-only | 14 | No code artifact needed |
+| 🔶 Partial | 27 | POC covers some aspects |
+| ⬜ Not started | 21 | No implementation |
+| 🔮 Future | 6 | Awan Saya / Phase 3+ |
+| 📄 Doc-only | 15 | No code artifact needed |
 
 ### What's working now (POC)
 

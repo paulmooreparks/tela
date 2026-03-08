@@ -381,6 +381,24 @@ Helper authentication uses the single-use session token issued by the browser fl
 
 `capabilities`, `metadata`, `serviceList`, `fileTransferInit` (Phase 2)
 
+> **Implementation note (§6.4):** The current implementation uses a different control message set than the spec above. The spec describes the target protocol; the implementation uses a simpler signalling model that evolved during development.
+>
+> Actual message types in the current implementation:
+> - **Agent → Hub:** `register` (with machineId, ports, services, metadata, token, wgPubKey)
+> - **Hub → Agent:** `registered` (confirmation)
+> - **Client → Hub:** `connect` (with machineId, wgPubKey, token)
+> - **Hub → Agent:** `session-request` (informs agent of pending client)
+> - **Agent → Hub:** `session-join` (agent opens a per-session WebSocket)
+> - **Hub → Agent:** `session-start` (carries client's WG public key)
+> - **Agent → Hub:** `wg-pubkey` (agent's ephemeral WG public key, relayed to client)
+> - **Hub → Both:** `udp-offer` (UDP relay token and port)
+> - **Hub → Both:** `peer-endpoint` (STUN-discovered endpoint for direct P2P)
+> - **Hub → Both:** `session-end` (session teardown)
+> - **Either → Hub:** `error`
+> - **Agent/Client:** `ready` (used after WireGuard setup)
+>
+> The spec's `hello`/`welcome` handshake, `open`/`close` channel lifecycle, and `heartbeat` frame type are not yet implemented. Heartbeats are handled via WebSocket ping/pong frames (20s/45s intervals).
+
 ## **6.5 Session Tokens**
 
 Session tokens are short-lived, single-use JWTs (HS256 or EdDSA) containing: user ID, agent ID, expiration, nonce, permissions.
@@ -476,8 +494,10 @@ The Hub never sees private keys and cannot decrypt tunnel traffic (**zero-knowle
 
 ### IP Assignment
 
-- Agent: `10.77.0.1/24`
-- Client: `10.77.0.2/24`
+> **Implementation note:** The original design specified fixed IPs. The implementation uses per-session addressing to support multiple simultaneous sessions on the same hub.
+
+- Agent: `10.77.{N}.1/32` (N = session index, 1-254)
+- Client: `10.77.{N}.2/32`
 - MTU: 1420
 
 ### Security Properties
@@ -585,10 +605,12 @@ The agent is the core runtime component that runs on every managed machine.
 
 - **Language:** Go
 - **Binary:** `telad`, static, cross-compiled, no CGO.
-- **Dependencies:** `gorilla/websocket` (WS), `wireguard-go` + gVisor netstack (WireGuard L3). No libuv, no C/C++, no OpenSSL.
+- **Dependencies:** `gorilla/websocket` (WS), `wireguard-go` + gVisor netstack (WireGuard L3), `gopkg.in/yaml.v3` (config). No libuv, no C/C++, no OpenSSL.
 - **Platforms:** Windows, Linux, macOS (all supported via CI cross-compilation).
 
 > **Note:** Original design specified C/C++ + libuv + OpenSSL/mbedTLS. Implementation uses Go throughout.
+
+> **Implementation note (§7.2):** The `telad` binary also supports `service` subcommands for OS service management: `telad service install -config telad.yaml` copies the config to the system-wide path and registers a native OS service (Windows SCM, Linux systemd, macOS launchd). Other service subcommands: `start`, `stop`, `restart`, `uninstall`.
 
 ## **7.3 Concurrency Model**
 
@@ -650,6 +672,11 @@ The Hub is **not** an identity provider, dashboard engine, policy engine, orches
 - **Dependencies:** `gorilla/websocket` (WS+HTTP), `gopkg.in/yaml.v3` (config). No Node.js, no MeshCentral, no ORMs.
 - **Config:** YAML file (`telahubd.yaml`) with `port`, `udpPort`, `name`, `wwwDir`, `auth`, and `portals` fields. Loaded via `-config` flag; env vars (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`, `HUB_WWW_DIR`) override file values.
 - **Dependency constraints:** No frontend frameworks, no complex dependency trees, no microservices, no build systems.
+
+> **Implementation note (§8.2):** The `telahubd` binary also supports three subcommand families:
+> - `telahubd service install/start/stop/restart/uninstall` for OS service management.
+> - `telahubd user bootstrap/list/add/remove/grant/revoke/rotate` for local CLI-based token and ACL management (see §13).
+> - `telahubd portal add/remove/list` for portal registration (see §8.5).
 
 ## **8.3 Storage**
 
@@ -842,7 +869,10 @@ Phase 1:
   - `-services`: comma-separated service names (resolved via hub API, e.g. `ssh,rdp`).
   - `-profile`: named connection profile from `~/.tela/profiles/<name>.yaml`.
 - `tela status`: show current Hub connection and active sessions.
+- `tela admin <subcommand>`: remote hub auth management (tokens, ACLs). Subcommands: `list-tokens`, `add-token`, `remove-token`, `grant`, `revoke`, `rotate`. All require owner or admin token.
 - `tela version`: print version and exit.
+- `tela login <url>` *(deprecated)*: alias for `tela remote add portal <url>`.
+- `tela logout` *(deprecated)*: alias for `tela remote remove portal`.
 
 Phase 2+:
 

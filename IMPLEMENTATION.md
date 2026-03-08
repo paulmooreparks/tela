@@ -34,9 +34,9 @@ A simple reference topology:
 
 ```mermaid
 flowchart LR
-  NC["Native client"] --> T["tela\nlocalhost listener\n10.77.0.2/24"]
+  NC["Native client"] --> T["tela\nlocalhost listener\n10.77.{N}.2/24"]
   T -->|wss| Hub
-  Hub -->|ws| TD["telad\n10.77.0.1/24"]
+  Hub -->|ws| TD["telad\n10.77.{N}.1/24"]
   TD --> LS["Local service"]
 
   linkStyle 1 stroke:#5ee89e
@@ -46,7 +46,7 @@ flowchart LR
   style TD fill:#16213e,stroke:#5ee89e,color:#fff
 ```
 
-> WireGuard L3 tunnel (encrypted, gVisor netstack) spans `10.77.0.2/24` ↔ `10.77.0.1/24`.
+> WireGuard L3 tunnel (encrypted, gVisor netstack) spans `10.77.{N}.2/24` ↔ `10.77.{N}.1/24`, where N is the session index (1-254).
 
 A practical rule:
 
@@ -78,7 +78,7 @@ TLS is terminated at **Cloudflare Tunnel** (cloudflared). No separate reverse pr
 This means:
 - No Let's Encrypt configuration required.
 - No inbound port exposure on the host -- cloudflared makes an outbound connection to Cloudflare.
-- Certificate pinning (see Â§6) is applied between hub and agent, not at the TLS edge.
+- Certificate pinning (see §6) is applied between hub and agent, not at the TLS edge.
 
 The Docker Compose service maps `3002:8080` (host:container) for local development access.
 
@@ -346,7 +346,7 @@ tela connect -hub barn-hub -machine barn
 
 ### Remaining iteration targets
 
-- Binary multiplexed framing (DESIGN.md Â§6.3)
+- Binary multiplexed framing (DESIGN.md §6.3)
 - Multiple simultaneous sessions per machine
 
 ---
@@ -430,8 +430,8 @@ for many tiny SSH packets it multiplies syscalls and copies.
 ### 13.4 Double relay (hub as pure relay)
 
 The Hub receives every byte from one side and writes it to the other.
-For a Node.js hub, each hop passes through the event loop and `ws`
-library buffers.
+For the Go hub, each hop passes through goroutine scheduling and
+`gorilla/websocket` library buffers.
 
 **Current mitigation - UDP relay (done):**
 

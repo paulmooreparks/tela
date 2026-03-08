@@ -1,3 +1,5 @@
+![TelaLogo](https://raw.githubusercontent.com/paulmooreparks/tela/main/logo.png)
+
 # Tela
 
 Secure remote access to TCP services (SSH, RDP, HTTP, etc.) through an encrypted WireGuard tunnel relayed over WebSocket. No admin privileges or TUN devices required on either end.
