@@ -1,8 +1,8 @@
-# **Tela — Design, Architecture, and Agent‑Centric Development Strategy**
+# **Tela - Design, Architecture, and Agent‑Centric Development Strategy**
 
 ### *FOSS Remote‑Access & Connectivity Fabric (SEA‑rooted, Global‑ready)*
 
-### *Version 0.4 — Authoritative Specification*
+### *Version 0.4 - Authoritative Specification*
 
 ---
 
@@ -64,7 +64,7 @@ This glossary defines terms as they are used in Tela.
 
 ## **1.1 Name**
 
-**Tela** — Filipino for *fabric*.
+**Tela**: Filipino for *fabric*.
 Represents a woven mesh of nodes, tunnels, and services.
 Short, global‑friendly, SEA‑rooted, and brandable.
 
@@ -88,7 +88,7 @@ Tela must remain small, stable, and protocol‑frozen so Awan Saya can evolve ra
 Tela is a **connectivity fabric**, not a remote desktop tool.
 Remote desktop is simply the first module that runs on the fabric.
 
-Tela's core value proposition: **access any machine or service from any locked‑down environment with zero installation** — via outbound‑only agents, browser orchestration, a helper binary for local TCP binding, multiplexed WebSocket channels, and protocol‑agnostic tunneling. This combination does not exist in any current tool.
+Tela provides access to any machine or service from any locked‑down environment with zero installation. It does this via outbound‑only agents, browser orchestration, a helper binary for local TCP binding, multiplexed WebSocket channels, and protocol‑agnostic tunneling.
 ## **1.4 License**
 
 Tela is released under the **Apache License 2.0**.
@@ -143,7 +143,7 @@ Tela must be stable enough to run for 10+ years with minimal changes: frozen pro
 
 Go for the agent (`telad`) and Hub (`telahubd`), vanilla JS for the browser, Go for the CLI. These choices minimize churn and maximize longevity.
 
-> **Implementation note:** The original design specified C/C++ for the agent and Node.js for the Hub. Both were implemented in Go — a deliberate simplification that preserves the "boring technology" intent while using a single language across all server-side components.
+> **Implementation note:** The original design specified C/C++ for the agent and Node.js for the Hub. Both were implemented in Go, a deliberate simplification that preserves the "boring technology" intent while using a single language across all server-side components.
 
 ## **3.3 Agent‑Centric Development**
 
@@ -170,11 +170,11 @@ These invariants shape every architectural decision.
 
 ## **4.1 Components**
 
-- **telad** — Go static binary (daemon/agent). Runs on managed machines. Registers services with the Hub, brokers WireGuard sessions.
-- **telahubd** — Go HTTP+WebSocket server (Hub). Central coordination point. Serves hub console, `/api/status`, `/api/history`.
-- **tela** — Go static binary (client). Connects through the Hub to an agent, establishes WireGuard tunnel, binds localhost listeners.
-- **Tela Web** — Vanilla JS browser UI. Orchestration only.
-- **Awan Saya** — Future control plane and optional connectivity/hosting service. Not part of Tela core. See §18.
+- **telad**: Go static binary (daemon/agent). Runs on managed machines. Registers services with the Hub, brokers WireGuard sessions.
+- **telahubd**: Go HTTP+WebSocket server (Hub). Central coordination point. Serves hub console, `/api/status`, `/api/history`.
+- **tela**: Go static binary (client). Connects through the Hub to an agent, establishes WireGuard tunnel, binds localhost listeners.
+- **Tela Web**: Vanilla JS browser UI. Orchestration only.
+- **Awan Saya**: Future control plane and optional connectivity/hosting service. Not part of Tela core. See §18.
 
 > **Implementation note:** The original design specified separate "Agent" (C/C++), "Hub" (Node.js), "Helper" (Go), and "CLI" (Go) binaries. The implementation consolidates these into three Go binaries: `telad` (agent/daemon), `telahubd` (hub), and `tela` (client/helper/CLI).
 
@@ -226,34 +226,34 @@ Once the helper is launched, the browser can close.
 
 MeshCentral is a mature, stable, widely deployed remote‑access system with a proven agent transport layer. Tela builds on selected MeshCentral components to avoid reinventing complex, battle‑tested functionality.
 
-This section defines exactly what Tela reuses, what Tela replaces, and why — so the Hub does not become an accidental fork.
+This section defines exactly what Tela reuses, what Tela replaces, and why. This prevents the Hub from becoming an accidental fork.
 
 ## **5.1 Components Reused**
 
 Tela reuses only parts that are stable, protocol‑agnostic, dependency‑minimal, well‑tested, and unlikely to change:
 
-- **WebSocket multiplexing engine** — channel framing, lifecycle, binary data handling, flow control. Tela layers its own protocol on top.
-- **Agent connection lifecycle** — persistent WebSocket logic, reconnect, heartbeat, basic registration.
-- **Minimal device registry logic** — agent ID storage, basic metadata, online/offline tracking. Not the full device management model.
-- **Core agent transport code** — socket abstraction, platform‑specific networking, TLS handling, WebSocket framing. Everything above the transport layer is replaced.
+- **WebSocket multiplexing engine**: channel framing, lifecycle, binary data handling, flow control. Tela layers its own protocol on top.
+- **Agent connection lifecycle**: persistent WebSocket logic, reconnect, heartbeat, basic registration.
+- **Minimal device registry logic**: agent ID storage, basic metadata, online/offline tracking. Not the full device management model.
+- **Core agent transport code**: socket abstraction, platform‑specific networking, TLS handling, WebSocket framing. Everything above the transport layer is replaced.
 
 ## **5.2 Components Replaced**
 
 Tela replaces all MeshCentral components that are UI‑heavy, RDP‑specific, opinionated, or tied to MeshCentral's identity/device management model:
 
-- **Entire Web UI** — Tela Web is new, minimal, vanilla JS.
-- **Browser TCP bridge** — MeshCentral does not have a local‑client TCP bridge. Tela's helper architecture is original.
-- **Local‑client ephemeral port mechanism** — unique to Tela.
-- **Service exposure API** — MeshCentral is RDP‑centric; Tela exposes arbitrary TCP services.
-- **Metadata & tagging system** — new, lightweight model.
-- **Authentication model** — Tela uses local auth (standalone) or SSO (Awan Saya).
-- **Protocol specification** — Tela freezes v1 for long‑term stability; MeshCentral evolves faster.
+- **Entire Web UI**: Tela Web is new, minimal, vanilla JS.
+- **Browser TCP bridge**: MeshCentral does not have a local‑client TCP bridge. Tela's helper architecture is original.
+- **Local‑client ephemeral port mechanism**: unique to Tela.
+- **Service exposure API**: MeshCentral is RDP‑centric; Tela exposes arbitrary TCP services.
+- **Metadata & tagging system**: new, lightweight model.
+- **Authentication model**: Tela uses local auth (standalone) or SSO (Awan Saya).
+- **Protocol specification**: Tela freezes v1 for long‑term stability; MeshCentral evolves faster.
 
 ## **5.3 Rationale**
 
-> **Implementation note (§5.1–§5.3):** MeshCentral integration was not pursued. The current implementation (`telahubd`, `telad`, `tela`) is written entirely from scratch in Go, using `gorilla/websocket`, `wireguard-go`, and gVisor netstack. No MeshCentral code is integrated. The architectural intent — minimal hub, outbound-only agents, protocol-agnostic tunnels — is preserved.
+> **Implementation note (§5.1–§5.3):** MeshCentral integration was not pursued. The current implementation (`telahubd`, `telad`, `tela`) is written entirely from scratch in Go, using `gorilla/websocket`, `wireguard-go`, and gVisor netstack. No MeshCentral code is integrated. The architectural intent (minimal hub, outbound-only agents, protocol-agnostic tunnels) is preserved.
 
-MeshCentral would have solved the hardest problems — cross‑platform agent, stable WebSocket transport, NAT traversal, multiplexing, reconnect logic, TLS handling — without reinventing them. The from-scratch Go implementation achieves the same goals via a simpler architecture.
+MeshCentral would have solved the hardest problems (cross‑platform agent, stable WebSocket transport, NAT traversal, multiplexing, reconnect logic, TLS handling) without reinventing them. The from-scratch Go implementation achieves the same goals via a simpler architecture.
 
 ---
 
@@ -321,9 +321,9 @@ typedef struct {
 
 ### Frame Types
 
-- `0x01` — Control
-- `0x02` — Data
-- `0x03` — Heartbeat
+- `0x01`: Control
+- `0x02`: Data
+- `0x03`: Heartbeat
 
 ### Wire Encoding Rules
 
@@ -435,7 +435,7 @@ For protocols that bind authentication to the target hostname (e.g., RDP with NL
 
 TCP relay through `localhost` works for protocols that don't verify server identity against the target address (SSH, HTTP, VNC). However, RDP with Network Level Authentication (NLA/CredSSP) performs server identity verification tied to the target hostname. Connecting to `localhost` produces an incorrect Service Principal Name (SPN), causing CredSSP to fail.
 
-This is a fundamental limitation of L4/L7 proxying — Tailscale and Cloudflare solve it using L3 tunneling, not TCP relay. Tela does the same.
+This is a fundamental limitation of L4/L7 proxying. Tailscale and Cloudflare solve it using L3 tunneling, not TCP relay. Tela does the same.
 
 ### Architecture
 
@@ -458,7 +458,7 @@ flowchart LR
 |-----------|---------------|--------------|----------------|
 | **Agent (telad)** | wireguard‑go + gVisor netstack | No (userspace) | No |
 | **Client (tela)** | wireguard‑go + gVisor netstack | No (userspace) | No |
-| **Hub** | Unchanged — transparent binary relay | N/A | N/A |
+| **Hub** | Unchanged; transparent binary relay | N/A | N/A |
 
 Both sides use gVisor netstack (pure userspace). Neither side requires a TUN adapter or admin privileges. This is a key differentiator from Tailscale, which requires admin for TUN creation.
 
@@ -514,27 +514,27 @@ This means even a half‑upgrade (only the downstream direction on UDP) reduces 
 
 #### Fallback
 
-If the UDP probe times out (2 seconds), the side stays on WebSocket with zero degradation — no configuration change, no error, no user action required. The upgrade is fully opportunistic.
+If the UDP probe times out (2 seconds), the side stays on WebSocket with zero degradation. No configuration change, no error, no user action required. The upgrade is fully opportunistic.
 
 #### Port
 
 The Hub's UDP relay port defaults to **41820** (a nod to WireGuard's standard port 51820). It is configurable via the `HUB_UDP_PORT` environment variable.
 
-### Direct Tunnel (Phase 3 — STUN + Hole Punching)
+### Direct Tunnel (Phase 3 - STUN + Hole Punching)
 
 When both peers have upgraded to UDP, they can attempt to establish a **direct** peer-to-peer UDP path that bypasses the hub entirely for data traffic.
 
 #### Protocol
 
-1. **STUN Discovery** — Each peer sends a STUN Binding Request (RFC 5389) to `stun.l.google.com:19302` using the same UDP socket opened during the relay upgrade. The STUN server returns the peer's server-reflexive address (public IP:port as seen after NAT).
+1. **STUN Discovery**: Each peer sends a STUN Binding Request (RFC 5389) to `stun.l.google.com:19302` using the same UDP socket opened during the relay upgrade. The STUN server returns the peer's server-reflexive address (public IP:port as seen after NAT).
 
-2. **Endpoint Exchange** — Each peer sends `{ type: "peer-endpoint", message: "IP:port" }` to the other via the hub's existing paired WebSocket relay. No hub changes are needed — the paired relay already forwards both binary and text messages.
+2. **Endpoint Exchange**: Each peer sends `{ type: "peer-endpoint", message: "IP:port" }` to the other via the hub's existing paired WebSocket relay. No hub changes are needed; the paired relay already forwards both binary and text messages.
 
-3. **Simultaneous Hole Punch** — Both peers send `TPUNCH` (6-byte magic) to each other's reflexive address every 100 ms for up to 5 seconds. When a NAT sees outbound traffic to a new destination, it creates a mapping. If both sides punch simultaneously, each side's outbound packet creates the mapping the other side's inbound packet needs.
+3. **Simultaneous Hole Punch**: Both peers send `TPUNCH` (6-byte magic) to each other's reflexive address every 100 ms for up to 5 seconds. When a NAT sees outbound traffic to a new destination, it creates a mapping. If both sides punch simultaneously, each side's outbound packet creates the mapping the other side's inbound packet needs.
 
-4. **Direct Activation** — When a peer's `udpReader` receives a `TPUNCH` from a non-hub address, it records that address and signals the `AttemptDirect` goroutine. The bind begins routing raw WireGuard datagrams (no token prefix) directly to the peer.
+4. **Direct Activation**: When a peer's `udpReader` receives a `TPUNCH` from a non-hub address, it records that address and signals the `AttemptDirect` goroutine. The bind begins routing raw WireGuard datagrams (no token prefix) directly to the peer.
 
-5. **Receive Transition** — The `udpReader` classifies incoming packets by source:
+5. **Receive Transition**: The `udpReader` classifies incoming packets by source:
    - From hub address → relayed (strip token prefix)
    - STUN magic cookie → STUN response (route to `stunCh`)
    - `TPUNCH` → hole-punch signal (record peer, signal `punchCh`)
@@ -559,7 +559,7 @@ On timeout, the bind stays on UDP relay (or WebSocket) with zero user impact.
 
 ### Coexistence with TCP Relay
 
-Both transport modes coexist. The Hub does not distinguish between TCP‑relay binary messages and WireGuard datagrams — it relays both identically. Agents and clients negotiate the transport mode during signaling:
+Both transport modes coexist. The Hub does not distinguish between TCP‑relay binary messages and WireGuard datagrams; it relays both identically. Agents and clients negotiate the transport mode during signaling:
 
 - Agents that support WireGuard include `wgPubKey` in their registration.
 - Clients detect WireGuard support from the `ready` response.
@@ -584,7 +584,7 @@ The agent is the core runtime component that runs on every managed machine.
 ## **7.2 Implementation**
 
 - **Language:** Go
-- **Binary:** `telad` — static, cross-compiled, no CGO.
+- **Binary:** `telad`, static, cross-compiled, no CGO.
 - **Dependencies:** `gorilla/websocket` (WS), `wireguard-go` + gVisor netstack (WireGuard L3). No libuv, no C/C++, no OpenSSL.
 - **Platforms:** Windows, Linux, macOS (all supported via CI cross-compilation).
 
@@ -594,7 +594,7 @@ The agent is the core runtime component that runs on every managed machine.
 
 The agent uses a **strict, invariant concurrency model**.
 
-> **Implementation note:** The original design specified the libuv event loop. The Go implementation uses Go's goroutine + channel model instead — one goroutine per connection, channels for coordination between them. The invariants below are updated to reflect the actual model.
+> **Implementation note:** The original design specified the libuv event loop. The Go implementation uses Go's goroutine + channel model instead. There is one goroutine per connection, channels for coordination between them. The invariants below are updated to reflect the actual model.
 
 ### Goroutines
 
@@ -646,7 +646,7 @@ The Hub is **not** an identity provider, dashboard engine, policy engine, orches
 ## **8.2 Implementation**
 
 - **Language:** Go
-- **Binary:** `telahubd` — static, cross-compiled, no CGO.
+- **Binary:** `telahubd`, static, cross-compiled, no CGO.
 - **Dependencies:** `gorilla/websocket` (WS+HTTP), `gopkg.in/yaml.v3` (config). No Node.js, no MeshCentral, no ORMs.
 - **Config:** YAML file (`telahubd.yaml`) with `port`, `udpPort`, `name`, `wwwDir`, `auth`, and `portals` fields. Loaded via `-config` flag; env vars (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`, `HUB_WWW_DIR`) override file values.
 - **Dependency constraints:** No frontend frameworks, no complex dependency trees, no microservices, no build systems.
@@ -665,14 +665,14 @@ Multi‑node deployments, HA, multi‑tenant environments. Required for HA Hub (
 
 Current hub endpoints:
 
-- `GET /api/status` — machine + hub status
-- `GET /api/history` — session event history
-- `GET /api/admin/tokens` — list token identities (owner/admin only)
-- `POST /api/admin/tokens` — add a token identity
-- `DELETE /api/admin/tokens?id=<id>` — remove a token identity
-- `POST /api/admin/grant` — grant connect access to a machine
-- `POST /api/admin/revoke` — revoke connect access
-- `POST /api/admin/rotate/<id>` — regenerate a token
+- `GET /api/status`: machine + hub status
+- `GET /api/history`: session event history
+- `GET /api/admin/tokens`: list token identities (owner/admin only)
+- `POST /api/admin/tokens`: add a token identity
+- `DELETE /api/admin/tokens?id=<id>`: remove a token identity
+- `POST /api/admin/grant`: grant connect access to a machine
+- `POST /api/admin/revoke`: revoke connect access
+- `POST /api/admin/rotate/<id>`: regenerate a token
 
 Additive‑only changes. 12‑month deprecation window.
 
@@ -680,9 +680,9 @@ Additive‑only changes. 12‑month deprecation window.
 
 Hub operators can register their hub with one or more Tela portals (like Awan Saya) using the `telahubd portal` subcommand:
 
-- `telahubd portal add <name> <url>` — discover the portal's hub directory via `/.well-known/tela` (RFC 8615), register the hub via `POST /api/hubs`, and store the portal association in the hub config.
-- `telahubd portal remove <name>` — deregister the hub from the portal (best-effort `DELETE /api/hubs`) and remove the association from config.
-- `telahubd portal list` — list configured portal registrations.
+- `telahubd portal add <name> <url>`: discover the portal's hub directory via `/.well-known/tela` (RFC 8615), register the hub via `POST /api/hubs`, and store the portal association in the hub config.
+- `telahubd portal remove <name>`: deregister the hub from the portal (best-effort `DELETE /api/hubs`) and remove the association from config.
+- `telahubd portal list`: list configured portal registrations.
 
 Portals are stored in the `portals:` map in `telahubd.yaml`:
 
@@ -770,7 +770,7 @@ The helper is the key to Tela's zero‑install local‑client access. Implemente
 
 The helper must **not**: store credentials, store configuration, persist any state, modify system settings, install itself, run as a service, or write to protected directories. It must be a pure user‑mode, ephemeral process.
 
-**Exception — WireGuard L3 mode (§6.8):** Creating a TUN adapter requires one‑time admin/root elevation on the host OS — the same requirement as Tailscale. In TCP‑relay mode, the helper requires no admin rights.
+**Exception, WireGuard L3 mode (§6.8):** Creating a TUN adapter requires one‑time admin/root elevation on the host OS. This is the same requirement as Tailscale. In TCP‑relay mode, the helper requires no admin rights.
 
 ## **10.3 Distribution & Signing**
 
@@ -798,7 +798,7 @@ Unsigned helpers will trigger SmartScreen/Gatekeeper blocks.
 
 Downloaded to a temporary directory, executed directly, receives arguments from the browser or CLI.
 
-**Cleanup:** On exit, the helper attempts to delete its own binary. On Linux/macOS this is straightforward. On Windows, a running process cannot delete its own executable; the helper uses a best‑effort deferred‑delete mechanism (e.g., a short‑lived batch wrapper or `MoveFileEx` with `MOVEFILE_DELAY_UNTIL_REBOOT`). Cleanup failure is non‑fatal — stale helper binaries in temp directories are harmless.
+**Cleanup:** On exit, the helper attempts to delete its own binary. On Linux/macOS this is straightforward. On Windows, a running process cannot delete its own executable; the helper uses a best‑effort deferred‑delete mechanism (e.g., a short‑lived batch wrapper or `MoveFileEx` with `MOVEFILE_DELAY_UNTIL_REBOOT`). Cleanup failure is non‑fatal. Stale helper binaries in temp directories are harmless.
 
 ## **10.4 Data Path**
 
@@ -824,7 +824,7 @@ If the helper cannot execute (locked‑down environment blocks downloads or exec
 
 A Go static binary for administrative and automation workflows.
 
-Go is chosen because: static binaries, instant cross‑compilation, no runtime dependencies, excellent for small utilities, and — critically — avoids coupling the CLI to either the Hub (Node.js) or Agent (C/C++) codebases.
+Go is chosen because: static binaries, instant cross‑compilation, no runtime dependencies, excellent for small utilities, and avoids coupling the CLI to either the Hub (Node.js) or Agent (C/C++) codebases.
 
 The CLI is intentionally not part of the core runtime.
 
@@ -832,23 +832,23 @@ The CLI is intentionally not part of the core runtime.
 
 Phase 1:
 
-- `tela remote add <name> <url>` — add a hub directory remote, store credentials locally.
-- `tela remote remove <name>` — remove a remote.
-- `tela remote list` — list configured remotes.
-- `tela machines` — list registered machines and their online/offline status.
-- `tela services -machine <machineId>` — list exposed services on a machine.
-- `tela connect -hub <name-or-url> -machine <machineId>` — establish a WireGuard tunnel, bind local listeners.
-  - `-ports` — comma-separated `local:remote` port mappings.
-  - `-services` — comma-separated service names (resolved via hub API, e.g. `ssh,rdp`).
-  - `-profile` — named connection profile from `~/.tela/profiles/<name>.yaml`.
-- `tela status` — show current Hub connection and active sessions.
-- `tela version` — print version and exit.
+- `tela remote add <name> <url>`: add a hub directory remote, store credentials locally.
+- `tela remote remove <name>`: remove a remote.
+- `tela remote list`: list configured remotes.
+- `tela machines`: list registered machines and their online/offline status.
+- `tela services -machine <machineId>`: list exposed services on a machine.
+- `tela connect -hub <name-or-url> -machine <machineId>`: establish a WireGuard tunnel, bind local listeners.
+  - `-ports`: comma-separated `local:remote` port mappings.
+  - `-services`: comma-separated service names (resolved via hub API, e.g. `ssh,rdp`).
+  - `-profile`: named connection profile from `~/.tela/profiles/<name>.yaml`.
+- `tela status`: show current Hub connection and active sessions.
+- `tela version`: print version and exit.
 
 Phase 2+:
 
-- `tela transfer <machineId> <localPath> <remotePath>` — file transfer (Phase 2).
-- `tela config` — manage CLI configuration (Hub URL, stored credentials).
-- `tela helper` — run the helper directly (for scripted/headless workflows).
+- `tela transfer <machineId> <localPath> <remotePath>`: file transfer (Phase 2).
+- `tela config`: manage CLI configuration (Hub URL, stored credentials).
+- `tela helper`: run the helper directly (for scripted/headless workflows).
 
 The CLI must remain additive‑only. No subcommand removals or renames after release.
 
@@ -890,7 +890,7 @@ Both agent and helper must: validate Hub certificate fingerprint, refuse to conn
 
 *Current implementation: not implemented. Standard TLS CA validation only.*
 
-## **12.3 Session Tokens** *(PARTIAL — shared secret only)*
+## **12.3 Session Tokens** *(PARTIAL - shared secret only)*
 
 Short‑lived, single‑use, signed by Hub, passed from browser → helper, validated by Hub, invalidated immediately after use. See §6.5 for full specification.
 
@@ -902,7 +902,7 @@ All traffic encrypted via TLS 1.3 over WebSocket.
 
 ## **12.5 E2E Encryption**
 
-**Implemented.** WireGuard (Curve25519 key exchange + ChaCha20-Poly1305 data) provides end-to-end encryption between `tela` (client) and `telad` (daemon). The Hub is a zero-knowledge relay — it sees only encrypted WireGuard datagrams and cannot inspect or tamper with tunnel traffic.
+**Implemented.** WireGuard (Curve25519 key exchange + ChaCha20-Poly1305 data) provides end-to-end encryption between `tela` (client) and `telad` (daemon). The Hub is a zero-knowledge relay; it sees only encrypted WireGuard datagrams and cannot inspect or tamper with tunnel traffic.
 
 Ephemeral keypairs are generated per session; no long-term WireGuard keys are stored.
 
@@ -912,15 +912,15 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 ### Protects Against
 
-- **MITM** — TLS 1.3 + certificate pinning prevents interception by third parties.
-- **Replay attacks** — single‑use, short‑lived session tokens with nonces.
-- **Unregistered agents** — only agents with Ed25519 keys registered at the Hub can connect. Does *not* protect against a registered agent whose key has been stolen.
-- **Forged certificates** — certificate pinning rejects certificates from a different key. Does *not* protect against compromise of the Hub's actual private key.
-- **Compromised networks** — all traffic is encrypted end‑to‑hop via TLS.
+- **MITM**: TLS 1.3 + certificate pinning prevents interception by third parties.
+- **Replay attacks**: single‑use, short‑lived session tokens with nonces.
+- **Unregistered agents**: only agents with Ed25519 keys registered at the Hub can connect. Does *not* protect against a registered agent whose key has been stolen.
+- **Forged certificates**: certificate pinning rejects certificates from a different key. Does *not* protect against compromise of the Hub's actual private key.
+- **Compromised networks**: all traffic is encrypted end‑to‑hop via TLS.
 
 ### Fails Closed In Presence Of
 
-- **TLS‑intercepting corporate proxies** — certificate pinning will cause connection failure (correct security behavior). Users in these environments must use the in‑browser fallback.
+- **TLS‑intercepting corporate proxies**: certificate pinning will cause connection failure (correct security behavior). Users in these environments must use the in‑browser fallback.
 
 ### Does Not Protect Against
 
@@ -950,7 +950,7 @@ The hub stores named **token identities** in its YAML config file:
 - An **admin REST API** (`/api/admin/*`) allows remote token and ACL management.
 - `tela admin` CLI commands provide a convenient interface to the admin API.
 - `TELA_OWNER_TOKEN` env var bootstraps the first owner identity for Docker deployments.
-- Changes via the admin API take effect immediately (hot-reload) — no hub restart needed.
+- Changes via the admin API take effect immediately (hot-reload). No hub restart needed.
 
 ### Future (spec vision)
 
@@ -1175,7 +1175,7 @@ Human maintainers must review:
 
 # **17. Roadmap**
 
-## **17.1 Phase 1 — Minimum Viable Fabric (0–3 months)**
+## **17.1 Phase 1 - Minimum Viable Fabric (0-3 months)**
 
 This phase delivers the core Tela substrate. The 3‑month timeline is feasible because core transport, multiplexing, agent lifecycle, and reconnect logic are inherited from MeshCentral (see §5). Net‑new work is marked with †.
 

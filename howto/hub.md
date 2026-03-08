@@ -34,7 +34,7 @@ go build -o telahubd ./cmd/telahubd
 ### Run locally
 
 ```bash
-# Minimal — listens on :8080 (HTTP+WS) and :41820 (UDP)
+# Minimal - listens on :8080 (HTTP+WS) and :41820 (UDP)
 telahubd
 
 # With a display name
@@ -80,7 +80,7 @@ telahubd version
 
 ## Enable authentication (recommended)
 
-By default, the hub runs in **open mode** — any agent or client can connect without credentials. To lock it down, enable token-based authentication.
+By default, the hub runs in **open mode**. Any agent or client can connect without credentials. To lock it down, enable token-based authentication.
 
 ### Docker deployment (env-var bootstrap)
 
@@ -134,7 +134,7 @@ tela admin rotate alice -hub wss://your-hub.example.com -token <owner-token>
 tela admin remove-token alice -hub wss://your-hub.example.com -token <owner-token>
 ```
 
-All changes take effect immediately (hot-reload) — no hub restart required.
+All changes take effect immediately (hot-reload). No hub restart required.
 
 ### Using `telad` with auth
 

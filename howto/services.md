@@ -1,8 +1,7 @@
 # Running Tela as an OS Service
 
 Both **telad** (daemon) and **telahubd** (hub) can run as native OS services
-on Windows, Linux, and macOS. The service machinery is built into the binary
-— no wrapper scripts needed.
+on Windows, Linux, and macOS. The service machinery is built into the binary; no wrapper scripts needed.
 
 ## How it works
 
@@ -43,7 +42,7 @@ or `/etc/tela/telad.yaml`.
 ### Config file format
 
 ```yaml
-# telad.yaml — register machines with the hub.
+# telad.yaml - register machines with the hub.
 hub: wss://tela.example.com
 token: my-secret-token        # optional auth token
 
@@ -92,7 +91,7 @@ telahubd service install -name myhub -port 8080 -udp-port 41820 -www /opt/tela/w
 ### Config file format
 
 ```yaml
-# telahubd.yaml — hub server configuration.
+# telahubd.yaml - hub server configuration.
 port: 8080            # HTTP + WebSocket listen port
 udpPort: 41820        # UDP relay port
 name: "My Hub"        # Display name (optional)

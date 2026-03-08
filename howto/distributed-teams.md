@@ -1,4 +1,4 @@
-# HOWTO — Distributed Development Teams (Tela)
+# HOWTO - Distributed Development Teams (Tela)
 
 This guide shows how to use Tela for a distributed engineering team to access dev/staging resources (SSH, databases, internal HTTP admin panels) without a VPN and without opening inbound ports.
 
@@ -17,7 +17,7 @@ It covers:
 
 ---
 
-## Step 0 — Pick a hub strategy
+## Step 0 - Pick a hub strategy
 
 Common approaches:
 
@@ -31,7 +31,7 @@ Recommendation:
 
 ---
 
-## Step 1 — Run the hub(s)
+## Step 1 - Run the hub(s)
 
 On each hub host:
 
@@ -43,9 +43,9 @@ Make each hub reachable over `wss://` (public VM, reverse proxy, or tunnel). Ens
 
 ---
 
-## Step 2 — Register machines/services with `telad`
+## Step 2 - Register machines/services with `telad`
 
-### Pattern A — Endpoint agents (recommended)
+### Pattern A - Endpoint agents (recommended)
 
 Run `telad` on each machine you want to expose.
 
@@ -61,7 +61,7 @@ Example (a Windows staging box exposing RDP):
 .\telad.exe -hub wss://STAGING-HUB -machine staging-win01 -ports "3389"
 ```
 
-### Pattern B — Site gateway (bridge agent)
+### Pattern B - Site gateway (bridge agent)
 
 Run `telad` on a gateway VM that can reach internal targets.
 
@@ -95,7 +95,7 @@ Run:
 
 ---
 
-## Step 3 — Developer workflow with `tela`
+## Step 3 - Developer workflow with `tela`
 
 On a developer laptop:
 

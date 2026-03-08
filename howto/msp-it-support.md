@@ -1,4 +1,4 @@
-# HOWTO — MSP / IT Support (Tela)
+# HOWTO - MSP / IT Support (Tela)
 
 This guide shows how an IT support provider can use Tela to reach customer machines (SSH, RDP, internal admin UIs) without asking customers to open inbound ports.
 
@@ -15,7 +15,7 @@ This guide assumes **one hub per customer**.
 
 ---
 
-## Step 1 — Deploy a hub for a customer
+## Step 1 - Deploy a hub for a customer
 
 1. Deploy the hub on infrastructure you control.
 2. Publish a customer-specific URL (example: `wss://acme-hub.example.com`).
@@ -23,9 +23,9 @@ This guide assumes **one hub per customer**.
 
 ---
 
-## Step 2 — Register customer machines
+## Step 2 - Register customer machines
 
-### Pattern A — Endpoint agent (preferred)
+### Pattern A - Endpoint agent (preferred)
 
 On each customer machine:
 
@@ -43,7 +43,7 @@ Example (Linux server, SSH only):
 ./telad -hub wss://acme-hub.example.com -machine srv-01 -ports "22"
 ```
 
-### Pattern B — Customer-site gateway
+### Pattern B - Customer-site gateway
 
 Use this when you can’t install `telad` on endpoints.
 
@@ -52,7 +52,7 @@ Use this when you can’t install `telad` on endpoints.
 
 ---
 
-## Step 3 — Technician workflow
+## Step 3 - Technician workflow
 
 On the tech’s machine:
 

@@ -1,4 +1,4 @@
-# HOWTO — Production Service Access (Bastion Replacement) (Tela)
+# HOWTO - Production Service Access (Bastion Replacement) (Tela)
 
 This guide shows how to use Tela to access production services (SSH, databases, internal admin panels) without a traditional bastion host and without opening inbound ports on production machines.
 
@@ -15,7 +15,7 @@ The key idea is: production machines connect outbound to a hub, operators connec
 
 ---
 
-## Step 1 — Stand up a production hub
+## Step 1 - Stand up a production hub
 
 1. Deploy the hub on hardened infrastructure.
 2. Publish it as `wss://PROD-HUB`.
@@ -38,9 +38,9 @@ In real production you’ll typically also:
 
 ---
 
-## Step 2 — Register production machines with `telad`
+## Step 2 - Register production machines with `telad`
 
-### Pattern A — Endpoint agent
+### Pattern A - Endpoint agent
 
 On each production VM, run `telad`.
 
@@ -61,7 +61,7 @@ Guidance:
 - If you need DB access, consider requiring TLS on the DB itself.
 - Avoid exposing wide port ranges.
 
-### Pattern B — Gateway/bridge agent (use sparingly)
+### Pattern B - Gateway/bridge agent (use sparingly)
 
 Use only when endpoints cannot run `telad`.
 
@@ -72,7 +72,7 @@ In that case, the gateway becomes a critical asset:
 
 ---
 
-## Step 3 — Operator workflow
+## Step 3 - Operator workflow
 
 On an operator machine:
 

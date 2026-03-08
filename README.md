@@ -23,7 +23,7 @@ graph LR
 
 ## How it works
 
-**tela** (client) and **telad** (daemon) each create a userspace WireGuard tunnel using gVisor netstack — pure Go, no kernel TUN, no elevated privileges. The hub relays encrypted WireGuard datagrams between them over WebSocket, with automatic upgrades to faster transports when available:
+**tela** (client) and **telad** (daemon) each create a userspace WireGuard tunnel using gVisor netstack. This is pure Go, no kernel TUN, no elevated privileges. The hub relays encrypted WireGuard datagrams between them over WebSocket, with automatic upgrades to faster transports when available:
 
 | Transport | Path | When |
 |-----------|------|------|
@@ -31,15 +31,15 @@ graph LR
 | UDP relay | tela → hub:41820 → telad | When outbound UDP is open |
 | Direct P2P | tela → telad | When STUN hole-punch succeeds |
 
-The hub never sees plaintext — it relays opaque WireGuard ciphertext.
+The hub never sees plaintext. It relays opaque WireGuard ciphertext.
 
 ## Components
 
 | Component | Language | Description |
 |-----------|----------|-------------|
-| **tela** | Go | Client — connects to hub, establishes WG tunnel, binds localhost listeners |
-| **telad** | Go | Daemon — registers with hub, exposes local services through WG tunnel |
-| **telahubd** | Go | Hub server — pairs daemons with clients, relays WS/UDP, serves hub console |
+| **tela** | Go | Client. Connects to hub, establishes WG tunnel, binds localhost listeners |
+| **telad** | Go | Daemon. Registers with hub, exposes local services through WG tunnel |
+| **telahubd** | Go | Hub server. Pairs daemons with clients, relays WS/UDP, serves hub console |
 
 ## Networking & port requirements
 
@@ -78,16 +78,16 @@ go build -o telahubd ./cmd/telahubd
 ### Run locally (3 terminals)
 
 ```bash
-# Terminal 1 — Hub
+# Terminal 1 - Hub
 ./telahubd
 
-# Terminal 2 — Daemon (exposes SSH + RDP)
+# Terminal 2 - Daemon (exposes SSH + RDP)
 ./telad -hub ws://localhost:8080 -machine mybox -ports "22,3389"
 
-# Terminal 3 — List machines
+# Terminal 3 - List machines
 ./tela machines -hub ws://localhost:8080
 
-# Terminal 3 — Connect to a machine
+# Terminal 3 - Connect to a machine
 ./tela connect -hub ws://localhost:8080 -machine mybox
 
 # Connect by service name instead of port
@@ -157,9 +157,9 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admi
 
 - **End-to-end encryption**: WireGuard (Curve25519 key exchange, ChaCha20-Poly1305 data) between tela and telad. The hub is a blind relay.
 - **Token-based auth**: Named token identities with role-based access control (owner/admin/user/viewer). Per-machine ACLs control who can register and connect. A `console-viewer` token is auto-generated for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible).
-- **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin` — no shell access to the hub required.
+- **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin`. No shell access to the hub required.
 - **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
-- **No admin required**: gVisor netstack operates entirely in userspace — no TUN device, no root/Administrator.
+- **No admin required**: gVisor netstack operates entirely in userspace. No TUN device, no root/Administrator.
 - **Outbound-only**: Both tela and telad initiate outbound connections to the hub. No inbound ports needed on either end.
 
 See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and admin API reference.
@@ -168,14 +168,14 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and admin API 
 
 After the initial WebSocket connection, tela and telad automatically negotiate faster transports:
 
-1. **UDP relay** — Hub offers a UDP port alongside WebSocket. Both sides probe it; if reachable, WireGuard datagrams switch to UDP (eliminates TCP-over-TCP). Falls back to WebSocket on timeout.
-2. **Direct tunnel** — Both sides perform STUN discovery (RFC 5389) to learn their public IP:port, exchange endpoints via the hub, and attempt simultaneous UDP hole punching. On success, WireGuard datagrams flow peer-to-peer with zero relay overhead.
+1. **UDP relay**: Hub offers a UDP port alongside WebSocket. Both sides probe it; if reachable, WireGuard datagrams switch to UDP (eliminates TCP-over-TCP). Falls back to WebSocket on timeout.
+2. **Direct tunnel**: Both sides perform STUN discovery (RFC 5389) to learn their public IP:port, exchange endpoints via the hub, and attempt simultaneous UDP hole punching. On success, WireGuard datagrams flow peer-to-peer with zero relay overhead.
 
 The cascade is fully automatic. Each tier falls through on failure with no user action.
 
 ## Running as an OS service
 
-Both `telad` and `telahubd` can run as native OS services (Windows SCM, Linux systemd, macOS launchd). Configuration lives in a YAML file in a system-wide directory — edit the file and restart to reconfigure, no reinstallation needed.
+Both `telad` and `telahubd` can run as native OS services (Windows SCM, Linux systemd, macOS launchd). Configuration lives in a YAML file in a system-wide directory. Edit the file and restart to reconfigure; no reinstallation needed.
 
 ```bash
 # Install telad as a service (copies config to system dir)
@@ -226,7 +226,7 @@ docker/            Caddyfile, docker-compose, cloudflared config
 | **Hub** | Central relay (`telahubd`) that pairs daemons with clients. Serves the hub console. |
 | **Hub Console** | Web interface for a hub (e.g., `https://hub.example.com/`). |
 | **Daemon / telad** | Long-lived daemon on a managed machine that registers with the hub. |
-| **Client / tela** | Binary on the user's laptop that tunnels through the hub to an agent. |
+| **Client / tela** | Binary on the user's machine that tunnels through the hub to an agent. |
 | **Machine** | A named resource registered by an agent (e.g., `barn`). |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
 | **Session** | An active encrypted tunnel between a client and an agent. |
@@ -235,12 +235,13 @@ docker/            Caddyfile, docker-compose, cloudflared config
 
 ## Documentation
 
-- [CONFIGURATION.md](CONFIGURATION.md) — Configuration file schemas (`hubs.yaml`, `telad.yaml`, `telahubd.yaml`, portal `config.json`)
-- [DESIGN.md](DESIGN.md) — Architecture specification (includes full glossary)
-- [IMPLEMENTATION.md](IMPLEMENTATION.md) — Deployment runbook
-- [TODO.md](TODO.md) — Roadmap
-- [STATUS.md](STATUS.md) — Traceability matrix (design → implementation)
+- [REFERENCE](REFERENCE.md) - Comprehensive documentation for Tela and its command-line tools
+- [CONFIGURATION.md](CONFIGURATION.md) - Configuration file schemas (`hubs.yaml`, `telad.yaml`, `telahubd.yaml`, portal `config.json`)
+- [DESIGN.md](DESIGN.md) - Architecture specification (includes full glossary)
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) - Deployment runbook
+- [TODO.md](TODO.md) - Roadmap
+- [STATUS.md](STATUS.md) - Traceability matrix (design → implementation)
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0. See [LICENSE](LICENSE).

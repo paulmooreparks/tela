@@ -1,4 +1,4 @@
-﻿# Tela / Awan Saya — Local Implementation & Deployment Runbook (POC)
+﻿# Tela / Awan Saya - Local Implementation & Deployment Runbook (POC)
 
 This document is a **practical runbook** for implementing and running Tela locally, exposing a Hub for internet access, and starting a POC path toward Awan Saya.
 
@@ -61,7 +61,7 @@ To keep Cloudflare optional, keep your internal deployment consistent and swap o
 
 **Current setup (1 container):**
 
-- `gohub` (`telahubd`) — Go hub, listens on `:8080` (HTTP/WS) and `:41820` (UDP relay). Published on the host as `3002:8080` and `41821:41820/udp`.
+- `gohub` (`telahubd`): Go hub, listens on `:8080` (HTTP/WS) and `:41820` (UDP relay). Published on the host as `3002:8080` and `41821:41820/udp`.
 - TLS is terminated externally by **Cloudflare Tunnel** (no reverse proxy container needed).
 - `cloudflared` (host service, not a container) routes `gohub.parkscomputing.com` → `http://localhost:3002`.
 
@@ -84,7 +84,7 @@ The Docker Compose service maps `3002:8080` (host:container) for local developme
 
 ---
 
-## 4) Ingress mode 1 — Direct public exposure (no tunnel)
+## 4) Ingress mode 1 - Direct public exposure (no tunnel)
 
 This is the most Cloudflare-independent option.
 
@@ -111,7 +111,7 @@ This is the most Cloudflare-independent option.
 
 ---
 
-## 5) Ingress mode 2 — Cloudflare Tunnel (optional convenience)
+## 5) Ingress mode 2 - Cloudflare Tunnel (optional convenience)
 
 This is the easiest way to avoid inbound firewall changes.
 
@@ -187,7 +187,7 @@ For a POC, option (1) is often the fastest while preserving the long-term direct
 
 ## 8) Docker Compose skeleton
 
-**Current production setup** — see `docker-compose.yml` in the repo root:
+**Current production setup.** See `docker-compose.yml` in the repo root:
 
 ```yaml
 services:
@@ -243,7 +243,7 @@ On first startup (when no tokens exist in the hub config), the hub automatically
 - Adds a wildcard `*` machine ACL granting the owner full access
 - Persists the auth config to `/app/data/telahubd.yaml` on a named Docker volume (`hub-data`), so data survives container recreation.
 
-On subsequent restarts, the env var is ignored — tokens already exist in the persisted config.
+On subsequent restarts, the env var is ignored because tokens already exist in the persisted config.
 
 ### Managing tokens remotely
 
@@ -270,7 +270,7 @@ tela admin rotate alice -hub wss://gohub.parkscomputing.com -token <owner-token>
 tela admin remove-token alice -hub wss://gohub.parkscomputing.com -token <owner-token>
 ```
 
-All changes take effect immediately (hot-reload) — no hub restart required.
+All changes take effect immediately (hot-reload). No hub restart required.
 
 ### Using environment variables to avoid repeating flags
 
@@ -404,11 +404,11 @@ proximity. There is no way to reduce this while using the tunnel.
 
 **Mitigation:**
 
-- **Direct mode (done)** — Caddy with DNS-01 (Cloudflare API) serves
+- **Direct mode (done)**: Caddy with DNS-01 (Cloudflare API) serves
   a direct hostname with valid Let's Encrypt TLS, bypassing the
   Cloudflare edge entirely. This is the recommended path for local and
   LAN-adjacent use.
-- **Tunnel mode** — still available via Cloudflare Tunnel for scenarios
+- **Tunnel mode**: still available via Cloudflare Tunnel for scenarios
   where inbound ports are blocked.
 - Long-term: allow the Hub to advertise both URLs and let the client
   prefer the direct path automatically.
@@ -421,7 +421,7 @@ for many tiny SSH packets it multiplies syscalls and copies.
 
 **Mitigation (future):**
 
-- **Binary multiplexed framing** as specified in DESIGN.md §6.3 — a thin
+- **Binary multiplexed framing** as specified in DESIGN.md §6.3. A thin
   12-byte Tela frame header replaces per-message WS framing, and multiple
   logical channels share a single WS connection.
 - **Per-message-deflate** (`permessage-deflate` WS extension) can compress
@@ -433,7 +433,7 @@ The Hub receives every byte from one side and writes it to the other.
 For a Node.js hub, each hop passes through the event loop and `ws`
 library buffers.
 
-**Current mitigation — UDP relay (done):**
+**Current mitigation - UDP relay (done):**
 
 The hub now offers a UDP port (41820) alongside WebSocket. When both
 peers upgrade, WireGuard datagrams bypass the WS framing layer entirely.
@@ -444,9 +444,9 @@ latency via the relay.
 
 **Future mitigation:**
 
-- **Native hub data-plane** — rewrite the relay in Go where `splice(2)`
+- **Native hub data-plane**: rewrite the relay in Go where `splice(2)`
   / zero-copy IO can eliminate userspace copies for the remaining WS path.
-- **Peer-to-peer direct tunnel (done)** — STUN-based hole punching lets
+- **Peer-to-peer direct tunnel (done)**: STUN-based hole punching lets
   tela and telad establish a direct UDP path, removing the hub from the
   data plane entirely. Implemented in Phase 3 with automatic fallback
   cascade (direct → UDP relay → WebSocket).

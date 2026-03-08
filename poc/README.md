@@ -1,7 +1,7 @@
-> **⚠️ HISTORICAL DOCUMENT — POC ONLY**
+> **⚠️ HISTORICAL DOCUMENT - POC ONLY**
 > This document describes the original Node.js proof-of-concept (`hub.js`). The current implementation uses `telahubd` (Go). For current deployment, see [README.md](../README.md), [IMPLEMENTATION.md](../IMPLEMENTATION.md), and the [`howto/`](../howto/) directory.
 
-# Tela — Secure Remote Access via WireGuard over WebSocket
+# Tela - Secure Remote Access via WireGuard over WebSocket
 
 Tela tunnels TCP services (SSH, RDP, HTTP, etc.) through a WireGuard L3
 tunnel relayed over WebSocket, with an optional UDP fast path. No admin
@@ -37,16 +37,16 @@ graph LR
 
 | Component | Language | Role |
 |-----------|----------|------|
-| **tela** | Go | Client — WireGuard endpoint, auto-binds localhost listeners for each advertised port |
-| **telad** | Go | Agent/daemon — WireGuard endpoint, forwards tunnel traffic to local services |
-| **hub.js** | Node.js | *(Legacy POC relay — replaced by `telahubd` in Go)* |
+| **tela** | Go | Client. WireGuard endpoint, auto-binds localhost listeners for each advertised port |
+| **telad** | Go | Agent/daemon. WireGuard endpoint, forwards tunnel traffic to local services |
+| **hub.js** | Node.js | *(Legacy POC relay, replaced by `telahubd` in Go)* |
 | **serve.js** | Node.js | Test web server (for quick smoke tests only) |
 
 ### Security
 
 - **End-to-end encryption:** WireGuard (Curve25519 + ChaCha20-Poly1305) between tela and telad. The hub sees only ciphertext.
 - **Token auth:** Named token identities with role-based ACL (owner/admin/user). Per-machine access control. Remote management via `tela admin` CLI and admin REST API. Env-var bootstrap for Docker (`TELA_OWNER_TOKEN`). When no tokens configured, hub runs in open mode (backward compatible).
-- **No admin/TUN:** Both sides use gVisor netstack — pure userspace, no elevated privileges.
+- **No admin/TUN:** Both sides use gVisor netstack. Pure userspace, no elevated privileges.
 
 ## Prerequisites
 
@@ -54,7 +54,7 @@ graph LR
 - **Node.js 20+** (to run hub.js)
 - **Docker + Docker Compose** (for production deployment)
 
-## Quick Start — Local Development
+## Quick Start - Local Development
 
 ### 1. Build the Go binaries
 
@@ -127,11 +127,11 @@ See `IMPLEMENTATION.md` §8 for the full Docker Compose skeleton and Caddyfile.
 
 Subcommand-based CLI. Run `tela` with no arguments for usage.
 
-**Hub name resolution** — the `-hub` flag accepts a full URL (`wss://...`) or
+**Hub name resolution.** The `-hub` flag accepts a full URL (`wss://...`) or
 a short hub name. Short names are resolved by: (1) querying configured remotes
 added via `tela remote add`, (2) falling back to a local `hubs.yaml` file.
 
-**Environment variables** — set these to avoid repeating flags:
+**Environment variables.** Set these to avoid repeating flags:
 
 | Variable | Description |
 |----------|-------------|
@@ -344,14 +344,14 @@ See `TODO.md` for the full roadmap.
 
 ## Troubleshooting
 
-**"Machine not found"** — Start telad before tela. The machine’s daemon must register first.
+**"Machine not found"**: Start telad before tela. The machine’s daemon must register first.
 
-**"auth failed"** — Token mismatch. Ensure `-token` matches a valid token in the hub's auth config. For the POC `hub.js`, the token must match `HUB_TOKEN`. For `telahubd`, the token must be a valid identity in the hub's YAML config.
+**"auth failed"**: Token mismatch. Ensure `-token` matches a valid token in the hub's auth config. For the POC `hub.js`, the token must match `HUB_TOKEN`. For `telahubd`, the token must be a valid identity in the hub's YAML config.
 
-**Connection hangs after pairing** — Check that the WireGuard handshake completes. Look for `[wg] handshake complete` in the logs. If missing, there may be a WebSocket framing issue.
+**Connection hangs after pairing**: Check that the WireGuard handshake completes. Look for `[wg] handshake complete` in the logs. If missing, there may be a WebSocket framing issue.
 
-**RDP black screen / NLA error** — Ensure RDP is enabled (Windows Pro/Enterprise only). Tela uses a WireGuard tunnel so NLA/CredSSP works correctly (unlike L4 TCP proxies).
+**RDP black screen / NLA error**: Ensure RDP is enabled (Windows Pro/Enterprise only). Tela uses a WireGuard tunnel so NLA/CredSSP works correctly (unlike L4 TCP proxies).
 
-**UDP relay not upgrading** — The hub's UDP port (41820) must be reachable from the client. If behind NAT without port forwarding, the system falls back to WebSocket automatically.
+**UDP relay not upgrading**: The hub's UDP port (41820) must be reachable from the client. If behind NAT without port forwarding, the system falls back to WebSocket automatically.
 
-**Port already in use** — Another process is using that port. tela will report the conflict at startup.
+**Port already in use**: Another process is using that port. tela will report the conflict at startup.

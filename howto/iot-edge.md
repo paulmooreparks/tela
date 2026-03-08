@@ -1,4 +1,4 @@
-# HOWTO — IoT / Edge Device Management (Tela)
+# HOWTO - IoT / Edge Device Management (Tela)
 
 This guide shows how to use Tela to manage devices deployed behind NAT/firewalls you don’t control (Raspberry Pi, kiosks, industrial controllers). The primary goal is reliable outbound-only SSH (and optionally web admin ports) without requiring port forwards.
 
@@ -13,7 +13,7 @@ Pattern A is simplest per-device. Pattern B reduces software footprint on device
 
 ---
 
-## Step 1 — Run a hub reachable from anywhere
+## Step 1 - Run a hub reachable from anywhere
 
 Deploy the hub somewhere reachable over HTTPS/WebSockets.
 
@@ -27,7 +27,7 @@ Publish it as `wss://YOUR-HUB`.
 
 ---
 
-## Step 2 — Endpoint pattern: install and run `telad` on a device
+## Step 2 - Endpoint pattern: install and run `telad` on a device
 
 ### 2.1 Install `telad`
 
@@ -69,7 +69,7 @@ Key settings:
 
 ---
 
-## Step 3 — Site gateway pattern (bridge many devices)
+## Step 3 - Site gateway pattern (bridge many devices)
 
 Run one gateway VM/device at the site.
 
@@ -106,7 +106,7 @@ Hardening guidance for gateways:
 
 ---
 
-## Step 4 — Operator workflow with `tela`
+## Step 4 - Operator workflow with `tela`
 
 From your laptop:
 

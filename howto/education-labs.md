@@ -1,4 +1,4 @@
-# HOWTO — Education / Lab Environments (Tela)
+# HOWTO - Education / Lab Environments (Tela)
 
 This guide shows how to use Tela to provide remote access to lab machines for students (RDP/VNC/SSH) without requiring a campus VPN.
 
@@ -11,14 +11,14 @@ This guide shows how to use Tela to provide remote access to lab machines for st
 
 ---
 
-## Step 1 — Deploy a hub for the lab
+## Step 1 - Deploy a hub for the lab
 
 1. Deploy the hub and publish it as `wss://LAB-HUB`.
 2. Verify hub console and `/api/status` are reachable.
 
 ---
 
-## Step 2 — Register lab machines
+## Step 2 - Register lab machines
 
 On each lab machine, run `telad`.
 
@@ -36,7 +36,7 @@ Example (Linux lab machine exposing SSH):
 
 ---
 
-## Step 3 — Student workflow
+## Step 3 - Student workflow
 
 On the student’s machine:
 
@@ -65,7 +65,7 @@ mstsc /v:localhost
 
 - Pre-assign machine names to students.
 - Rotate credentials/policies each term.
-- Consider exposing only RDP/VNC/SSH — no broad internal network access.
+- Consider exposing only RDP/VNC/SSH. Avoid granting broad internal network access.
 
 ---
 

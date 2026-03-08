@@ -1,4 +1,4 @@
-# HOWTO — Personal Cloud / Homelab Remote Access (Tela)
+# HOWTO - Personal Cloud / Homelab Remote Access (Tela)
 
 This guide shows how to use Tela to reach home machines (NAS, dev box, media server) from anywhere, including locked-down networks, without opening inbound ports on the home network.
 
@@ -32,7 +32,7 @@ It covers two supported deployment patterns:
 
 ---
 
-## Step 1 — Run a Hub
+## Step 1 - Run a Hub
 
 There are many ways to publish a hub. Start with the simplest for your setup.
 
@@ -49,7 +49,7 @@ docker compose up --build -d
 
 This brings up:
 
-- `gohub` (`telahubd` — HTTP + WebSocket + hub console)
+- `gohub` (`telahubd`: HTTP + WebSocket + hub console)
 
 Verify locally:
 
@@ -68,7 +68,7 @@ Requirements:
 - WebSockets must be supported (most tunnels/proxies support this).
 
 ---
-## Step 1.5 — Enable authentication (recommended)
+## Step 1.5 - Enable authentication (recommended)
 
 By default the hub runs in open mode. For any Internet-exposed hub, you should enable token-based auth.
 
@@ -98,9 +98,9 @@ tela admin grant barn-agent barn -hub wss://YOUR-HUB-HOSTNAME -token <owner-toke
 See [hub.md](hub.md) for the full list of `tela admin` commands.
 
 ---
-## Step 2 — Register a home machine (choose a pattern)
+## Step 2 - Register a home machine (choose a pattern)
 
-### Pattern A — Run `telad` on the home machine (recommended)
+### Pattern A - Run `telad` on the home machine (recommended)
 
 Use this when you can run `telad` directly on the machine that hosts the services.
 
@@ -128,7 +128,7 @@ Notes:
 - Keep service exposure minimal: only the ports you need.
 - If the hub has auth enabled, the token must be a valid identity token (generated via `tela admin add-token`).
 
-### Pattern B — Run `telad` on a gateway that can reach the home machines
+### Pattern B - Run `telad` on a gateway that can reach the home machines
 
 Use this when the target machine is locked down or you want to minimize installed software on the target.
 
@@ -169,7 +169,7 @@ This is a convenient dev/test pattern because you don’t need to install `telad
 
 ---
 
-## Step 3 — Connect from a client machine (zero-install)
+## Step 3 - Connect from a client machine (zero-install)
 
 On the machine you’re using to connect *from*:
 
@@ -204,7 +204,7 @@ This binds one or more `localhost` ports on your client machine.
 
 ---
 
-## Step 4 — Use the service (SSH / RDP)
+## Step 4 - Use the service (SSH / RDP)
 
 ### SSH
 

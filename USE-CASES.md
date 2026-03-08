@@ -1,10 +1,10 @@
-# Tela — Use Cases
+# Tela - Use Cases
 
 ## Overview
 
 Tela is a connectivity fabric that provides outbound-only, encrypted TCP tunnels between machines, with no installation, no admin privileges, and no inbound ports required on either end.
 
-This document describes concrete scenarios where Tela's design gives it a meaningful advantage over existing tools.
+This document describes concrete scenarios where Tela's design is a good fit.
 
 ---
 
@@ -83,7 +83,7 @@ Detailed HOWTO: `howto/distributed-teams.md`
 
 | Solution | Friction |
 |----------|----------|
-| **Teleport** | Full-featured but heavy — requires deploying a proxy, installing `tsh`, certificate infrastructure. |
+| **Teleport** | Full-featured but heavy. Requires deploying a proxy, installing `tsh`, certificate infrastructure. |
 | **Tailscale** | Excellent, but requires TUN/admin and a Tailscale account per device. Not viable on managed corporate machines. |
 | **SSH jump hosts** | Only works for SSH. Tela tunnels any TCP service. |
 
@@ -135,7 +135,7 @@ Detailed HOWTO: `howto/production-access.md`
 
 - `telad` on each VM exposes only the declared ports. No bastion host to maintain.
 - Audit trail via hub history (who connected, when, to what).
-- WireGuard encryption end-to-end — the hub never sees plaintext.
+- WireGuard encryption end-to-end. The hub never sees plaintext.
 - Works on any cloud, bare metal, or on-prem. No vendor lock-in.
 
 **Compared to alternatives:**
@@ -165,7 +165,7 @@ Detailed HOWTO: `howto/msp-it-support.md`
 
 - Install `telad` on each customer's machines. Each customer gets a hub (or shares one with per-customer machine tagging).
 - Customer machines are behind NATs the MSP can't control. Outbound-only is essential.
-- Zero-install client means the MSP tech can connect from any machine — their own laptop, a customer's workstation, a hotel business center.
+- Zero-install client means the MSP tech can connect from any machine: their own laptop, a customer's workstation, a hotel business center.
 
 **Compared to alternatives:**
 
@@ -198,14 +198,14 @@ Detailed HOWTO: `howto/education-labs.md`
 
 ---
 
-## Where Tela Is Uniquely Positioned
+## Summary
 
-No existing tool provides this exact combination:
+Tela combines these properties:
 
-1. **Zero-install, no-admin client** — works on locked-down machines
-2. **Protocol-agnostic TCP tunneling** — not just SSH, not just HTTP
-3. **Outbound-only agents** — works behind any NAT/firewall
-4. **End-to-end WireGuard encryption** — hub never sees plaintext
-5. **Lightweight, single-binary deployment** — no infrastructure to maintain beyond the hub
+1. **Zero-install, no-admin client**: works on locked-down machines
+2. **Protocol-agnostic TCP tunneling**: not just SSH, not just HTTP
+3. **Outbound-only agents**: works behind any NAT/firewall
+4. **End-to-end WireGuard encryption**: hub never sees plaintext
+5. **Lightweight, single-binary deployment**: no infrastructure to maintain beyond the hub
 
-Tailscale comes closest but requires system-level installation. Cloudflare Tunnel is HTTP-focused. Teleport and Boundary are heavy. MeshCentral is screen-sharing-centric. Tela occupies the gap between "just use SSH" and "deploy an enterprise zero-trust platform."
+Tailscale requires system-level installation. Cloudflare Tunnel is HTTP-focused. Teleport and Boundary are heavier to deploy. MeshCentral is screen-sharing-centric.

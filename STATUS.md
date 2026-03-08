@@ -1,60 +1,60 @@
-# Tela — Implementation Status
+# Tela - Implementation Status
 
 Traceability matrix mapping each DESIGN.md section to current implementation status.
 
 **Legend:**
-- ✅ **Done** — Implemented (at least POC-level working code)
-- 🔶 **Partial** — Some aspects implemented, gaps remain
-- ⬜ **Not started** — No implementation yet
-- 🔮 **Future** — Awan Saya scope or Phase 3+
-- 📄 **Doc-only** — Informational section, no implementation required
+- ✅ **Done**: Implemented (at least POC-level working code)
+- 🔶 **Partial**: Some aspects implemented, gaps remain
+- ⬜ **Not started**: No implementation yet
+- 🔮 **Future**: Awan Saya scope or Phase 3+
+- 📄 **Doc-only**: Informational section, no implementation required
 
 Last updated: 2026-03-05
 
 ---
 
-## §0–§3 — Identity, Goals, Philosophy
+## §0-§3 - Identity, Goals, Philosophy
 
 These sections are design guidance; "implementation" means the codebase reflects the principles.
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §0 | Purpose of This Document | 📄 | — |
-| §0.1 | Glossary | 📄 | — |
-| §1.1 | Name | 📄 | — |
-| §1.2 | Positioning | 📄 | — |
-| §1.3 | What Tela Is | 📄 | — |
+| §0 | Purpose of This Document | 📄 | - |
+| §0.1 | Glossary | 📄 | - |
+| §1.1 | Name | 📄 | - |
+| §1.2 | Positioning | 📄 | - |
+| §1.3 | What Tela Is | 📄 | - |
 | §1.4 | License | ✅ | Apache 2.0 in repo |
 | §2.1 | Goals | 🔶 | Outbound-only tunneling works; multiplexing, protocol-agnostic channels, multi-platform agents not yet |
-| §2.2 | Non-Goals | 📄 | — |
+| §2.2 | Non-Goals | 📄 | - |
 | §3.1–3.4 | Design Philosophy & Invariants | 📄 | Guiding principles; no code artifact |
 
 ---
 
-## §4 — Architecture Overview
+## §4 - Architecture Overview
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §4.1 | Components | 🔶 | `telad` (Go agent ✅), `telahubd` (Go hub ✅), `tela` (Go client ✅), Web (landing page + downloads ✅), CLI (⬜), Awan Saya (🔮) |
-| §4.2 | Data Flow — Agent Connection | ✅ | `telad`: outbound WS, register, reconnect, token auth |
-| §4.2 | Data Flow — Browser Orchestration | 🔶 | Landing page with OS-detected download links; no login, session tokens, or machine list |
-| §4.2 | Data Flow — Client Connection | ✅ | `tela`: WS connect, WireGuard tunnel, auto-bind local listeners, reconnect |
-| §4.2 | Data Flow — Multiplexed Channels | ⬜ | One WS per session, no channel multiplexing |
+| §4.2 | Data Flow: Agent Connection | ✅ | `telad`: outbound WS, register, reconnect, token auth |
+| §4.2 | Data Flow: Browser Orchestration | 🔶 | Landing page with OS-detected download links; no login, session tokens, or machine list |
+| §4.2 | Data Flow: Client Connection | ✅ | `tela`: WS connect, WireGuard tunnel, auto-bind local listeners, reconnect |
+| §4.2 | Data Flow: Multiplexed Channels | ⬜ | One WS per session, no channel multiplexing |
 | §4.3 | Component Interaction Model | 🔶 | Client→Hub and Agent→Hub paths work; Browser→Hub auth/session path not implemented |
 
 ---
 
-## §5 — MeshCentral Integration Boundary
+## §5 - MeshCentral Integration Boundary
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §5.1 | Components Reused | ⬜ | POC is written from scratch; no MeshCentral code integrated |
 | §5.2 | Components Replaced | 📄 | Design guidance for when integration happens |
-| §5.3 | Rationale | 📄 | — |
+| §5.3 | Rationale | 📄 | - |
 
 ---
 
-## §6 — Protocol Specification
+## §6 - Protocol Specification
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
@@ -71,25 +71,25 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 ---
 
-## §7 — Tela Agent
+## §7 - Tela Agent
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §7.1 | Responsibilities | 🔶 | Outbound WS ✅, register ✅, TCP proxy ✅, reconnect ✅, token auth ✅, multi-port ✅, heartbeat ⬜, service discovery ⬜, policy ⬜, metadata ⬜ |
 | §7.2 | Implementation (C/C++, static binary) | 🔶 | Agent is Go (telad), not C/C++. Static binary ✅, cross-compiled ✅ |
-| §7.3 | Concurrency Model (libuv) | ⬜ | N/A — Go runtime, not libuv |
+| §7.3 | Concurrency Model (libuv) | ⬜ | N/A. Go runtime, not libuv |
 | §7.4 | Configuration (`telad.yaml`) | ✅ | YAML config file with `-config` flag. Multi-machine, per-machine token override, rich metadata fields. System path: `%ProgramData%\Tela\telad.yaml` / `/etc/tela/telad.yaml` |
 | §7.5 | Logging | 🔶 | Console logging with `[telad]` prefix; no structured/rotated logs |
 | §7.6 | Updates | ⬜ | No update mechanism |
 
 ---
 
-## §8 — Tela Hub
+## §8 - Tela Hub
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §8.1 | Responsibilities | 🔶 | Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅, UDP relay ✅, `/status` API ✅, admin REST API ✅. No user auth (browser), no session tokens, no metadata |
-| §8.2 | Implementation (Go) | ✅ | `telahubd` — Go, `gorilla/websocket`, no Node.js, no MeshCentral |
+| §8.2 | Implementation (Go) | ✅ | `telahubd`: Go, `gorilla/websocket`, no Node.js, no MeshCentral |
 | §8.3 | Storage (SQLite / Postgres) | 🔶 | Auth config persisted to YAML (hot-reload); session/machine state is in-memory only |
 | §8.4 | REST API | 🔶 | Hub `/status` ✅, `/api/history` ✅, `/api/admin/*` ✅ (token/ACL management); no `/api/v1/*` endpoints |
 | §8.5 | Multiplexing | ⬜ | No channel multiplexing |
@@ -98,7 +98,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 ---
 
-## §9 — Tela Web (Browser UI)
+## §9 - Tela Web (Browser UI)
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
@@ -109,7 +109,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 
 ---
 
-## §10 — Tela Helper / Client
+## §10 - Tela Helper / Client
 
 Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implementation evolved beyond this: `tela` is the client binary that establishes a full WireGuard L3 tunnel and auto-binds local listeners. It subsumes the Helper role while adding encrypted tunneling.
 
@@ -123,7 +123,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 ---
 
-## §11 — Tela CLI
+## §11 - Tela CLI
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
@@ -132,7 +132,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 ---
 
-## §12 — Security Model
+## §12 - Security Model
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
@@ -145,40 +145,40 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 ---
 
-## §13 — Authentication
+## §13 - Authentication
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §13.1 | Tela Standalone (bcrypt, SQLite, cookies, TOTP) | 🔶 | Named token identities with RBAC ✅; YAML-persisted auth config ✅; admin REST API ✅; `tela admin` CLI ✅; env-var bootstrap ✅. No bcrypt/cookies/TOTP (spec vision), but functional token-based auth is complete |
-| §13.2 | Awan Saya (SSO) | 🔮 | — |
+| §13.2 | Awan Saya (SSO) | 🔮 | - |
 
 ---
 
-## §14 — End-to-End Usage Flow
+## §14 - End-to-End Usage Flow
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §14.1 | Setup (Tela Standalone) | 🔶 | Hub deployed ✅, Cloudflare Tunnel ✅, Caddy direct ✅, agent registered ✅, token auth + ACL ✅, env-var bootstrap ✅, remote admin ✅. No browser-based user creation |
 | §14.2 | Accessing from Locked-Down Laptop | ✅ | Full path validated: download tela → run → SSH ✅, RDP ✅ (via WireGuard L3 tunnel) |
-| §14.3 | In-Browser Fallback | ⬜ | — |
+| §14.3 | In-Browser Fallback | ⬜ | - |
 
 ---
 
-## §15 — Literate Coding Standards
+## §15 - Literate Coding Standards
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §15.1 | Narrative Header Blocks | ✅ | All Go and JS files have descriptive purpose/architecture headers |
 | §15.2 | Inline Intent Comments | 🔶 | Present in critical sections (wsBind, hub relay, netstack) |
 | §15.3 | Embedded Protocol Excerpts | ⬜ | No frozen protocol to embed yet |
-| §15.4 | "DO NOT MODIFY" Markers | ⬜ | — |
-| §15.5 | Explicit Invariants | ⬜ | — |
+| §15.4 | "DO NOT MODIFY" Markers | ⬜ | - |
+| §15.5 | Explicit Invariants | ⬜ | - |
 | §15.6 | No Hidden Magic | ✅ | Code is straightforward |
 | §15.7 | Language-Specific Conventions | 🔶 | Go conventions followed; JS hub is simple |
 
 ---
 
-## §16 — LLM Agent Guardrails
+## §16 - LLM Agent Guardrails
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
@@ -186,31 +186,31 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 ---
 
-## §17 — Roadmap
+## §17 - Roadmap
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
-| §17.1 | Phase 1 — Minimum Viable Fabric | 🔶 | Core WG tunnel works, reconnect ✅, token auth ✅, multi-port ✅, UDP relay ✅. Protocol/mux/full-auth not started |
-| §17.2 | Phase 2 — Fabric Extensions | ⬜ | — |
-| §17.3 | Phase 3 — Substrate for Awan Saya | 🔮 | — |
-| §17.4 | Phase 4 — Awan Saya v0.1 | 🔮 | — |
+| §17.1 | Phase 1 - Minimum Viable Fabric | 🔶 | Core WG tunnel works, reconnect ✅, token auth ✅, multi-port ✅, UDP relay ✅. Protocol/mux/full-auth not started |
+| §17.2 | Phase 2 - Fabric Extensions | ⬜ | - |
+| §17.3 | Phase 3 - Substrate for Awan Saya | 🔮 | - |
+| §17.4 | Phase 4 - Awan Saya v0.1 | 🔮 | - |
 
 ---
 
-## §18 — Awan Saya Architecture
+## §18 - Awan Saya Architecture
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §18.1 | Three Connectivity Models | 🔶 | Model A (direct) demonstrated via Cloudflare Tunnel + Caddy direct; Models B & C are Awan Saya scope |
-| §18.2 | Hub Registry | 🔮 | — |
-| §18.3 | Relay Protocol | 🔮 | — |
-| §18.4 | What Changes in Tela (Nothing) | 📄 | — |
-| §18.5 | Eliminating External Dependencies | 🔮 | — |
-| §18.6 | Analogy Summary | 📄 | — |
+| §18.2 | Hub Registry | 🔮 | - |
+| §18.3 | Relay Protocol | 🔮 | - |
+| §18.4 | What Changes in Tela (Nothing) | 📄 | - |
+| §18.5 | Eliminating External Dependencies | 🔮 | - |
+| §18.6 | Analogy Summary | 📄 | - |
 
 ---
 
-## §19 — Risks & Mitigations
+## §19 - Risks & Mitigations
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
@@ -218,14 +218,14 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 ---
 
-## §20 — Testing Strategy
+## §20 - Testing Strategy
 
 | Section | Title | Status | Notes |
 |---------|-------|--------|-------|
 | §20.1 | Protocol Conformance Tests | ⬜ | No test suite |
 | §20.2 | Integration Tests | ⬜ | Manual testing only |
-| §20.3 | Regression Suite | ⬜ | — |
-| §20.4 | What Is Not Tested in Tela Core | 📄 | — |
+| §20.3 | Regression Suite | ⬜ | - |
+| §20.4 | What Is Not Tested in Tela Core | 📄 | - |
 
 ---
 
@@ -241,13 +241,13 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 
 ### What's working now (POC)
 
-1. **WireGuard L3 tunnel** — E2E encrypted, zero-admin, zero-install on both sides (gVisor netstack)
-2. **UDP relay** — Eliminates TCP-over-TCP; auto-fallback to WebSocket; asymmetric bridging
-3. **Multi-port forwarding** — telad advertises ports, tela auto-binds local listeners
-4. **Token auth with RBAC** — Named identities (owner/admin/user), per-machine ACLs, env-var bootstrap for Docker, remote management via `tela admin` CLI and admin REST API, hot-reload (no restart needed)
-5. **Auto-reconnect** — Both tela and telad reconnect on disconnect
-6. **Cross-platform client** — Windows, Linux, macOS (Intel + ARM) binaries served from hub
-7. **Dual ingress** — Cloudflare Tunnel + Caddy direct
+1. **WireGuard L3 tunnel**: E2E encrypted, zero-admin, zero-install on both sides (gVisor netstack)
+2. **UDP relay**: Eliminates TCP-over-TCP; auto-fallback to WebSocket; asymmetric bridging
+3. **Multi-port forwarding**: telad advertises ports, tela auto-binds local listeners
+4. **Token auth with RBAC**: Named identities (owner/admin/user), per-machine ACLs, env-var bootstrap for Docker, remote management via `tela admin` CLI and admin REST API, hot-reload (no restart needed)
+5. **Auto-reconnect**: Both tela and telad reconnect on disconnect
+6. **Cross-platform client**: Windows, Linux, macOS (Intel + ARM) binaries served from hub
+7. **Dual ingress**: Cloudflare Tunnel + Caddy direct
 8. **Hub /status API** — JSON endpoint for monitoring
 9. **Direct tunnel (P2P)** — STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
 10. **CLI remote management** — `tela remote add` configures a hub directory, `tela remote remove` removes it (`tela login`/`tela logout` kept as deprecated aliases)
