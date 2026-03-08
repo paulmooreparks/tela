@@ -34,6 +34,7 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
+	mathrand "math/rand"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -236,12 +237,20 @@ func cmdConnect(args []string) {
 		os.Exit(0)
 	}()
 
+	const maxDelay = 5 * time.Minute
+	attempt := 0
 	for {
-		if err := runSession(*hubURL, *machineID, *token, mappings); errors.Is(err, errFatal) {
+		err := runSession(*hubURL, *machineID, *token, mappings)
+		if errors.Is(err, errFatal) {
 			os.Exit(1)
 		}
-		log.Println("reconnecting in 3 seconds...")
-		time.Sleep(3 * time.Second)
+		if err == nil {
+			attempt = 0 // successful session — reset backoff
+		}
+		delay := reconnectDelay(attempt, maxDelay)
+		log.Printf("reconnecting in %s...", delay.Round(time.Second))
+		time.Sleep(delay)
+		attempt++
 	}
 }
 
@@ -522,13 +531,21 @@ func runProfile(name string) {
 		go func(idx int, hub, mach, tok string, maps []portMapping) {
 			defer wg.Done()
 			log.Printf("[profile:%d] connecting to %s → %s", idx, hub, mach)
+			const maxDelay = 5 * time.Minute
+			attempt := 0
 			for {
-				if err := runSession(hub, mach, tok, maps); errors.Is(err, errFatal) {
+				err := runSession(hub, mach, tok, maps)
+				if errors.Is(err, errFatal) {
 					log.Printf("[profile:%d] fatal error, stopping", idx)
 					return
 				}
-				log.Printf("[profile:%d] reconnecting in 3 seconds...", idx)
-				time.Sleep(3 * time.Second)
+				if err == nil {
+					attempt = 0 // successful session — reset backoff
+				}
+				delay := reconnectDelay(attempt, maxDelay)
+				log.Printf("[profile:%d] reconnecting in %s...", idx, delay.Round(time.Second))
+				time.Sleep(delay)
+				attempt++
 			}
 		}(i+1, hubURL, machine, token, mappings)
 	}
@@ -805,6 +822,31 @@ func startWSKeepalive(ws *websocket.Conn) func() {
 // errFatal is returned by runSession when the error is not worth retrying.
 var errFatal = fmt.Errorf("fatal")
 
+// errMachineNotFound is returned when the machine isn't registered on the hub.
+// This is retryable — the daemon may reconnect at any time.
+var errMachineNotFound = fmt.Errorf("machine not found")
+
+// reconnectDelay calculates the next backoff delay with jitter.
+// delay doubles each call up to maxDelay; jitter is ±25%.
+func reconnectDelay(attempt int, maxDelay time.Duration) time.Duration {
+	const baseDelay = 3 * time.Second
+	d := baseDelay
+	for i := 0; i < attempt; i++ {
+		d *= 2
+		if d > maxDelay {
+			d = maxDelay
+			break
+		}
+	}
+	// Add ±25% jitter
+	jitter := float64(d) * 0.25 * (2*mathrand.Float64() - 1)
+	d += time.Duration(jitter)
+	if d < time.Second {
+		d = time.Second
+	}
+	return d
+}
+
 func runSession(hubURL, machineID, token string, overrideMappings []portMapping) error {
 	log.Printf("connecting to hub: %s", hubURL)
 
@@ -885,15 +927,12 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 		case "error":
 			log.Printf("hub error: %s", msg.Message)
 			lower := strings.ToLower(msg.Message)
-			if strings.Contains(lower, "not found") || strings.Contains(lower, "invalid token") {
-				// Provide actionable diagnostics
-				if strings.Contains(lower, "not found") {
-					httpURL := wsToHTTP(hubURL)
-					log.Printf("machine %q is not registered on this hub", machineID)
-					log.Printf("check available machines: tela machines -hub %s", httpURL)
-					log.Printf("or run: curl %s/api/status", httpURL)
-				}
+			if strings.Contains(lower, "invalid token") {
 				return errFatal
+			}
+			if strings.Contains(lower, "not found") {
+				log.Printf("machine %q is not registered on this hub (will retry)", machineID)
+				return errMachineNotFound
 			}
 			return fmt.Errorf("hub error: %s", msg.Message)
 		}

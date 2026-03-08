@@ -24,6 +24,7 @@ package main
 import (
 	"crypto/ecdh"
 	"crypto/rand"
+	mathrand "math/rand"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -530,14 +531,42 @@ func runMultiMachine(cfg *configFile) {
 	wg.Wait()
 }
 
+// reconnectDelay calculates the next backoff delay with jitter.
+// delay doubles each call up to maxDelay; jitter is ±25%.
+func reconnectDelay(attempt int, maxDelay time.Duration) time.Duration {
+	const baseDelay = 3 * time.Second
+	d := baseDelay
+	for i := 0; i < attempt; i++ {
+		d *= 2
+		if d > maxDelay {
+			d = maxDelay
+			break
+		}
+	}
+	// Add ±25% jitter
+	jitter := float64(d) * 0.25 * (2*mathrand.Float64() - 1)
+	d += time.Duration(jitter)
+	if d < time.Second {
+		d = time.Second
+	}
+	return d
+}
+
 // runSingleMachine is the reconnect loop for one machine.
 func runSingleMachine(hubURL string, reg registration, targetHost string) {
 	prefix := fmt.Sprintf("[telad:%s] ", reg.MachineID)
 	logger := log.New(os.Stderr, prefix, log.Ltime)
+	const maxDelay = 5 * time.Minute
+	attempt := 0
 	for {
-		runAgent(logger, hubURL, reg, targetHost)
-		logger.Println("reconnecting in 3 seconds...")
-		time.Sleep(3 * time.Second)
+		wasRegistered := runAgent(logger, hubURL, reg, targetHost)
+		if wasRegistered {
+			attempt = 0 // was registered — reset backoff
+		}
+		delay := reconnectDelay(attempt, maxDelay)
+		logger.Printf("reconnecting in %s...", delay.Round(time.Second))
+		time.Sleep(delay)
+		attempt++
 	}
 }
 
@@ -644,13 +673,13 @@ func startWSKeepalive(ws *websocket.Conn) func() {
 	}
 }
 
-func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string) {
+func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string) bool {
 	lg.Printf("connecting to hub: %s", hubURL)
 
 	ws, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
 	if err != nil {
 		lg.Printf("dial failed: %v", err)
-		return
+		return false
 	}
 	defer ws.Close()
 	stopKeepalive := startWSKeepalive(ws)
@@ -674,15 +703,16 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	}
 	if err := ws.WriteJSON(&regMsg); err != nil {
 		lg.Printf("register failed: %v", err)
-		return
+		return false
 	}
 
 	// Read control messages on the control WS
+	registered := false
 	for {
 		_, raw, err := ws.ReadMessage()
 		if err != nil {
 			lg.Printf("hub read error: %v", err)
-			return
+			return registered
 		}
 
 		var msg controlMessage
@@ -692,6 +722,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 
 		switch msg.Type {
 		case "registered":
+			registered = true
 			lg.Printf("registered as: %s — waiting for sessions", msg.MachineID)
 
 		case "session-request":
