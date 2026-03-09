@@ -9,7 +9,7 @@ Traceability matrix mapping each DESIGN.md section to current implementation sta
 - 🔮 **Future**: Awan Saya scope or Phase 3+
 - 📄 **Doc-only**: Informational section, no implementation required
 
-Last updated: 2026-03-08
+Last updated: 2026-03-09
 
 ---
 
@@ -66,7 +66,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §6.6 | Backward Compatibility | ⬜ | No versioning in POC messages |
 | §6.7 | Error Handling | 🔶 | Basic error logging; no structured error types or per-channel error handling |
 | §6.8 | WireGuard L3 Transport | ✅ | wireguard-go + gVisor netstack on both sides, ephemeral keypairs, zero-admin, hub is zero-knowledge relay |
-| §6.8 | UDP Relay Mode | ✅ | Hub UDP relay (port 41820), probe/ready handshake, asymmetric fallback (UDP↔WS bridging), auto-fallback on timeout |
+| §6.8 | UDP Relay Mode | ✅ | Hub UDP relay (port 41820), probe/ready handshake, asymmetric fallback (UDP↔WS bridging), auto-fallback on timeout, `udpHost` advertisement for proxy/tunnel setups |
 | §6.8 | Direct Tunnel (P2P) | ✅ | STUN discovery (RFC 5389), endpoint exchange via hub, simultaneous UDP hole punching, fallback cascade (direct → relay → WS) |
 
 ---
@@ -242,7 +242,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 ### What's working now (POC)
 
 1. **WireGuard L3 tunnel**: E2E encrypted, zero-admin, zero-install on both sides (gVisor netstack)
-2. **UDP relay**: Eliminates TCP-over-TCP; auto-fallback to WebSocket; asymmetric bridging
+2. **UDP relay**: Eliminates TCP-over-TCP; auto-fallback to WebSocket; asymmetric bridging; `udpHost` advertisement for proxy/tunnel deployments
 3. **Multi-port forwarding**: telad advertises ports, tela auto-binds local listeners
 4. **Token auth with RBAC**: Named identities (owner/admin/user), per-machine ACLs, env-var bootstrap for Docker, remote management via `tela admin` CLI and admin REST API, hot-reload (no restart needed)
 5. **Auto-reconnect**: Both tela and telad reconnect on disconnect

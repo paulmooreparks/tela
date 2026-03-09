@@ -198,10 +198,11 @@ services:
     container_name: tela-gohub
     ports:
       - "3002:8080"         # HTTP + WebSocket (cloudflared points here)
-      - "41821:41820/udp"   # UDP relay for WireGuard datagrams
+      - "41820:41820/udp"    # UDP relay for WireGuard datagrams
     environment:
       - HUB_PORT=8080
       - HUB_UDP_PORT=41820
+      - HUB_UDP_HOST=${HUB_UDP_HOST:-}  # set to real public IP when behind proxy
       - HUB_NAME=gohub
       # - TELA_OWNER_TOKEN=<hex>   # uncomment to enable auth (see §8.1)
     volumes:

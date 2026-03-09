@@ -28,6 +28,7 @@ go build -o telahubd ./cmd/telahubd
 |----------|---------|-------------|
 | `HUB_PORT` | `8080` | HTTP + WebSocket listen port |
 | `HUB_UDP_PORT` | `41820` | UDP relay port |
+| `HUB_UDP_HOST` | *(empty)* | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
 | `HUB_NAME` | *(empty)* | Display name shown in portal and `/api/status` |
 | `HUB_WWW_DIR` | `./www` | Directory for static console files |
 
@@ -42,6 +43,9 @@ HUB_NAME=myhub telahubd
 
 # Custom ports
 HUB_PORT=9090 HUB_UDP_PORT=9091 telahubd
+
+# Behind Cloudflare/proxy — advertise real IP for UDP relay
+HUB_UDP_HOST=myhost.example.com telahubd
 ```
 
 ### Run with Docker
@@ -54,6 +58,7 @@ docker run -d --name telahubd \
   -p 8080:8080 \
   -p 41820:41820/udp \
   -e HUB_NAME=myhub \
+  -e HUB_UDP_HOST=myhost.example.com \
   telahubd
 ```
 

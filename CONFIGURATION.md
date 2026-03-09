@@ -194,6 +194,7 @@ machines:
 ```yaml
 port: 8080
 udpPort: 41820
+udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
 name: owlsnest
 wwwDir: ./www
 
@@ -219,9 +220,10 @@ auth:
 
 ### Core fields
 
-- `port`, `udpPort`, `name`, `wwwDir`: same as the corresponding env vars.
+- `port`, `udpPort`, `udpHost`, `name`, `wwwDir`: same as the corresponding env vars.
 - Precedence: **env vars override YAML**, and YAML overrides built-in defaults.
-- Supported env vars: `HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`, `HUB_WWW_DIR`.
+- Supported env vars: `HUB_PORT`, `HUB_UDP_PORT`, `HUB_UDP_HOST`, `HUB_NAME`, `HUB_WWW_DIR`.
+- `udpHost`: when the hub is behind a proxy or tunnel (e.g. Cloudflare) that doesn't forward UDP, set this to the hub's real public IP or a DNS name that resolves to it. The hub includes this in `udp-offer` messages so clients send UDP to the right address.
 
 ### Auth block (`auth:`)
 

@@ -391,7 +391,7 @@ Helper authentication uses the single-use session token issued by the browser fl
 > - **Agent → Hub:** `session-join` (agent opens a per-session WebSocket)
 > - **Hub → Agent:** `session-start` (carries client's WG public key)
 > - **Agent → Hub:** `wg-pubkey` (agent's ephemeral WG public key, relayed to client)
-> - **Hub → Both:** `udp-offer` (UDP relay token and port)
+> - **Hub → Both:** `udp-offer` (UDP relay token, port, and optional host)
 > - **Hub → Both:** `peer-endpoint` (STUN-discovered endpoint for direct P2P)
 > - **Hub → Both:** `session-end` (session teardown)
 > - **Either → Hub:** `error`
@@ -517,8 +517,8 @@ To mitigate this, the Hub provides a **UDP relay** alongside the WebSocket relay
 #### Protocol
 
 1. Hub generates two 8-byte cryptographic tokens (one per side) during `pair()`.
-2. Hub sends `{ type: "udp-offer", token: "<hex>", port: 41820 }` to both sides.
-3. Each side sends a probe packet `[8-byte token]["PROBE"]` to the Hub's UDP port.
+2. Hub sends `{ type: "udp-offer", token: "<hex>", port: 41820 }` to both sides. If `udpHost` is configured, the message also includes `host: "<ip-or-hostname>"`.
+3. Each side sends a probe packet `[8-byte token]["PROBE"]` to the Hub's UDP address (using `host` from the offer if present, otherwise the WebSocket hostname).
 4. Hub records the sender's address and replies `[token]["READY"]`.
 5. On success, that side switches WireGuard `Send()` to emit `[token][datagram]` over UDP.
 6. Hub strips the token, looks up the peer's token and address, prepends the peer's token, and forwards the datagram.
@@ -538,7 +538,7 @@ If the UDP probe times out (2 seconds), the side stays on WebSocket with zero de
 
 #### Port
 
-The Hub's UDP relay port defaults to **41820** (a nod to WireGuard's standard port 51820). It is configurable via the `HUB_UDP_PORT` environment variable.
+The Hub's UDP relay port defaults to **41820** (a nod to WireGuard's standard port 51820). It is configurable via the `HUB_UDP_PORT` environment variable. When the hub is behind a proxy or tunnel that doesn't forward UDP (e.g. Cloudflare), set `HUB_UDP_HOST` to the hub's real public IP or a DNS name that resolves directly. The hub includes this address in `udp-offer` messages so that clients and agents send UDP to the actual host rather than the proxy.
 
 ### Direct Tunnel (Phase 3 - STUN + Hole Punching)
 

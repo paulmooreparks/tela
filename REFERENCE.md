@@ -146,6 +146,7 @@ TLS is handled externally by a reverse proxy (Cloudflare Tunnel, Caddy, nginx, e
 ```yaml
 port: 8080           # HTTP+WS listen port
 udpPort: 41820       # UDP relay port
+udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
 name: myhub          # Display name for this hub
 wwwDir: ./www        # Static file directory (hub console)
 ```
@@ -156,6 +157,7 @@ wwwDir: ./www        # Static file directory (hub console)
 |----------|---------|-------------|
 | `HUB_PORT` | `8080` | HTTP+WS listen port |
 | `HUB_UDP_PORT` | `41820` | UDP relay port |
+| `HUB_UDP_HOST` | (empty) | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
 | `HUB_NAME` | (empty) | Display name for this hub |
 | `HUB_WWW_DIR` | `./www` | Static file directory |
 
@@ -255,7 +257,7 @@ The hub auto-generates a `console-viewer` token at startup. The built-in web con
 | Port | Protocol | Required | Notes |
 |------|----------|----------|-------|
 | 443 (or custom) | TCP | Yes | WebSocket connections from `tela` and `telad` |
-| 41820 (configurable) | UDP | Optional | UDP relay tier; improves latency when open |
+| 41820 (configurable) | UDP | Optional | UDP relay tier; improves latency when open. When the hub is behind a proxy (e.g. Cloudflare), set `HUB_UDP_HOST` to the real public IP/hostname so clients can reach the UDP port directly. |
 
 No inbound ports are required on the machines running `telad`. Only the hub (or its reverse proxy) needs inbound access.
 

@@ -25,8 +25,9 @@ Minimum:
 
 Optional (performance / transport):
 
-- Inbound UDP `HUB_UDP_PORT` (default `41820`) to enable the hub’s UDP relay.
+- Inbound UDP `HUB_UDP_PORT` (default `41820`) to enable the hub's UDP relay.
   - If this is not reachable (e.g., you only expose the hub via a TCP-only tunnel), sessions still work via WebSockets; they may just be slower.
+  - If the hub's domain resolves to a proxy (e.g. Cloudflare), set `HUB_UDP_HOST` to the real public IP or a DNS name that resolves directly, and forward UDP on your router. Without this, clients send UDP to the proxy and it's silently dropped.
 
 Portal visibility:
 
