@@ -83,6 +83,7 @@ type controlMessage struct {
 	Ports      []uint16 `json:"ports,omitempty"`
 	Token      string   `json:"token,omitempty"`
 	Port       int      `json:"port,omitempty"` // single port (udp-offer)
+	Host       string   `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
 	SessionIdx int      `json:"sessionIdx,omitempty"`
 }
 
@@ -893,6 +894,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	var agentPorts []uint16
 	var udpTokenHex string
 	var udpPort int
+	var udpHost string
 	var sessionIdx int
 	ready := false
 
@@ -923,7 +925,12 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 		case "udp-offer":
 			udpTokenHex = msg.Token
 			udpPort = msg.Port
-			log.Printf("received UDP relay offer (port %d)", udpPort)
+			udpHost = msg.Host
+			if udpHost != "" {
+				log.Printf("received UDP relay offer (host %s, port %d)", udpHost, udpPort)
+			} else {
+				log.Printf("received UDP relay offer (port %d)", udpPort)
+			}
 		case "error":
 			log.Printf("hub error: %s", msg.Message)
 			lower := strings.ToLower(msg.Message)
@@ -1009,7 +1016,7 @@ persistent_keepalive_interval=25
 
 	// Attempt UDP relay upgrade (if hub offered it)
 	if udpTokenHex != "" && udpPort > 0 {
-		tryUDPUpgrade(bind, hubURL, udpTokenHex, udpPort)
+		tryUDPUpgrade(bind, hubURL, udpTokenHex, udpPort, udpHost)
 	}
 
 	// Phase 3: attempt direct tunnel via STUN + hole punching
@@ -1157,7 +1164,7 @@ func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
 			case "udp-offer":
 				if !bind.UDPActive() {
 					log.Printf("received late UDP relay offer (port %d)", msg.Port)
-					tryUDPUpgrade(bind, hubURL, msg.Token, msg.Port)
+					tryUDPUpgrade(bind, hubURL, msg.Token, msg.Port, msg.Host)
 					if bind.UDPActive() {
 						go tryDirectUpgrade(bind, hubURL)
 					}
@@ -1179,18 +1186,21 @@ func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string) {
 }
 
 // tryUDPUpgrade attempts to switch from WebSocket to UDP relay transport.
-func tryUDPUpgrade(bind *wsbind.Bind, hubURL, tokenHex string, port int) {
-	u, err := url.Parse(hubURL)
-	if err != nil {
-		log.Printf("UDP upgrade: cannot parse hub URL: %v", err)
-		return
+func tryUDPUpgrade(bind *wsbind.Bind, hubURL, tokenHex string, port int, host string) {
+	if host == "" {
+		u, err := url.Parse(hubURL)
+		if err != nil {
+			log.Printf("UDP upgrade: cannot parse hub URL: %v", err)
+			return
+		}
+		host = u.Hostname()
 	}
 	token, err := hex.DecodeString(tokenHex)
 	if err != nil {
 		log.Printf("UDP upgrade: invalid token: %v", err)
 		return
 	}
-	if err := bind.UpgradeUDP(u.Hostname(), port, token); err != nil {
+	if err := bind.UpgradeUDP(host, port, token); err != nil {
 		log.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
 	}
 }

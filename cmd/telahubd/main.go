@@ -72,6 +72,7 @@ type portalEntry struct {
 type hubConfig struct {
 	Port      int                    `yaml:"port"`              // HTTP+WS listen port (default 8080)
 	UDPPort   int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
+	UDPHost   string                 `yaml:"udpHost,omitempty"` // public IP/hostname for UDP relay (when behind proxy)
 	Name      string                 `yaml:"name"`              // Display name for this hub
 	WWWDir    string                 `yaml:"wwwDir"`            // Static file directory (default ./www)
 	Auth      authConfig             `yaml:"auth,omitempty"`    // Token-based access control
@@ -101,6 +102,9 @@ func applyHubConfig(cfg *hubConfig) {
 		if cfg.UDPPort != 0 {
 			udpPort = cfg.UDPPort
 		}
+		if cfg.UDPHost != "" {
+			udpHost = cfg.UDPHost
+		}
 		if cfg.Name != "" {
 			hubName = cfg.Name
 		}
@@ -112,6 +116,7 @@ func applyHubConfig(cfg *hubConfig) {
 	// Env vars override config file
 	httpPort = envInt("HUB_PORT", httpPort)
 	udpPort = envInt("HUB_UDP_PORT", udpPort)
+	udpHost = envStr("HUB_UDP_HOST", udpHost)
 	hubName = envStr("HUB_NAME", hubName)
 	wwwDir = envStr("HUB_WWW_DIR", wwwDir)
 }
@@ -135,6 +140,7 @@ func envStr(key, def string) string {
 var (
 	httpPort    = 8080
 	udpPort     = 41820
+	udpHost     = "" // if set, included in udp-offer for proxy setups
 	hubName     = ""
 	wwwDir      = "./www"
 	globalAuth  = newAuthStore(nil) // replaced at startup; open hub until config is loaded
@@ -956,6 +962,9 @@ func pairSession(machineID string, entry *machineEntry, session *clientSession) 
 
 	// Send udp-offer to both sides
 	offer := map[string]any{"type": "udp-offer", "port": udpPort}
+	if udpHost != "" {
+		offer["host"] = udpHost
+	}
 
 	offer["token"] = agentTokenHex
 	agentOffer, _ := json.Marshal(offer)
@@ -1349,6 +1358,9 @@ func runHub(stopCh <-chan struct{}) {
 	log.Printf("[hub] static site: %s", wwwDir)
 	if hubName != "" {
 		log.Printf("[hub] hub name: %s", hubName)
+	}
+	if udpHost != "" {
+		log.Printf("[hub] UDP host override: %s", udpHost)
 	}
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("[hub] server error: %v", err)

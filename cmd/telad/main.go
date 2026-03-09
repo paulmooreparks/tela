@@ -24,13 +24,13 @@ package main
 import (
 	"crypto/ecdh"
 	"crypto/rand"
-	mathrand "math/rand"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	mathrand "math/rand"
 	"net"
 	"net/netip"
 	"net/url"
@@ -79,6 +79,7 @@ type controlMessage struct {
 	Services  []serviceDescriptor `json:"services,omitempty"`
 	Token     string   `json:"token,omitempty"`
 	Port      int      `json:"port,omitempty"` // single port (udp-offer)
+	Host      string   `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
 	SessionID  string `json:"sessionId,omitempty"`
 	SessionIdx int    `json:"sessionIdx,omitempty"`
 }
@@ -921,7 +922,7 @@ func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL stri
 			case "udp-offer":
 				if !bind.UDPActive() {
 					lg.Printf("received UDP relay offer (port %d)", msg.Port)
-					tryUDPUpgrade(lg, bind, hubURL, msg.Token, msg.Port)
+					tryUDPUpgrade(lg, bind, hubURL, msg.Token, msg.Port, msg.Host)
 					if bind.UDPActive() {
 						go tryDirectUpgrade(lg, bind, hubURL)
 					}
@@ -947,18 +948,21 @@ func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL stri
 }
 
 // tryUDPUpgrade attempts to switch from WebSocket to UDP relay transport.
-func tryUDPUpgrade(lg *log.Logger, bind *wsbind.Bind, hubURL, tokenHex string, port int) {
-	u, err := url.Parse(hubURL)
-	if err != nil {
-		lg.Printf("UDP upgrade: cannot parse hub URL: %v", err)
-		return
+func tryUDPUpgrade(lg *log.Logger, bind *wsbind.Bind, hubURL, tokenHex string, port int, host string) {
+	if host == "" {
+		u, err := url.Parse(hubURL)
+		if err != nil {
+			lg.Printf("UDP upgrade: cannot parse hub URL: %v", err)
+			return
+		}
+		host = u.Hostname()
 	}
 	token, err := hex.DecodeString(tokenHex)
 	if err != nil {
 		lg.Printf("UDP upgrade: invalid token: %v", err)
 		return
 	}
-	if err := bind.UpgradeUDP(u.Hostname(), port, token); err != nil {
+	if err := bind.UpgradeUDP(host, port, token); err != nil {
 		lg.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
 	}
 }
