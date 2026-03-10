@@ -1,7 +1,7 @@
 # Tela Go Hub (telahubd) — multi-stage Docker image
 #
 # Stage 1: Compile telahubd for Linux amd64.
-# Stage 2: Minimal Alpine image with the binary + static console files.
+# Stage 2: Minimal Alpine image with the binary (console files are embedded).
 #
 # Build context must be the repo root:
 #   docker build -f docker/gohub/Dockerfile -t tela-gohub .
@@ -19,6 +19,7 @@ RUN go mod download
 
 COPY internal/ ./internal/
 COPY cmd/ ./cmd/
+COPY console/ ./console/
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
@@ -38,12 +39,8 @@ WORKDIR /app
 
 COPY --from=builder /out/telahubd /usr/local/bin/telahubd
 
-# Copy hub console static files
-COPY www/ ./www/
-
 ENV HUB_PORT=8080
 ENV HUB_UDP_PORT=41820
-ENV HUB_WWW_DIR=/app/www
 
 EXPOSE 8080
 EXPOSE 41820/udp

@@ -36,6 +36,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"mime"
 	"net"
@@ -53,6 +54,7 @@ import (
 	"github.com/gorilla/websocket"
 	"gopkg.in/yaml.v3"
 
+	"github.com/paulmooreparks/tela/console"
 	"github.com/paulmooreparks/tela/internal/service"
 )
 
@@ -109,7 +111,10 @@ func applyHubConfig(cfg *hubConfig) {
 			hubName = cfg.Name
 		}
 		if cfg.WWWDir != "" {
-			wwwDir = cfg.WWWDir
+			if info, err := os.Stat(cfg.WWWDir); err == nil && info.IsDir() {
+				wwwDir = cfg.WWWDir
+				wwwDirOverride = true
+			}
 		}
 	}
 
@@ -118,7 +123,12 @@ func applyHubConfig(cfg *hubConfig) {
 	udpPort = envInt("HUB_UDP_PORT", udpPort)
 	udpHost = envStr("HUB_UDP_HOST", udpHost)
 	hubName = envStr("HUB_NAME", hubName)
-	wwwDir = envStr("HUB_WWW_DIR", wwwDir)
+	if v := os.Getenv("HUB_WWW_DIR"); v != "" {
+		if info, err := os.Stat(v); err == nil && info.IsDir() {
+			wwwDir = v
+			wwwDirOverride = true
+		}
+	}
 }
 
 func envInt(key string, def int) int {
@@ -138,15 +148,16 @@ func envStr(key, def string) string {
 }
 
 var (
-	httpPort    = 8080
-	udpPort     = 41820
-	udpHost     = "" // if set, included in udp-offer for proxy setups
-	hubName     = ""
-	wwwDir      = "./www"
-	globalAuth  = newAuthStore(nil) // replaced at startup; open hub until config is loaded
-	globalCfg   *hubConfig         // live config; mutated by admin API
-	globalCfgMu sync.Mutex         // protects globalCfg + config file writes
-	globalCfgPath string           // path to YAML config file (for admin API persistence)
+	httpPort       = 8080
+	udpPort        = 41820
+	udpHost        = "" // if set, included in udp-offer for proxy setups
+	hubName        = ""
+	wwwDir         = "./www"
+	wwwDirOverride = false // true when wwwDir explicitly set via config/env
+	globalAuth     = newAuthStore(nil) // replaced at startup; open hub until config is loaded
+	globalCfg      *hubConfig         // live config; mutated by admin API
+	globalCfgMu    sync.Mutex         // protects globalCfg + config file writes
+	globalCfgPath  string             // path to YAML config file (for admin API persistence)
 )
 
 // ── Data structures ────────────────────────────────────────────────
@@ -509,63 +520,78 @@ func handleAPIHistory(w http.ResponseWriter, r *http.Request) {
 
 // ── Static file serving ────────────────────────────────────────────
 
+// wwwFS returns the filesystem used for serving static console files.
+// If wwwDir was explicitly set (via config or env), serve from disk;
+// otherwise serve from the embedded console.FS.
+func wwwFS() fs.FS {
+	if wwwDirOverride {
+		return os.DirFS(wwwDir)
+	}
+	// console.FS has files under "www/", so strip that prefix.
+	sub, _ := fs.Sub(console.FS, "www")
+	return sub
+}
+
+func readFSFile(fsys fs.FS, name string) ([]byte, error) {
+	return fs.ReadFile(fsys, name)
+}
+
 func handleStatic(w http.ResponseWriter, r *http.Request) {
 	urlPath := r.URL.Path
 	if urlPath == "/" {
 		urlPath = "/index.html"
 	}
+	// Strip leading slash for fs.FS paths
+	fsPath := strings.TrimPrefix(urlPath, "/")
 
-	filePath := filepath.Join(wwwDir, filepath.FromSlash(urlPath))
-	filePath = filepath.Clean(filePath)
+	root := wwwFS()
 
-	// Prevent path traversal
-	absWWW, _ := filepath.Abs(wwwDir)
-	absFile, _ := filepath.Abs(filePath)
-	if !strings.HasPrefix(absFile, absWWW) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	info, err := os.Stat(filePath)
+	info, err := fs.Stat(root, fsPath)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	if info.IsDir() {
-		filePath = filepath.Join(filePath, "index.html")
-		info, err = os.Stat(filePath)
+		fsPath = fsPath + "/index.html"
+		info, err = fs.Stat(root, fsPath)
 		if err != nil {
 			http.NotFound(w, r)
 			return
 		}
 	}
 
-	// For index.html, inject the console viewer token so the page can
-	// call /api/status and /api/history without user authentication.
-	if filepath.Base(filePath) == "index.html" {
-		viewerToken := globalAuth.consoleViewerToken()
-		if viewerToken != "" {
-			data, readErr := os.ReadFile(filePath)
-			if readErr == nil {
-				injection := fmt.Sprintf(
-					`<script>window.TELA_CONSOLE_TOKEN=%q;</script>`,
-					viewerToken,
-				)
-				html := strings.Replace(string(data), "</head>", injection+"\n</head>", 1)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write([]byte(html))
-				return
+	// For index.html, inject runtime values so the page can use them
+	// without an extra API call.
+	if strings.HasSuffix(fsPath, "index.html") {
+		data, readErr := readFSFile(root, fsPath)
+		if readErr == nil {
+			var parts []string
+			parts = append(parts, fmt.Sprintf("window.TELA_HUB_VERSION=%q;", version))
+			viewerToken := globalAuth.consoleViewerToken()
+			if viewerToken != "" {
+				parts = append(parts, fmt.Sprintf("window.TELA_CONSOLE_TOKEN=%q;", viewerToken))
 			}
+			injection := "<script>" + strings.Join(parts, "") + "</script>"
+			html := strings.Replace(string(data), "</head>", injection+"\n</head>", 1)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte(html))
+			return
 		}
 	}
 
-	ext := filepath.Ext(filePath)
+	// Serve the file using http.FileServer over the fs.FS.
+	ext := filepath.Ext(fsPath)
 	ct := mime.TypeByExtension(ext)
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
+	data, err := readFSFile(root, fsPath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", ct)
-	http.ServeFile(w, r, filePath)
+	http.ServeContent(w, r, fsPath, info.ModTime(), strings.NewReader(string(data)))
 }
 
 // ── WebSocket relay ────────────────────────────────────────────────
@@ -1355,7 +1381,11 @@ func runHub(stopCh <-chan struct{}) {
 	}
 
 	log.Printf("[hub] telahubd %s listening on http+ws://0.0.0.0:%d", version, httpPort)
-	log.Printf("[hub] static site: %s", wwwDir)
+	if wwwDirOverride {
+		log.Printf("[hub] static site: %s (disk override)", wwwDir)
+	} else {
+		log.Printf("[hub] static site: embedded")
+	}
 	if hubName != "" {
 		log.Printf("[hub] hub name: %s", hubName)
 	}
