@@ -96,7 +96,7 @@ Examples:
 
   tela admin list-portals -hub gohub -token <owner-token>
   tela admin add-portal awansaya -hub gohub -token <owner-token> \
-    -portal-url https://awansaya.net -hub-url https://gohub.example.com
+    -portal-url https://awansaya.net
   tela admin remove-portal awansaya -hub gohub -token <owner-token>
 
 Tip: set TELA_OWNER_TOKEN in your shell profile so you don't need -token
@@ -169,6 +169,59 @@ func adminParseHubAndToken(fs *flag.FlagSet) (string, string) {
 	return hubURL, token
 }
 
+// permuteArgs reorders args so that flag-like tokens (starting with "-")
+// and their values come before positional arguments.  This lets callers
+// write "tela admin add-token alice -hub myhub" instead of requiring all
+// flags before the positional name.
+//
+// Handles: -flag value, -flag=value, and bare positional args.
+// The "--" terminator is respected (everything after it stays as-is).
+func permuteArgs(fs *flag.FlagSet, args []string) []string {
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(a) > 0 && a[0] == '-' {
+			flags = append(flags, a)
+			// If the flag is not -flag=value, consume the next arg as its value
+			// (unless it's a boolean flag, which has no separate value).
+			if !containsEquals(a) && i+1 < len(args) {
+				name := a
+				for len(name) > 0 && name[0] == '-' {
+					name = name[1:]
+				}
+				if f := fs.Lookup(name); f != nil {
+					if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !bf.IsBoolFlag() {
+						i++
+						flags = append(flags, args[i])
+					}
+				} else {
+					// Unknown flag — assume it takes a value.
+					i++
+					if i < len(args) {
+						flags = append(flags, args[i])
+					}
+				}
+			}
+		} else {
+			positional = append(positional, a)
+		}
+	}
+	return append(flags, positional...)
+}
+
+func containsEquals(s string) bool {
+	for _, c := range s {
+		if c == '=' {
+			return true
+		}
+	}
+	return false
+}
+
 func adminCheckError(status int, result map[string]any) {
 	if status >= 200 && status < 300 {
 		return
@@ -236,7 +289,7 @@ func cmdAdminAddToken(args []string) {
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	role := fs.String("role", "", "Role: owner, admin, or omit for user")
-	fs.Parse(args)
+	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
@@ -277,7 +330,7 @@ func cmdAdminRemoveToken(args []string) {
 	fs := flag.NewFlagSet("admin remove-token", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(args)
+	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
@@ -305,7 +358,7 @@ func cmdAdminGrant(args []string) {
 	fs := flag.NewFlagSet("admin grant", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(args)
+	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
@@ -341,7 +394,7 @@ func cmdAdminRevoke(args []string) {
 	fs := flag.NewFlagSet("admin revoke", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(args)
+	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
@@ -372,7 +425,7 @@ func cmdAdminRotate(args []string) {
 	fs := flag.NewFlagSet("admin rotate", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(args)
+	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
@@ -458,13 +511,13 @@ func cmdAdminAddPortal(args []string) {
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	portalURL := fs.String("portal-url", "", "Portal URL (e.g. https://awansaya.net)")
 	portalToken := fs.String("portal-token", "", "Portal admin API token (used once, not stored on hub)")
-	portalHubURL := fs.String("hub-url", "", "Hub's public URL for portal registration")
-	fs.Parse(args)
+	portalHubURL := fs.String("hub-url", "", "Hub's public URL for portal registration (defaults to -hub)")
+	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin add-portal <name> -hub <hub> -token <token> -portal-url <url> -hub-url <url> [-portal-token <token>]")
+		fmt.Fprintln(os.Stderr, "Usage: tela admin add-portal <name> -hub <hub> -token <token> -portal-url <url> [-hub-url <url>] [-portal-token <token>]")
 		os.Exit(1)
 	}
 	name := fs.Arg(0)
@@ -474,15 +527,17 @@ func cmdAdminAddPortal(args []string) {
 		fmt.Fprintln(os.Stderr, "Error: -portal-url is required")
 		os.Exit(1)
 	}
-	if *portalHubURL == "" {
-		fmt.Fprintln(os.Stderr, "Error: -hub-url is required (the hub's public URL for portal registration)")
-		os.Exit(1)
+
+	// Default -hub-url to the HTTPS form of -hub
+	effectiveHubURL := *portalHubURL
+	if effectiveHubURL == "" {
+		effectiveHubURL = wsToHTTP(hub)
 	}
 
 	body := map[string]string{
 		"name":      name,
 		"portalUrl": *portalURL,
-		"hubUrl":    *portalHubURL,
+		"hubUrl":    effectiveHubURL,
 	}
 	if *portalToken != "" {
 		body["portalToken"] = *portalToken
@@ -518,7 +573,7 @@ func cmdAdminRemovePortal(args []string) {
 	fs := flag.NewFlagSet("admin remove-portal", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(args)
+	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
