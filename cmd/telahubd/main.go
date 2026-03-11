@@ -543,6 +543,7 @@ func handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	// Strip leading slash for fs.FS paths
 	fsPath := strings.TrimPrefix(urlPath, "/")
+	fsPath = strings.TrimSuffix(fsPath, "/")
 
 	root := wwwFS()
 

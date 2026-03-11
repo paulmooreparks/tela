@@ -369,12 +369,20 @@
     }
 
     // ── Fetch status + history from all hubs ────────────────────────
+    function authFetch(url) {
+      if (window.TELA_CONSOLE_TOKEN) {
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        url += sep + 'token=' + encodeURIComponent(window.TELA_CONSOLE_TOKEN);
+      }
+      return fetch(url);
+    }
+
     function fetchAllHubs() {
       return Promise.all(HUBS.map(function (hub) {
-        var statusP = fetch(hub.url + '/api/status')
+        var statusP = authFetch(hub.url + '/api/status')
           .then(function (r) { return r.json(); })
           .catch(function () { return { machines: [] }; });
-        var historyP = fetch(hub.url + '/api/history')
+        var historyP = authFetch(hub.url + '/api/history')
           .then(function (r) { return r.json(); })
           .catch(function () { return { events: [] }; });
         return Promise.all([statusP, historyP]).then(function (results) {
@@ -565,7 +573,6 @@
     })();
 
     refreshDashboardData();
-    setInterval(refreshDashboardData, 5000);
   </script>
 </body>
 </html>
