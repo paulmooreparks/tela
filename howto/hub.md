@@ -255,51 +255,207 @@ tela connect -machine barn
 
 ## What must be reachable
 
-Minimum (required):
+| Port | Protocol | Required | Purpose |
+|------|----------|----------|---------|
+| 443 | TCP | Yes | HTTPS + WebSockets (clients and daemons connect here) |
+| 80 | TCP | Yes* | ACME HTTP-01 challenge (Let's Encrypt cert issuance) and HTTP→HTTPS redirect |
+| 41820 | UDP | Optional | UDP relay for faster WireGuard transport (falls back to WebSocket if blocked) |
 
-- **Inbound TCP** for **HTTPS + WebSockets** from both `tela` (clients) and `telad` (daemons).
-  - Publish on **TCP 443** when exposing to the Internet.
-  - Your reverse proxy/tunnel must support WebSocket upgrades end-to-end.
+\* Port 80 is required by Caddy for automatic certificate issuance. If you use DNS-01 challenges or bring your own certificate, you can skip it.
 
-Optional:
+### Open firewall ports (cloud VMs)
 
-- **Inbound UDP** on the hub's UDP relay port (default `41820`) if you want UDP relay.
-  - If you only expose the hub via a TCP-only tunnel, UDP relay will not work; the system will fall back to WebSockets.
+Cloud VMs block inbound traffic by default. You must explicitly allow the ports above in your provider's firewall/security group.
+
+**Azure (Network Security Group):**
+
+```bash
+az network nsg rule create --resource-group <rg> --nsg-name <nsg> \
+  --name AllowTela --priority 1010 --direction Inbound \
+  --access Allow --protocol Tcp --destination-port-ranges 80 443
+
+az network nsg rule create --resource-group <rg> --nsg-name <nsg> \
+  --name AllowTelaUDP --priority 1020 --direction Inbound \
+  --access Allow --protocol Udp --destination-port-ranges 41820
+```
+
+Or in the Azure Portal: VM → Networking → Add inbound port rule.
+
+**AWS (Security Group):**
+
+```bash
+aws ec2 authorize-security-group-ingress --group-id <sg-id> \
+  --ip-permissions \
+  IpProtocol=tcp,FromPort=80,ToPort=80,IpRanges='[{CidrIp=0.0.0.0/0}]' \
+  IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges='[{CidrIp=0.0.0.0/0}]'
+
+aws ec2 authorize-security-group-ingress --group-id <sg-id> \
+  --ip-permissions \
+  IpProtocol=udp,FromPort=41820,ToPort=41820,IpRanges='[{CidrIp=0.0.0.0/0}]'
+```
+
+Or in the AWS Console: EC2 → Security Groups → Edit inbound rules.
+
+**GCP (Firewall rule):**
+
+```bash
+gcloud compute firewall-rules create allow-tela \
+  --allow tcp:80,tcp:443,udp:41820 \
+  --target-tags tela-hub
+```
+
+Then add the `tela-hub` network tag to your VM instance.
+
+**Self-hosted / bare metal:** Ensure `ufw`, `iptables`, or your router forwards these ports to the hub machine.
 
 ## Publish with TLS (recommended)
 
-Publish the hub behind something that terminates TLS and supports WebSockets:
+Running the hub without TLS (`ws://`) works for local development, but production hubs should use TLS (`wss://`). This protects hub authentication tokens in transit and is required by browsers for the hub console over HTTPS.
 
-- Caddy, nginx, HAProxy, Cloudflare Tunnel, etc.
-- Ensure WebSocket upgrade headers are preserved.
+The recommended approach is **Caddy** as a reverse proxy — it handles TLS certificates automatically via Let's Encrypt, supports WebSocket upgrade out of the box, and requires minimal configuration.
 
-Typical shape:
+### Prerequisites
 
-- Public: `https://your-hub.example.com` (TCP 443)
-- Internal: hub container / process on TCP 8080
+1. A **DNS A record** pointing your hub's hostname to the VM's public IP:
+   ```
+   myhub.example.com  →  203.0.113.42
+   ```
+2. **Ports 80 and 443** open inbound (see [firewall section](#open-firewall-ports-cloud-vms) above).
+3. telahubd running on a local port (e.g., 8080) that Caddy will proxy to.
 
-### Example: Cloudflare Tunnel
+### Step 1: Move telahubd to a local port
 
-Add an ingress rule to your cloudflared config:
+Since Caddy needs ports 80 and 443, move telahubd to a non-privileged port that only Caddy can reach:
 
-```yaml
-- hostname: your-hub.example.com
-  service: http://localhost:8080
+```bash
+# Edit the hub config
+sudo vi /etc/tela/telahubd.yaml
+# Change: port: 8080
+
+# Restart the service
+sudo telahubd service stop
+sudo telahubd service start
+
+# Verify it's listening locally
+curl http://localhost:8080/api/status
 ```
 
-Then create a CNAME DNS record pointing `your-hub.example.com` to your tunnel.
+### Step 2: Install Caddy
 
-### Example: Caddy reverse proxy
+**Debian / Ubuntu:**
 
-```caddyfile
-your-hub.example.com {
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install caddy
+```
+
+**RHEL / Fedora:**
+
+```bash
+sudo dnf install 'dnf-command(copr)'
+sudo dnf copr enable @caddy/caddy
+sudo dnf install caddy
+```
+
+**macOS:**
+
+```bash
+brew install caddy
+```
+
+### Step 3: Configure Caddy
+
+```bash
+sudo tee /etc/caddy/Caddyfile << 'EOF'
+myhub.example.com {
     reverse_proxy localhost:8080
 }
+EOF
 ```
 
-### Example: Docker Compose with Caddy + Cloudflare DNS
+Replace `myhub.example.com` with your hub's actual hostname.
 
-See the `docker-compose.yml` and `docker/caddy/Caddyfile` in the Tela repo for a complete example using Caddy with DNS-01 TLS and Cloudflare Tunnel.
+That's the entire config. Caddy automatically:
+- Obtains a Let's Encrypt TLS certificate
+- Renews it before expiry
+- Redirects HTTP → HTTPS
+- Proxies WebSocket upgrade headers
+
+### Step 4: Start Caddy
+
+```bash
+sudo systemctl enable caddy
+sudo systemctl restart caddy
+```
+
+### Step 5: Verify
+
+```bash
+# From any machine on the Internet
+curl https://myhub.example.com/api/status
+
+# Open the hub console in a browser
+# https://myhub.example.com/
+
+# Connect with the CLI
+tela connect -hub wss://myhub.example.com -machine barn
+telad -hub wss://myhub.example.com -machine barn -ports 22,3389
+```
+
+### Alternative: Cloudflare Tunnel (zero inbound ports)
+
+If you don't want to expose any inbound ports, Cloudflare Tunnel makes an outbound connection to Cloudflare's edge, which terminates TLS and proxies traffic back to your hub.
+
+```bash
+# Install cloudflared
+# See https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+# Create a tunnel and configure ingress (~/.cloudflared/config.yml):
+tunnel: <tunnel-id>
+ingress:
+  - hostname: myhub.example.com
+    service: http://localhost:80
+  - service: http_status:404
+
+# Route DNS and run
+cloudflared tunnel route dns my-hub myhub.example.com
+cloudflared tunnel run my-hub
+```
+
+With Cloudflare Tunnel, telahubd can stay on port 80 (default) since Caddy isn't needed. Note that Cloudflare Tunnel is TCP-only — the UDP relay (port 41820) won't work through it, and sessions will use WebSocket transport instead.
+
+### Alternative: nginx + certbot
+
+```bash
+sudo apt install nginx certbot python3-certbot-nginx
+
+sudo tee /etc/nginx/sites-available/tela-hub << 'EOF'
+server {
+    listen 80;
+    server_name myhub.example.com;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+EOF
+
+sudo ln -s /etc/nginx/sites-available/tela-hub /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# Obtain TLS certificate (adds HTTPS config automatically)
+sudo certbot --nginx -d myhub.example.com
+```
 
 ## Register with a hub directory
 
