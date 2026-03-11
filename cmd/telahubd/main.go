@@ -8,7 +8,7 @@
 // Configuration (in order of precedence, highest first):
 //   1. Environment variables  (HUB_PORT, HUB_UDP_PORT, HUB_NAME, HUB_WWW_DIR)
 //   2. YAML config file       (-config telahubd.yaml)
-//   3. Built-in defaults      (port 8080, udpPort 41820, wwwDir ./www)
+//   3. Built-in defaults      (port 80, udpPort 41820, wwwDir ./www)
 //
 // When running as an OS service the binary reads its config from the
 // system-wide location (e.g. /etc/tela/telahubd.yaml or
@@ -74,7 +74,7 @@ type portalEntry struct {
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	Port      int                    `yaml:"port"`              // HTTP+WS listen port (default 8080)
+	Port      int                    `yaml:"port"`              // HTTP+WS listen port (default 80)
 	UDPPort   int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
 	UDPHost   string                 `yaml:"udpHost,omitempty"` // public IP/hostname for UDP relay (when behind proxy)
 	Name      string                 `yaml:"name"`              // Display name for this hub
@@ -150,7 +150,7 @@ func envStr(key, def string) string {
 }
 
 var (
-	httpPort       = 8080
+	httpPort       = 80
 	udpPort        = 41820
 	udpHost        = "" // if set, included in udp-offer for proxy setups
 	hubName        = ""
@@ -1454,7 +1454,7 @@ Edit that file and run "telahubd service restart" to reconfigure.
 
 Install examples:
   telahubd service install -config telahubd.yaml
-  telahubd service install -name myhub -port 8080 -udp-port 41820 -www ./www
+  telahubd service install -name myhub -port 80 -udp-port 41820 -www ./www
 `, cfgPath)
 		os.Exit(1)
 	}
@@ -1486,7 +1486,7 @@ func hubServiceInstall() {
 	fs := flag.NewFlagSet("service install", flag.ExitOnError)
 	cfgFile := fs.String("config", "", "Path to YAML config file (optional — generates one if omitted)")
 	name := fs.String("name", "", "Hub display name")
-	port := fs.Int("port", 8080, "HTTP+WS listen port")
+	port := fs.Int("port", 80, "HTTP+WS listen port")
 	udpPortFlag := fs.Int("udp-port", 41820, "UDP relay port")
 	www := fs.String("www", "./www", "Static file directory")
 	fs.Parse(os.Args[3:])
@@ -2277,7 +2277,7 @@ func loadOrCreateHubConfig(path string) (*hubConfig, error) {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return &hubConfig{
-				Port:    8080,
+				Port:    80,
 				UDPPort: 41820,
 				WWWDir:  "./www",
 			}, nil

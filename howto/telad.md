@@ -53,7 +53,7 @@ machines:
 Notes:
 
 - `hub:` must be reachable from where `telad` runs.
-  - For local development (no TLS), a `ws://localhost:8080` hub URL is typical.
+  - For local development (no TLS), a `ws://localhost` hub URL is typical.
 - If `target:` is omitted, `telad` assumes the services are local to the daemon host.
 
 ## Service reachability checklist

@@ -12,7 +12,7 @@ Purpose:
 	  telad -config telad.yaml
 
 	Single-machine mode (flags):
-	  telad -hub ws://hub:8080 -machine barn -ports 22,3389
+	  telad -hub ws://hub -machine barn -ports 22,3389
 
 Network (per-session addressing):
 
@@ -164,7 +164,7 @@ Usage:
 
 Examples:
   telad -config telad.yaml
-  telad -hub ws://hub:8080 -machine barn -ports 22:SSH,3389:RDP
+  telad -hub ws://hub -machine barn -ports 22:SSH,3389:RDP
   telad -hub wss://hub.example.com -machine barn -ports "22:SSH,3389:RDP,12345:Prometheus" -token s3cret
 
 Options:

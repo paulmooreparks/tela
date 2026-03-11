@@ -38,7 +38,7 @@ To run as a systemd service instead of in the foreground:
 
 ```bash
 # Install the service (creates /etc/systemd/system/telahubd.service)
-sudo telahubd service install -name myhub -port 8080
+sudo telahubd service install -name myhub -port 80
 
 # Start it
 sudo telahubd service start
@@ -67,7 +67,7 @@ For Intel Macs, replace `arm64` with `amd64` in the download URL.
 To run as a launchd service:
 
 ```bash
-sudo telahubd service install -name myhub -port 8080
+sudo telahubd service install -name myhub -port 80
 sudo telahubd service start
 ```
 
@@ -88,7 +88,7 @@ Invoke-WebRequest -Uri https://github.com/paulmooreparks/tela/releases/latest/do
 To install as a Windows service (run from an elevated/Administrator prompt):
 
 ```powershell
-.\telahubd.exe service install -name myhub -port 8080
+.\telahubd.exe service install -name myhub -port 80
 .\telahubd.exe service start
 ```
 
@@ -102,7 +102,7 @@ go build -o telahubd ./cmd/telahubd
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HUB_PORT` | `8080` | HTTP + WebSocket listen port |
+| `HUB_PORT` | `80` | HTTP + WebSocket listen port |
 | `HUB_UDP_PORT` | `41820` | UDP relay port |
 | `HUB_UDP_HOST` | *(empty)* | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
 | `HUB_NAME` | *(empty)* | Display name shown in portal and `/api/status` |
@@ -111,7 +111,7 @@ go build -o telahubd ./cmd/telahubd
 ### Run locally
 
 ```bash
-# Minimal - listens on :8080 (HTTP+WS) and :41820 (UDP)
+# Minimal - listens on :80 (HTTP+WS) and :41820 (UDP)
 telahubd
 
 # With a display name
@@ -131,7 +131,7 @@ The Tela repo includes a ready-made Dockerfile at `docker/gohub/Dockerfile`:
 ```bash
 docker build -f docker/gohub/Dockerfile -t telahubd .
 docker run -d --name telahubd \
-  -p 8080:8080 \
+  -p 80:80 \
   -p 41820:41820/udp \
   -e HUB_NAME=myhub \
   -e HUB_UDP_HOST=myhost.example.com \
@@ -150,10 +150,10 @@ The Docker Compose setup uses a named volume (`hub-data`) to persist the hub con
 
 ```bash
 # Check hub status
-curl http://localhost:8080/api/status
+curl http://localhost/api/status
 
 # Check session history
-curl http://localhost:8080/api/history
+curl http://localhost/api/history
 
 # Check version
 telahubd version

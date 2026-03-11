@@ -55,8 +55,8 @@ hubs:
 
 ```yaml
 hubs:
-  local: ws://localhost:8080
-  gohub-local: ws://localhost:8080
+  local: ws://localhost
+  gohub-local: ws://localhost
 ```
 
 **Example (production):**
@@ -120,7 +120,7 @@ Notes:
 **Top-level schema:**
 
 ```yaml
-hub: ws://localhost:8080
+hub: ws://localhost
 token: ""         # optional default token for all machines
 
 machines:
@@ -192,7 +192,7 @@ machines:
 **Schema:**
 
 ```yaml
-port: 8080
+port: 80
 udpPort: 41820
 udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
 name: owlsnest

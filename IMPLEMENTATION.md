@@ -61,13 +61,13 @@ To keep Cloudflare optional, keep your internal deployment consistent and swap o
 
 **Current setup (1 container):**
 
-- `gohub` (`telahubd`): Go hub, listens on `:8080` (HTTP/WS) and `:41820` (UDP relay). Published on the host as `3002:8080` and `41821:41820/udp`.
+- `gohub` (`telahubd`): Go hub, listens on `:80` (HTTP/WS) and `:41820` (UDP relay). Published on the host as `3002:80` and `41821:41820/udp`.
 - TLS is terminated externally by **Cloudflare Tunnel** (no reverse proxy container needed).
 - `cloudflared` (host service, not a container) routes `gohub.parkscomputing.com` → `http://localhost:3002`.
 
 This yields:
 
-- Tunnel mode: Internet → Cloudflare → `cloudflared` (host) → `gohub:3002` → `telahubd:8080`
+- Tunnel mode: Internet → Cloudflare → `cloudflared` (host) → `gohub:3002` → `telahubd:80`
 
 ---
 
@@ -80,7 +80,7 @@ This means:
 - No inbound port exposure on the host -- cloudflared makes an outbound connection to Cloudflare.
 - Certificate pinning (see §6) is applied between hub and agent, not at the TLS edge.
 
-The Docker Compose service maps `3002:8080` (host:container) for local development access.
+The Docker Compose service maps `3002:80` (host:container) for local development access.
 
 ---
 
@@ -135,7 +135,7 @@ This is the easiest way to avoid inbound firewall changes.
 Practical pattern:
 
 - `cloudflared` -> `https://proxy:443`
-- `proxy` -> `http://hub:8080` (or `ws://hub:8080` depending on your hub endpoints)
+- `proxy` -> `http://hub:80` (or `ws://hub:80` depending on your hub endpoints)
 
 ---
 
@@ -197,10 +197,10 @@ services:
       dockerfile: docker/gohub/Dockerfile
     container_name: tela-gohub
     ports:
-      - "3002:8080"         # HTTP + WebSocket (cloudflared points here)
+      - "3002:80"           # HTTP + WebSocket (cloudflared points here)
       - "41820:41820/udp"    # UDP relay for WireGuard datagrams
     environment:
-      - HUB_PORT=8080
+      - HUB_PORT=80
       - HUB_UDP_PORT=41820
       - HUB_UDP_HOST=${HUB_UDP_HOST:-}  # set to real public IP when behind proxy
       - HUB_NAME=gohub
@@ -327,9 +327,9 @@ tela.exe (Go, WireGuard client) --wss--> telahubd (Go relay) <--ws-- telad (Go, 
 ### Running locally (development)
 
 1. **Build Go binaries:** `go build ./cmd/tela && go build ./cmd/telad && go build ./cmd/telahubd`
-2. **Start the hub:** `./telahubd` (listens on `:8080` HTTP/WS + `:41820` UDP)
-3. **Start telad:** `./telad -hub ws://localhost:8080 -machine mybox -ports "22:SSH:SSH server,3389:RDP:Remote Desktop"`
-4. **Start tela:** `./tela connect -hub ws://localhost:8080 -machine mybox`
+2. **Start the hub:** `./telahubd` (listens on `:80` HTTP/WS + `:41820` UDP)
+3. **Start telad:** `./telad -hub ws://localhost -machine mybox -ports "22:SSH:SSH server,3389:RDP:Remote Desktop"`
+4. **Start tela:** `./tela connect -hub ws://localhost -machine mybox`
 5. Connect to `localhost:<advertised-port>` -- traffic flows through the WireGuard tunnel.
 
 ### Running via Docker (production)

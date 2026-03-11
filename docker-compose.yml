@@ -15,10 +15,10 @@ services:
         VERSION: ${VERSION:-dev}
     container_name: tela-gohub
     ports:
-      - "3002:8080"
+      - "3002:80"
       - "41820:41820/udp"
     environment:
-      - HUB_PORT=8080
+      - HUB_PORT=80
       - HUB_UDP_PORT=41820
       - HUB_UDP_HOST=${HUB_UDP_HOST:-}
       - HUB_NAME=gohub

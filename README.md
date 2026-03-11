@@ -84,22 +84,22 @@ go build -o telahubd ./cmd/telahubd
 ./telahubd
 
 # Terminal 2 - Daemon (exposes SSH + RDP)
-./telad -hub ws://localhost:8080 -machine mybox -ports "22,3389"
+./telad -hub ws://localhost -machine mybox -ports "22,3389"
 
 # Terminal 3 - List machines
-./tela machines -hub ws://localhost:8080
+./tela machines -hub ws://localhost
 
 # Terminal 3 - Connect to a machine
-./tela connect -hub ws://localhost:8080 -machine mybox
+./tela connect -hub ws://localhost -machine mybox
 
 # Connect by service name instead of port
-./tela connect -hub ws://localhost:8080 -machine mybox -services ssh
+./tela connect -hub ws://localhost -machine mybox -services ssh
 ```
 
 Or set environment variables to skip repeating flags:
 
 ```bash
-export TELA_HUB=ws://localhost:8080 TELA_MACHINE=mybox
+export TELA_HUB=ws://localhost TELA_MACHINE=mybox
 ./tela connect
 ./tela machines
 ./tela services
@@ -216,7 +216,7 @@ telad service install -config telad.yaml
 telad service start
 
 # Install telahubd as a service (generates config from flags)
-telahubd service install -name myhub -port 8080
+telahubd service install -name myhub -port 80
 telahubd service start
 
 # Reconfigure: edit the config, then restart

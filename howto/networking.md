@@ -6,7 +6,7 @@ This doc makes the **reachability assumptions** explicit for Tela.
 
 | Component | Needs inbound from Internet | Needs outbound | Default ports / protocols |
 |----------|------------------------------|---------------|---------------------------|
-| Hub (`telahubd`) | Yes | No (special) | Public: TCP 443 for HTTPS+WebSockets; Optional: UDP 41820 for UDP relay. The hub listens on `HUB_PORT` (default `8080`) and `HUB_UDP_PORT` (default `41820`). |
+| Hub (`telahubd`) | Yes | No (special) | Public: TCP 443 for HTTPS+WebSockets; Optional: UDP 41820 for UDP relay. The hub listens on `HUB_PORT` (default `80`) and `HUB_UDP_PORT` (default `41820`). |
 | Daemon (`telad`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `HUB_UDP_PORT` |
 | Client (`tela`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `HUB_UDP_PORT` |
 | Portal (browser UI) | n/a | Yes | Browser fetches `https://<hub>/api/status` and `https://<hub>/api/history` (cross-origin) |
@@ -19,7 +19,7 @@ Minimum:
 
 - Inbound TCP for **HTTPS + WebSockets**.
   - The hub serves HTTPS + WebSockets on a single public origin (typically TCP 443).
-  - Implementation note: the hub serves HTTP+WS on a single port (`HUB_PORT`, default `8080`) and is commonly published on 443 via a reverse proxy / tunnel.
+  - Implementation note: the hub serves HTTP+WS on a single port (`HUB_PORT`, default `80`) and is commonly published on 443 via a reverse proxy / tunnel.
   - In most deployments you publish this via a reverse proxy / tunnel on **TCP 443**.
 - The Hub must allow WebSocket upgrade end-to-end (reverse proxy must forward `Upgrade` / `Connection` headers).
 
@@ -42,7 +42,7 @@ Portal visibility:
 
 1) **Outbound to the Hub**
 
-- Must be able to establish a long-lived WebSocket connection to the hub URL in `telad.yaml` (example: `hub: ws://hub:8080`).
+- Must be able to establish a long-lived WebSocket connection to the hub URL in `telad.yaml` (example: `hub: ws://hub` or `hub: wss://hub.example.com`).
 
 2) **Reachability to the services it exposes**
 

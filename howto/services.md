@@ -85,14 +85,14 @@ one from flags:
 telahubd service install -config telahubd.yaml
 
 # Option 2: generate from flags
-telahubd service install -name myhub -port 8080 -udp-port 41820 -www /opt/tela/www
+telahubd service install -name myhub -port 80 -udp-port 41820 -www /opt/tela/www
 ```
 
 ### Config file format
 
 ```yaml
 # telahubd.yaml - hub server configuration.
-port: 8080            # HTTP + WebSocket listen port
+port: 80            # HTTP + WebSocket listen port
 udpPort: 41820        # UDP relay port
 name: "My Hub"        # Display name (optional)
 wwwDir: ./www         # Static file directory

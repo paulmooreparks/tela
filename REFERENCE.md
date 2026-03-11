@@ -117,7 +117,7 @@ Tela negotiates the best available transport for each connection. See [section 9
 
 ### Starting a hub
 
-The minimal command (uses built-in defaults: port 8080, UDP port 41820):
+The minimal command (uses built-in defaults: port 80, UDP port 41820):
 
 ```bash
 telahubd
@@ -144,7 +144,7 @@ TLS is handled externally by a reverse proxy (Cloudflare Tunnel, Caddy, nginx, e
 **YAML config file** (`telahubd.yaml`):
 
 ```yaml
-port: 8080           # HTTP+WS listen port
+port: 80           # HTTP+WS listen port
 udpPort: 41820       # UDP relay port
 udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
 name: myhub          # Display name for this hub
@@ -155,7 +155,7 @@ wwwDir: ./www        # Static file directory (hub console)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HUB_PORT` | `8080` | HTTP+WS listen port |
+| `HUB_PORT` | `80` | HTTP+WS listen port |
 | `HUB_UDP_PORT` | `41820` | UDP relay port |
 | `HUB_UDP_HOST` | (empty) | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
 | `HUB_NAME` | (empty) | Display name for this hub |
@@ -392,7 +392,7 @@ telad -config telad.yaml
 **Single-machine mode** (quick testing):
 
 ```bash
-telad -hub ws://hub:8080 -machine web01 -ports "22:SSH:OpenSSH server,3389:RDP:Remote Desktop" -token <token>
+telad -hub ws://hub -machine web01 -ports "22:SSH:OpenSSH server,3389:RDP:Remote Desktop" -token <token>
 ```
 
 ### telad flags
@@ -824,7 +824,7 @@ On `hub.example.com`, create a minimal config:
 
 ```yaml
 # telahubd.yaml
-port: 8080
+port: 80
 name: my-hub
 ```
 
@@ -834,7 +834,7 @@ Start the hub:
 telahubd -config telahubd.yaml
 ```
 
-(In production, put a reverse proxy with TLS in front of port 8080.)
+(In production, put a reverse proxy with TLS in front of port 80.)
 
 ### Step 2: Bootstrap auth
 
@@ -1143,7 +1143,7 @@ For networking troubleshooting, see [howto/networking.md](howto/networking.md).
 
 ```bash
 # Start hub
-telahubd                                    # defaults (port 8080, UDP 41820)
+telahubd                                    # defaults (port 80, UDP 41820)
 telahubd -config telahubd.yaml              # with config file
 
 # Token management (local CLI)
