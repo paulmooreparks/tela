@@ -23,6 +23,9 @@ services:
       - HUB_UDP_HOST=${HUB_UDP_HOST:-}
       - HUB_NAME=gohub
       - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
+      - TELA_PORTAL_URL=${TELA_PORTAL_URL:-}
+      - TELA_PORTAL_TOKEN=${TELA_PORTAL_TOKEN:-}
+      - TELA_HUB_URL=${TELA_HUB_URL:-}
     volumes:
       - hub-data:/app/data
     restart: unless-stopped

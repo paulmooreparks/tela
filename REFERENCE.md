@@ -160,6 +160,10 @@ wwwDir: ./www        # Static file directory (hub console)
 | `HUB_UDP_HOST` | (empty) | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
 | `HUB_NAME` | (empty) | Display name for this hub |
 | `HUB_WWW_DIR` | `./www` | Static file directory |
+| `TELA_OWNER_TOKEN` | (empty) | Bootstrap owner token on first startup (ignored if tokens already exist) |
+| `TELA_PORTAL_URL` | (empty) | Portal URL for auto-registration on first startup (e.g. `https://awansaya.net`) |
+| `TELA_PORTAL_TOKEN` | (empty) | Portal admin API token for registration (used once, not persisted) |
+| `TELA_HUB_URL` | (empty) | Hub's own public URL for portal registration (e.g. `https://gohub.example.com`) |
 
 The only flag `telahubd` accepts is `-config <path>`.
 
@@ -219,6 +223,22 @@ TELA_OWNER_TOKEN=$(openssl rand -hex 32) docker compose up -d
 
 On first startup (when no tokens exist), the hub auto-creates an `owner` identity with this token and a wildcard `*` machine ACL. On subsequent restarts, the env var is ignored because tokens already exist in the persisted config.
 
+**Docker portal auto-registration:**
+
+For container deployments, you can also auto-register with a portal on first startup:
+
+```bash
+TELA_OWNER_TOKEN=$(openssl rand -hex 32) \
+TELA_PORTAL_URL=https://awansaya.net \
+TELA_PORTAL_TOKEN=<portal-admin-token> \
+TELA_HUB_URL=https://gohub.example.com \
+docker compose up -d
+```
+
+On first startup (when no portals are configured), the hub discovers the portal's hub directory, registers itself, and stores the sync token. The portal admin token (`TELA_PORTAL_TOKEN`) is used only for the initial POST and is **not** persisted. On subsequent restarts, the env vars are ignored because portal config already exists.
+
+All three env vars (`TELA_PORTAL_URL`, `TELA_PORTAL_TOKEN`, `TELA_HUB_URL`) plus `HUB_NAME` (or `name` in config) are required for auto-registration.
+
 ### Remote token management
 
 Once bootstrapped, use `tela admin` from any workstation (see [section 7](#7-tela-the-client-cli) for details).
@@ -253,6 +273,27 @@ telahubd portal sync
 
 If the portal is an older version that does not return a sync token, the admin API token is stored instead (with a warning). Upgrade the portal to enable automatic syncing.
 
+#### Remote portal management (API)
+
+Portal registrations can also be managed via the hub's admin REST API, which is useful for scripting and container environments where the CLI is unavailable:
+
+```bash
+# List portals
+curl -H "Authorization: Bearer <owner-token>" https://hub.example.com/api/admin/portals
+
+# Add/update a portal
+curl -X POST -H "Authorization: Bearer <owner-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"awansaya","portalUrl":"https://awansaya.net","portalToken":"<portal-admin-token>","hubUrl":"https://hub.example.com"}' \
+  https://hub.example.com/api/admin/portals
+
+# Remove a portal
+curl -X DELETE -H "Authorization: Bearer <owner-token>" \
+  'https://hub.example.com/api/admin/portals?name=awansaya'
+```
+
+The `portalToken` in the POST body is the portal's admin API token. It is used for the registration request but is **not** persisted in the hub config — only the scoped sync token returned by the portal is stored.
+
 ### Hub console
 
 The hub serves a built-in web console that is embedded directly into the `telahubd` binary. No external static files are required — a single binary is the complete deployment.
@@ -273,6 +314,9 @@ If you need to override the embedded console with custom files, set `HUB_WWW_DIR
 | `/api/admin/grant` | POST | owner/admin | Grant connect access to a machine |
 | `/api/admin/revoke` | POST | owner/admin | Revoke connect access |
 | `/api/admin/rotate/<id>` | POST | owner/admin | Regenerate a token |
+| `/api/admin/portals` | GET | owner/admin | List portal registrations |
+| `/api/admin/portals` | POST | owner/admin | Add/update a portal registration |
+| `/api/admin/portals?name=<n>` | DELETE | owner/admin | Remove a portal registration |
 | `/.well-known/tela` | GET | none | Hub directory discovery (RFC 8615) |
 | `/api/hubs` | GET | viewer+ | Hub listing for portal/CLI resolution |
 
@@ -558,7 +602,7 @@ tela connect -hub myhub -machine web01   # "myhub" resolved via the remote
 
 #### tela admin
 
-Remote hub auth management. Requires an owner or admin token.
+Remote hub auth and portal management. Requires an owner or admin token.
 
 ```bash
 tela admin list-tokens   -hub <hub> [-token <token>]
@@ -567,6 +611,10 @@ tela admin remove-token <id> -hub <hub> [-token <token>]
 tela admin grant <id> <machineId> -hub <hub> [-token <token>]
 tela admin revoke <id> <machineId> -hub <hub> [-token <token>]
 tela admin rotate <id> -hub <hub> [-token <token>]
+
+tela admin list-portals -hub <hub> [-token <token>]
+tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> -hub-url <url> [-portal-token <token>]
+tela admin remove-portal <name> -hub <hub> [-token <token>]
 ```
 
 Token resolution for admin commands: `-token` flag, then `TELA_OWNER_TOKEN` env var, then `TELA_TOKEN` env var.
@@ -1159,6 +1207,11 @@ tela admin remove-token <id> -hub <hub> [-token <token>]
 tela admin grant <id> <machineId> -hub <hub> [-token <token>]
 tela admin revoke <id> <machineId> -hub <hub> [-token <token>]
 tela admin rotate <id> -hub <hub> [-token <token>]
+
+# Remote portal management (owner/admin)
+tela admin list-portals -hub <hub> [-token <token>]
+tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> -hub-url <url> [-portal-token <token>]
+tela admin remove-portal <name> -hub <hub> [-token <token>]
 
 # Version
 tela version

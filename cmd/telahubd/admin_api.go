@@ -1,4 +1,4 @@
-// admin_api.go — REST API for remote hub auth management
+// admin_api.go — REST API for remote hub auth and portal management
 //
 // All endpoints require Authorization: Bearer <owner-or-admin-token>.
 // Changes take effect immediately (hot-reload) and are persisted to the
@@ -11,6 +11,9 @@
 //   POST   /api/admin/grant             Grant connect access  {id, machineId}
 //   POST   /api/admin/revoke            Revoke connect access {id, machineId}
 //   POST   /api/admin/rotate/<id>       Regenerate token for identity
+//   GET    /api/admin/portals           List portal registrations
+//   POST   /api/admin/portals           Add/update a portal registration
+//   DELETE /api/admin/portals?name=<n>  Remove a portal registration
 
 package main
 
@@ -496,4 +499,171 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		"id":     id,
 		"token":  newToken,
 	})
+}
+
+// ── GET/POST/DELETE /api/admin/portals ────────────────────────────
+
+type adminPortalView struct {
+	Name         string `json:"name"`
+	URL          string `json:"url"`
+	HubDirectory string `json:"hubDirectory"`
+	HasSyncToken bool   `json:"hasSyncToken"`
+}
+
+type adminPortalAddRequest struct {
+	Name        string `json:"name"`
+	PortalURL   string `json:"portalUrl"`
+	PortalToken string `json:"portalToken,omitempty"` // admin API token (used for registration, not persisted)
+	HubURL      string `json:"hubUrl"`
+}
+
+func handleAdminPortals(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		corsHeaders(w)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if _, ok := requireOwnerOrAdmin(w, r); !ok {
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		adminListPortals(w, r)
+	case http.MethodPost:
+		adminAddPortal(w, r)
+	case http.MethodDelete:
+		adminRemovePortal(w, r)
+	default:
+		corsHeaders(w)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func adminListPortals(w http.ResponseWriter, r *http.Request) {
+	globalCfgMu.Lock()
+	defer globalCfgMu.Unlock()
+
+	portals := make([]adminPortalView, 0)
+	for name, p := range globalCfg.Portals {
+		portals = append(portals, adminPortalView{
+			Name:         name,
+			URL:          p.URL,
+			HubDirectory: p.HubDirectory,
+			HasSyncToken: p.SyncToken != "",
+		})
+	}
+
+	corsHeaders(w)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"portals": portals})
+}
+
+func adminAddPortal(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
+	var req adminPortalAddRequest
+	if err := json.Unmarshal(body, &req); err != nil || req.Name == "" || req.PortalURL == "" || req.HubURL == "" {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "name, portalUrl, and hubUrl are required"})
+		return
+	}
+
+	// Determine hub name from config
+	globalCfgMu.Lock()
+	regHubName := globalCfg.Name
+	globalCfgMu.Unlock()
+	if regHubName == "" {
+		regHubName = hubName
+	}
+	if regHubName == "" {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "hub name not configured (set HUB_NAME or name in config)"})
+		return
+	}
+
+	viewerToken := globalAuth.consoleViewerToken()
+
+	result, err := registerWithPortal(req.PortalURL, req.PortalToken, regHubName, req.HubURL, viewerToken)
+	if err != nil {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	globalCfgMu.Lock()
+	if globalCfg.Portals == nil {
+		globalCfg.Portals = make(map[string]portalEntry)
+	}
+	globalCfg.Portals[req.Name] = result.Entry
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+	globalCfgMu.Unlock()
+
+	status := "created"
+	if result.Updated {
+		status = "updated"
+	}
+
+	log.Printf("[hub] admin: portal %q %s (%s)", req.Name, status, result.Entry.URL)
+
+	corsHeaders(w)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":       status,
+		"name":         req.Name,
+		"url":          result.Entry.URL,
+		"hubDirectory": result.Entry.HubDirectory,
+		"hasSyncToken": result.Entry.SyncToken != "",
+	})
+}
+
+func adminRemovePortal(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "name query param is required"})
+		return
+	}
+
+	globalCfgMu.Lock()
+	defer globalCfgMu.Unlock()
+
+	if globalCfg.Portals == nil {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "portal not found"})
+		return
+	}
+
+	if _, exists := globalCfg.Portals[name]; !exists {
+		corsHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "portal not found"})
+		return
+	}
+
+	delete(globalCfg.Portals, name)
+
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	log.Printf("[hub] admin: removed portal %q", name)
+
+	corsHeaders(w)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "name": name})
 }

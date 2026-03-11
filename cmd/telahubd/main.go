@@ -1339,6 +1339,11 @@ func main() {
 
 	globalAuth = newAuthStore(&cfg.Auth)
 
+	// Portal env-var bootstrap (requires globalAuth for viewer token)
+	if bootstrapPortalsFromEnv(cfg, globalCfgPath) {
+		log.Println("[hub] portal registered from TELA_PORTAL_URL")
+	}
+
 	runHub(nil)
 }
 
@@ -1355,6 +1360,7 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/admin/grant", handleAdminGrant)
 	mux.HandleFunc("/api/admin/revoke", handleAdminRevoke)
 	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate) // /api/admin/rotate/{id}
+	mux.HandleFunc("/api/admin/portals", handleAdminPortals)
 	mux.HandleFunc("/ws", handleWS)
 
 	// WebSocket upgrade on root path too (agents/clients connect to /)
@@ -1651,6 +1657,11 @@ func serviceRunHub(stopCh <-chan struct{}) {
 	globalCfgPath = yamlPath
 	globalAuth = newAuthStore(&cfg.Auth)
 
+	// Portal env-var bootstrap (requires globalAuth for viewer token)
+	if bootstrapPortalsFromEnv(cfg, yamlPath) {
+		log.Println("[hub] portal registered from TELA_PORTAL_URL")
+	}
+
 	runHub(stopCh)
 }
 
@@ -1782,6 +1793,131 @@ func syncViewerTokenToPortals() {
 	}
 }
 
+// registerResult holds the outcome of a portal registration.
+type registerResult struct {
+	Entry   portalEntry
+	Updated bool // true if the portal already had an entry for this hub (upsert)
+}
+
+// registerWithPortal performs hub directory discovery and registers the hub
+// with a portal. adminToken is used for the registration POST only and is
+// NOT included in the returned entry (security: never persisted).
+// Returns a registerResult with the portalEntry to save (containing only
+// the sync token) and whether the registration was an update.
+func registerWithPortal(portalURL, adminToken, regHubName, regHubURL, viewerToken string) (registerResult, error) {
+	portalURL = strings.TrimRight(portalURL, "/")
+	if !strings.HasPrefix(portalURL, "http://") && !strings.HasPrefix(portalURL, "https://") {
+		portalURL = "https://" + portalURL
+	}
+
+	// Discover hub directory endpoint via /.well-known/tela (RFC 8615)
+	hubDirectory := discoverHubDirectory(portalURL, adminToken)
+
+	// Build registration payload
+	payload := map[string]string{
+		"name": regHubName,
+		"url":  regHubURL,
+	}
+	if viewerToken != "" {
+		payload["viewerToken"] = viewerToken
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	apiURL := portalURL + hubDirectory
+
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(string(payloadBytes)))
+	if err != nil {
+		return registerResult{}, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if adminToken != "" {
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return registerResult{}, fmt.Errorf("could not reach %s: %w", portalURL, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	var respData struct {
+		Updated   bool   `json:"updated"`
+		SyncToken string `json:"syncToken"`
+	}
+
+	if resp.StatusCode == 401 {
+		return registerResult{}, fmt.Errorf("unauthorized — check your API token")
+	}
+	if resp.StatusCode == 409 {
+		// Hub already registered — older portals that don't support upsert
+		respData.Updated = true
+	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return registerResult{}, fmt.Errorf("portal returned HTTP %d: %s", resp.StatusCode, string(body))
+	} else {
+		json.Unmarshal(body, &respData)
+	}
+
+	entry := portalEntry{
+		URL:          portalURL,
+		SyncToken:    respData.SyncToken,
+		HubDirectory: hubDirectory,
+	}
+	if respData.SyncToken == "" && adminToken != "" {
+		// Old portal that doesn't issue sync tokens — keep admin token for compat
+		entry.Token = adminToken
+	}
+
+	return registerResult{Entry: entry, Updated: respData.Updated}, nil
+}
+
+// bootstrapPortalsFromEnv checks for TELA_PORTAL_URL. If the hub has no
+// portals configured and the env var is set, it registers with the portal
+// and writes the config. Returns true if bootstrap occurred.
+// Requires globalAuth to be initialized (needs viewer token).
+func bootstrapPortalsFromEnv(cfg *hubConfig, cfgPath string) bool {
+	portalURL := os.Getenv("TELA_PORTAL_URL")
+	if portalURL == "" {
+		return false
+	}
+	if len(cfg.Portals) > 0 {
+		// Already have portal(s) — env var is ignored (same pattern as auth bootstrap).
+		return false
+	}
+
+	portalToken := os.Getenv("TELA_PORTAL_TOKEN") // admin token for registration (not persisted)
+	hubURL := os.Getenv("TELA_HUB_URL")
+	regHubName := cfg.Name
+	if regHubName == "" {
+		regHubName = envStr("HUB_NAME", "")
+	}
+
+	if hubURL == "" || regHubName == "" {
+		log.Println("[hub] portal bootstrap: TELA_HUB_URL and hub name (HUB_NAME or config) required, skipping")
+		return false
+	}
+
+	viewerToken := globalAuth.consoleViewerToken()
+
+	result, err := registerWithPortal(portalURL, portalToken, regHubName, hubURL, viewerToken)
+	if err != nil {
+		log.Printf("[hub] portal bootstrap: %v", err)
+		return false
+	}
+
+	if cfg.Portals == nil {
+		cfg.Portals = make(map[string]portalEntry)
+	}
+	cfg.Portals["default"] = result.Entry
+
+	if cfgPath != "" {
+		_ = writeHubConfig(cfgPath, cfg)
+	}
+	return true
+}
+
 // handlePortalCommand implements "telahubd portal <subcmd>".
 func handlePortalCommand() {
 	if len(os.Args) < 3 {
@@ -1860,11 +1996,6 @@ func cmdPortalAdd() {
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
 
-	// Discover hub directory endpoint via /.well-known/tela (RFC 8615)
-	fmt.Printf("Discovering %s... ", portalURL)
-	hubDirectory := discoverHubDirectory(portalURL, token)
-	fmt.Printf("%s\n", hubDirectory)
-
 	// Load config
 	cfgPath := portalCmdConfigPath()
 	cfg, err := loadOrCreateHubConfig(cfgPath)
@@ -1876,7 +2007,7 @@ func cmdPortalAdd() {
 		cfg.Portals = make(map[string]portalEntry)
 	}
 
-	// Determine hub name and URL for registration
+	// Determine hub name for registration
 	regHubName := cfg.Name
 	if regHubName == "" {
 		regHubName = hubName
@@ -1887,6 +2018,7 @@ func cmdPortalAdd() {
 		regHubName = strings.TrimSpace(regHubName)
 	}
 
+	// Determine hub URL for registration
 	regHubURL := ""
 	fmt.Printf("Hub public URL (e.g. https://gohub.example.com): ")
 	regHubURL, _ = reader.ReadString('\n')
@@ -1913,78 +2045,27 @@ func cmdPortalAdd() {
 		}
 	}
 
-	// Register with the portal: POST to hub directory endpoint
-	apiURL := portalURL + hubDirectory
-	payload := map[string]string{
-		"name": regHubName,
-		"url":  regHubURL,
-	}
-	if viewerToken != "" {
-		payload["viewerToken"] = viewerToken
-	}
-
-	payloadBytes, _ := json.Marshal(payload)
+	// Register with the portal using the shared function
 	fmt.Printf("Registering %q at %s... ", regHubName, portalURL)
-
-	req, err := http.NewRequest("POST", apiURL, strings.NewReader(string(payloadBytes)))
+	result, err := registerWithPortal(portalURL, token, regHubName, regHubURL, viewerToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
 		os.Exit(1)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nError: could not reach %s: %v\n", portalURL, err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	// Parse response body for sync token and update status
-	var respData struct {
-		Updated   bool   `json:"updated"`
-		SyncToken string `json:"syncToken"`
-	}
-
-	if resp.StatusCode == 401 {
-		fmt.Fprintln(os.Stderr, "\nError: unauthorized — check your API token")
-		os.Exit(1)
-	}
-	if resp.StatusCode == 409 {
-		// Hub already registered — older portals that don't support upsert
-		fmt.Println("already registered")
-	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		fmt.Fprintf(os.Stderr, "\nError: portal returned HTTP %d: %s\n", resp.StatusCode, string(body))
-		os.Exit(1)
+	if result.Updated {
+		fmt.Println("updated")
 	} else {
-		json.Unmarshal(body, &respData)
-		if respData.Updated {
-			fmt.Println("updated")
-		} else {
-			fmt.Println("ok")
-		}
+		fmt.Println("ok")
 	}
 
-	// Save portal association to config — store sync token, not admin token
-	entry := portalEntry{
-		URL:          portalURL,
-		SyncToken:    respData.SyncToken,
-		HubDirectory: hubDirectory,
-	}
-	if respData.SyncToken != "" {
+	if result.Entry.SyncToken != "" {
 		fmt.Println("Sync token received — admin token will not be stored in config")
-	} else {
-		// Old portal that doesn't issue sync tokens — keep admin token for compat
-		entry.Token = token
+	} else if token != "" {
 		fmt.Println("Warning: portal did not return a sync token — storing admin token (upgrade portal to enable auto-sync)")
 	}
-	cfg.Portals[name] = entry
+
+	cfg.Portals[name] = result.Entry
 
 	if err := writeHubConfig(cfgPath, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)

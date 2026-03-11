@@ -1,8 +1,8 @@
-// admin.go — "tela admin" subcommands for remote hub auth management
+// admin.go — "tela admin" subcommands for remote hub management
 //
 // These commands call the hub's /api/admin/* REST endpoints so you can
-// manage token identities and machine ACLs from any workstation — no
-// SSH or shell access to the hub required.
+// manage token identities, machine ACLs, and portal registrations from
+// any workstation — no SSH or shell access to the hub required.
 //
 // All commands require an owner or admin token passed via -token flag
 // or TELA_OWNER_TOKEN environment variable (falls back to TELA_TOKEN).
@@ -43,6 +43,12 @@ func cmdAdmin(args []string) {
 		cmdAdminRevoke(rest)
 	case "rotate":
 		cmdAdminRotate(rest)
+	case "list-portals":
+		cmdAdminListPortals(rest)
+	case "add-portal":
+		cmdAdminAddPortal(rest)
+	case "remove-portal":
+		cmdAdminRemovePortal(rest)
 	case "help", "-h", "--help":
 		printAdminUsage()
 	default:
@@ -53,18 +59,23 @@ func cmdAdmin(args []string) {
 }
 
 func printAdminUsage() {
-	fmt.Fprintf(os.Stderr, `tela admin — remote hub auth management
+	fmt.Fprintf(os.Stderr, `tela admin — remote hub auth and portal management
 
 Usage:
   tela admin <command> [options]
 
-Commands:
+Token commands:
   list-tokens    List all token identities on the hub
   add-token      Add a new token identity (returns the token once)
   remove-token   Remove a token identity
   grant          Grant connect access to a machine
   revoke         Revoke connect access to a machine
   rotate         Regenerate token for an identity
+
+Portal commands:
+  list-portals    List portal registrations
+  add-portal      Register hub with a portal
+  remove-portal   Remove a portal registration
 
 All commands require -hub and -token.
 The token must belong to an owner or admin identity.
@@ -82,6 +93,11 @@ Examples:
   tela admin revoke alice my-desktop -hub gohub -token <owner-token>
   tela admin remove-token alice -hub gohub -token <owner-token>
   tela admin rotate alice -hub gohub -token <owner-token>
+
+  tela admin list-portals -hub gohub -token <owner-token>
+  tela admin add-portal awansaya -hub gohub -token <owner-token> \
+    -portal-url https://awansaya.net -hub-url https://gohub.example.com
+  tela admin remove-portal awansaya -hub gohub -token <owner-token>
 
 Tip: set TELA_OWNER_TOKEN in your shell profile so you don't need -token
 every time.  Use a separate TELA_TOKEN for day-to-day tela connect usage.
@@ -379,5 +395,147 @@ func cmdAdminRotate(args []string) {
 	fmt.Printf("  New token: %s\n", newToken)
 	fmt.Println()
 	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("Change is already active (no hub restart needed).")
+}
+
+// ── tela admin list-portals ──────────────────────────────────────
+
+func cmdAdminListPortals(args []string) {
+	fs := flag.NewFlagSet("admin list-portals", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(args)
+	_ = hubURL
+	_ = token
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("GET", hub, "/api/admin/portals", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(result)
+		return
+	}
+
+	portals, _ := result["portals"].([]any)
+	if len(portals) == 0 {
+		fmt.Println("No portals configured.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tURL\tSYNC TOKEN")
+	for _, p := range portals {
+		entry, ok := p.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := entry["name"].(string)
+		url, _ := entry["url"].(string)
+		hasSyncToken, _ := entry["hasSyncToken"].(bool)
+		syncStatus := "no"
+		if hasSyncToken {
+			syncStatus = "yes"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", name, url, syncStatus)
+	}
+	w.Flush()
+}
+
+// ── tela admin add-portal ────────────────────────────────────────
+
+func cmdAdminAddPortal(args []string) {
+	fs := flag.NewFlagSet("admin add-portal", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	portalURL := fs.String("portal-url", "", "Portal URL (e.g. https://awansaya.net)")
+	portalToken := fs.String("portal-token", "", "Portal admin API token (used once, not stored on hub)")
+	portalHubURL := fs.String("hub-url", "", "Hub's public URL for portal registration")
+	fs.Parse(args)
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin add-portal <name> -hub <hub> -token <token> -portal-url <url> -hub-url <url> [-portal-token <token>]")
+		os.Exit(1)
+	}
+	name := fs.Arg(0)
+	hub, tok := adminParseHubAndToken(fs)
+
+	if *portalURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: -portal-url is required")
+		os.Exit(1)
+	}
+	if *portalHubURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub-url is required (the hub's public URL for portal registration)")
+		os.Exit(1)
+	}
+
+	body := map[string]string{
+		"name":      name,
+		"portalUrl": *portalURL,
+		"hubUrl":    *portalHubURL,
+	}
+	if *portalToken != "" {
+		body["portalToken"] = *portalToken
+	}
+
+	status, result, err := adminHTTP("POST", hub, "/api/admin/portals", tok, body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	st, _ := result["status"].(string)
+	url, _ := result["url"].(string)
+	hasSyncToken, _ := result["hasSyncToken"].(bool)
+
+	if st == "updated" {
+		fmt.Printf("Updated portal '%s' (%s)\n", name, url)
+	} else {
+		fmt.Printf("Added portal '%s' (%s)\n", name, url)
+	}
+	if hasSyncToken {
+		fmt.Println("Sync token received — viewer token updates will be automatic.")
+	} else {
+		fmt.Println("Warning: no sync token returned — upgrade the portal to enable auto-sync.")
+	}
+	fmt.Println("Change is already active (no hub restart needed).")
+}
+
+// ── tela admin remove-portal ─────────────────────────────────────
+
+func cmdAdminRemovePortal(args []string) {
+	fs := flag.NewFlagSet("admin remove-portal", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(args)
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin remove-portal <name> -hub <hub> -token <token>")
+		os.Exit(1)
+	}
+	name := fs.Arg(0)
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/portals?name="+name, tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Printf("Removed portal '%s'.\n", name)
 	fmt.Println("Change is already active (no hub restart needed).")
 }
