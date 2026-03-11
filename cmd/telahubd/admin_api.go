@@ -482,6 +482,11 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
+	// If the console-viewer token was rotated, sync to portals
+	if id == "console-viewer" {
+		go syncViewerTokenToPortals()
+	}
+
 	log.Printf("[hub] admin: rotated token for %q", id)
 
 	corsHeaders(w)

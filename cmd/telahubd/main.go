@@ -66,7 +66,8 @@ var version = "dev"
 // portalEntry stores a registered portal association.
 type portalEntry struct {
 	URL          string `yaml:"url"`                     // Portal base URL
-	Token        string `yaml:"token,omitempty"`         // API token for portal authentication
+	Token        string `yaml:"token,omitempty"`         // Legacy admin API token (cleared on new registrations)
+	SyncToken    string `yaml:"syncToken,omitempty"`     // Per-hub sync token for viewer token updates
 	HubDirectory string `yaml:"hubDirectory,omitempty"` // Discovered hub directory path
 }
 
@@ -1380,6 +1381,12 @@ func runHub(stopCh <-chan struct{}) {
 	// Start keepalive pinger
 	go runKeepalive()
 
+	// Sync viewer token to portals after a short delay
+	go func() {
+		time.Sleep(2 * time.Second)
+		syncViewerTokenToPortals()
+	}()
+
 	// Graceful shutdown
 	if stopCh != nil {
 		// Service mode: stop when SCM/systemd signals
@@ -1716,6 +1723,65 @@ func discoverHubDirectory(baseURL string, token string) string {
 	return wk.HubDirectory
 }
 
+// syncViewerTokenToPortals pushes the current console-viewer token to all
+// registered portals that have a sync token. Safe to call from goroutines.
+func syncViewerTokenToPortals() {
+	globalCfgMu.Lock()
+	portals := make(map[string]portalEntry)
+	for k, v := range globalCfg.Portals {
+		portals[k] = v
+	}
+	name := globalCfg.Name
+	globalCfgMu.Unlock()
+
+	if name == "" {
+		name = hubName
+	}
+	if name == "" {
+		log.Println("[hub] portal sync: no hub name configured, skipping")
+		return
+	}
+
+	viewerToken := globalAuth.consoleViewerToken()
+	if viewerToken == "" {
+		return
+	}
+
+	for pName, p := range portals {
+		if p.SyncToken == "" {
+			log.Printf("[hub] portal %q: no sync token, skipping (re-register to enable auto-sync)", pName)
+			continue
+		}
+		syncURL := p.URL + p.HubDirectory + "/sync"
+		payload, _ := json.Marshal(map[string]string{
+			"name":        name,
+			"viewerToken": viewerToken,
+		})
+
+		req, err := http.NewRequest("PATCH", syncURL, strings.NewReader(string(payload)))
+		if err != nil {
+			log.Printf("[hub] portal %q sync: request error: %v", pName, err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+p.SyncToken)
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[hub] portal %q sync: %v", pName, err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode == 200 {
+			log.Printf("[hub] portal %q: viewer token synced", pName)
+		} else {
+			log.Printf("[hub] portal %q sync: HTTP %d", pName, resp.StatusCode)
+		}
+	}
+}
+
 // handlePortalCommand implements "telahubd portal <subcmd>".
 func handlePortalCommand() {
 	if len(os.Args) < 3 {
@@ -1730,6 +1796,8 @@ func handlePortalCommand() {
 		cmdPortalRemove()
 	case "list", "ls":
 		cmdPortalList()
+	case "sync":
+		cmdPortalSync()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown portal subcommand: %s\n", subcmd)
 		printPortalUsage()
@@ -1747,6 +1815,7 @@ Usage:
   telahubd portal add <name> <url> [-config <path>]    Register with a portal
   telahubd portal remove <name> [-config <path>]        Unregister from a portal
   telahubd portal list [-config <path>]                  List portal registrations
+  telahubd portal sync [-config <path>]                  Push viewer token to all portals
 
 Examples:
   telahubd portal add awansaya https://awansaya.net
@@ -1877,6 +1946,12 @@ func cmdPortalAdd() {
 
 	body, _ := io.ReadAll(resp.Body)
 
+	// Parse response body for sync token and update status
+	var respData struct {
+		Updated   bool   `json:"updated"`
+		SyncToken string `json:"syncToken"`
+	}
+
 	if resp.StatusCode == 401 {
 		fmt.Fprintln(os.Stderr, "\nError: unauthorized — check your API token")
 		os.Exit(1)
@@ -1888,23 +1963,28 @@ func cmdPortalAdd() {
 		fmt.Fprintf(os.Stderr, "\nError: portal returned HTTP %d: %s\n", resp.StatusCode, string(body))
 		os.Exit(1)
 	} else {
-		// Check if the portal reports this was an update vs a new registration
-		var respData struct {
-			Updated bool `json:"updated"`
-		}
-		if json.Unmarshal(body, &respData) == nil && respData.Updated {
+		json.Unmarshal(body, &respData)
+		if respData.Updated {
 			fmt.Println("updated")
 		} else {
 			fmt.Println("ok")
 		}
 	}
 
-	// Save portal association to config
-	cfg.Portals[name] = portalEntry{
+	// Save portal association to config — store sync token, not admin token
+	entry := portalEntry{
 		URL:          portalURL,
-		Token:        token,
+		SyncToken:    respData.SyncToken,
 		HubDirectory: hubDirectory,
 	}
+	if respData.SyncToken != "" {
+		fmt.Println("Sync token received — admin token will not be stored in config")
+	} else {
+		// Old portal that doesn't issue sync tokens — keep admin token for compat
+		entry.Token = token
+		fmt.Println("Warning: portal did not return a sync token — storing admin token (upgrade portal to enable auto-sync)")
+	}
+	cfg.Portals[name] = entry
 
 	if err := writeHubConfig(cfgPath, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
@@ -2007,6 +2087,46 @@ func cmdPortalList() {
 		}
 		fmt.Printf("%-20s %-40s %s\n", n, p.URL, tokenDisplay)
 	}
+}
+
+func cmdPortalSync() {
+	cfgPath := portalCmdConfigPath()
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if cfg.Portals == nil || len(cfg.Portals) == 0 {
+		fmt.Println("No portals configured.")
+		fmt.Println("Add one with: telahubd portal add <name> <url>")
+		return
+	}
+
+	// Load config into globals so syncViewerTokenToPortals can access them
+	globalCfgMu.Lock()
+	globalCfg = cfg
+	globalCfgMu.Unlock()
+	globalAuth = newAuthStore(&cfg.Auth)
+
+	viewerToken := globalAuth.consoleViewerToken()
+	if viewerToken == "" {
+		fmt.Println("No viewer token configured — nothing to sync.")
+		return
+	}
+
+	name := cfg.Name
+	if name == "" {
+		name = hubName
+	}
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "Error: no hub name configured (set 'name' in config or HUB_NAME env)")
+		os.Exit(1)
+	}
+
+	fmt.Printf("Syncing viewer token for %q to %d portal(s)...\n", name, len(cfg.Portals))
+	syncViewerTokenToPortals()
+	fmt.Println("Done.")
 }
 
 // ── User / auth management subcommand ──────────────────────────────

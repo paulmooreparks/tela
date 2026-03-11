@@ -231,11 +231,35 @@ Register your hub with a portal (like Awan Saya) for hub name resolution:
 telahubd portal add myportal https://awansaya.net
 telahubd portal list
 telahubd portal remove myportal
+telahubd portal sync                        # push viewer token to all portals
 ```
+
+Registration is idempotent — running `portal add` for an already-registered hub updates the existing entry (URL and viewer token) rather than failing.
+
+#### Sync tokens
+
+When a portal supports sync tokens, `portal add` returns a per-hub sync token. This token is scoped to a single hub and can only update that hub's viewer token on the portal. The hub stores the sync token in its config and does **not** persist the portal's admin API token.
+
+The hub automatically syncs its viewer token to all registered portals:
+
+- **On startup** (after a 2-second delay)
+- **On console-viewer token rotation** (via the admin API)
+
+You can also trigger a manual sync:
+
+```bash
+telahubd portal sync
+```
+
+If the portal is an older version that does not return a sync token, the admin API token is stored instead (with a warning). Upgrade the portal to enable automatic syncing.
 
 ### Hub console
 
-The hub auto-generates a `console-viewer` token at startup. The built-in web console uses this token to show registered machines, services, and session history without requiring user login.
+The hub serves a built-in web console that is embedded directly into the `telahubd` binary. No external static files are required — a single binary is the complete deployment.
+
+The console uses a `console-viewer` token (auto-generated at startup) to show registered machines, services, and session history without requiring user login. The token is delivered to the browser as an `HttpOnly` cookie (`tela_viewer`), so API calls authenticate transparently.
+
+If you need to override the embedded console with custom files, set `HUB_WWW_DIR` (or `wwwDir` in YAML). When set, the hub serves from disk instead of the embedded filesystem.
 
 ### Hub API endpoints
 
@@ -970,12 +994,25 @@ After your hub is running and publicly reachable, register it with a portal usin
 telahubd portal add myportal https://awansaya.net
 ```
 
-This adds your hub to the portal's directory. The portal will then proxy status checks from the browser to your hub using a stored viewer token.
+This adds your hub to the portal's directory. The portal will then proxy status checks from the browser to your hub using the stored viewer token.
 
 You will be prompted for:
 - The hub's public URL (for example, `https://hub.example.com`)
-- A viewer token for the hub (created with `telahubd user add <name> -role viewer` or via the admin API)
 - A portal admin token (obtained from the portal's settings page)
+
+The hub's `console-viewer` token is sent automatically — you do not need to create a separate viewer token.
+
+Registration is idempotent. Running the same command again updates the hub's URL and viewer token on the portal. The portal returns a scoped sync token so that future viewer-token updates happen automatically (see [portal registration](#portal-registration) in section 5).
+
+### Viewer token synchronization
+
+Once registered, the hub keeps the portal's viewer token up to date automatically:
+
+- On every hub restart, the current viewer token is pushed to all portals.
+- When the `console-viewer` token is rotated (via the admin API), the new token is pushed immediately.
+- You can also run `telahubd portal sync` to push manually.
+
+If the portal shows a yellow "Auth Error" status for a hub, the viewer token is out of sync. Running `telahubd portal sync` or restarting the hub resolves this.
 
 ### Configuring the tela client with Awan Saya
 
@@ -1009,7 +1046,7 @@ https://awansaya.net/portal/
 
 The portal shows a card for each registered hub. Each card displays:
 - Hub name and URL
-- Online/offline status
+- Status indicator: green (online), yellow (auth error), or red (unreachable)
 - Registered machines and their connection status
 - Recent history
 
@@ -1074,6 +1111,7 @@ telahubd user rotate <id>                   # regenerate token
 telahubd portal add <name> <portal-url>
 telahubd portal remove <name>
 telahubd portal list
+telahubd portal sync
 
 # OS service management
 telahubd service install -config telahubd.yaml
