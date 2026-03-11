@@ -12,9 +12,85 @@ A **Tela Hub** is the rendezvous + relay point that:
 
 `telahubd` is the Go-native hub server. Single binary, no runtime dependencies. It serves HTTP, WebSocket relay, and UDP relay on one process.
 
-### Download
+### Install (bare-metal)
 
 Pre-built binaries for Windows, Linux, and macOS are available on the [GitHub Releases](https://github.com/paulmooreparks/tela/releases) page.
+
+#### Linux (amd64)
+
+```bash
+# Download
+curl -Lo telahubd https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-linux-amd64
+chmod +x telahubd
+sudo mv telahubd /usr/local/bin/
+
+# Bootstrap auth (creates /etc/tela/telahubd.yaml with an owner token)
+sudo telahubd user bootstrap
+# → SAVE THE PRINTED TOKEN — it will not be shown again.
+
+# Start the hub
+sudo telahubd
+```
+
+For ARM64 (Raspberry Pi, AWS Graviton, etc.), replace `amd64` with `arm64` in the download URL.
+
+To run as a systemd service instead of in the foreground:
+
+```bash
+# Install the service (creates /etc/systemd/system/telahubd.service)
+sudo telahubd service install -name myhub -port 8080
+
+# Start it
+sudo telahubd service start
+
+# Check logs
+journalctl -u telahubd -f
+```
+
+#### macOS (Apple Silicon)
+
+```bash
+# Download
+curl -Lo telahubd https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-darwin-arm64
+chmod +x telahubd
+sudo mv telahubd /usr/local/bin/
+
+# Bootstrap auth
+sudo telahubd user bootstrap
+
+# Start the hub
+telahubd
+```
+
+For Intel Macs, replace `arm64` with `amd64` in the download URL.
+
+To run as a launchd service:
+
+```bash
+sudo telahubd service install -name myhub -port 8080
+sudo telahubd service start
+```
+
+#### Windows (amd64)
+
+```powershell
+# Download (PowerShell)
+Invoke-WebRequest -Uri https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-windows-amd64.exe -OutFile telahubd.exe
+
+# Bootstrap auth (creates %ProgramData%\Tela\telahubd.yaml)
+.\telahubd.exe user bootstrap
+# → SAVE THE PRINTED TOKEN
+
+# Start the hub
+.\telahubd.exe
+```
+
+To install as a Windows service (run from an elevated/Administrator prompt):
+
+```powershell
+.\telahubd.exe service install -name myhub -port 8080
+.\telahubd.exe service start
+```
 
 ### Build from source
 
@@ -106,10 +182,15 @@ On first startup the hub creates an `owner` identity and a `console-viewer` iden
 
 ### Bare-metal / direct deployment
 
-If running `telahubd` directly (not in Docker), you can either:
+If running `telahubd` directly (not in Docker), use `user bootstrap` to generate the first owner token:
 
-1. Set `TELA_OWNER_TOKEN` as an environment variable before starting, or
-2. Create a `telahubd.yaml` config file with an `auth:` block (see [CONFIGURATION.md](../CONFIGURATION.md))
+```bash
+sudo telahubd user bootstrap
+```
+
+This creates `/etc/tela/telahubd.yaml` (or `%ProgramData%\Tela\telahubd.yaml` on Windows) with an owner identity and a wildcard machine ACL. See the [Install (bare-metal)](#install-bare-metal) section above for the full curl-to-running walkthrough.
+
+Alternatively, set `TELA_OWNER_TOKEN` as an environment variable before starting, or create a config file manually (see [CONFIGURATION.md](../CONFIGURATION.md)).
 
 ### Managing tokens remotely with `tela admin`
 
