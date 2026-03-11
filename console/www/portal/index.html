@@ -388,7 +388,7 @@
         return Promise.all([statusP, historyP]).then(function (results) {
           var data = results[0];
           var hubName = (data && data.hubName) ? data.hubName : hub.name;
-          return { hub: hub, hubName: hubName, status: data.machines ? 'online' : 'offline', data: data, history: results[1].events || [] };
+          return { hub: hub, hubName: hubName, status: (data.machines && !data.error) ? 'online' : (data.error === 'auth_required') ? 'auth_error' : 'offline', data: data, history: results[1].events || [] };
         });
       }));
     }
@@ -436,9 +436,10 @@
         var online = machines.filter(function (m) { return m.agentConnected; }).length;
         var sessions = machines.reduce(function (sum, m) { return sum + (m.sessionCount || 0); }, 0);
 
-        var dot = r.status === 'online'
-          ? '<span class="dot green"></span> Online'
-          : '<span class="dot red"></span> Unreachable';
+        var dot;
+        if (r.status === 'online') dot = '<span class="dot green"></span> Online';
+        else if (r.status === 'auth_error') dot = '<span class="dot yellow"></span> Auth Error';
+        else dot = '<span class="dot red"></span> Unreachable';
 
         var consoleLink = '<a class="btn-console" href="' + escHtml(r.hub.url) + '/" target="_blank">&#x2197; Console</a>';
 

@@ -371,7 +371,13 @@ func tokenFromRequest(r *http.Request) string {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
-	return r.URL.Query().Get("token")
+	if t := r.URL.Query().Get("token"); t != "" {
+		return t
+	}
+	if c, err := r.Cookie("tela_viewer"); err == nil {
+		return c.Value
+	}
+	return ""
 }
 
 func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
@@ -561,14 +567,26 @@ func handleStatic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// For index.html, inject runtime values so the page can use them
-	// without an extra API call.
+	// For index.html, inject runtime values and set a viewer cookie so
+	// same-origin API fetches are authenticated automatically.
 	if strings.HasSuffix(fsPath, "index.html") {
 		data, readErr := readFSFile(root, fsPath)
 		if readErr == nil {
+			viewerToken := globalAuth.consoleViewerToken()
+
+			// Set HttpOnly cookie so browser API fetches include the token.
+			if viewerToken != "" {
+				http.SetCookie(w, &http.Cookie{
+					Name:     "tela_viewer",
+					Value:    viewerToken,
+					Path:     "/",
+					HttpOnly: true,
+					SameSite: http.SameSiteLaxMode,
+				})
+			}
+
 			var parts []string
 			parts = append(parts, fmt.Sprintf("window.TELA_HUB_VERSION=%q;", version))
-			viewerToken := globalAuth.consoleViewerToken()
 			if viewerToken != "" {
 				parts = append(parts, fmt.Sprintf("window.TELA_CONSOLE_TOKEN=%q;", viewerToken))
 			}
@@ -1864,13 +1882,21 @@ func cmdPortalAdd() {
 		os.Exit(1)
 	}
 	if resp.StatusCode == 409 {
-		// Hub already registered — treat as success (idempotent)
+		// Hub already registered — older portals that don't support upsert
 		fmt.Println("already registered")
 	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		fmt.Fprintf(os.Stderr, "\nError: portal returned HTTP %d: %s\n", resp.StatusCode, string(body))
 		os.Exit(1)
 	} else {
-		fmt.Println("ok")
+		// Check if the portal reports this was an update vs a new registration
+		var respData struct {
+			Updated bool `json:"updated"`
+		}
+		if json.Unmarshal(body, &respData) == nil && respData.Updated {
+			fmt.Println("updated")
+		} else {
+			fmt.Println("ok")
+		}
 	}
 
 	// Save portal association to config
