@@ -33,6 +33,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -2274,7 +2275,7 @@ func userCmdConfigPath() string {
 func loadOrCreateHubConfig(path string) (*hubConfig, error) {
 	cfg, err := loadHubConfig(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return &hubConfig{
 				Port:    8080,
 				UDPPort: 41820,
