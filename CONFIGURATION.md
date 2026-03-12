@@ -248,8 +248,8 @@ Use `"*"` as the machine key for a wildcard rule that applies to all machines.
 
 ### Auth evaluation order
 
-1. If `auth.tokens` is empty → open mode, allow everything.
-2. Incoming request must carry a valid token (`Authorization: Bearer <token>` header or `?token=` query parameter).
+1. If `auth.tokens` is empty → open mode, allow everything. (Note: on first startup with no tokens, the hub auto-generates an owner token, so open mode requires deliberate configuration.)
+2. Incoming request must carry a valid token via `Authorization: Bearer <token>` header (or cookie for browser sessions).
 3. Owner/admin tokens bypass per-machine checks.
 4. For `register`: check `machines[machineId].registerToken` then `machines["*"].registerToken`.
 5. For `connect`: check `machines[machineId].connectTokens` then `machines["*"].connectTokens`.

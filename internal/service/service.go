@@ -69,7 +69,7 @@ func ConfigPath(binaryName string) string {
 // SaveConfig writes the service configuration to disk.
 func SaveConfig(binaryName string, cfg *Config) error {
 	dir := ConfigDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create config dir %s: %w", dir, err)
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -77,7 +77,7 @@ func SaveConfig(binaryName string, cfg *Config) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 	path := ConfigPath(binaryName)
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil

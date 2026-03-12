@@ -403,7 +403,7 @@ telad -hub ws://hub -machine web01 -ports "22:SSH:OpenSSH server,3389:RDP:Remote
 | `-hub` | `TELA_HUB` | (none) | Hub WebSocket URL |
 | `-machine` | `TELA_MACHINE` | (none) | Machine name for hub registry |
 | `-token` | `TELA_TOKEN` | (none) | Hub auth token |
-| `-ports` | `TELA_PORTS` | `3389` | Comma-separated port specs (see below) |
+| `-ports` | `TELA_PORTS` | (required) | Comma-separated port specs (see below) |
 | `-target-host` | `TELA_TARGET_HOST` | `127.0.0.1` | Target service host (gateway mode) |
 | `-v` | | | Verbose logging |
 

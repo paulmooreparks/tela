@@ -68,9 +68,9 @@ Requirements:
 - WebSockets must be supported (most tunnels/proxies support this).
 
 ---
-## Step 1.5 - Enable authentication (recommended)
+## Step 1.5 - Authentication
 
-By default the hub runs in open mode. For any Internet-exposed hub, you should enable token-based auth.
+The hub auto-generates an owner token on first startup (secure by default). For bare-metal installations, the token is printed to stdout — save it. For Docker, set `TELA_OWNER_TOKEN` so you have a known token to use for remote management.
 
 ### Quick path (Docker)
 

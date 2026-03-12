@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"text/tabwriter"
 	"time"
@@ -113,6 +114,13 @@ func adminTokenDefault() string {
 	return os.Getenv("TELA_TOKEN")
 }
 
+// adminClient is a shared HTTP client for admin API calls, avoiding a
+// new client (and TLS handshake) per request.
+var adminClient = &http.Client{
+	Timeout:   10 * time.Second,
+	Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+}
+
 // adminHTTP performs an HTTP request against the hub's admin API.
 func adminHTTP(method, hubURL, path, token string, body any) (int, map[string]any, error) {
 	apiURL := wsToHTTP(hubURL) + path
@@ -137,11 +145,7 @@ func adminHTTP(method, hubURL, path, token string, body any) (int, map[string]an
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
-	}
-	resp, err := client.Do(req)
+	resp, err := adminClient.Do(req)
 	if err != nil {
 		return 0, nil, fmt.Errorf("could not reach hub: %w", err)
 	}
@@ -341,7 +345,7 @@ func cmdAdminRemoveToken(args []string) {
 	id := fs.Arg(0)
 	hub, tok := adminParseHubAndToken(fs)
 
-	status, result, err := adminHTTP("DELETE", hub, "/api/admin/tokens?id="+id, tok, nil)
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/tokens?id="+url.QueryEscape(id), tok, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -584,7 +588,7 @@ func cmdAdminRemovePortal(args []string) {
 	name := fs.Arg(0)
 	hub, tok := adminParseHubAndToken(fs)
 
-	status, result, err := adminHTTP("DELETE", hub, "/api/admin/portals?name="+name, tok, nil)
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/portals?name="+url.QueryEscape(name), tok, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

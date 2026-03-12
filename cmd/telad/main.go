@@ -12,7 +12,7 @@ Purpose:
 	  telad -config telad.yaml
 
 	Single-machine mode (flags):
-	  telad -hub ws://hub -machine barn -ports 22,3389
+	  telad -hub ws://hub -machine barn -ports 22:SSH,3389:RDP
 
 Network (per-session addressing):
 
@@ -176,7 +176,7 @@ Options:
 	hubURL := flag.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
 	machineID := flag.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID to register (env: TELA_MACHINE)")
 	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
-	portsStr := flag.String("ports", envOrDefault("TELA_PORTS", "3389"), "Comma-separated port specs: port[:name[:description]]  e.g. 22:SSH,3389:RDP,12345:MyApp (env: TELA_PORTS)")
+	portsStr := flag.String("ports", envOrDefault("TELA_PORTS", ""), "Comma-separated port specs: port[:name[:description]]  e.g. 22:SSH,3389:RDP,12345:MyApp (env: TELA_PORTS)")
 	targetHost := flag.String("target-host", envOrDefault("TELA_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELA_TARGET_HOST)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
@@ -191,12 +191,13 @@ Options:
 	log.SetPrefix("[telad] ")
 
 	// Handle graceful shutdown
+	stopCh = make(chan struct{})
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
 		log.Println("shutting down")
-		os.Exit(0)
+		close(stopCh)
 	}()
 
 	// Config-file mode
@@ -215,6 +216,9 @@ Options:
 		os.Exit(1)
 	}
 
+	if *portsStr == "" {
+		log.Fatalf("-ports is required (e.g. -ports 22:SSH,3389:RDP)")
+	}
 	services := parsePortSpecs(*portsStr)
 	if len(services) == 0 {
 		log.Fatalf("no valid ports in: %s", *portsStr)
@@ -338,14 +342,14 @@ func serviceInstall() {
 
 // copyFile copies src to dst, creating parent directories as needed.
 func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
 		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
 	}
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	if err := os.WriteFile(dst, data, 0644); err != nil {
+	if err := os.WriteFile(dst, data, 0600); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
 	return nil
@@ -405,8 +409,16 @@ func serviceStatus() {
 }
 
 // serviceRunDaemon loads the YAML config from the system directory and
-// runs telad. It blocks until stopCh is closed.
-func serviceRunDaemon(stopCh <-chan struct{}) {
+// runs telad. It blocks until svcStop is closed.
+func serviceRunDaemon(svcStop <-chan struct{}) {
+	// Bridge service stop channel to the global stopCh so
+	// runSingleMachine exits its reconnect loop on shutdown.
+	stopCh = make(chan struct{})
+	go func() {
+		<-svcStop
+		close(stopCh)
+	}()
+
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[telad] ")
 
@@ -429,22 +441,22 @@ func serviceRunDaemon(stopCh <-chan struct{}) {
 	log.Printf("loaded config from %s", yamlPath)
 	go runMultiMachine(fileCfg)
 
-	<-stopCh
+	<-svcStop
 	log.Println("service stopping")
 }
 
 func serviceRun() {
-	stopCh = make(chan struct{})
+	svcStop := make(chan struct{})
 
 	// Handle signals for non-Windows "service run" (systemd/launchd)
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		close(stopCh)
+		close(svcStop)
 	}()
 
-	serviceRunDaemon(stopCh)
+	serviceRunDaemon(svcStop)
 }
 
 func runAsWindowsService() {
@@ -564,9 +576,25 @@ func runSingleMachine(hubURL string, reg registration, targetHost string) {
 		if wasRegistered {
 			attempt = 0 // was registered — reset backoff
 		}
+
+		// Check for shutdown before reconnecting
+		select {
+		case <-stopCh:
+			logger.Printf("shutdown received, exiting reconnect loop")
+			return
+		default:
+		}
+
 		delay := reconnectDelay(attempt, maxDelay)
 		logger.Printf("reconnecting in %s...", delay.Round(time.Second))
-		time.Sleep(delay)
+
+		// Wait for delay or shutdown, whichever comes first
+		select {
+		case <-time.After(delay):
+		case <-stopCh:
+			logger.Printf("shutdown received, exiting reconnect loop")
+			return
+		}
 		attempt++
 	}
 }
@@ -779,7 +807,11 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 		subnet = 1
 	}
 	if subnet > 254 {
-		subnet = 254
+		lg.Printf("[session %s] rejected — session index %d exceeds 254-session limit", sessionID[:8], sessionIdx)
+		ws.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "session limit exceeded"))
+		ws.Close()
+		return
 	}
 	sessionAgentIP := fmt.Sprintf("10.77.%d.1", subnet)
 	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)

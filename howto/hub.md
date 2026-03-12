@@ -159,9 +159,11 @@ curl http://localhost/api/history
 telahubd version
 ```
 
-## Enable authentication (recommended)
+## Authentication
 
-By default, the hub runs in **open mode**. Any agent or client can connect without credentials. To lock it down, enable token-based authentication.
+On first startup, the hub auto-generates an owner token and prints it to stdout (secure by default). Save this token — it will not be displayed again.
+
+If you need an open hub (no authentication), remove all tokens from the config file and restart. The hub will log a warning when running in open mode.
 
 ### Docker deployment (env-var bootstrap)
 

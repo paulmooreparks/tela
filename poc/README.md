@@ -287,7 +287,7 @@ telad -hub <url> -machine <name> -ports <list> [-target-host <host>] [-token <se
 | `-config` | `$TELA_CONFIG` | Path to YAML config file |
 | `-hub` | `$TELA_HUB` | Hub WebSocket URL |
 | `-machine` | `$TELA_MACHINE` | Machine name to register as |
-| `-ports` | `$TELA_PORTS` or `3389` | Comma-separated ports to advertise |
+| `-ports` | `$TELA_PORTS` (required) | Comma-separated ports to advertise |
 | `-target-host` | `$TELA_TARGET_HOST` or `127.0.0.1` | Host where services are running |
 | `-token` | `$TELA_TOKEN` | Authentication token |
 

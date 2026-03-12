@@ -26,16 +26,13 @@ import (
 )
 
 // requireOwnerOrAdmin checks the Authorization header and returns the
-// caller token. If auth is disabled, returns "" with ok=true (open hub).
-// If auth is enabled and caller is not owner/admin, writes 403 and returns ok=false.
+// caller token. Admin API always requires owner/admin auth, even on
+// open hubs — an open hub means "open for relay traffic", not "open
+// for management".
 func requireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (string, bool) {
 	callerToken := tokenFromRequest(r)
-	if !globalAuth.isEnabled() {
-		// Open hub — admin API still works (no protection needed)
-		return callerToken, true
-	}
 	if !globalAuth.isOwnerOrAdmin(callerToken) {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
@@ -88,7 +85,7 @@ type adminAddResponse struct {
 
 func handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -105,14 +102,14 @@ func handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		adminRemoveToken(w, r)
 	default:
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
 func adminListTokens(w http.ResponseWriter, r *http.Request) {
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
+	globalCfgMu.RLock()
+	defer globalCfgMu.RUnlock()
 
 	tokens := make([]adminTokenView, 0, len(globalCfg.Auth.Tokens))
 	for _, t := range globalCfg.Auth.Tokens {
@@ -131,7 +128,7 @@ func adminListTokens(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"tokens": tokens})
 }
@@ -140,14 +137,14 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var req adminAddRequest
 	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
 		return
 	}
 	if req.Role != "" && req.Role != "owner" && req.Role != "admin" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "role must be 'owner', 'admin', or omitted"})
@@ -158,7 +155,7 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 	defer globalCfgMu.Unlock()
 
 	if findTokenEntryInCfg(req.ID) != nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]string{"error": "identity already exists"})
@@ -167,7 +164,7 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 
 	token, err := generateToken()
 	if err != nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "token generation failed"})
@@ -186,7 +183,7 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] admin: added identity %q (role: %s)", req.ID, req.Role)
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(adminAddResponse{
@@ -199,7 +196,7 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 func adminRemoveToken(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "id query param is required"})
@@ -221,7 +218,7 @@ func adminRemoveToken(w http.ResponseWriter, r *http.Request) {
 		filtered = append(filtered, t)
 	}
 	if !found {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
@@ -256,7 +253,7 @@ func adminRemoveToken(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] admin: removed identity %q", id)
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "id": id})
 }
@@ -270,12 +267,12 @@ type adminGrantRequest struct {
 
 func handleAdminGrant(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method != http.MethodPost {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -286,7 +283,7 @@ func handleAdminGrant(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var req adminGrantRequest
 	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
@@ -298,7 +295,7 @@ func handleAdminGrant(w http.ResponseWriter, r *http.Request) {
 
 	entry := findTokenEntryInCfg(req.ID)
 	if entry == nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
@@ -313,7 +310,7 @@ func handleAdminGrant(w http.ResponseWriter, r *http.Request) {
 	// Check if already granted
 	for _, ct := range acl.ConnectTokens {
 		if ct == entry.Token {
-			corsHeaders(w)
+			adminCorsHeaders(w, r)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"status": "already_granted"})
 			return
@@ -329,7 +326,7 @@ func handleAdminGrant(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] admin: granted %q connect to %q", req.ID, req.MachineID)
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "granted", "id": req.ID, "machineId": req.MachineID})
 }
@@ -338,12 +335,12 @@ func handleAdminGrant(w http.ResponseWriter, r *http.Request) {
 
 func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method != http.MethodPost {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -354,7 +351,7 @@ func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var req adminGrantRequest // same shape
 	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
@@ -366,7 +363,7 @@ func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
 
 	entry := findTokenEntryInCfg(req.ID)
 	if entry == nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
@@ -375,7 +372,7 @@ func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
 
 	acl, exists := globalCfg.Auth.Machines[req.MachineID]
 	if !exists {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "no ACL for machine"})
@@ -392,7 +389,7 @@ func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
 		newCT = append(newCT, ct)
 	}
 	if !found {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "identity does not have access to this machine"})
@@ -408,7 +405,7 @@ func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] admin: revoked %q from %q", req.ID, req.MachineID)
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": req.ID, "machineId": req.MachineID})
 }
@@ -417,12 +414,12 @@ func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
 
 func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method != http.MethodPost {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -433,7 +430,7 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 	// Extract id from path: /api/admin/rotate/{id}
 	id := strings.TrimPrefix(r.URL.Path, "/api/admin/rotate/")
 	if id == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "id is required in URL path"})
@@ -445,7 +442,7 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 
 	entry := findTokenEntryInCfg(id)
 	if entry == nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
@@ -455,7 +452,7 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 	oldToken := entry.Token
 	newToken, err := generateToken()
 	if err != nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "token generation failed"})
@@ -492,7 +489,7 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] admin: rotated token for %q", id)
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"status": "rotated",
@@ -519,7 +516,7 @@ type adminPortalAddRequest struct {
 
 func handleAdminPortals(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -536,14 +533,14 @@ func handleAdminPortals(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		adminRemovePortal(w, r)
 	default:
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
 func adminListPortals(w http.ResponseWriter, r *http.Request) {
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
+	globalCfgMu.RLock()
+	defer globalCfgMu.RUnlock()
 
 	portals := make([]adminPortalView, 0)
 	for name, p := range globalCfg.Portals {
@@ -555,7 +552,7 @@ func adminListPortals(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"portals": portals})
 }
@@ -564,7 +561,7 @@ func adminAddPortal(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var req adminPortalAddRequest
 	if err := json.Unmarshal(body, &req); err != nil || req.Name == "" || req.PortalURL == "" || req.HubURL == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "name, portalUrl, and hubUrl are required"})
@@ -572,14 +569,14 @@ func adminAddPortal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine hub name from config
-	globalCfgMu.Lock()
+	globalCfgMu.RLock()
 	regHubName := globalCfg.Name
-	globalCfgMu.Unlock()
+	globalCfgMu.RUnlock()
 	if regHubName == "" {
 		regHubName = hubName
 	}
 	if regHubName == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "hub name not configured (set HUB_NAME or name in config)"})
@@ -590,7 +587,7 @@ func adminAddPortal(w http.ResponseWriter, r *http.Request) {
 
 	result, err := registerWithPortal(req.PortalURL, req.PortalToken, regHubName, req.HubURL, viewerToken)
 	if err != nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -614,7 +611,7 @@ func adminAddPortal(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] admin: portal %q %s (%s)", req.Name, status, result.Entry.URL)
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{
@@ -629,7 +626,7 @@ func adminAddPortal(w http.ResponseWriter, r *http.Request) {
 func adminRemovePortal(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "name query param is required"})
@@ -640,7 +637,7 @@ func adminRemovePortal(w http.ResponseWriter, r *http.Request) {
 	defer globalCfgMu.Unlock()
 
 	if globalCfg.Portals == nil {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "portal not found"})
@@ -648,7 +645,7 @@ func adminRemovePortal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, exists := globalCfg.Portals[name]; !exists {
-		corsHeaders(w)
+		adminCorsHeaders(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "portal not found"})
@@ -663,7 +660,7 @@ func adminRemovePortal(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[hub] admin: removed portal %q", name)
 
-	corsHeaders(w)
+	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "name": name})
 }

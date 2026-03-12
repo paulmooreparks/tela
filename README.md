@@ -189,7 +189,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admi
 ## Authentication & security
 
 - **End-to-end encryption**: WireGuard (Curve25519 key exchange, ChaCha20-Poly1305 data) between tela and telad. The hub is a blind relay.
-- **Token-based auth**: Named token identities with role-based access control (owner/admin/user/viewer). Per-machine ACLs control who can register and connect. A `console-viewer` token is auto-generated for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible).
+- **Token-based auth**: Named token identities with role-based access control (owner/admin/user/viewer). Per-machine ACLs control who can register and connect. On first startup, the hub auto-generates an owner token (secure by default). A `console-viewer` token is auto-generated for the hub's built-in web console.
 - **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin`. No shell access to the hub required.
 - **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
 - **No admin required**: gVisor netstack operates entirely in userspace. No TUN device, no root/Administrator.

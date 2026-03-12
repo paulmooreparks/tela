@@ -30,7 +30,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -156,10 +158,11 @@ var (
 	hubName        = ""
 	wwwDir         = "./www"
 	wwwDirOverride = false // true when wwwDir explicitly set via config/env
+	verbose        = false // if true, log individual relay messages
 	globalAuth     = newAuthStore(nil) // replaced at startup; open hub until config is loaded
-	globalCfg      *hubConfig         // live config; mutated by admin API
-	globalCfgMu    sync.Mutex         // protects globalCfg + config file writes
-	globalCfgPath  string             // path to YAML config file (for admin API persistence)
+	globalCfg      *hubConfig          // live config; mutated by admin API
+	globalCfgMu    sync.RWMutex        // protects globalCfg + config file writes
+	globalCfgPath  string              // path to YAML config file (for admin API persistence)
 )
 
 // ── Data structures ────────────────────────────────────────────────
@@ -179,6 +182,7 @@ type machineEntry struct {
 
 	ControlWS *websocket.Conn            // agent's registration/signaling channel
 	Sessions  map[string]*clientSession   // sessionID → active session
+	NextIdx   int                         // monotonically incrementing session index
 
 	// Metadata from registration
 	Ports        []int
@@ -248,9 +252,11 @@ var (
 	wsStates   = make(map[*websocket.Conn]*wsState)
 	wsStatesMu sync.RWMutex
 
-	// Session history (ring buffer, most recent first).
-	history   []historyEvent
-	historyMu sync.Mutex
+	// Session history (ring buffer, most recent first when read).
+	history      [maxHistory]historyEvent
+	historyHead  int // next write position (circular)
+	historyCount int // total items written (capped at maxHistory)
+	historyMu    sync.Mutex
 
 	// UDP relay sessions, keyed by token hex.
 	udpSessions   = make(map[string]*udpSession)
@@ -262,16 +268,28 @@ const maxHistory = 100
 func recordEvent(machineID, event, detail string) {
 	historyMu.Lock()
 	defer historyMu.Unlock()
-	e := historyEvent{
+	history[historyHead] = historyEvent{
 		MachineID: machineID,
 		Event:     event,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Detail:    detail,
 	}
-	history = append([]historyEvent{e}, history...)
-	if len(history) > maxHistory {
-		history = history[:maxHistory]
+	historyHead = (historyHead + 1) % maxHistory
+	if historyCount < maxHistory {
+		historyCount++
 	}
+}
+
+// snapshotHistory returns a copy of the history ring buffer, most recent first.
+func snapshotHistory() []historyEvent {
+	historyMu.Lock()
+	defer historyMu.Unlock()
+	out := make([]historyEvent, 0, historyCount)
+	for i := 0; i < historyCount; i++ {
+		idx := (historyHead - 1 - i + maxHistory) % maxHistory
+		out = append(out, history[idx])
+	}
+	return out
 }
 
 func sessionDetailFrom(entry *machineEntry, requestedPorts []int) string {
@@ -368,16 +386,33 @@ func corsHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
-// tokenFromRequest extracts the caller token from Authorization: Bearer or ?token= query param.
+// adminCorsHeaders sets restrictive CORS for admin endpoints — no wildcard origin.
+// Cross-origin browser requests to admin endpoints are not expected; admin
+// access is via CLI or same-origin console.
+func adminCorsHeaders(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// Non-browser request (curl, CLI) — no CORS headers needed.
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Vary", "Origin")
+}
+
+// tokenFromRequest extracts the caller token from Authorization: Bearer,
+// the tela_viewer cookie, or (deprecated) the ?token= query param.
 func tokenFromRequest(r *http.Request) string {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
-	if t := r.URL.Query().Get("token"); t != "" {
-		return t
-	}
 	if c, err := r.Cookie("tela_viewer"); err == nil {
 		return c.Value
+	}
+	if t := r.URL.Query().Get("token"); t != "" {
+		log.Printf("[hub] DEPRECATED: token passed via ?token= query param from %s — use Authorization header instead", r.RemoteAddr)
+		return t
 	}
 	return ""
 }
@@ -508,15 +543,14 @@ func handleAPIHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	historyMu.Lock()
-	events := make([]historyEvent, 0, len(history))
-	for _, e := range history {
+	historySnapshot := snapshotHistory()
+	events := make([]historyEvent, 0, len(historySnapshot))
+	for _, e := range historySnapshot {
 		if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, e.MachineID) {
 			continue
 		}
 		events = append(events, e)
 	}
-	historyMu.Unlock()
 
 	corsHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
@@ -576,26 +610,31 @@ func handleStatic(w http.ResponseWriter, r *http.Request) {
 		if readErr == nil {
 			viewerToken := globalAuth.consoleViewerToken()
 
+			// Only inject viewer token and set cookie for the console
+			// page (root index.html), not for sub-pages or static content.
+			isConsolePage := fsPath == "index.html"
+
 			// Set HttpOnly cookie so browser API fetches include the token.
-			if viewerToken != "" {
+			if viewerToken != "" && isConsolePage {
 				http.SetCookie(w, &http.Cookie{
 					Name:     "tela_viewer",
 					Value:    viewerToken,
 					Path:     "/",
 					HttpOnly: true,
+					Secure:   r.TLS != nil,
 					SameSite: http.SameSiteLaxMode,
 				})
 			}
 
 			var parts []string
 			parts = append(parts, fmt.Sprintf("window.TELA_HUB_VERSION=%q;", version))
-			if viewerToken != "" {
+			if viewerToken != "" && isConsolePage {
 				parts = append(parts, fmt.Sprintf("window.TELA_CONSOLE_TOKEN=%q;", viewerToken))
 			}
 			injection := "<script>" + strings.Join(parts, "") + "</script>"
-			html := strings.Replace(string(data), "</head>", injection+"\n</head>", 1)
+			html := bytes.Replace(data, []byte("</head>"), []byte(injection+"\n</head>"), 1)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(html))
+			w.Write(html)
 			return
 		}
 	}
@@ -612,13 +651,27 @@ func handleStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", ct)
-	http.ServeContent(w, r, fsPath, info.ModTime(), strings.NewReader(string(data)))
+	http.ServeContent(w, r, fsPath, info.ModTime(), bytes.NewReader(data))
 }
 
 // ── WebSocket relay ────────────────────────────────────────────────
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		// Agents and CLI clients don't send an Origin header — always allow.
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		// When auth is enabled, require same-origin for browser-initiated
+		// WebSocket upgrades to prevent cross-site WebSocket hijacking.
+		if globalAuth.isEnabled() {
+			host := r.Host
+			// Origin typically includes scheme: "http://host" or "https://host"
+			return strings.HasSuffix(origin, "://"+host)
+		}
+		return true
+	},
 }
 
 // JSON messages from agents and clients during signaling.
@@ -692,7 +745,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			if peer != nil {
 				if err := peer.WriteMessage(msgType, data); err != nil {
 					log.Printf("[hub] relay write error: %v", err)
-				} else {
+				} else if verbose {
 					peerRole := "?"
 					wsStatesMu.RLock()
 					if ps, ok := wsStates[peer]; ok {
@@ -849,7 +902,7 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 			sendError(ws, "Access denied")
 			return
 		}
-	} else if entryToken != "" && entryToken != msg.Token {
+	} else if entryToken != "" && subtle.ConstantTimeCompare([]byte(entryToken), []byte(msg.Token)) != 1 {
 		log.Printf("[hub] client token mismatch for %s", machineID)
 		errMsg, _ := json.Marshal(map[string]string{"type": "error", "message": "Invalid token"})
 		ws.WriteMessage(websocket.TextMessage, errMsg)
@@ -874,7 +927,8 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 		entry.Sessions = make(map[string]*clientSession)
 	}
 	entry.Sessions[sessionID] = session
-	sessionIdx := len(entry.Sessions)
+	entry.NextIdx++
+	sessionIdx := entry.NextIdx
 	session.SessionIdx = sessionIdx
 	entry.mu.Unlock()
 
@@ -1164,6 +1218,12 @@ const (
 	readyWord   = "READY"
 )
 
+// udpBufPool reuses buffers for outgoing UDP relay datagrams, avoiding
+// a heap allocation per relayed datagram.
+var udpBufPool = sync.Pool{
+	New: func() any { return make([]byte, 0, 1500) },
+}
+
 func runUDPRelay() {
 	addr := &net.UDPAddr{Port: udpPort}
 	conn, err := net.ListenUDP("udp4", addr)
@@ -1219,10 +1279,11 @@ func runUDPRelay() {
 		if peer.Addr != nil {
 			// Peer is on UDP — forward via UDP
 			peerTokenBytes, _ := hex.DecodeString(session.PeerTokenHex)
-			relayBuf := make([]byte, udpTokenLen+len(payload))
-			copy(relayBuf, peerTokenBytes)
-			copy(relayBuf[udpTokenLen:], payload)
+			relayBuf := udpBufPool.Get().([]byte)[:0]
+			relayBuf = append(relayBuf, peerTokenBytes...)
+			relayBuf = append(relayBuf, payload...)
 			conn.WriteToUDP(relayBuf, peer.Addr)
+			udpBufPool.Put(relayBuf)
 		} else if peer.PeerWS != nil {
 			// Peer hasn't upgraded to UDP — fall back to WebSocket relay
 			peer.PeerWS.WriteMessage(websocket.BinaryMessage, payload)
@@ -1284,7 +1345,9 @@ func main() {
 
 	// Parse flags
 	configPath := flag.String("config", "", "Path to YAML config file")
+	verboseFlag := flag.Bool("v", false, "Verbose logging (include per-message relay logs)")
 	flag.Parse()
+	verbose = *verboseFlag
 
 	// Load config file if given, or auto-detect persisted config from a
 	// previous env-var bootstrap.
@@ -1320,6 +1383,13 @@ func main() {
 		log.Println("[hub] auth bootstrapped from TELA_OWNER_TOKEN")
 	}
 
+	// Auto-bootstrap: if still no auth, generate an owner token.
+	// Secure by default — hubs never run in open mode unless explicitly
+	// started with -open.
+	if autoBootstrapAuth(cfg, *configPath) {
+		log.Println("[hub] auth auto-bootstrapped (owner token generated)")
+	}
+
 	globalCfg = cfg
 	globalCfgPath = *configPath
 
@@ -1328,7 +1398,7 @@ func main() {
 	// admin API mutations and bootstrap changes persist to disk.
 	if globalCfgPath == "" && len(cfg.Auth.Tokens) > 0 {
 		globalCfgPath = "data/telahubd.yaml"
-		os.MkdirAll("data", 0o755)
+		os.MkdirAll("data", 0o700)
 		_ = writeHubConfig(globalCfgPath, cfg)
 	}
 
@@ -1414,6 +1484,10 @@ func runHub(stopCh <-chan struct{}) {
 	}
 
 	log.Printf("[hub] telahubd %s listening on http+ws://0.0.0.0:%d", version, httpPort)
+	if !globalAuth.isEnabled() {
+		log.Println("[hub] WARNING *** Hub running in OPEN mode — any client may connect and register ***")
+		log.Println("[hub] WARNING *** Set TELA_OWNER_TOKEN or use a config file to enable auth ***")
+	}
 	if wwwDirOverride {
 		log.Printf("[hub] static site: %s (disk override)", wwwDir)
 	} else {
@@ -1546,7 +1620,7 @@ func hubServiceInstall() {
 
 // writeHubConfig writes a telahubd YAML config file.
 func writeHubConfig(path string, cfg *hubConfig) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return fmt.Errorf("create dir: %w", err)
 	}
 	data, err := yaml.Marshal(cfg)
@@ -1554,7 +1628,7 @@ func writeHubConfig(path string, cfg *hubConfig) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 	header := "# telahubd configuration\n# Edit and restart the service to apply changes.\n\n"
-	if err := os.WriteFile(path, []byte(header+string(data)), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(header+string(data)), 0600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -1562,14 +1636,14 @@ func writeHubConfig(path string, cfg *hubConfig) error {
 
 // copyFile copies src to dst, creating parent directories as needed.
 func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
 		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
 	}
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	if err := os.WriteFile(dst, data, 0644); err != nil {
+	if err := os.WriteFile(dst, data, 0600); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
 	return nil
@@ -1652,6 +1726,11 @@ func serviceRunHub(stopCh <-chan struct{}) {
 	// Env-var bootstrap: TELA_OWNER_TOKEN
 	if bootstrapFromEnv(cfg, yamlPath) {
 		log.Println("[hub] auth bootstrapped from TELA_OWNER_TOKEN")
+	}
+
+	// Auto-bootstrap: if still no auth, generate an owner token.
+	if autoBootstrapAuth(cfg, yamlPath) {
+		log.Println("[hub] auth auto-bootstrapped (owner token generated)")
 	}
 
 	globalCfg = cfg

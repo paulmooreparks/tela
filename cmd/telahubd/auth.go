@@ -2,8 +2,10 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 )
@@ -84,11 +86,11 @@ func (s *authStore) identityID(token string) string {
 
 // isOwnerOrAdmin returns true when the token belongs to a hub-level owner or admin.
 func (s *authStore) isOwnerOrAdmin(token string) bool {
-	if !s.enabled {
-		return true
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if !s.enabled {
+		return false
+	}
 	e, ok := s.byToken[token]
 	return ok && (e.HubRole == "owner" || e.HubRole == "admin")
 }
@@ -114,7 +116,7 @@ func (s *authStore) canRegister(token, machineID string) bool {
 		return false
 	}
 	if acl.RegisterToken != "" {
-		return acl.RegisterToken == token
+		return subtle.ConstantTimeCompare([]byte(acl.RegisterToken), []byte(token)) == 1
 	}
 	// ACL entry exists, no registerToken restriction → any known token may register
 	_, known := s.byToken[token]
@@ -179,7 +181,7 @@ func (s *authStore) consoleViewerToken() string {
 
 func inTokenList(list []string, target string) bool {
 	for _, v := range list {
-		if v == target {
+		if subtle.ConstantTimeCompare([]byte(v), []byte(target)) == 1 {
 			return true
 		}
 	}
@@ -258,6 +260,13 @@ func bootstrapFromEnv(cfg *hubConfig, cfgPath string) bool {
 		return false
 	}
 
+	bootstrapAuth(cfg, cfgPath, ownerToken)
+	return true
+}
+
+// bootstrapAuth installs the owner token, a console-viewer token, and a
+// wildcard connect ACL into cfg, then persists to cfgPath.
+func bootstrapAuth(cfg *hubConfig, cfgPath string, ownerToken string) {
 	// Generate a viewer token for the built-in hub console.
 	viewerToken, err := generateToken()
 	if err != nil {
@@ -283,6 +292,33 @@ func bootstrapFromEnv(cfg *hubConfig, cfgPath string) bool {
 	if cfgPath != "" {
 		_ = writeHubConfig(cfgPath, cfg)
 	}
+}
+
+// autoBootstrapAuth generates a new owner token when the hub has no auth
+// configured and no TELA_OWNER_TOKEN env var. The token is printed once
+// to stdout so the operator can save it. Returns true if bootstrap occurred.
+func autoBootstrapAuth(cfg *hubConfig, cfgPath string) bool {
+	if len(cfg.Auth.Tokens) > 0 {
+		return false
+	}
+	ownerToken, err := generateToken()
+	if err != nil {
+		log.Printf("[hub] WARNING: could not auto-generate owner token: %v", err)
+		return false
+	}
+
+	bootstrapAuth(cfg, cfgPath, ownerToken)
+
+	fmt.Println("==============================================================")
+	fmt.Println("  AUTH BOOTSTRAPPED — owner token generated automatically")
+	fmt.Println("")
+	fmt.Printf("  Owner token: %s\n", ownerToken)
+	fmt.Println("")
+	fmt.Println("  Save this token — it will not be displayed again.")
+	fmt.Println("  Use it with: tela admin --hub <URL> --token <TOKEN>")
+	fmt.Println("  Or set env:  TELA_OWNER_TOKEN=" + ownerToken)
+	fmt.Println("==============================================================")
+
 	return true
 }
 
