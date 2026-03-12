@@ -613,7 +613,7 @@ tela admin revoke <id> <machineId> -hub <hub> [-token <token>]
 tela admin rotate <id> -hub <hub> [-token <token>]
 
 tela admin list-portals -hub <hub> [-token <token>]
-tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> -hub-url <url> [-portal-token <token>]
+tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> [-hub-url <url>] [-portal-token <token>]
 tela admin remove-portal <name> -hub <hub> [-token <token>]
 ```
 
@@ -1210,7 +1210,7 @@ tela admin rotate <id> -hub <hub> [-token <token>]
 
 # Remote portal management (owner/admin)
 tela admin list-portals -hub <hub> [-token <token>]
-tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> -hub-url <url> [-portal-token <token>]
+tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> [-hub-url <url>] [-portal-token <token>]
 tela admin remove-portal <name> -hub <hub> [-token <token>]
 
 # Version

@@ -1656,6 +1656,12 @@ func serviceRunHub(stopCh <-chan struct{}) {
 
 	globalCfg = cfg
 	globalCfgPath = yamlPath
+
+	// Ensure a console-viewer token exists for the built-in hub console.
+	if ensureConsoleViewer(cfg, yamlPath) {
+		log.Println("[hub] created console-viewer token for hub console")
+	}
+
 	globalAuth = newAuthStore(&cfg.Auth)
 
 	// Portal env-var bootstrap (requires globalAuth for viewer token)
@@ -2004,8 +2010,16 @@ func cmdPortalAdd() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
+	applyHubConfig(cfg)
+
 	if cfg.Portals == nil {
 		cfg.Portals = make(map[string]portalEntry)
+	}
+
+	// Ensure a console-viewer token exists (handles configs from older bootstraps).
+	if ensureConsoleViewer(cfg, cfgPath) {
+		fmt.Println("Created console-viewer token.")
 	}
 
 	// Determine hub name for registration
@@ -2032,17 +2046,11 @@ func cmdPortalAdd() {
 	// Build the viewer token to include if the hub has auth
 	viewerToken := ""
 	if len(cfg.Auth.Tokens) > 0 {
-		// Look for "console-viewer" token or prompt
 		for _, t := range cfg.Auth.Tokens {
 			if t.ID == "console-viewer" {
 				viewerToken = t.Token
 				break
 			}
-		}
-		if viewerToken == "" {
-			fmt.Print("Hub viewer token for portal (press Enter to skip): ")
-			viewerToken, _ = reader.ReadString('\n')
-			viewerToken = strings.TrimSpace(viewerToken)
 		}
 	}
 
@@ -2179,10 +2187,17 @@ func cmdPortalSync() {
 		os.Exit(1)
 	}
 
+	applyHubConfig(cfg)
+
 	if cfg.Portals == nil || len(cfg.Portals) == 0 {
 		fmt.Println("No portals configured.")
 		fmt.Println("Add one with: telahubd portal add <name> <url>")
 		return
+	}
+
+	// Ensure a console-viewer token exists (handles configs from older bootstraps).
+	if ensureConsoleViewer(cfg, cfgPath) {
+		fmt.Println("Created console-viewer token.")
 	}
 
 	// Load config into globals so syncViewerTokenToPortals can access them
@@ -2323,8 +2338,19 @@ func cmdUserBootstrap() {
 		os.Exit(1)
 	}
 
+	// Generate a viewer token for the built-in hub console.
+	viewerToken, err := generateToken()
+	if err != nil {
+		viewerToken = "" // non-fatal; console will show empty
+	}
+
 	cfg.Auth.Tokens = []tokenEntry{
 		{ID: "owner", Token: token, HubRole: "owner"},
+	}
+	if viewerToken != "" {
+		cfg.Auth.Tokens = append(cfg.Auth.Tokens, tokenEntry{
+			ID: "console-viewer", Token: viewerToken, HubRole: "viewer",
+		})
 	}
 	// Default machine ACL: wildcard allows the owner token to connect everywhere
 	if cfg.Auth.Machines == nil {

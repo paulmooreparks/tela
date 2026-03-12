@@ -222,6 +222,24 @@ tela admin remove-token alice -hub wss://your-hub.example.com -token <owner-toke
 
 All changes take effect immediately (hot-reload). No hub restart required.
 
+### Managing portals remotely with `tela admin`
+
+Register your hub with a portal directory (like Awan Saya) from any workstation:
+
+```bash
+# Register hub with a portal
+tela admin add-portal awansaya -hub wss://your-hub.example.com -token <owner-token> \
+  -portal-url https://awansaya.net -portal-token <portal-admin-token>
+
+# List portal registrations
+tela admin list-portals -hub wss://your-hub.example.com -token <owner-token>
+
+# Remove a portal registration
+tela admin remove-portal awansaya -hub wss://your-hub.example.com -token <owner-token>
+```
+
+Note: `-token` is the **hub's** owner token (authenticates you to the hub). `-portal-token` is the **portal's** admin API token (used by the hub to register with the portal). The `-hub-url` flag is optional — it defaults to the HTTPS form of `-hub`.
+
 ### Using `telad` with auth
 
 When the hub has auth enabled, agents must provide a valid token:
@@ -459,16 +477,36 @@ sudo certbot --nginx -d myhub.example.com
 
 ## Register with a hub directory
 
-Once the hub is reachable, add it to a hub directory (such as Awan Saya) so users and the CLI can find it by short name:
+Once the hub is reachable, add it to a hub directory (such as Awan Saya) so users and the CLI can find it by short name.
+
+### Option A: CLI (recommended)
+
+From any workstation with the hub's owner token:
+
+```bash
+tela admin add-portal awansaya \
+  -hub wss://your-hub.example.com \
+  -token <hub-owner-token> \
+  -portal-url https://awansaya.net \
+  -portal-token <portal-admin-token>
+```
+
+The hub will register itself with the portal, exchange viewer tokens for status proxying, and store a scoped sync token so future viewer-token updates happen automatically. The portal admin token is used once and is **not** stored on the hub.
+
+### Option B: Portal dashboard
 
 1. Open the portal dashboard and click **Add Hub**.
 2. Enter a short name (e.g., `myhub`), the hub's public URL (e.g., `https://your-hub.example.com`), and optionally a **viewer token** (so the portal can proxy hub status server-side).
-3. The hub will appear in the portal dashboard and be resolvable by the CLI:
-   ```bash
-   tela remote add myportal https://your-portal.example
-   tela machines -hub myhub
-   tela connect -hub myhub -machine mybox
-   ```
+
+### After registration
+
+The hub will appear in the portal dashboard and be resolvable by the CLI:
+
+```bash
+tela remote add myportal https://your-portal.example
+tela machines -hub myhub
+tela connect -hub myhub -machine mybox
+```
 
 ## Verify from outside
 
