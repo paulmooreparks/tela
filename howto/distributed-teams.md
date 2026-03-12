@@ -41,6 +41,42 @@ docker compose up --build -d
 
 Make each hub reachable over `wss://` (public VM, reverse proxy, or tunnel). Ensure WebSockets work.
 
+See [hub.md](hub.md) for the full hub deployment guide, including TLS setup with Caddy and cloud firewall rules.
+
+---
+
+## Step 1.5 - Enable authentication (recommended)
+
+Enable token-based auth on each hub. For Docker deployments:
+
+```bash
+# Generate an owner token
+openssl rand -hex 32
+
+# Add to docker-compose.yml environment:
+#   - TELA_OWNER_TOKEN=<your-token>
+
+# Redeploy
+docker compose up --build -d
+```
+
+Then create tokens for agents and users:
+
+```bash
+# Create agent identities (one per telad instance)
+tela admin add-token telad-dev-db01 -hub wss://DEV-HUB -token <owner-token>
+tela admin add-token telad-staging-win01 -hub wss://STAGING-HUB -token <owner-token>
+
+# Grant machine access
+tela admin grant telad-dev-db01 dev-db01 -hub wss://DEV-HUB -token <owner-token>
+
+# Create developer identity
+tela admin add-token alice -hub wss://DEV-HUB -token <owner-token>
+tela admin grant alice dev-db01 -hub wss://DEV-HUB -token <owner-token>
+```
+
+See [hub.md](hub.md) for the full list of `tela admin` commands.
+
 ---
 
 ## Step 2 - Register machines/services with `telad`
@@ -52,13 +88,13 @@ Run `telad` on each machine you want to expose.
 Example (a Linux server exposing SSH and Postgres):
 
 ```bash
-./telad -hub wss://DEV-HUB -machine dev-db01 -ports "22,5432"
+./telad -hub wss://DEV-HUB -machine dev-db01 -ports "22,5432" -token <agent-token>
 ```
 
 Example (a Windows staging box exposing RDP):
 
 ```powershell
-.\telad.exe -hub wss://STAGING-HUB -machine staging-win01 -ports "3389"
+.\telad.exe -hub wss://STAGING-HUB -machine staging-win01 -ports "3389" -token <agent-token>
 ```
 
 ### Pattern B - Site gateway (bridge agent)
@@ -69,20 +105,18 @@ Example `telad.yaml`:
 
 ```yaml
 hub: wss://DEV-HUB
+token: "<agent-token>"
 machines:
   - name: dev-db01
     services:
       - port: 22
-        proto: tcp
         name: SSH
       - port: 5432
-        proto: tcp
         name: Postgres
     target: 10.10.0.15
   - name: dev-admin
     services:
       - port: 8443
-        proto: tcp
         name: Admin UI
     target: 10.10.0.25
 ```
@@ -103,19 +137,28 @@ On a developer laptop:
 2. List machines:
 
 ```bash
-./tela machines -hub wss://DEV-HUB
+./tela machines -hub wss://DEV-HUB -token <your-token>
 ```
 
 3. List services:
 
 ```bash
-./tela services -hub wss://DEV-HUB -machine dev-db01
+./tela services -hub wss://DEV-HUB -machine dev-db01 -token <your-token>
 ```
 
 4. Connect:
 
 ```bash
-./tela connect -hub wss://DEV-HUB -machine dev-db01
+./tela connect -hub wss://DEV-HUB -machine dev-db01 -token <your-token>
+```
+
+**Tip:** Set environment variables to avoid repeating flags:
+
+```bash
+export TELA_HUB=wss://DEV-HUB
+export TELA_TOKEN=<your-token>
+./tela machines
+./tela connect -machine dev-db01
 ```
 
 5. Use tools against localhost:

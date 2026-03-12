@@ -39,6 +39,10 @@ telad service install -config telad.yaml
 The config file will be copied to (for example) `C:\ProgramData\Tela\telad.yaml`
 or `/etc/tela/telad.yaml`.
 
+Make sure your `telad.yaml` includes the hub URL, auth token, and machine
+definitions before installing. See [telad.md](telad.md) for the full config
+format and authentication setup.
+
 ### Config file format
 
 ```yaml
@@ -97,6 +101,17 @@ udpPort: 41820        # UDP relay port
 name: "My Hub"        # Display name (optional)
 wwwDir: ./www         # Static file directory
 ```
+
+> **Note:** Authentication (tokens, ACLs) is managed separately via
+> `telahubd user bootstrap` (for the first owner token) and `tela admin`
+> commands (for subsequent identities). You do not need to edit auth
+> configuration in the YAML file manually. See [hub.md](hub.md) for details.
+
+> **Bootstrap ordering:** Run `telahubd user bootstrap` **before**
+> `telahubd service install` if you want the installed config to already
+> contain auth tokens. If you install the service first and then bootstrap,
+> the bootstrap writes directly to the system config path
+> (`/etc/tela/telahubd.yaml` or `%ProgramData%\Tela\telahubd.yaml`).
 
 > **Note:** Environment variables (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`,
 > `HUB_WWW_DIR`) always override the config file, for backward compatibility.

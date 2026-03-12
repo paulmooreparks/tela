@@ -188,7 +188,7 @@ If running `telahubd` directly (not in Docker), use `user bootstrap` to generate
 sudo telahubd user bootstrap
 ```
 
-This creates `/etc/tela/telahubd.yaml` (or `%ProgramData%\Tela\telahubd.yaml` on Windows) with an owner identity and a wildcard machine ACL. See the [Install (bare-metal)](#install-bare-metal) section above for the full curl-to-running walkthrough.
+This creates `/etc/tela/telahubd.yaml` (or `%ProgramData%\Tela\telahubd.yaml` on Windows) with an `owner` identity (wildcard machine ACL) and a `console-viewer` identity (used by the built-in hub console and portal status proxying). See the [Install (bare-metal)](#install-bare-metal) section above for the full curl-to-running walkthrough.
 
 Alternatively, set `TELA_OWNER_TOKEN` as an environment variable before starting, or create a config file manually (see [CONFIGURATION.md](../CONFIGURATION.md)).
 
@@ -421,8 +421,8 @@ curl https://myhub.example.com/api/status
 # https://myhub.example.com/
 
 # Connect with the CLI
-tela connect -hub wss://myhub.example.com -machine barn
-telad -hub wss://myhub.example.com -machine barn -ports 22,3389
+tela connect -hub wss://myhub.example.com -machine barn -token <your-token>
+telad -hub wss://myhub.example.com -machine barn -ports 22,3389 -token <agent-token>
 ```
 
 ### Alternative: Cloudflare Tunnel (zero inbound ports)
@@ -504,8 +504,8 @@ The hub will appear in the portal dashboard and be resolvable by the CLI:
 
 ```bash
 tela remote add myportal https://your-portal.example
-tela machines -hub myhub
-tela connect -hub myhub -machine mybox
+tela machines -hub myhub -token <your-token>
+tela connect -hub myhub -machine mybox -token <your-token>
 ```
 
 ## Verify from outside
@@ -521,7 +521,9 @@ From a machine on the Internet (or at least outside your LAN), verify:
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | `telad` never appears | Hub unreachable or WebSocket upgrade blocked | Confirm the hub URL is reachable externally (TCP 443 + WS) |
+| Portal shows "Auth Error" for a hub | Viewer token out of sync or missing | Run `telahubd portal sync` on the hub, or restart the hub service. If the hub was bootstrapped before the console-viewer fix, run `telahubd user bootstrap` again or add a console-viewer identity manually |
 | Portal cards stay empty | Portal missing viewer token, or hub unreachable from portal server | Ensure the hub entry in the portal includes a valid viewer token |
+| `telad` connects but "auth_required" | Hub has auth enabled, agent has no token | Add a `token:` field to `telad.yaml` or pass `-token` on the command line |
 | UDP relay not working | TCP-only tunnel or firewall | Confirm UDP `HUB_UDP_PORT` is open inbound on the hub and outbound from both sides |
 | "Machine not found" | Machine isn't registered | Run `tela machines -hub <hub>` to list available machines; confirm `telad` is running and connected |
 

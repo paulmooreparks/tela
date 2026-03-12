@@ -85,7 +85,7 @@ openssl rand -hex 32
 docker compose up --build -d
 ```
 
-The hub creates an `owner` identity on first startup, then you manage everything remotely:
+The hub creates an `owner` identity and a `console-viewer` identity on first startup, then you manage everything remotely:
 
 ```bash
 # From any workstation with tela installed:
@@ -144,11 +144,11 @@ Example config snippet:
 
 ```yaml
 hub: wss://YOUR-HUB-HOSTNAME
+token: "<agent-token>"
 machines:
   - name: nas
     services:
       - port: 22
-        proto: tcp
         name: SSH
     target: 192.168.1.50
 ```
@@ -191,13 +191,13 @@ Get-FileHash .\tela.exe -Algorithm SHA256
 3. List machines:
 
 ```bash
-./tela machines -hub wss://YOUR-HUB-HOSTNAME
+./tela machines -hub wss://YOUR-HUB-HOSTNAME -token <your-token>
 ```
 
 4. Connect:
 
 ```bash
-./tela connect -hub wss://YOUR-HUB-HOSTNAME -machine barn
+./tela connect -hub wss://YOUR-HUB-HOSTNAME -machine barn -token <your-token>
 ```
 
 This binds one or more `localhost` ports on your client machine.
@@ -236,11 +236,12 @@ mstsc /v:localhost
 
 ## Troubleshooting
 
-### I can’t see my machine in `tela machines`
+### I can't see my machine in `tela machines`
 
 - Confirm `telad` is running and connecting to the correct hub URL.
 - Check the hub console `/` to see if the machine shows up.
 - Confirm the hub is reachable from the agent host (outbound HTTPS/WS allowed).
+- If the hub has auth enabled, confirm the agent's token is valid and has been granted access to the machine.
 
 ### `tela` connects but SSH/RDP fails
 
