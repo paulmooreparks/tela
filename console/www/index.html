@@ -299,6 +299,50 @@
     }
     .btn-action:disabled { opacity: 0.5; cursor: default; }
 
+    /* ── Command copy box ──────────────────────────────────── */
+    .code-block-wrap {
+      position: relative;
+      margin: 0;
+      flex: 1 1 100%;
+    }
+    .code-block {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      padding: 10px 90px 10px 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+    .code-block code {
+      font-family: 'Courier New', Courier, monospace;
+      white-space: nowrap;
+    }
+    .code-copy-btn {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.1);
+      color: #cdd6f4;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .code-copy-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .code-copy-btn.copied {
+      color: var(--color-accent);
+      border-color: var(--color-accent);
+    }
+
     /* ── History ──────────────────────────────────────────── */
     .history-list {
       list-style: none;
@@ -608,13 +652,15 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
     }
 
     // ── Copy to clipboard ────────────────────────────────────────────
-    function copyConnect(machineId, btn) {
-      var cmd = 'tela connect -hub ' + hubWsUrl + ' -machine ' + machineId;
-      var orig = btn.textContent;
+    function copyCmd(btn) {
+      var code = btn.closest('.code-block-wrap').querySelector('code');
+      if (!code) return;
+      var cmd = code.textContent;
+      var origHtml = btn.innerHTML;
       function showCopied() {
-        btn.textContent = 'Copied!';
-        btn.disabled = true;
-        setTimeout(function () { btn.textContent = orig; btn.disabled = false; }, 1500);
+        btn.textContent = '\u2714 Copied';
+        btn.classList.add('copied');
+        setTimeout(function () { btn.innerHTML = origHtml; btn.classList.remove('copied'); }, 1500);
       }
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(cmd).then(showCopied);
@@ -724,12 +770,18 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
                   + '</td><td>' + svcs + '</td><td>' + sess
                   + '</td><td>' + seen + '</td></tr>';
 
-                var connectBtn = m.agentConnected
-                  ? '<button class="btn-action" onclick="copyConnect(\'' + safeId + '\', this)">Connect</button>'
-                  : '<button class="btn-action" disabled>Offline</button>';
+                var cmdContent;
+                if (m.agentConnected) {
+                  var connectCmd = 'tela connect -hub ' + hubWsUrl + ' -machine ' + m.id;
+                  cmdContent = '<div class="code-block-wrap"><div class="code-block"><code>'
+                    + escHtml(connectCmd) + '</code></div>'
+                    + '<button class="code-copy-btn" type="button" onclick="copyCmd(this)">&#x1F4CB; Copy</button></div>';
+                } else {
+                  cmdContent = '<span class="no-data">Machine offline</span>';
+                }
 
                 html += '<tr class="detail-row hidden" id="' + detailId + '">'
-                  + '<td colspan="6"><div class="detail-inner">' + connectBtn + '</div></td></tr>';
+                  + '<td colspan="6"><div class="detail-inner">' + cmdContent + '</div></td></tr>';
               });
               html += '</tbody></table>';
               content.innerHTML = html;

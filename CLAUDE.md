@@ -22,8 +22,10 @@ Related project: **Awan Saya** (`c:\Users\paul\source\repos\awansatu`) — porta
 - Do not use emdash
 - Do not use a style of writing that would even require emdash or semicolons.
 - Do not use curly quotes, single or double. Use ' or " as appropriate instead.
-- Do not use a salesy, marketing style of writing, unless instructed to do so. Simple be factual instead.
+- Do not use a salesy, marketing style of writing, unless instructed to do so. Simply be factual instead.
 - Write in the style of a technical writer producing exact documentation, unless instructed otherwise.
+- Be very clear and thorough in technical writing. Do not leave out steps.
+- Spell out the first abbeviation usage in a document unless you can be reasonably sure the abbreviation is known in context (e.g., TCP and UDP are known, FOSS is not necessarily known)
 
 ## Build & Verify
 
@@ -86,6 +88,10 @@ persisted to YAML. No hub restart needed for token/ACL/portal changes.
 - Config persistence: `writeHubConfig` for YAML, `service.SaveConfig` for JSON
 - Mutex conventions: `sync.RWMutex` for read-heavy state (`globalCfgMu`, `machinesMu`)
 - Constant-time comparison for all token checks (`crypto/subtle`)
+
+# git management
+
+- Clean up tmpclaude* files periodically so that they do not clog the file system
 
 ## Remaining Review Items
 

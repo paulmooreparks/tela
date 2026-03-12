@@ -196,6 +196,88 @@
     .no-data { color: #999; font-style: italic; padding: 12px 0; }
     .last-updated { color: #aaa; font-size: 0.8rem; margin-top: 8px; }
 
+    /* ── Expandable row detail ──────────────────────────── */
+    .row-expand-btn {
+      background: none;
+      border: 1px solid transparent;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: transform 0.15s ease;
+    }
+    .row-expand-btn:hover {
+      background: #f0f4fa;
+      border-color: #b0b8c4;
+      color: #334155;
+    }
+    .row-expand-btn[aria-expanded="true"] {
+      transform: rotate(90deg);
+    }
+    .detail-row td {
+      padding: 0 !important;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .detail-row .detail-inner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #f8f9fb;
+      border-top: 1px dashed #e2e6ed;
+    }
+    .detail-row.hidden {
+      display: none;
+    }
+    .has-expand th:nth-child(1),
+    .has-expand td:nth-child(1) { width: 44px; text-align: center; }
+
+    /* ── Command copy box ──────────────────────────────────── */
+    .code-block-wrap {
+      position: relative;
+      margin: 0;
+      flex: 1 1 100%;
+    }
+    .code-block {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      padding: 10px 90px 10px 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+    .code-block code {
+      font-family: 'Courier New', Courier, monospace;
+      white-space: nowrap;
+    }
+    .code-copy-btn {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.1);
+      color: #cdd6f4;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .code-copy-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .code-copy-btn.copied {
+      color: #5ee89e;
+      border-color: #5ee89e;
+    }
+
     footer { margin-top: 40px; color: #999; font-size: 0.85rem; text-align: center; padding: 0 20px 24px; }
     footer a { color: #666; }
     footer a:hover { text-decoration: underline; }
@@ -368,6 +450,57 @@
       });
     }
 
+    function httpToWs(url) {
+      return String(url || '').replace(/^https:\/\//i, 'wss://').replace(/^http:\/\//i, 'ws://');
+    }
+
+    function copyCmd(btn) {
+      var code = btn.closest('.code-block-wrap').querySelector('code');
+      if (!code) return;
+      var cmd = code.textContent;
+      var origHtml = btn.innerHTML;
+      function showCopied() {
+        btn.textContent = '\u2714 Copied';
+        btn.classList.add('copied');
+        setTimeout(function () { btn.innerHTML = origHtml; btn.classList.remove('copied'); }, 1500);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(showCopied);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = cmd;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showCopied();
+      }
+    }
+
+    function toggleDetail(btn) {
+      var targetId = btn.getAttribute('data-target');
+      var row = document.getElementById(targetId);
+      if (!row) return;
+      var expanded = btn.getAttribute('aria-expanded') === 'true';
+      document.querySelectorAll('.row-expand-btn[aria-expanded="true"]').forEach(function (other) {
+        if (other !== btn) {
+          other.setAttribute('aria-expanded', 'false');
+          other.setAttribute('aria-label', 'Show actions');
+          var otherId = other.getAttribute('data-target');
+          var otherRow = document.getElementById(otherId);
+          if (otherRow) otherRow.classList.add('hidden');
+        }
+      });
+      btn.setAttribute('aria-expanded', String(!expanded));
+      btn.setAttribute('aria-label', expanded ? 'Show actions' : 'Hide actions');
+      row.classList.toggle('hidden');
+    }
+
+    document.getElementById('machines-content').addEventListener('click', function (e) {
+      var btn = e.target.closest('.row-expand-btn');
+      if (btn) toggleDetail(btn);
+    });
+
     // ── Fetch status + history from all hubs ────────────────────────
     function authFetch(url) {
       if (window.TELA_CONSOLE_TOKEN) {
@@ -428,7 +561,7 @@
 
       // Hubs table
       var hubsHtml = '<table class="hub-table"><thead><tr>'
-        + '<th>Hub</th><th>Status</th><th>Machines</th><th>Online</th><th>Sessions</th><th></th>'
+        + '<th>Hub</th><th>Status</th><th>Machines</th><th>Online</th><th>Sessions</th>'
         + '</tr></thead><tbody>';
 
       results.forEach(function (r) {
@@ -441,15 +574,14 @@
         else if (r.status === 'auth_error') dot = '<span class="dot yellow"></span> Auth Error';
         else dot = '<span class="dot red"></span> Unreachable';
 
-        var consoleLink = '<a class="btn-console" href="' + escHtml(r.hub.url) + '/" target="_blank">&#x2197; Console</a>';
+        var consoleHref = escHtml(r.hub.url) + '/';
 
         hubsHtml += '<tr>'
-          + '<td><span class="hub-name">' + escHtml(r.hubName) + '</span><br><span class="hub-url">' + escHtml(r.hub.url) + '</span></td>'
+          + '<td><a class="hub-name" href="' + consoleHref + '" target="_blank" title="Open hub console">' + escHtml(r.hubName) + '</a><br><span class="hub-url">' + escHtml(r.hub.url) + '</span></td>'
           + '<td>' + dot + '</td>'
           + '<td>' + machines.length + '</td>'
           + '<td>' + online + '</td>'
           + '<td>' + sessions + '</td>'
-          + '<td>' + consoleLink + '</td>'
           + '</tr>';
       });
 
@@ -467,11 +599,11 @@
       if (allMachines.length === 0) {
         document.getElementById('machines-content').innerHTML = '<p class="no-data">No machines registered across any hub.</p>';
       } else {
-        var mHtml = '<table class="machine-table"><thead><tr>'
-          + '<th>Machine</th><th>Hub</th><th>Status</th><th>Services</th><th>Last seen</th>'
+        var mHtml = '<table class="machine-table has-expand"><thead><tr>'
+          + '<th></th><th>Machine</th><th>Hub</th><th>Status</th><th>Services</th><th>Last seen</th>'
           + '</tr></thead><tbody>';
 
-        allMachines.forEach(function (item) {
+        allMachines.forEach(function (item, mIdx) {
           var m = item.machine;
 
           var statusDot;
@@ -497,13 +629,30 @@
           if (tags) meta.push(tags);
           if (meta.length > 0) name += '<div class="machine-meta">' + meta.join('') + '</div>';
 
+          var machineDetailId = 'machine-detail-' + mIdx;
+
           mHtml += '<tr>'
+            + '<td><button class="row-expand-btn" type="button" aria-expanded="false" aria-label="Show actions" data-target="' + machineDetailId + '">&#x25B6;</button></td>'
             + '<td>' + name + '</td>'
             + '<td>' + escHtml(item.hubName) + '</td>'
             + '<td>' + statusDot + '</td>'
             + '<td>' + svcs + '</td>'
             + '<td>' + isoTime(m.lastSeen) + '</td>'
             + '</tr>';
+
+          var cmdBoxHtml;
+          if (m.agentConnected) {
+            var wsUrl = httpToWs(item.hubUrl);
+            var connectCmd = 'tela connect -hub ' + wsUrl + ' -machine ' + m.id;
+            cmdBoxHtml = '<div class="code-block-wrap"><div class="code-block"><code>'
+              + escHtml(connectCmd) + '</code></div>'
+              + '<button class="code-copy-btn" type="button" onclick="copyCmd(this)">&#x1F4CB; Copy</button></div>';
+          } else {
+            cmdBoxHtml = '<span class="no-data">Machine offline</span>';
+          }
+
+          mHtml += '<tr class="detail-row hidden" id="' + machineDetailId + '">'
+            + '<td colspan="6"><div class="detail-inner">' + cmdBoxHtml + '</div></td></tr>';
         });
 
         mHtml += '</tbody></table>';
