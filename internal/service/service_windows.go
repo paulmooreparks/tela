@@ -138,18 +138,17 @@ func Start(binaryName string) error {
 	defer m.Disconnect()
 
 	svcName := ServiceName(binaryName)
-	svcNamePtr, err := syscall.UTF16PtrFromString(svcName)
-	if err != nil {
-		return fmt.Errorf("service name: %w", err)
-	}
-
-	h, err := windows.OpenService(m.Handle, svcNamePtr, windows.SERVICE_START)
+	s, err := m.OpenService(svcName)
 	if err != nil {
 		return fmt.Errorf("open service %s: %w", svcName, err)
 	}
-	defer windows.CloseServiceHandle(h)
+	defer s.Close()
 
-	if err := windows.StartService(h, 0, nil); err != nil {
+	if err := s.Start(); err != nil {
+		// Query the service config to show the binary path for diagnostics.
+		if cfg, qerr := s.Config(); qerr == nil {
+			return fmt.Errorf("start service %s: %w\n  binary: %s", svcName, err, cfg.BinaryPathName)
+		}
 		return fmt.Errorf("start service %s: %w", svcName, err)
 	}
 	return nil
@@ -168,19 +167,14 @@ func Stop(binaryName string) error {
 	defer m.Disconnect()
 
 	svcName := ServiceName(binaryName)
-	svcNamePtr, err := syscall.UTF16PtrFromString(svcName)
-	if err != nil {
-		return fmt.Errorf("service name: %w", err)
-	}
-
-	h, err := windows.OpenService(m.Handle, svcNamePtr, windows.SERVICE_STOP)
+	s, err := m.OpenService(svcName)
 	if err != nil {
 		return fmt.Errorf("open service %s: %w", svcName, err)
 	}
-	defer windows.CloseServiceHandle(h)
+	defer s.Close()
 
-	var status windows.SERVICE_STATUS
-	if err := windows.ControlService(h, windows.SERVICE_CONTROL_STOP, &status); err != nil {
+	_, err = s.Control(svc.Stop)
+	if err != nil {
 		return fmt.Errorf("stop service %s: %w", svcName, err)
 	}
 	return nil
