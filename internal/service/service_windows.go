@@ -348,21 +348,36 @@ func setServiceDACL(handle windows.Handle) {
 	_ = r1 // Non-fatal; best-effort.
 }
 
-// grantSystemAccess uses icacls to ensure the SYSTEM account has read+execute
-// access to the given path. For directories, access is inherited by children.
+// grantSystemAccess ensures the SYSTEM account can read and execute the given
+// path. It first removes any explicit DENY ACEs for SYSTEM (which override
+// allow ACEs and cannot be fixed by /grant alone), then adds an allow ACE.
+// For files, it also removes the Mark of the Web (Zone.Identifier ADS) which
+// can block SYSTEM from executing internet-downloaded binaries.
 // Errors are silently ignored (non-fatal).
 func grantSystemAccess(path string) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return
 	}
+
 	if info.IsDir() {
+		// Remove any explicit deny ACEs for SYSTEM on the directory tree
+		_ = exec.Command("icacls", path, "/remove:d", "SYSTEM", "/T", "/Q").Run()
 		// (OI)(CI) = inherit to files and subdirectories
 		_ = exec.Command("icacls", path, "/grant", "SYSTEM:(OI)(CI)(RX)", "/T", "/Q").Run()
 	} else {
+		// Remove the Mark of the Web (Zone.Identifier alternate data stream).
+		// Downloaded files may be tagged as internet-origin, which can block
+		// execution by the SYSTEM account under certain security policies.
+		_ = os.Remove(path + ":Zone.Identifier")
+
+		// Remove any explicit deny ACEs for SYSTEM on the file
+		_ = exec.Command("icacls", path, "/remove:d", "SYSTEM", "/Q").Run()
 		_ = exec.Command("icacls", path, "/grant", "SYSTEM:(RX)", "/Q").Run()
-		// Also grant SYSTEM access to the directory containing the binary
+
+		// Same for the directory containing the binary
 		dir := filepath.Dir(path)
+		_ = exec.Command("icacls", dir, "/remove:d", "SYSTEM", "/Q").Run()
 		_ = exec.Command("icacls", dir, "/grant", "SYSTEM:(OI)(CI)(RX)", "/Q").Run()
 	}
 }
