@@ -521,6 +521,18 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[telad] ")
 
+	// When running as a Windows service, redirect log output to a file.
+	// stderr goes nowhere under the SCM, so without this all log output
+	// (including per-machine loggers that write to os.Stderr) is lost.
+	if runtime.GOOS == "windows" && service.IsWindowsService() {
+		logPath := service.LogPath("telad")
+		lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, service.ConfigFilePerm())
+		if err == nil {
+			log.SetOutput(lf)
+			os.Stderr = lf
+		}
+	}
+
 	svcCfg, err := service.LoadConfig("telad")
 	if err != nil {
 		log.Fatalf("service config: %v", err)

@@ -134,6 +134,13 @@ func BinaryConfigPath(binaryName string) string {
 	return filepath.Join(ConfigDir(), binaryName+".yaml")
 }
 
+// LogPath returns the path to the service log file.
+// e.g. "telad" → C:\ProgramData\Tela\telad.log  (Windows)
+//      "telad" → /etc/tela/telad.log             (Linux/macOS)
+func LogPath(binaryName string) string {
+	return filepath.Join(ConfigDir(), binaryName+".log")
+}
+
 // EncodeYAMLConfig encodes YAML content as base64 for storage in Config.YAMLConfig.
 func EncodeYAMLConfig(yamlContent string) string {
 	return base64.StdEncoding.EncodeToString([]byte(yamlContent))
