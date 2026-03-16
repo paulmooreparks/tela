@@ -310,7 +310,11 @@ Install examples:
 	case "status":
 		serviceStatus()
 	case "run":
-		serviceRun()
+		if service.IsWindowsService() {
+			runAsWindowsService()
+		} else {
+			serviceRun()
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown service subcommand: %s\n", subcmd)
 		os.Exit(1)
