@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -15,8 +15,7 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
-// Install registers the service with the Windows Service Control Manager
-// and starts it immediately.
+// Install registers the service with the Windows Service Control Manager.
 func Install(binaryName string, cfg *Config) error {
 	if !IsElevated() {
 		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
@@ -74,13 +73,6 @@ func Install(binaryName string, cfg *Config) error {
 		fmt.Fprintf(os.Stderr, "warning: could not set recovery actions: %v\n", err)
 	}
 
-	// Start the service using the handle from CreateService (which has full access).
-	// Opening the service again later with SERVICE_ALL_ACCESS can fail on some
-	// Windows configurations even when elevated.
-	if err := s.Start(); err != nil {
-		return fmt.Errorf("service installed but failed to start: %w", err)
-	}
-
 	return nil
 }
 
@@ -131,13 +123,14 @@ func Start(binaryName string) error {
 	}
 
 	svcName := ServiceName(binaryName)
-	out, err := exec.Command("sc", "start", svcName).CombinedOutput()
+	h, err := openServiceHandle(svcName, windows.SERVICE_START)
 	if err != nil {
-		output := strings.TrimSpace(string(out))
-		if strings.Contains(output, "1056") {
-			return fmt.Errorf("service %s is already running", svcName)
-		}
-		return fmt.Errorf("start service %s: %s", svcName, output)
+		return fmt.Errorf("open service %s: %w", svcName, err)
+	}
+	defer windows.CloseServiceHandle(h)
+
+	if err := windows.StartService(h, 0, nil); err != nil {
+		return fmt.Errorf("start service %s: %w", svcName, err)
 	}
 	return nil
 }
@@ -149,53 +142,50 @@ func Stop(binaryName string) error {
 	}
 
 	svcName := ServiceName(binaryName)
-	out, err := exec.Command("sc", "stop", svcName).CombinedOutput()
+	h, err := openServiceHandle(svcName, windows.SERVICE_STOP)
 	if err != nil {
-		output := strings.TrimSpace(string(out))
-		if strings.Contains(output, "1062") {
-			return fmt.Errorf("service %s is not running", svcName)
-		}
-		return fmt.Errorf("stop service %s: %s", svcName, output)
+		return fmt.Errorf("open service %s: %w", svcName, err)
+	}
+	defer windows.CloseServiceHandle(h)
+
+	var status windows.SERVICE_STATUS
+	if err := windows.ControlService(h, windows.SERVICE_CONTROL_STOP, &status); err != nil {
+		return fmt.Errorf("stop service %s: %w", svcName, err)
 	}
 	return nil
 }
 
 // QueryStatus returns the current state of the service.
 func QueryStatus(binaryName string) (*Status, error) {
-	m, err := mgr.Connect()
+	svcName := ServiceName(binaryName)
+	h, err := openServiceHandle(svcName, windows.SERVICE_QUERY_STATUS)
 	if err != nil {
-		// Non-elevated users can still query via sc.exe
-		return queryStatusFallback(binaryName)
-	}
-	defer m.Disconnect()
-
-	s, err := m.OpenService(ServiceName(binaryName))
-	if err != nil {
+		// Service does not exist or SCM not accessible
 		return &Status{Installed: false, Info: "not installed"}, nil
 	}
-	defer s.Close()
+	defer windows.CloseServiceHandle(h)
 
-	st, err := s.Query()
-	if err != nil {
+	var st windows.SERVICE_STATUS
+	if err := windows.QueryServiceStatus(h, &st); err != nil {
 		return &Status{Installed: true, Info: fmt.Sprintf("query error: %v", err)}, nil
 	}
 
-	running := st.State == svc.Running
+	running := st.CurrentState == windows.SERVICE_RUNNING
 	stateStr := "unknown"
-	switch st.State {
-	case svc.Stopped:
+	switch st.CurrentState {
+	case windows.SERVICE_STOPPED:
 		stateStr = "stopped"
-	case svc.StartPending:
+	case windows.SERVICE_START_PENDING:
 		stateStr = "start pending"
-	case svc.StopPending:
+	case windows.SERVICE_STOP_PENDING:
 		stateStr = "stop pending"
-	case svc.Running:
+	case windows.SERVICE_RUNNING:
 		stateStr = "running"
-	case svc.ContinuePending:
+	case windows.SERVICE_CONTINUE_PENDING:
 		stateStr = "continue pending"
-	case svc.PausePending:
+	case windows.SERVICE_PAUSE_PENDING:
 		stateStr = "pause pending"
-	case svc.Paused:
+	case windows.SERVICE_PAUSED:
 		stateStr = "paused"
 	}
 
@@ -274,6 +264,39 @@ func RunAsService(binaryName string, handler *Handler) error {
 	return svc.Run(ServiceName(binaryName), handler)
 }
 
+// openServiceHandle opens a service with the specified access rights using
+// the Windows API directly. The Go mgr.OpenService always requests
+// SERVICE_ALL_ACCESS which can fail even when elevated. Using minimal
+// access rights (e.g. SERVICE_START, SERVICE_STOP) avoids this.
+func openServiceHandle(svcName string, access uint32) (windows.Handle, error) {
+	scm, err := openSCManager(windows.SC_MANAGER_CONNECT)
+	if err != nil {
+		return 0, err
+	}
+	defer windows.CloseServiceHandle(scm)
+
+	svcNamePtr, err := syscall.UTF16PtrFromString(svcName)
+	if err != nil {
+		return 0, err
+	}
+	h, err := windows.OpenService(scm, svcNamePtr, access)
+	if err != nil {
+		return 0, err
+	}
+	return h, nil
+}
+
+// openSCManager opens the Service Control Manager with the specified access
+// rights. The Go mgr.Connect always requests SC_MANAGER_ALL_ACCESS, but
+// SC_MANAGER_CONNECT is sufficient for opening existing services.
+func openSCManager(access uint32) (windows.Handle, error) {
+	h, err := windows.OpenSCManager(nil, nil, access)
+	if err != nil {
+		return 0, fmt.Errorf("connect to SCM: %w", err)
+	}
+	return h, nil
+}
+
 // grantSystemAccess uses icacls to ensure the SYSTEM account has read+execute
 // access to the given path. For directories, access is inherited by children.
 // Errors are silently ignored (non-fatal).
@@ -293,19 +316,3 @@ func grantSystemAccess(path string) {
 	}
 }
 
-// queryStatusFallback uses sc.exe when the SCM API isn't accessible.
-func queryStatusFallback(binaryName string) (*Status, error) {
-	svcName := ServiceName(binaryName)
-	out, err := exec.Command("sc", "query", svcName).Output()
-	if err != nil {
-		return &Status{Installed: false, Info: "not installed"}, nil
-	}
-	output := string(out)
-	if strings.Contains(output, "RUNNING") {
-		return &Status{Installed: true, Running: true, Info: "running"}, nil
-	}
-	if strings.Contains(output, "STOPPED") {
-		return &Status{Installed: true, Running: false, Info: "stopped"}, nil
-	}
-	return &Status{Installed: true, Running: false, Info: "installed"}, nil
-}

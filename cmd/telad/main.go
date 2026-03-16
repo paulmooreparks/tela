@@ -427,10 +427,11 @@ func serviceInstall() {
 		os.Exit(1)
 	}
 
-	fmt.Println("telad service installed and started")
+	fmt.Println("telad service installed successfully")
 	if destPath != "" {
 		fmt.Printf("  config: %s\n", destPath)
 	}
+	fmt.Println("  start:  telad service start")
 	if destPath != "" {
 		fmt.Println("  edit:   " + destPath)
 	}
