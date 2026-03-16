@@ -6,7 +6,7 @@
 // WireGuard sessions between agents and clients.
 //
 // Configuration (in order of precedence, highest first):
-//   1. Environment variables  (HUB_PORT, HUB_UDP_PORT, HUB_NAME, HUB_WWW_DIR)
+//   1. Environment variables  (TELAHUBD_PORT, TELAHUBD_UDP_PORT, TELAHUBD_NAME, TELAHUBD_WWW_DIR)
 //   2. YAML config file       (-config telahubd.yaml)
 //   3. Built-in defaults      (port 80, udpPort 41820, wwwDir ./www)
 //
@@ -48,10 +48,12 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -123,11 +125,11 @@ func applyHubConfig(cfg *hubConfig) {
 	}
 
 	// Env vars override config file
-	httpPort = envInt("HUB_PORT", httpPort)
-	udpPort = envInt("HUB_UDP_PORT", udpPort)
-	udpHost = envStr("HUB_UDP_HOST", udpHost)
-	hubName = envStr("HUB_NAME", hubName)
-	if v := os.Getenv("HUB_WWW_DIR"); v != "" {
+	httpPort = envInt("TELAHUBD_PORT", httpPort)
+	udpPort = envInt("TELAHUBD_UDP_PORT", udpPort)
+	udpHost = envStr("TELAHUBD_UDP_HOST", udpHost)
+	hubName = envStr("TELAHUBD_NAME", hubName)
+	if v := os.Getenv("TELAHUBD_WWW_DIR"); v != "" {
 		if info, err := os.Stat(v); err == nil && info.IsDir() {
 			wwwDir = v
 			wwwDirOverride = true
@@ -1311,25 +1313,71 @@ func runKeepalive() {
 
 // ── Main ───────────────────────────────────────────────────────────
 
+func printHubUsage() {
+	fmt.Fprintf(os.Stderr, `telahubd — Tela Hub Server
+
+Combined HTTP + WebSocket + UDP relay server. Serves the hub console,
+exposes status/history APIs, and relays encrypted WireGuard sessions
+between agents and clients.
+
+Usage:
+  telahubd [options]                Run the hub server
+  telahubd <command> [options]      Run a subcommand
+
+Commands:
+  service   Manage telahubd as an OS service (install, start, stop, etc.)
+  user      Manage auth tokens (add, remove, grant, revoke, rotate)
+  portal    Manage portal registrations (add, remove, list, sync)
+  version   Print version and exit
+  help      Show this help
+
+Server Options:
+  -config <file>   Path to YAML config file
+  -v               Verbose logging (include per-message relay logs)
+
+Environment Variables (override config file):
+  TELAHUBD_PORT         HTTP+WS listen port       (default: 80)
+  TELAHUBD_UDP_PORT     UDP relay port             (default: 41820)
+  TELAHUBD_UDP_HOST     Explicit UDP host          (for proxied setups)
+  TELAHUBD_NAME         Hub display name
+  TELAHUBD_WWW_DIR      Static file directory      (default: ./www)
+  TELA_OWNER_TOKEN      Bootstrap owner auth token
+
+Portal Bootstrap:
+  TELAHUBD_PORTAL_URL   Portal URL to register with on first start
+  TELAHUBD_PORTAL_TOKEN Admin API token for portal registration
+  TELAHUBD_PUBLIC_URL   This hub's public URL (for portal registration)
+
+Examples:
+  telahubd -config telahubd.yaml
+  telahubd -config telahubd.yaml -v
+  telahubd user bootstrap
+  telahubd service install -config telahubd.yaml
+
+Run 'telahubd <command>' without arguments for command-specific help.
+`)
+}
+
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-
-	// Handle service subcommand before anything else.
-	if len(os.Args) > 1 && os.Args[1] == "service" {
-		handleServiceCommand()
-		return
-	}
-
-	// Handle user/auth management subcommand.
-	if len(os.Args) > 1 && os.Args[1] == "user" {
-		handleUserCommand()
-		return
-	}
-
-	// Handle portal management subcommand.
-	if len(os.Args) > 1 && os.Args[1] == "portal" {
-		handlePortalCommand()
-		return
+	// Handle subcommands and special cases before flag parsing.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "service":
+			handleServiceCommand()
+			return
+		case "user":
+			handleUserCommand()
+			return
+		case "portal":
+			handlePortalCommand()
+			return
+		case "version", "--version":
+			fmt.Printf("telahubd %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+			os.Exit(0)
+		case "help", "-h", "--help":
+			printHubUsage()
+			os.Exit(0)
+		}
 	}
 
 	// If launched by Windows SCM, enter service mode automatically.
@@ -1338,12 +1386,10 @@ func main() {
 		return
 	}
 
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Printf("telahubd %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
-		os.Exit(0)
-	}
+	log.SetFlags(log.Ltime)
 
 	// Parse flags
+	flag.Usage = func() { printHubUsage() }
 	configPath := flag.String("config", "", "Path to YAML config file")
 	verboseFlag := flag.Bool("v", false, "Verbose logging (include per-message relay logs)")
 	flag.Parse()
@@ -1415,7 +1461,7 @@ func main() {
 
 	// Portal env-var bootstrap (requires globalAuth for viewer token)
 	if bootstrapPortalsFromEnv(cfg, globalCfgPath) {
-		log.Println("[hub] portal registered from TELA_PORTAL_URL")
+		log.Println("[hub] portal registered from TELAHUBD_PORTAL_URL")
 	}
 
 	runHub(nil)
@@ -1746,7 +1792,7 @@ func serviceRunHub(stopCh <-chan struct{}) {
 
 	// Portal env-var bootstrap (requires globalAuth for viewer token)
 	if bootstrapPortalsFromEnv(cfg, yamlPath) {
-		log.Println("[hub] portal registered from TELA_PORTAL_URL")
+		log.Println("[hub] portal registered from TELAHUBD_PORTAL_URL")
 	}
 
 	runHub(stopCh)
@@ -1960,12 +2006,12 @@ func registerWithPortal(portalURL, adminToken, regHubName, regHubURL, viewerToke
 	return registerResult{Entry: entry, Updated: respData.Updated}, nil
 }
 
-// bootstrapPortalsFromEnv checks for TELA_PORTAL_URL. If the hub has no
+// bootstrapPortalsFromEnv checks for TELAHUBD_PORTAL_URL. If the hub has no
 // portals configured and the env var is set, it registers with the portal
 // and writes the config. Returns true if bootstrap occurred.
 // Requires globalAuth to be initialized (needs viewer token).
 func bootstrapPortalsFromEnv(cfg *hubConfig, cfgPath string) bool {
-	portalURL := os.Getenv("TELA_PORTAL_URL")
+	portalURL := os.Getenv("TELAHUBD_PORTAL_URL")
 	if portalURL == "" {
 		return false
 	}
@@ -1974,15 +2020,15 @@ func bootstrapPortalsFromEnv(cfg *hubConfig, cfgPath string) bool {
 		return false
 	}
 
-	portalToken := os.Getenv("TELA_PORTAL_TOKEN") // admin token for registration (not persisted)
-	hubURL := os.Getenv("TELA_HUB_URL")
+	portalToken := os.Getenv("TELAHUBD_PORTAL_TOKEN") // admin token for registration (not persisted)
+	hubURL := os.Getenv("TELAHUBD_PUBLIC_URL")
 	regHubName := cfg.Name
 	if regHubName == "" {
-		regHubName = envStr("HUB_NAME", "")
+		regHubName = envStr("TELAHUBD_NAME", "")
 	}
 
 	if hubURL == "" || regHubName == "" {
-		log.Println("[hub] portal bootstrap: TELA_HUB_URL and hub name (HUB_NAME or config) required, skipping")
+		log.Println("[hub] portal bootstrap: TELAHUBD_PUBLIC_URL and hub name (TELAHUBD_NAME or config) required, skipping")
 		return false
 	}
 
@@ -2029,7 +2075,7 @@ func handlePortalCommand() {
 }
 
 func printPortalUsage() {
-	fmt.Fprintf(os.Stderr, `telahubd portal — manage portal registrations
+	fmt.Fprintf(os.Stderr, `telahubd portal -- manage portal registrations
 
 Register this hub with one or more Tela portals (like Awan Saya) so that
 users who query the portal can discover it.
@@ -2037,23 +2083,19 @@ users who query the portal can discover it.
 Usage:
   telahubd portal add <name> <url> [-config <path>]    Register with a portal
   telahubd portal remove <name> [-config <path>]        Unregister from a portal
-  telahubd portal list [-config <path>]                  List portal registrations
+  telahubd portal list [-config <path>] [-json]          List portal registrations
   telahubd portal sync [-config <path>]                  Push viewer token to all portals
 
 Examples:
   telahubd portal add awansaya https://awansaya.net
   telahubd portal remove awansaya
   telahubd portal list
+  telahubd portal list -json
 `)
 }
 
-// portalCmdConfigPath returns the config file path for portal commands.
-func portalCmdConfigPath() string {
-	for i, arg := range os.Args {
-		if arg == "-config" && i+1 < len(os.Args) {
-			return os.Args[i+1]
-		}
-	}
+// portalCmdConfigPathDefault returns the default config file path for portal commands.
+func portalCmdConfigPathDefault() string {
 	// Check for persisted config in data dir
 	const dataConfig = "data/telahubd.yaml"
 	if _, err := os.Stat(dataConfig); err == nil {
@@ -2063,14 +2105,18 @@ func portalCmdConfigPath() string {
 }
 
 func cmdPortalAdd() {
-	if len(os.Args) < 5 {
+	fs := flag.NewFlagSet("portal add", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	if fs.NArg() < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: telahubd portal add <name> <url> [-config <path>]")
 		fmt.Fprintln(os.Stderr, "Example: telahubd portal add awansaya https://awansaya.net")
 		os.Exit(1)
 	}
 
-	name := os.Args[3]
-	portalURL := strings.TrimRight(os.Args[4], "/")
+	name := fs.Arg(0)
+	portalURL := strings.TrimRight(fs.Arg(1), "/")
 
 	// Validate URL
 	if !strings.HasPrefix(portalURL, "http://") && !strings.HasPrefix(portalURL, "https://") {
@@ -2084,7 +2130,10 @@ func cmdPortalAdd() {
 	token = strings.TrimSpace(token)
 
 	// Load config
-	cfgPath := portalCmdConfigPath()
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = portalCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2166,13 +2215,20 @@ func cmdPortalAdd() {
 }
 
 func cmdPortalRemove() {
-	if len(os.Args) < 4 {
+	fs := flag.NewFlagSet("portal remove", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: telahubd portal remove <name> [-config <path>]")
 		os.Exit(1)
 	}
 
-	name := os.Args[3]
-	cfgPath := portalCmdConfigPath()
+	name := fs.Arg(0)
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = portalCmdConfigPathDefault()
+	}
 
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
@@ -2217,7 +2273,15 @@ func cmdPortalRemove() {
 }
 
 func cmdPortalList() {
-	cfgPath := portalCmdConfigPath()
+	fs := flag.NewFlagSet("portal list", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = portalCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2230,21 +2294,40 @@ func cmdPortalList() {
 		return
 	}
 
-	fmt.Printf("%-20s %-40s %s\n", "NAME", "URL", "TOKEN")
-	fmt.Printf("%-20s %-40s %s\n", "----", "---", "-----")
-
 	// Sort for deterministic output
 	var names []string
 	for n := range cfg.Portals {
 		names = append(names, n)
 	}
-	for i := 0; i < len(names); i++ {
-		for j := i + 1; j < len(names); j++ {
-			if names[i] > names[j] {
-				names[i], names[j] = names[j], names[i]
-			}
+	sort.Strings(names)
+
+	if *asJSON {
+		type entry struct {
+			Name  string `json:"name"`
+			URL   string `json:"url"`
+			Token string `json:"token"`
 		}
+		var entries []entry
+		for _, n := range names {
+			p := cfg.Portals[n]
+			tokenDisplay := ""
+			if p.Token != "" {
+				if len(p.Token) > 4 {
+					tokenDisplay = "****" + p.Token[len(p.Token)-4:]
+				} else {
+					tokenDisplay = "****"
+				}
+			}
+			entries = append(entries, entry{Name: n, URL: p.URL, Token: tokenDisplay})
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(entries)
+		return
 	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tURL\tTOKEN")
 	for _, n := range names {
 		p := cfg.Portals[n]
 		tokenDisplay := "(none)"
@@ -2255,12 +2338,20 @@ func cmdPortalList() {
 				tokenDisplay = "****"
 			}
 		}
-		fmt.Printf("%-20s %-40s %s\n", n, p.URL, tokenDisplay)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", n, p.URL, tokenDisplay)
 	}
+	w.Flush()
 }
 
 func cmdPortalSync() {
-	cfgPath := portalCmdConfigPath()
+	fs := flag.NewFlagSet("portal sync", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = portalCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2297,7 +2388,7 @@ func cmdPortalSync() {
 		name = hubName
 	}
 	if name == "" {
-		fmt.Fprintln(os.Stderr, "Error: no hub name configured (set 'name' in config or HUB_NAME env)")
+		fmt.Fprintln(os.Stderr, "Error: no hub name configured (set 'name' in config or TELAHUBD_NAME env)")
 		os.Exit(1)
 	}
 
@@ -2338,11 +2429,11 @@ func handleUserCommand() {
 }
 
 func printUserUsage() {
-	fmt.Fprintf(os.Stderr, `telahubd user — manage auth tokens
+	fmt.Fprintf(os.Stderr, `telahubd user -- manage auth tokens
 
 Usage:
   telahubd user bootstrap [-config <path>]         First-run: generate owner token
-  telahubd user list [-config <path>]               List all token identities
+  telahubd user list [-config <path>] [-json]       List all token identities
   telahubd user add <id> [-config <path>] [-role owner|admin]
                                                      Add a new token identity
   telahubd user remove <id> [-config <path>]        Remove a token identity
@@ -2354,14 +2445,8 @@ Usage:
 `)
 }
 
-// userCmdConfigPath returns the config file path from -config flag or
-// the system default.
-func userCmdConfigPath() string {
-	for i, arg := range os.Args {
-		if arg == "-config" && i+1 < len(os.Args) {
-			return os.Args[i+1]
-		}
-	}
+// userCmdConfigPathDefault returns the default config file path.
+func userCmdConfigPathDefault() string {
 	return service.BinaryConfigPath("telahubd")
 }
 
@@ -2398,7 +2483,14 @@ func findTokenEntry(cfg *hubConfig, id string) *tokenEntry {
 }
 
 func cmdUserBootstrap() {
-	cfgPath := userCmdConfigPath()
+	fs := flag.NewFlagSet("user bootstrap", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2449,12 +2541,20 @@ func cmdUserBootstrap() {
 	fmt.Printf("  Config:  %s\n", cfgPath)
 	fmt.Printf("  Owner token: %s\n", token)
 	fmt.Println()
-	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("SAVE THIS TOKEN -- it will not be shown again.")
 	fmt.Println("Restart the hub to activate auth enforcement.")
 }
 
 func cmdUserList() {
-	cfgPath := userCmdConfigPath()
+	fs := flag.NewFlagSet("user list", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2466,8 +2566,32 @@ func cmdUserList() {
 		return
 	}
 
-	fmt.Printf("%-20s %-10s %s\n", "ID", "ROLE", "TOKEN (first 8)")
-	fmt.Printf("%-20s %-10s %s\n", "----", "----", "--------")
+	if *asJSON {
+		type entry struct {
+			ID           string `json:"id"`
+			Role         string `json:"role"`
+			TokenPreview string `json:"tokenPreview"`
+		}
+		var entries []entry
+		for _, t := range cfg.Auth.Tokens {
+			role := t.HubRole
+			if role == "" {
+				role = "user"
+			}
+			preview := t.Token
+			if len(preview) > 8 {
+				preview = preview[:8] + "..."
+			}
+			entries = append(entries, entry{ID: t.ID, Role: role, TokenPreview: preview})
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(entries)
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tROLE\tTOKEN (first 8)")
 	for _, t := range cfg.Auth.Tokens {
 		role := t.HubRole
 		if role == "" {
@@ -2477,30 +2601,32 @@ func cmdUserList() {
 		if len(preview) > 8 {
 			preview = preview[:8] + "..."
 		}
-		fmt.Printf("%-20s %-10s %s\n", t.ID, role, preview)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", t.ID, role, preview)
 	}
+	w.Flush()
 }
 
 func cmdUserAdd() {
-	if len(os.Args) < 4 {
+	fs := flag.NewFlagSet("user add", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	role := fs.String("role", "", "Role: owner, admin, or omit for user")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "usage: telahubd user add <id> [-config <path>] [-role owner|admin]")
 		os.Exit(1)
 	}
-	id := os.Args[3]
+	id := fs.Arg(0)
 
-	// Parse optional -role flag
-	role := ""
-	for i, arg := range os.Args {
-		if arg == "-role" && i+1 < len(os.Args) {
-			role = os.Args[i+1]
-		}
-	}
-	if role != "" && role != "owner" && role != "admin" {
+	if *role != "" && *role != "owner" && *role != "admin" {
 		fmt.Fprintf(os.Stderr, "error: role must be 'owner' or 'admin' (omit for regular user)\n")
 		os.Exit(1)
 	}
 
-	cfgPath := userCmdConfigPath()
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2521,7 +2647,7 @@ func cmdUserAdd() {
 	cfg.Auth.Tokens = append(cfg.Auth.Tokens, tokenEntry{
 		ID:      id,
 		Token:   token,
-		HubRole: role,
+		HubRole: *role,
 	})
 
 	if err := saveUserConfig(cfgPath, cfg); err != nil {
@@ -2530,24 +2656,31 @@ func cmdUserAdd() {
 	}
 
 	fmt.Printf("Added identity '%s'", id)
-	if role != "" {
-		fmt.Printf(" (role: %s)", role)
+	if *role != "" {
+		fmt.Printf(" (role: %s)", *role)
 	}
 	fmt.Println()
 	fmt.Printf("  Token: %s\n", token)
 	fmt.Println()
-	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("SAVE THIS TOKEN -- it will not be shown again.")
 	fmt.Println("Restart the hub to apply changes.")
 }
 
 func cmdUserRemove() {
-	if len(os.Args) < 4 {
+	fs := flag.NewFlagSet("user remove", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "usage: telahubd user remove <id> [-config <path>]")
 		os.Exit(1)
 	}
-	id := os.Args[3]
+	id := fs.Arg(0)
 
-	cfgPath := userCmdConfigPath()
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2602,14 +2735,21 @@ func cmdUserRemove() {
 }
 
 func cmdUserGrant() {
-	if len(os.Args) < 5 {
+	fs := flag.NewFlagSet("user grant", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	if fs.NArg() < 2 {
 		fmt.Fprintln(os.Stderr, "usage: telahubd user grant <id> <machineId> [-config <path>]")
 		os.Exit(1)
 	}
-	id := os.Args[3]
-	machineID := os.Args[4]
+	id := fs.Arg(0)
+	machineID := fs.Arg(1)
 
-	cfgPath := userCmdConfigPath()
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2647,14 +2787,21 @@ func cmdUserGrant() {
 }
 
 func cmdUserRevoke() {
-	if len(os.Args) < 5 {
+	fs := flag.NewFlagSet("user revoke", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	if fs.NArg() < 2 {
 		fmt.Fprintln(os.Stderr, "usage: telahubd user revoke <id> <machineId> [-config <path>]")
 		os.Exit(1)
 	}
-	id := os.Args[3]
-	machineID := os.Args[4]
+	id := fs.Arg(0)
+	machineID := fs.Arg(1)
 
-	cfgPath := userCmdConfigPath()
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2699,13 +2846,20 @@ func cmdUserRevoke() {
 }
 
 func cmdUserRotate() {
-	if len(os.Args) < 4 {
+	fs := flag.NewFlagSet("user rotate", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "usage: telahubd user rotate <id> [-config <path>]")
 		os.Exit(1)
 	}
-	id := os.Args[3]
+	id := fs.Arg(0)
 
-	cfgPath := userCmdConfigPath()
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
 	cfg, err := loadOrCreateHubConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -2752,6 +2906,52 @@ func cmdUserRotate() {
 	fmt.Printf("Rotated token for '%s'.\n", id)
 	fmt.Printf("  New token: %s\n", newToken)
 	fmt.Println()
-	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("SAVE THIS TOKEN -- it will not be shown again.")
 	fmt.Println("Restart the hub to apply changes.")
+}
+
+// permuteArgs reorders args so that flags come before positional arguments,
+// allowing users to write "telahubd user add myid -config path" instead of
+// requiring flags before positional args.
+func permuteArgs(fs *flag.FlagSet, args []string) []string {
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(a) > 0 && a[0] == '-' {
+			flags = append(flags, a)
+			if !containsEquals(a) && i+1 < len(args) {
+				name := a
+				for len(name) > 0 && name[0] == '-' {
+					name = name[1:]
+				}
+				if f := fs.Lookup(name); f != nil {
+					if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !bf.IsBoolFlag() {
+						i++
+						flags = append(flags, args[i])
+					}
+				} else {
+					i++
+					if i < len(args) {
+						flags = append(flags, args[i])
+					}
+				}
+			}
+		} else {
+			positional = append(positional, a)
+		}
+	}
+	return append(flags, positional...)
+}
+
+func containsEquals(s string) bool {
+	for _, c := range s {
+		if c == '=' {
+			return true
+		}
+	}
+	return false
 }

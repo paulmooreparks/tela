@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -205,11 +206,13 @@ func QueryStatus(binaryName string) (*Status, error) {
 
 // IsElevated returns true if the current process is running as Administrator.
 func IsElevated() bool {
-	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
+	var token windows.Token
+	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token)
 	if err != nil {
 		return false
 	}
-	return true
+	defer token.Close()
+	return token.IsElevated()
 }
 
 // IsWindowsService returns true if the process was started by the SCM.

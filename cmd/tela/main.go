@@ -34,7 +34,6 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
-	mathrand "math/rand"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -43,6 +42,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	mathrand "math/rand"
 	"net"
 	"net/http"
 	"net/netip"
@@ -62,8 +62,8 @@ import (
 	"golang.zx2c4.com/wireguard/tun/netstack"
 	"gopkg.in/yaml.v3"
 
-	"github.com/paulmooreparks/tela/internal/wsbind"
 	"github.com/paulmooreparks/tela/internal/service"
+	"github.com/paulmooreparks/tela/internal/wsbind"
 )
 
 // version is set at build time via -ldflags "-X main.version=..."
@@ -139,7 +139,7 @@ func main() {
 		cmdAdmin(os.Args[2:])
 	case "service":
 		handleServiceCommand()
-	case "version", "-v", "--version":
+	case "version", "--version":
 		fmt.Printf("tela %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 	case "help", "-h", "--help":
 		printUsage()

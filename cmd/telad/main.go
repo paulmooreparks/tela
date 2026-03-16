@@ -139,6 +139,39 @@ var verbose bool
 // stopCh is closed to signal graceful shutdown (used in service mode).
 var stopCh chan struct{}
 
+func printUsage() {
+	fmt.Fprintf(os.Stderr, `telad — Tela Daemon
+
+Register with a Tela Hub and expose local services through an encrypted
+WireGuard tunnel. No TUN device or admin/root required.
+
+Usage:
+  telad -config <file>                   Config-file mode (recommended)
+  telad -hub <url> -machine <id> [opts]  Single-machine mode
+
+Subcommands:
+  service   Manage telad as an OS service (install, start, stop, etc.)
+  version   Print version and exit
+  help      Show this help
+
+Environment Variables:
+  TELA_HUB            Hub WebSocket URL       (overridden by -hub)
+  TELA_MACHINE        Machine ID              (overridden by -machine)
+  TELA_TOKEN          Auth token              (overridden by -token)
+  TELAD_CONFIG        Config file path        (overridden by -config)
+  TELAD_PORTS         Port specs              (overridden by -ports)
+  TELAD_TARGET_HOST   Target host             (overridden by -target-host)
+
+Examples:
+  telad -config telad.yaml
+  telad -hub ws://hub -machine barn -ports 22:SSH,3389:RDP
+  telad -hub wss://hub.example.com -machine barn -ports "22:SSH,3389:RDP" -token s3cret
+
+Options:
+`)
+	flag.PrintDefaults()
+}
+
 func main() {
 	// Check for service subcommand or Windows SCM launch before flag parsing.
 	if len(os.Args) > 1 && os.Args[1] == "service" {
@@ -152,40 +185,30 @@ func main() {
 		return
 	}
 
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `telad — Tela Daemon
-
-Register with a Tela Hub and expose local services through an encrypted
-WireGuard tunnel. No TUN device or admin/root required.
-
-Usage:
-  telad -config <file>                   Config-file mode (recommended)
-  telad -hub <url> -machine <id> [opts]  Single-machine mode
-
-Examples:
-  telad -config telad.yaml
-  telad -hub ws://hub -machine barn -ports 22:SSH,3389:RDP
-  telad -hub wss://hub.example.com -machine barn -ports "22:SSH,3389:RDP,12345:Prometheus" -token s3cret
-
-Options:
-`)
-		flag.PrintDefaults()
+	// Handle version and help before flag parsing so they work without flags.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "--version":
+			fmt.Printf("telad %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+			os.Exit(0)
+		case "help", "-h", "--help":
+			printUsage()
+			os.Exit(0)
+		}
 	}
 
-	configPath := flag.String("config", envOrDefault("TELA_CONFIG", ""), "Path to YAML config file (env: TELA_CONFIG)")
+	flag.Usage = func() {
+		printUsage()
+	}
+
+	configPath := flag.String("config", envOrDefault("TELAD_CONFIG", ""), "Path to YAML config file (env: TELAD_CONFIG)")
 	hubURL := flag.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
 	machineID := flag.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID to register (env: TELA_MACHINE)")
 	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
-	portsStr := flag.String("ports", envOrDefault("TELA_PORTS", ""), "Comma-separated port specs: port[:name[:description]]  e.g. 22:SSH,3389:RDP,12345:MyApp (env: TELA_PORTS)")
-	targetHost := flag.String("target-host", envOrDefault("TELA_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELA_TARGET_HOST)")
+	portsStr := flag.String("ports", envOrDefault("TELAD_PORTS", ""), "Comma-separated port specs: port[:name[:description]]  e.g. 22:SSH,3389:RDP,12345:MyApp (env: TELAD_PORTS)")
+	targetHost := flag.String("target-host", envOrDefault("TELAD_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELAD_TARGET_HOST)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
-
-	// Handle version flag before anything else
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		fmt.Printf("telad %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
-		os.Exit(0)
-	}
 
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[telad] ")
