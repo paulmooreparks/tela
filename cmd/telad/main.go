@@ -362,10 +362,8 @@ func serviceUninstall() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	// Also remove the YAML config
-	yamlPath := service.BinaryConfigPath("telad")
-	_ = os.Remove(yamlPath)
 	fmt.Println("telad service uninstalled")
+	fmt.Printf("  config retained: %s\n", service.BinaryConfigPath("telad"))
 }
 
 func serviceStart() {

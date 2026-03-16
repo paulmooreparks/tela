@@ -97,15 +97,6 @@ func LoadConfig(binaryName string) (*Config, error) {
 	return &cfg, nil
 }
 
-// RemoveConfig deletes the service configuration file.
-func RemoveConfig(binaryName string) error {
-	path := ConfigPath(binaryName)
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove %s: %w", path, err)
-	}
-	return nil
-}
-
 // BinaryConfigPath returns the standard path to a binary's YAML config
 // file in the system-wide service config directory.
 // e.g. "telad" → C:\ProgramData\Tela\telad.yaml  (Windows)

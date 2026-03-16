@@ -63,6 +63,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/internal/wsbind"
+	"github.com/paulmooreparks/tela/internal/service"
 )
 
 // version is set at build time via -ldflags "-X main.version=..."
@@ -95,7 +96,22 @@ var portNames = map[uint16]string{
 
 var verbose bool
 
+// stopCh is closed to signal graceful shutdown (used in service mode).
+var stopCh chan struct{}
+
 func main() {
+	// Check for service subcommand or Windows SCM launch before flag parsing.
+	if len(os.Args) > 1 && os.Args[1] == "service" {
+		handleServiceCommand()
+		return
+	}
+
+	// If launched by the Windows SCM, enter service mode automatically.
+	if service.IsWindowsService() {
+		runAsWindowsService()
+		return
+	}
+
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[tela] ")
 
@@ -121,6 +137,8 @@ func main() {
 		cmdLogout(os.Args[2:])
 	case "admin":
 		cmdAdmin(os.Args[2:])
+	case "service":
+		handleServiceCommand()
 	case "version", "-v", "--version":
 		fmt.Printf("tela %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 	case "help", "-h", "--help":
@@ -145,6 +163,7 @@ Commands:
   status    Show hub status summary
   remote    Manage hub directory remotes (add, remove, list)
   admin     Remote hub auth management (tokens, ACLs)
+  service   Manage tela as an OS service (install, start, stop, etc.)
   version   Print version and exit
 
 Environment Variables:
@@ -230,12 +249,13 @@ func cmdConnect(args []string) {
 		os.Exit(1)
 	}
 
+	stopCh = make(chan struct{})
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
 		log.Println("shutting down")
-		os.Exit(0)
+		close(stopCh)
 	}()
 
 	const maxDelay = 5 * time.Minute
@@ -248,9 +268,23 @@ func cmdConnect(args []string) {
 		if err == nil {
 			attempt = 0 // successful session — reset backoff
 		}
+
+		// Check for shutdown before reconnecting
+		select {
+		case <-stopCh:
+			return
+		default:
+		}
+
 		delay := reconnectDelay(attempt, maxDelay)
 		log.Printf("reconnecting in %s...", delay.Round(time.Second))
-		time.Sleep(delay)
+
+		// Wait for delay or shutdown, whichever comes first
+		select {
+		case <-time.After(delay):
+		case <-stopCh:
+			return
+		}
 		attempt++
 	}
 }
@@ -474,7 +508,7 @@ func loadProfile(name string) (*connectionProfile, error) {
 }
 
 // runProfile loads a connection profile and runs all connections in parallel.
-// It blocks until all connections exit (Ctrl+C kills the process via signal handler).
+// It blocks until all connections exit or stopCh is closed.
 func runProfile(name string) {
 	profile, err := loadProfile(name)
 	if err != nil {
@@ -482,13 +516,17 @@ func runProfile(name string) {
 		os.Exit(1)
 	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		log.Println("shutting down all connections")
-		os.Exit(0)
-	}()
+	// Only initialize stopCh if not already set (service mode sets it externally).
+	if stopCh == nil {
+		stopCh = make(chan struct{})
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-sigCh
+			log.Println("shutting down all connections")
+			close(stopCh)
+		}()
+	}
 
 	log.Printf("loaded profile with %d connection(s)", len(profile.Connections))
 
@@ -543,9 +581,25 @@ func runProfile(name string) {
 				if err == nil {
 					attempt = 0 // successful session — reset backoff
 				}
+
+				// Check for shutdown before reconnecting
+				select {
+				case <-stopCh:
+					log.Printf("[profile:%d] shutdown received", idx)
+					return
+				default:
+				}
+
 				delay := reconnectDelay(attempt, maxDelay)
 				log.Printf("[profile:%d] reconnecting in %s...", idx, delay.Round(time.Second))
-				time.Sleep(delay)
+
+				// Wait for delay or shutdown, whichever comes first
+				select {
+				case <-time.After(delay):
+				case <-stopCh:
+					log.Printf("[profile:%d] shutdown received", idx)
+					return
+				}
 				attempt++
 			}
 		}(i+1, hubURL, machine, token, mappings)
@@ -1225,6 +1279,325 @@ func tryDirectUpgrade(bind *wsbind.Bind, hubURL string) {
 func logVerbose(format string, args ...any) {
 	if verbose {
 		log.Printf(format, args...)
+	}
+}
+
+// ── Service management ─────────────────────────────────────────────
+
+func handleServiceCommand() {
+	if len(os.Args) < 3 {
+		cfgPath := service.BinaryConfigPath("tela")
+		fmt.Fprintf(os.Stderr, `tela service — manage tela as an OS service
+
+Usage:
+  tela service install -config <file>  Install service (copies config to system dir)
+  tela service uninstall               Remove the service
+  tela service start                   Start the installed service
+  tela service stop                    Stop the running service
+  tela service restart                 Restart the service
+  tela service status                  Show service status
+  tela service run                     Run in service mode (used by the service manager)
+
+The service reads its configuration from:
+  %s
+
+The configuration file uses the connection profile YAML format:
+  connections:
+    - hub: wss://hub.example.com
+      machine: mybox
+      token: mytoken
+      services:
+        - remote: 22
+          local: 2222
+
+Edit that file and run "tela service restart" to reconfigure.
+
+Install example:
+  tela service install -config myprofile.yaml
+`, cfgPath)
+		os.Exit(1)
+	}
+
+	subcmd := os.Args[2]
+
+	switch subcmd {
+	case "install":
+		serviceInstall()
+	case "uninstall":
+		serviceUninstall()
+	case "start":
+		serviceStart()
+	case "stop":
+		serviceStop()
+	case "restart":
+		serviceRestart()
+	case "status":
+		serviceStatus()
+	case "run":
+		serviceRun()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown service subcommand: %s\n", subcmd)
+		os.Exit(1)
+	}
+}
+
+func serviceInstall() {
+	// Parse flags after "service install"
+	fs := flag.NewFlagSet("service install", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to YAML config file (required)")
+	fs.Parse(os.Args[3:])
+
+	if *configPath == "" {
+		fmt.Fprintf(os.Stderr, "error: -config is required\n")
+		fmt.Fprintf(os.Stderr, "usage: tela service install -config <file>\n")
+		os.Exit(1)
+	}
+
+	// Validate the config file
+	absConfig, _ := filepath.Abs(*configPath)
+	profile, err := loadProfile(absConfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Validate: service mode requires full WebSocket URLs (no hub name resolution)
+	for i, conn := range profile.Connections {
+		lower := strings.ToLower(conn.Hub)
+		if !strings.HasPrefix(lower, "ws://") && !strings.HasPrefix(lower, "wss://") {
+			fmt.Fprintf(os.Stderr, "error: connections[%d].hub must be a full WebSocket URL (ws:// or wss://) in service mode, got %q\n", i, conn.Hub)
+			fmt.Fprintf(os.Stderr, "Hub name resolution is not available in service mode.\n")
+			os.Exit(1)
+		}
+		// Validate: service mode requires numeric ports, not name-based resolution
+		for j, svc := range conn.Services {
+			if svc.Name != "" && svc.Remote == 0 {
+				fmt.Fprintf(os.Stderr, "error: connections[%d].services[%d] uses name-based resolution (%q) which is not supported in service mode. Use 'remote: <port>' instead.\n", i, j, svc.Name)
+				os.Exit(1)
+			}
+		}
+	}
+
+	// Copy the config to the system-wide location
+	destPath := service.BinaryConfigPath("tela")
+	if err := copyFile(absConfig, destPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Get the absolute path to the current executable
+	exePath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot determine executable path: %v\n", err)
+		os.Exit(1)
+	}
+	exePath, _ = filepath.Abs(exePath)
+
+	wd, _ := os.Getwd()
+	cfg := &service.Config{
+		BinaryPath:  exePath,
+		Description: "Tela Client — encrypted tunnel client",
+		WorkingDir:  wd,
+	}
+
+	if err := service.Install("tela", cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("tela service installed successfully")
+	fmt.Printf("  config: %s\n", destPath)
+	fmt.Println("  start:  tela service start")
+	fmt.Println("")
+	fmt.Println("Edit the config file and run \"tela service restart\" to reconfigure.")
+}
+
+// copyFile copies src to dst, creating parent directories as needed.
+func copyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
+		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", src, err)
+	}
+	if err := os.WriteFile(dst, data, 0600); err != nil {
+		return fmt.Errorf("write %s: %w", dst, err)
+	}
+	return nil
+}
+
+func serviceUninstall() {
+	if err := service.Uninstall("tela"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("tela service uninstalled")
+	fmt.Printf("  config retained: %s\n", service.BinaryConfigPath("tela"))
+}
+
+func serviceStart() {
+	if err := service.Start("tela"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("tela service started")
+}
+
+func serviceStop() {
+	if err := service.Stop("tela"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("tela service stopped")
+}
+
+func serviceRestart() {
+	fmt.Println("stopping tela service...")
+	_ = service.Stop("tela")
+	// Brief pause to let the service fully stop
+	time.Sleep(time.Second)
+	if err := service.Start("tela"); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("tela service restarted")
+}
+
+func serviceStatus() {
+	st, err := service.QueryStatus("tela")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("installed: %v\n", st.Installed)
+	fmt.Printf("running:   %v\n", st.Running)
+	fmt.Printf("status:    %s\n", st.Info)
+	if st.Installed {
+		fmt.Printf("config:    %s\n", service.BinaryConfigPath("tela"))
+	}
+}
+
+// serviceRunDaemon loads the YAML config from the system directory and
+// runs tela. It blocks until svcStop is closed.
+func serviceRunDaemon(svcStop <-chan struct{}) {
+	// Bridge service stop channel to the global stopCh so
+	// reconnect loops exit on shutdown.
+	stopCh = make(chan struct{})
+	go func() {
+		<-svcStop
+		close(stopCh)
+	}()
+
+	log.SetFlags(log.Ltime)
+	log.SetPrefix("[tela] ")
+
+	svcCfg, err := service.LoadConfig("tela")
+	if err != nil {
+		log.Fatalf("service config: %v", err)
+	}
+
+	if svcCfg.WorkingDir != "" {
+		os.Chdir(svcCfg.WorkingDir)
+	}
+
+	// Load the YAML config (profile format) from the system-wide location
+	yamlPath := service.BinaryConfigPath("tela")
+	profile, err := loadProfile(yamlPath)
+	if err != nil {
+		log.Fatalf("config %s: %v", yamlPath, err)
+	}
+
+	log.Printf("loaded %d connection(s) from %s", len(profile.Connections), yamlPath)
+
+	// Run all connections in parallel
+	var wg sync.WaitGroup
+	for i, conn := range profile.Connections {
+		hubURL := conn.Hub // Already validated as full URL at install time
+		token := conn.Token
+		machine := conn.Machine
+
+		if hubURL == "" || machine == "" {
+			log.Printf("[svc:%d] skipping: hub and machine are required", i+1)
+			continue
+		}
+
+		// Build mappings from profile services
+		var mappings []portMapping
+		for _, svc := range conn.Services {
+			if svc.Remote > 0 {
+				local := svc.Local
+				if local == 0 {
+					local = svc.Remote
+				}
+				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote)})
+			}
+		}
+
+		wg.Add(1)
+		go func(idx int, hub, mach, tok string, maps []portMapping) {
+			defer wg.Done()
+			log.Printf("[svc:%d] connecting to %s -> %s", idx, hub, mach)
+			const maxDelay = 5 * time.Minute
+			attempt := 0
+			for {
+				err := runSession(hub, mach, tok, maps)
+				if errors.Is(err, errFatal) {
+					log.Printf("[svc:%d] fatal error, stopping", idx)
+					return
+				}
+				if err == nil {
+					attempt = 0
+				}
+
+				select {
+				case <-stopCh:
+					log.Printf("[svc:%d] shutdown received", idx)
+					return
+				default:
+				}
+
+				delay := reconnectDelay(attempt, maxDelay)
+				log.Printf("[svc:%d] reconnecting in %s...", idx, delay.Round(time.Second))
+
+				select {
+				case <-time.After(delay):
+				case <-stopCh:
+					log.Printf("[svc:%d] shutdown received", idx)
+					return
+				}
+				attempt++
+			}
+		}(i+1, hubURL, machine, token, mappings)
+	}
+
+	// Block until service stop is signaled
+	<-svcStop
+	log.Println("service stopping")
+	wg.Wait()
+}
+
+func serviceRun() {
+	svcStop := make(chan struct{})
+
+	// Handle signals for non-Windows "service run" (systemd/launchd)
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		close(svcStop)
+	}()
+
+	serviceRunDaemon(svcStop)
+}
+
+func runAsWindowsService() {
+	handler := &service.Handler{
+		Run: func(svcStopCh <-chan struct{}) {
+			serviceRunDaemon(svcStopCh)
+		},
+	}
+	if err := service.RunAsService("tela", handler); err != nil {
+		log.Fatalf("service failed: %v", err)
 	}
 }
 

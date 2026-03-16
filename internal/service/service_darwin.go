@@ -90,7 +90,6 @@ func Uninstall(binaryName string) error {
 		return fmt.Errorf("remove %s: %w", path, err)
 	}
 
-	_ = RemoveConfig(binaryName)
 	return nil
 }
 

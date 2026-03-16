@@ -84,7 +84,6 @@ func Uninstall(binaryName string) error {
 	}
 
 	_ = run("systemctl", "daemon-reload")
-	_ = RemoveConfig(binaryName)
 	return nil
 }
 

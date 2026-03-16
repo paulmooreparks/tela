@@ -105,7 +105,6 @@ func Uninstall(binaryName string) error {
 		return fmt.Errorf("delete service %q: %w", svcName, err)
 	}
 
-	_ = RemoveConfig(binaryName)
 	return nil
 }
 
