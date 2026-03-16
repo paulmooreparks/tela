@@ -62,6 +62,7 @@ import (
 	"golang.zx2c4.com/wireguard/tun/netstack"
 	"gopkg.in/yaml.v3"
 
+	"github.com/paulmooreparks/tela/internal/credstore"
 	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
@@ -2061,41 +2062,89 @@ func cmdRemoteList() {
 	w.Flush()
 }
 
-// ── Deprecated: "tela login" / "tela logout" (aliases for remote add/remove) ──
+// ── Credential Store: "tela login" / "tela logout" ──
 
 func cmdLogin(args []string) {
-	fmt.Fprintln(os.Stderr, "Note: 'tela login' is deprecated. Use 'tela remote add <name> <url>' instead.")
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela login <url>")
+		fmt.Fprintln(os.Stderr, "Usage: tela login <hub-url>")
+		fmt.Fprintln(os.Stderr, "Stores a hub authentication token in ~/.tela/credentials.yaml")
 		os.Exit(1)
 	}
 
-	// Treat as "tela remote add portal <url>"
-	cmdRemoteAdd([]string{"portal", fs.Arg(0)})
+	hubURL := ensureWSScheme(fs.Arg(0))
+
+	// Prompt for token
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Token: ")
+	token, _ := reader.ReadString('\n')
+	token = strings.TrimSpace(token)
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "Error: token cannot be empty")
+		os.Exit(1)
+	}
+
+	// Optionally prompt for identity label
+	fmt.Print("Identity (press Enter to skip): ")
+	identity, _ := reader.ReadString('\n')
+	identity = strings.TrimSpace(identity)
+
+	// Store in credential store
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading credentials: %v\n", err)
+		os.Exit(1)
+	}
+	store.Set(hubURL, credstore.Credential{Token: token, Identity: identity})
+	if err := store.Save(credstore.UserPath()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving credentials: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Credentials stored for %s\n", hubURL)
 }
 
 func cmdLogout(args []string) {
-	fmt.Fprintln(os.Stderr, "Note: 'tela logout' is deprecated. Use 'tela remote remove <name>' instead.")
+	fs := flag.NewFlagSet("logout", flag.ExitOnError)
+	fs.Parse(args)
 
-	cfg, err := loadTelaConfig()
-	if err != nil || len(cfg.Remotes) == 0 {
-		fmt.Println("No remotes configured.")
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela logout <hub-url>")
+		os.Exit(1)
+	}
+
+	hubURL := ensureWSScheme(fs.Arg(0))
+
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		fmt.Println("No credentials stored.")
 		return
 	}
 
-	// Remove the "portal" remote if it exists (legacy behavior)
-	if _, ok := cfg.Remotes["portal"]; ok {
-		delete(cfg.Remotes, "portal")
-		if err := saveTelaConfig(cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("Remote \"portal\" removed.")
-	} else {
-		fmt.Println("No remote named \"portal\" found.")
-		fmt.Println("Use 'tela remote list' to see configured remotes and 'tela remote remove <name>' to remove one.")
+	if !store.Remove(hubURL) {
+		fmt.Printf("No credentials found for %s\n", hubURL)
+		return
 	}
+	if err := store.Save(credstore.UserPath()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving credentials: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Credentials removed for %s\n", hubURL)
+}
+
+// ensureWSScheme adds a ws:// or wss:// scheme to a URL if missing.
+func ensureWSScheme(u string) string {
+	lower := strings.ToLower(u)
+	if strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://") {
+		return u
+	}
+	if strings.HasPrefix(lower, "http://") {
+		return "ws://" + u[7:]
+	}
+	if strings.HasPrefix(lower, "https://") {
+		return "wss://" + u[8:]
+	}
+	return "wss://" + u
 }
