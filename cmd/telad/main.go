@@ -33,6 +33,7 @@ import (
 	"log"
 	mathrand "math/rand"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
@@ -155,6 +156,7 @@ Subcommands:
   service   Manage telad as an OS service (install, start, stop, etc.)
   login     Store agent credentials in the system credential store
   logout    Remove agent credentials from the system credential store
+  pair      Exchange a pairing code for an agent token
   version   Print version and exit
   help      Show this help
 
@@ -165,6 +167,14 @@ Environment Variables:
   TELAD_CONFIG        Config file path        (overridden by -config)
   TELAD_PORTS         Port specs              (overridden by -ports)
   TELAD_TARGET_HOST   Target host             (overridden by -target-host)
+
+Credential Storage (Long-Lived Agents):
+  Store tokens in the system credential store so you do not need to pass -token
+  on every invocation. Requires elevation (run as Administrator or sudo).
+
+    telad login -hub wss://hub.example.com           # Prompts for token
+    telad -hub wss://hub.example.com -machine barn   # Token found automatically
+    telad logout -hub wss://hub.example.com          # Remove stored credential
 
 Examples:
   telad -config telad.yaml
@@ -203,6 +213,9 @@ func main() {
 			return
 		case "logout":
 			cmdLogout(os.Args[2:])
+			return
+		case "pair":
+			cmdPair(os.Args[2:])
 			return
 		}
 	}
@@ -1293,6 +1306,115 @@ func cmdLogout(args []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Credentials removed for %s\n", *hubURL)
+}
+
+// cmdPair exchanges a pairing code for a permanent agent token.
+func cmdPair(args []string) {
+	fs := flag.NewFlagSet("pair", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
+	code := fs.String("code", "", "Pairing code (e.g., ABCD-1234)")
+	machineID := fs.String("machine", "", "Machine ID (optional; if omitted, code determines it)")
+	fs.Parse(args)
+
+	if *hubURL == "" || *code == "" {
+		fmt.Fprintln(os.Stderr, "Usage: telad pair -hub <url> -code <code> [-machine <id>]")
+		fmt.Fprintln(os.Stderr, "Exchanges a pairing code for a permanent agent token.")
+		os.Exit(1)
+	}
+
+	// Convert WS URL to HTTP for API calls
+	httpURL := wsToHTTP(*hubURL)
+
+	// Call /api/pair to redeem the code
+	req := map[string]string{
+		"code": *code,
+	}
+	if *machineID != "" {
+		req["machineId"] = *machineID
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding request: %v\n", err)
+		os.Exit(1)
+	}
+
+	resp, err := http.Post(
+		fmt.Sprintf("%s/api/pair", httpURL),
+		"application/json",
+		strings.NewReader(string(body)),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error connecting to hub: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading response: %v\n", err)
+		os.Exit(1)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		json.Unmarshal(respBody, &errResp)
+		if msg, ok := errResp["error"]; ok {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: HTTP %d\n", resp.StatusCode)
+		}
+		os.Exit(1)
+	}
+
+	var result map[string]string
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing response: %v\n", err)
+		os.Exit(1)
+	}
+
+	token, ok := result["token"]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Error: no token in response\n")
+		os.Exit(1)
+	}
+
+	identity, ok := result["identity"]
+	if !ok {
+		identity = "agent"
+	}
+
+	// Store the token in the credential store
+	// Try to use elevated store first; fall back to user store
+	storePath := credstore.SystemPath()
+	store, err := credstore.Load(storePath)
+	if err != nil {
+		store = &credstore.Store{Hubs: make(map[string]credstore.Credential)}
+	}
+
+	store.Set(*hubURL, credstore.Credential{Token: token, Identity: identity})
+	if err := store.Save(storePath); err != nil {
+		// Fallback to user store if system store isn't writable
+		storePath = credstore.UserPath()
+		store, _ := credstore.Load(storePath)
+		store.Set(*hubURL, credstore.Credential{Token: token, Identity: identity})
+		if err := store.Save(storePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving credentials: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Token stored in user credential store (system store not writable)")
+	}
+
+	fmt.Printf("Token redeemed and stored for %s\n", *hubURL)
+	fmt.Printf("Identity: %s\n", identity)
+	fmt.Printf("Agent can now connect without passing -token flag\n")
+}
+
+// wsToHTTP converts a WebSocket URL to HTTP URL.
+func wsToHTTP(wsURL string) string {
+	s := strings.Replace(wsURL, "wss://", "https://", 1)
+	s = strings.Replace(s, "ws://", "http://", 1)
+	return strings.TrimRight(s, "/")
 }
 
 func logVerbose(lg *log.Logger, format string, args ...any) {

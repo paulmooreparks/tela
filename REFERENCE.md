@@ -244,6 +244,52 @@ All three env vars (`TELAHUBD_PORTAL_URL`, `TELAHUBD_PORTAL_TOKEN`, `TELAHUBD_PU
 
 Once bootstrapped, use `tela admin` from any workstation (see [section 7](#7-tela-the-client-cli) for details).
 
+### Agent onboarding with pairing codes
+
+For a secure agent onboarding workflow without manual token copying, use one-time pairing codes.
+
+**Generate a pairing code (on any workstation with admin access to the hub):**
+
+```bash
+tela admin pair-code web01 -hub https://hub.example.com -token <owner-or-admin-token>
+```
+
+Output:
+```
+Generated pairing code: ABCD-1234
+Expires: 2026-03-16T19:45:00Z
+
+Agent onboarding command:
+  telad pair -hub wss://hub.example.com -code ABCD-1234
+```
+
+**Exchange the code for a permanent token (on the agent machine):**
+
+```bash
+telad pair -hub wss://hub.example.com -code ABCD-1234
+```
+
+This automatically:
+- Exchanges the code for a permanent token
+- Creates a token identity (e.g., `web01-agent`)
+- Stores the token in the system credential store (persists across restarts)
+- Outputs the identity for your records
+
+**Then start the agent without passing tokens:**
+
+```bash
+telad -hub wss://hub.example.com -machine web01 -ports "22:SSH,3389:RDP"
+# Token is found automatically from the credential store
+```
+
+**Pairing code details:**
+
+- Codes are short-lived and single-use (default: 10-minute expiry, configurable)
+- Code format: `XXXX-XXXX` (alphanumeric)
+- Entropy: 36^8 = ~2.8 trillion combinations with 10-minute expiry (brute-force infeasible)
+- No token exposure in logs or shell history
+- Optional: specify a different role during code generation (`-role admin`, `-role viewer`, etc.)
+
 ### Portal registration
 
 Register your hub with a portal (like Awan Saya) for hub name resolution:
@@ -525,6 +571,48 @@ Reference copy paths (if using `-config` mode):
 | `TELAD_TARGET_HOST` | `127.0.0.1` | Target service host (gateway mode) |
 
 Environment variables serve as defaults. Flags override environment variables, and config file values override both.
+
+### Credential storage for long-lived agents
+
+For production deployments, store the agent's hub token in the system credential store so it persists across service restarts and is not exposed in config files or shell history.
+
+**Store the token (requires elevation):**
+
+```bash
+# Linux / macOS
+sudo telad login -hub wss://hub.example.com
+# Prompts for token and optional identity
+
+# Windows (PowerShell, run as Administrator)
+telad login -hub wss://hub.example.com
+```
+
+**Then configure the agent without the token:**
+
+```bash
+# Config file mode (no token needed in the file)
+telad -config telad.yaml
+# Token is found automatically from credential store
+
+# Single-machine mode (no -token flag needed)
+telad -hub wss://hub.example.com -machine barn -ports "22:SSH,3389:RDP"
+# Token is found automatically
+```
+
+**Remove stored credentials (rarely needed):**
+
+```bash
+telad logout -hub wss://hub.example.com
+```
+
+**Credential store locations:**
+
+| Platform | User-level | System-level |
+|----------|-----------|--------------|
+| Linux / macOS | `~/.tela/credentials.yaml` | `/etc/tela/credentials.yaml` |
+| Windows | `%APPDATA%\tela\credentials.yaml` | `%ProgramData%\Tela\credentials.yaml` |
+
+System-level credentials are preferred for service mode (persists across service restarts). User-level credentials are used if system-level storage is not available.
 
 ---
 
@@ -848,12 +936,31 @@ hubs:
 
 | File | Platform | Path |
 |------|----------|------|
-| Config (remotes, credentials) | Linux/macOS | `~/.tela/config.yaml` |
+| Credentials (hub tokens) | Linux/macOS | `~/.tela/credentials.yaml` |
+| | Windows | `%APPDATA%\tela\credentials.yaml` |
+| Config (remotes) | Linux/macOS | `~/.tela/config.yaml` |
 | | Windows | `%APPDATA%\tela\config.yaml` |
 | Hub aliases | Linux/macOS | `~/.tela/hubs.yaml` |
 | | Windows | `%APPDATA%\tela\hubs.yaml` |
 | Connection profiles | Linux/macOS | `~/.tela/profiles/<name>.yaml` |
 | | Windows | `%APPDATA%\tela\profiles\<name>.yaml` |
+
+**Storing and retrieving hub credentials:**
+
+You can store hub tokens locally so you do not need to pass `-token` on every command:
+
+```bash
+# Store a token for a hub (prompts for token and optional identity)
+tela login wss://hub.example.com
+
+# Commands now find the token automatically
+tela connect -hub wss://hub.example.com -machine web01
+
+# Remove stored credentials when no longer needed
+tela logout wss://hub.example.com
+```
+
+Credentials are stored in `~/.tela/credentials.yaml` with 0600 permissions (user-readable only).
 
 ---
 

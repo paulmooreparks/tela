@@ -46,6 +46,8 @@ func cmdAdmin(args []string) {
 		cmdAdminRevoke(rest)
 	case "rotate":
 		cmdAdminRotate(rest)
+	case "pair-code":
+		cmdAdminPairCode(rest)
 	case "list-portals":
 		cmdAdminListPortals(rest)
 	case "add-portal":
@@ -74,6 +76,7 @@ Token commands:
   grant          Grant connect access to a machine
   revoke         Revoke connect access to a machine
   rotate         Regenerate token for an identity
+  pair-code      Generate a pairing code for agent onboarding
 
 Portal commands:
   list-portals    List portal registrations
@@ -96,6 +99,7 @@ Examples:
   tela admin revoke alice my-desktop -hub gohub -token <owner-token>
   tela admin remove-token alice -hub gohub -token <owner-token>
   tela admin rotate alice -hub gohub -token <owner-token>
+  tela admin pair-code barn -hub gohub -token <owner-token>
 
   tela admin list-portals -hub gohub -token <owner-token>
   tela admin add-portal awansaya -hub gohub -token <owner-token> \
@@ -574,6 +578,58 @@ func cmdAdminAddPortal(args []string) {
 		fmt.Println("Warning: no sync token returned -- upgrade the portal to enable auto-sync.")
 	}
 	fmt.Println("Change is already active (no hub restart needed).")
+}
+
+// ── tela admin pair-code ────────────────────────────────────────
+
+type pairCodeRequest struct {
+	MachineID string `json:"machineId"`
+	Role      string `json:"role,omitempty"`
+	ExpiresIn int    `json:"expiresIn"`
+}
+
+type pairCodeResponse struct {
+	Code      string `json:"code"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+func cmdAdminPairCode(args []string) {
+	fs := flag.NewFlagSet("admin pair-code", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	role := fs.String("role", "user", "Token role (user, admin, viewer, owner)")
+	expiresIn := fs.Int("expires-in", 600, "Code expiration in seconds (default: 600 / 10 minutes)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin pair-code <machineId> -hub <hub> -token <token>")
+		os.Exit(1)
+	}
+	machineID := fs.Arg(0)
+	hub, tok := adminParseHubAndToken(fs)
+
+	body := pairCodeRequest{
+		MachineID: machineID,
+		Role:      *role,
+		ExpiresIn: *expiresIn,
+	}
+
+	status, result, err := adminHTTP("POST", hub, "/api/admin/pair-code", tok, body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	code, _ := result["code"].(string)
+	expiresAt, _ := result["expiresAt"].(string)
+
+	fmt.Printf("Generated pairing code: %s\n", code)
+	fmt.Printf("Expires: %s\n", expiresAt)
+	fmt.Printf("\nAgent onboarding command:\n")
+	fmt.Printf("  telad pair -hub %s -code %s\n", hub, code)
 }
 
 // ── tela admin remove-portal ─────────────────────────────────────

@@ -1481,6 +1481,8 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/admin/revoke", handleAdminRevoke)
 	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate) // /api/admin/rotate/{id}
 	mux.HandleFunc("/api/admin/portals", handleAdminPortals)
+	mux.HandleFunc("/api/admin/pair-code", handleAdminPairCode)
+	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)
 
 	// WebSocket upgrade on root path too (agents/clients connect to /)
@@ -1506,6 +1508,15 @@ func runHub(stopCh <-chan struct{}) {
 
 	// Start keepalive pinger
 	go runKeepalive()
+
+	// Clean up expired pairing codes every minute
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			globalPairStore.CleanupExpiredCodes()
+		}
+	}()
 
 	// Sync viewer token to portals after a short delay
 	go func() {

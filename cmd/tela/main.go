@@ -163,6 +163,8 @@ Commands:
   services  List services on a specific machine
   status    Show hub status summary
   remote    Manage hub directory remotes (add, remove, list)
+  login     Store hub credentials in the credential store
+  logout    Remove hub credentials from the credential store
   admin     Remote hub auth management (tokens, ACLs)
   service   Manage tela as an OS service (install, start, stop, etc.)
   version   Print version and exit
@@ -173,6 +175,13 @@ Environment Variables:
   TELA_TOKEN    Default auth token        (overridden by -token)
 
   When set, these provide defaults so flags can be omitted.
+
+Credential Storage:
+  Store tokens for hub URLs so you do not need to pass -token on every command:
+
+    tela login wss://hub.example.com        # Prompts for token, stores locally
+    tela connect -hub wss://hub.example.com -machine mybox  # Token found automatically
+    tela logout wss://hub.example.com       # Remove stored credential
 
 Hub Name Resolution:
   The -hub flag accepts a full URL (wss://...) or a short hub name.
