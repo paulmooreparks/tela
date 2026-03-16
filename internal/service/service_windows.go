@@ -115,20 +115,14 @@ func Start(binaryName string) error {
 		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
-	m, err := mgr.Connect()
+	svcName := ServiceName(binaryName)
+	out, err := exec.Command("sc", "start", svcName).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("connect to SCM: %w", err)
-	}
-	defer m.Disconnect()
-
-	s, err := m.OpenService(ServiceName(binaryName))
-	if err != nil {
-		return fmt.Errorf("open service: %w (is it installed?)", err)
-	}
-	defer s.Close()
-
-	if err := s.Start(); err != nil {
-		return fmt.Errorf("start service: %w", err)
+		output := strings.TrimSpace(string(out))
+		if strings.Contains(output, "1056") {
+			return fmt.Errorf("service %s is already running", svcName)
+		}
+		return fmt.Errorf("start service %s: %s", svcName, output)
 	}
 	return nil
 }
@@ -139,21 +133,14 @@ func Stop(binaryName string) error {
 		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
-	m, err := mgr.Connect()
+	svcName := ServiceName(binaryName)
+	out, err := exec.Command("sc", "stop", svcName).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("connect to SCM: %w", err)
-	}
-	defer m.Disconnect()
-
-	s, err := m.OpenService(ServiceName(binaryName))
-	if err != nil {
-		return fmt.Errorf("open service: %w (is it installed?)", err)
-	}
-	defer s.Close()
-
-	_, err = s.Control(svc.Stop)
-	if err != nil {
-		return fmt.Errorf("stop service: %w", err)
+		output := strings.TrimSpace(string(out))
+		if strings.Contains(output, "1062") {
+			return fmt.Errorf("service %s is not running", svcName)
+		}
+		return fmt.Errorf("stop service %s: %s", svcName, output)
 	}
 	return nil
 }
