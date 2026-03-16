@@ -15,7 +15,8 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
-// Install registers the service with the Windows Service Control Manager.
+// Install registers the service with the Windows Service Control Manager
+// and starts it immediately.
 func Install(binaryName string, cfg *Config) error {
 	if !IsElevated() {
 		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
@@ -39,6 +40,12 @@ func Install(binaryName string, cfg *Config) error {
 		s.Close()
 		return fmt.Errorf("service %q is already installed. Uninstall first.", svcName)
 	}
+
+	// Grant SYSTEM read+execute on the binary and config so the service can start.
+	// User-created directories (e.g. "C:\Program Files\Tela") may not inherit
+	// SYSTEM access from the parent.
+	grantSystemAccess(cfg.BinaryPath)
+	grantSystemAccess(ConfigDir())
 
 	// Build the command line: binary "service" "run"
 	// The service runner will load config from the JSON file.
@@ -67,11 +74,12 @@ func Install(binaryName string, cfg *Config) error {
 		fmt.Fprintf(os.Stderr, "warning: could not set recovery actions: %v\n", err)
 	}
 
-	// Grant SYSTEM read+execute on the binary and config so the service can start.
-	// User-created directories (e.g. "C:\Program Files\Tela") may not inherit
-	// SYSTEM access from the parent.
-	grantSystemAccess(cfg.BinaryPath)
-	grantSystemAccess(ConfigDir())
+	// Start the service using the handle from CreateService (which has full access).
+	// Opening the service again later with SERVICE_ALL_ACCESS can fail on some
+	// Windows configurations even when elevated.
+	if err := s.Start(); err != nil {
+		return fmt.Errorf("service installed but failed to start: %w", err)
+	}
 
 	return nil
 }
