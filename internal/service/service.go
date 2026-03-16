@@ -74,10 +74,31 @@ func ConfigPath(binaryName string) string {
 	return filepath.Join(ConfigDir(), binaryName+"-service.json")
 }
 
+// ConfigDirPerm returns the permission mode for the service config directory.
+// On Windows, directories under ProgramData must be accessible to the SYSTEM
+// account (which runs services). On Unix, 0700 is fine since the service
+// typically runs as root.
+func ConfigDirPerm() os.FileMode {
+	if runtime.GOOS == "windows" {
+		return 0755
+	}
+	return 0700
+}
+
+// ConfigFilePerm returns the permission mode for service config files.
+// On Windows, files must be readable by the SYSTEM account. On Unix,
+// 0600 restricts access to the owning user (typically root).
+func ConfigFilePerm() os.FileMode {
+	if runtime.GOOS == "windows" {
+		return 0644
+	}
+	return 0600
+}
+
 // SaveConfig writes the service configuration to disk.
 func SaveConfig(binaryName string, cfg *Config) error {
 	dir := ConfigDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, ConfigDirPerm()); err != nil {
 		return fmt.Errorf("create config dir %s: %w", dir, err)
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -85,7 +106,7 @@ func SaveConfig(binaryName string, cfg *Config) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 	path := ConfigPath(binaryName)
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, ConfigFilePerm()); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil

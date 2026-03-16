@@ -1669,7 +1669,7 @@ func hubServiceInstall() {
 
 // writeHubConfig writes a telahubd YAML config file.
 func writeHubConfig(path string, cfg *hubConfig) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), service.ConfigDirPerm()); err != nil {
 		return fmt.Errorf("create dir: %w", err)
 	}
 	data, err := yaml.Marshal(cfg)
@@ -1677,7 +1677,7 @@ func writeHubConfig(path string, cfg *hubConfig) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 	header := "# telahubd configuration\n# Edit and restart the service to apply changes.\n\n"
-	if err := os.WriteFile(path, []byte(header+string(data)), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(header+string(data)), service.ConfigFilePerm()); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -1685,14 +1685,14 @@ func writeHubConfig(path string, cfg *hubConfig) error {
 
 // copyFile copies src to dst, creating parent directories as needed.
 func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), service.ConfigDirPerm()); err != nil {
 		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
 	}
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	if err := os.WriteFile(dst, data, 0600); err != nil {
+	if err := os.WriteFile(dst, data, service.ConfigFilePerm()); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
 	return nil

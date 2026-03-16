@@ -44,7 +44,7 @@ All three binaries must compile cleanly after any change. Always run both
 Systems ship locked down. Operators must take deliberate action to open them up.
 - Hubs auto-generate an owner token on first start (never run open by default)
 - Admin API requires owner/admin auth unconditionally, even on open hubs
-- Config files written with 0600, directories with 0700
+- Config files written with 0600, directories with 0700 (Unix); 0644/0755 on Windows (SYSTEM account needs read access for services)
 - Tokens compared with `crypto/subtle.ConstantTimeCompare`
 - WebSocket origin checking when auth is enabled
 - CORS: wildcard for public endpoints (status/history), echo-origin for admin

@@ -410,12 +410,16 @@ func serviceInstall() {
 	}
 	exePath, _ = filepath.Abs(exePath)
 
-	wd, _ := os.Getwd()
 	cfg := &service.Config{
 		BinaryPath:  exePath,
 		Description: "Tela Daemon -- encrypted tunnel agent",
-		WorkingDir:  wd,
 		YAMLConfig:  service.EncodeYAMLConfig(yamlContent),
+	}
+
+	// Only set working directory for file-based config
+	if destPath != "" {
+		wd, _ := os.Getwd()
+		cfg.WorkingDir = wd
 	}
 
 	if err := service.Install("telad", cfg); err != nil {
@@ -435,14 +439,14 @@ func serviceInstall() {
 
 // copyFile copies src to dst, creating parent directories as needed.
 func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), service.ConfigDirPerm()); err != nil {
 		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
 	}
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	if err := os.WriteFile(dst, data, 0600); err != nil {
+	if err := os.WriteFile(dst, data, service.ConfigFilePerm()); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
 	return nil
