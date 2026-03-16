@@ -848,6 +848,14 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	stopKeepalive := startWSKeepalive(ws)
 	defer stopKeepalive()
 
+	// Close the WebSocket when shutdown is signalled so the blocking
+	// ReadMessage loop below unblocks promptly instead of waiting for
+	// the pong timeout.
+	go func() {
+		<-stopCh
+		ws.Close()
+	}()
+
 	// Register with hub (include ports/services + metadata for the registry)
 	lg.Printf("connected, registering as: %s", reg.MachineID)
 	regMsg := controlMessage{
