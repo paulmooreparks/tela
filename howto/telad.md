@@ -92,7 +92,19 @@ telahubd user grant barn-agent barn
 
 ### Providing the token
 
-**Config file** (recommended):
+**Credential store** (recommended for long-lived agents):
+
+On the agent machine (requires elevation):
+
+```bash
+telad login -hub wss://your-hub.example.com
+# Prompts for token and optional identity
+# Stores in system credential store (survives service restart)
+```
+
+The token is now automatically found whenever `telad` connects to that hub.
+
+**Config file** (recommended for YAML-based deployments):
 
 ```yaml
 hub: wss://your-hub.example.com
@@ -115,6 +127,16 @@ telad -hub wss://your-hub.example.com -machine barn -ports "22,3389" -token <bar
 export TELA_TOKEN=<barn-agent-token>
 telad -hub wss://your-hub.example.com -machine barn -ports "22,3389"
 ```
+
+**Token lookup precedence:**
+
+1. `-token` flag (explicit)
+2. `TELA_TOKEN` environment variable
+3. Per-machine token in config file
+4. Top-level token in config file
+5. Credential store by hub URL
+
+This means you can `telad login` once and then use simpler commands without repeating the token.
 
 ## Running as an OS service
 

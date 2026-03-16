@@ -108,6 +108,59 @@ Notes:
 - `token` is optional; if present it's sent as `Authorization: Bearer <token>`.
 - `hub_directory` is auto-populated during `tela remote add` via the well-known endpoint. If `/.well-known/tela` is unavailable, defaults to `/api/hubs`.
 
+## `credentials.yaml` (credential store)
+
+**Purpose:** Stores hub authentication tokens so you don't need to pass `-token` on every command.
+
+**File locations:**
+
+- User-level: `%APPDATA%\tela\credentials.yaml` (Windows) or `~/.tela/credentials.yaml` (Unix)
+- System-level: `%ProgramData%\Tela\credentials.yaml` (Windows) or `/etc/tela/credentials.yaml` (Unix)
+
+**How it's created:** `tela login <hub-url>` or `telad login -hub <hub-url>` (telad requires elevation).
+
+**Schema:**
+
+```yaml
+hubs:
+  wss://hub.example.com:
+    token: 7bf042ceb070136fec15fdd49797c486225fbe62b6cfd3bb4649f04b32446d62
+    identity: alice
+```
+
+Notes:
+
+- The `hubs` mapping stores credentials by hub URL (normalized: trailing slashes removed, schemes lowercased).
+- `token` is required; `identity` is optional but helpful for tracking.
+- File permissions: 0600 (user-level) or 0644 (system-level, for SYSTEM account read access).
+
+**Using the credential store:**
+
+1. Store a token:
+   ```bash
+   tela login wss://hub.example.com
+   # Prompts for token and optional identity
+   ```
+
+2. Subsequent commands find the token automatically:
+   ```bash
+   tela connect -hub wss://hub.example.com -machine barn -ports 22:SSH
+   # No -token flag needed
+   ```
+
+3. Remove a stored credential:
+   ```bash
+   tela logout wss://hub.example.com
+   ```
+
+**Token lookup precedence:**
+
+1. `-token` flag (explicit)
+2. `TELA_TOKEN` environment variable
+3. Credential store (user then system)
+
+`telad login` stores in the system credential store (requires elevation) and persists across service restarts.
+
 ## `telad.yaml` (daemon / agent config)
 
 **Purpose:** Runs one `telad` process that can register one or more machines to a hub.
