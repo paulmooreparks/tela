@@ -9,11 +9,14 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
+
+var procSetServiceObjectSecurity = syscall.NewLazyDLL("advapi32.dll").NewProc("SetServiceObjectSecurity")
 
 // Install registers the service with the Windows Service Control Manager.
 func Install(binaryName string, cfg *Config) error {
@@ -61,6 +64,12 @@ func Install(binaryName string, cfg *Config) error {
 		return fmt.Errorf("create service %q: %w", svcName, err)
 	}
 	defer s.Close()
+
+	// Set an explicit DACL on the service granting Administrators and SYSTEM
+	// full control. The default DACL inherited from the SCM may not include
+	// these on all Windows configurations, which causes "Access is denied"
+	// when trying to start or stop the service later.
+	setServiceDACL(s.Handle)
 
 	// Set recovery actions: restart after 5s on first three failures.
 	err = s.SetRecoveryActions([]mgr.RecoveryAction{
@@ -122,8 +131,19 @@ func Start(binaryName string) error {
 		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("connect to SCM: %w", err)
+	}
+	defer m.Disconnect()
+
 	svcName := ServiceName(binaryName)
-	h, err := openServiceHandle(svcName, windows.SERVICE_START)
+	svcNamePtr, err := syscall.UTF16PtrFromString(svcName)
+	if err != nil {
+		return fmt.Errorf("service name: %w", err)
+	}
+
+	h, err := windows.OpenService(m.Handle, svcNamePtr, windows.SERVICE_START)
 	if err != nil {
 		return fmt.Errorf("open service %s: %w", svcName, err)
 	}
@@ -141,8 +161,19 @@ func Stop(binaryName string) error {
 		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("connect to SCM: %w", err)
+	}
+	defer m.Disconnect()
+
 	svcName := ServiceName(binaryName)
-	h, err := openServiceHandle(svcName, windows.SERVICE_STOP)
+	svcNamePtr, err := syscall.UTF16PtrFromString(svcName)
+	if err != nil {
+		return fmt.Errorf("service name: %w", err)
+	}
+
+	h, err := windows.OpenService(m.Handle, svcNamePtr, windows.SERVICE_STOP)
 	if err != nil {
 		return fmt.Errorf("open service %s: %w", svcName, err)
 	}
@@ -295,6 +326,32 @@ func openSCManager(access uint32) (windows.Handle, error) {
 		return 0, fmt.Errorf("connect to SCM: %w", err)
 	}
 	return h, nil
+}
+
+// setServiceDACL sets the standard Windows service DACL on the given service
+// handle. This grants SYSTEM and Administrators full control, and Interactive
+// and Service users read access. Without this, some Windows configurations
+// deny Administrators the ability to start/stop services they created.
+func setServiceDACL(handle windows.Handle) {
+	// Standard Windows service SDDL:
+	//   SY = SYSTEM (full control)
+	//   BA = Built-in Administrators (full control)
+	//   IU = Interactive Users (read/query)
+	//   SU = Service Logon Users (read/query)
+	const sddl = "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)"
+
+	sd, err := windows.SecurityDescriptorFromString(sddl)
+	if err != nil {
+		return
+	}
+
+	// SetServiceObjectSecurity(hService, DACL_SECURITY_INFORMATION, lpSecurityDescriptor)
+	r1, _, _ := procSetServiceObjectSecurity.Call(
+		uintptr(handle),
+		uintptr(windows.DACL_SECURITY_INFORMATION),
+		uintptr(unsafe.Pointer(sd)),
+	)
+	_ = r1 // Non-fatal; best-effort.
 }
 
 // grantSystemAccess uses icacls to ensure the SYSTEM account has read+execute
