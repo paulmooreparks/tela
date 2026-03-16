@@ -21,6 +21,8 @@ import (
 	"os"
 	"text/tabwriter"
 	"time"
+
+	"github.com/paulmooreparks/tela/internal/credstore"
 )
 
 func cmdAdmin(args []string) {
@@ -167,7 +169,10 @@ func adminParseHubAndToken(fs *flag.FlagSet) (string, string) {
 		os.Exit(1)
 	}
 	if token == "" {
-		fmt.Fprintln(os.Stderr, "Error: -token is required (or set TELA_OWNER_TOKEN)")
+		token = credstore.LookupToken(hubURL)
+	}
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "Error: -token is required (or set TELA_OWNER_TOKEN / TELA_TOKEN, or use 'tela login')")
 		os.Exit(1)
 	}
 	return hubURL, token

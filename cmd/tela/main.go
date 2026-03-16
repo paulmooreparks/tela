@@ -237,6 +237,10 @@ func cmdConnect(args []string) {
 
 	*hubURL = mustResolveHub(*hubURL)
 
+	if *token == "" && *hubURL != "" {
+		*token = credstore.LookupToken(*hubURL)
+	}
+
 	if *hubURL == "" || *machineID == "" {
 		fmt.Fprintln(os.Stderr, "Error: -hub and -machine are required (or set TELA_HUB / TELA_MACHINE)")
 		fs.Usage()
@@ -535,6 +539,11 @@ func runProfile(name string) {
 	for i, conn := range profile.Connections {
 		hubURL := mustResolveHub(conn.Hub)
 		token := conn.Token
+
+		if token == "" && hubURL != "" {
+			token = credstore.LookupToken(hubURL)
+		}
+
 		machine := conn.Machine
 
 		if hubURL == "" || machine == "" {
@@ -720,6 +729,10 @@ func cmdServices(args []string) {
 	asJSON := fs.Bool("json", false, "Output as JSON")
 	fs.Parse(args)
 	*hubURL = mustResolveHub(*hubURL)
+
+	if *token == "" && *hubURL != "" {
+		*token = credstore.LookupToken(*hubURL)
+	}
 
 	if *hubURL == "" || *machineID == "" {
 		fmt.Fprintln(os.Stderr, "Error: -hub and -machine are required (or set TELA_HUB / TELA_MACHINE)")
