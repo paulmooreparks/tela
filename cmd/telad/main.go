@@ -202,10 +202,12 @@ Options:
 
 	// Config-file mode
 	if *configPath != "" {
-		cfg, err := loadConfig(*configPath)
+		absPath, _ := filepath.Abs(*configPath)
+		cfg, err := loadConfig(absPath)
 		if err != nil {
 			log.Fatalf("config: %v", err)
 		}
+		log.Printf("loaded config from %s", absPath)
 		runMultiMachine(cfg)
 		return
 	}

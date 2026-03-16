@@ -40,7 +40,8 @@ func Install(binaryName string, cfg *Config) error {
 
 	// Build the command line: binary "service" "run"
 	// The service runner will load config from the JSON file.
-	binPath := cfg.BinaryPath + " service run"
+	// Quote the binary path in case it contains spaces (e.g. "C:\Program Files\...").
+	binPath := `"` + cfg.BinaryPath + `" service run`
 
 	s, err = m.CreateService(svcName, binPath, mgr.Config{
 		DisplayName:  svcName + " — Tela",

@@ -29,7 +29,8 @@ func Install(binaryName string, cfg *Config) error {
 
 	// Build ExecStart — the binary reads its YAML config from the
 	// standard system location (e.g. /etc/tela/telad.yaml).
-	execStart := cfg.BinaryPath + " service run"
+	// Quote the binary path in case it contains spaces.
+	execStart := `"` + cfg.BinaryPath + `" service run`
 
 	unit := fmt.Sprintf(`[Unit]
 Description=%s
