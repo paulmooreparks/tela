@@ -22,6 +22,7 @@ Network (per-session addressing):
 package main
 
 import (
+	"bufio"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/hex"
@@ -49,6 +50,7 @@ import (
 	"golang.zx2c4.com/wireguard/tun/netstack"
 	"gopkg.in/yaml.v3"
 
+	"github.com/paulmooreparks/tela/internal/credstore"
 	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
@@ -151,6 +153,8 @@ Usage:
 
 Subcommands:
   service   Manage telad as an OS service (install, start, stop, etc.)
+  login     Store agent credentials in the system credential store
+  logout    Remove agent credentials from the system credential store
   version   Print version and exit
   help      Show this help
 
@@ -194,6 +198,12 @@ func main() {
 		case "help", "-h", "--help":
 			printUsage()
 			os.Exit(0)
+		case "login":
+			cmdLogin(os.Args[2:])
+			return
+		case "logout":
+			cmdLogout(os.Args[2:])
+			return
 		}
 	}
 
@@ -258,6 +268,11 @@ func main() {
 		Token:        *token,
 		Ports:        portsFromServices(services),
 		Services:     services,
+	}
+
+	// Fall back to credential store if token is empty
+	if reg.Token == "" && *hubURL != "" {
+		reg.Token = credstore.LookupToken(*hubURL)
 	}
 
 	runSingleMachine(*hubURL, reg, *targetHost)
@@ -630,6 +645,9 @@ func loadConfig(path string) (*configFile, error) {
 		}
 		if m.Token == "" {
 			cfg.Machines[i].Token = cfg.Token
+		}
+		if cfg.Machines[i].Token == "" {
+			cfg.Machines[i].Token = credstore.LookupToken(cfg.Hub)
 		}
 		if len(m.Ports) == 0 && len(m.Services) > 0 {
 			cfg.Machines[i].Ports = portsFromServices(m.Services)
@@ -1196,6 +1214,85 @@ func proxyToTarget(lg *log.Logger, nsConn net.Conn, targetHost string, targetPor
 
 	wg.Wait()
 	logVerbose(lg, "proxy session ended for %s", addr)
+}
+
+// cmdLogin stores agent credentials in the system credential store.
+func cmdLogin(args []string) {
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
+	fs.Parse(args)
+
+	if *hubURL == "" {
+		fmt.Fprintln(os.Stderr, "Usage: telad login -hub <url>")
+		fmt.Fprintln(os.Stderr, "Stores agent credentials in the system credential store.")
+		fmt.Fprintln(os.Stderr, "Requires administrator/root privileges.")
+		os.Exit(1)
+	}
+
+	if !service.IsElevated() {
+		fmt.Fprintln(os.Stderr, "Error: telad login requires administrator/root privileges.")
+		os.Exit(1)
+	}
+
+	// Prompt for token
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Token: ")
+	token, _ := reader.ReadString('\n')
+	token = strings.TrimSpace(token)
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "Error: token cannot be empty")
+		os.Exit(1)
+	}
+
+	// Optionally prompt for identity label
+	fmt.Print("Identity (press Enter to skip): ")
+	identity, _ := reader.ReadString('\n')
+	identity = strings.TrimSpace(identity)
+
+	store, err := credstore.Load(credstore.SystemPath())
+	if err != nil {
+		store = &credstore.Store{Hubs: make(map[string]credstore.Credential)}
+	}
+	store.Set(*hubURL, credstore.Credential{Token: token, Identity: identity})
+	if err := store.Save(credstore.SystemPath()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving credentials: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Credentials stored for %s\n", *hubURL)
+}
+
+// cmdLogout removes agent credentials from the system credential store.
+func cmdLogout(args []string) {
+	fs := flag.NewFlagSet("logout", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub WebSocket URL (env: TELA_HUB)")
+	fs.Parse(args)
+
+	if *hubURL == "" {
+		fmt.Fprintln(os.Stderr, "Usage: telad logout -hub <url>")
+		os.Exit(1)
+	}
+
+	if !service.IsElevated() {
+		fmt.Fprintln(os.Stderr, "Error: telad logout requires administrator/root privileges.")
+		os.Exit(1)
+	}
+
+	store, err := credstore.Load(credstore.SystemPath())
+	if err != nil {
+		fmt.Println("No credentials stored.")
+		return
+	}
+
+	if !store.Remove(*hubURL) {
+		fmt.Printf("No credentials found for %s\n", *hubURL)
+		return
+	}
+	if err := store.Save(credstore.SystemPath()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving credentials: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Credentials removed for %s\n", *hubURL)
 }
 
 func logVerbose(lg *log.Logger, format string, args ...any) {
