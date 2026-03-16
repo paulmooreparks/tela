@@ -118,18 +118,37 @@ telad -hub wss://your-hub.example.com -machine barn -ports "22,3389"
 
 ## Running as an OS service
 
-`telad` can run as a native service on Windows, Linux, and macOS:
+`telad` can run as a native service on Windows, Linux, and macOS. Configuration is stored securely in the service metadata (no file permission issues).
+
+Two installation modes:
+
+**Mode 1: From a config file**
 
 ```bash
-# Install (copies config to system path)
 telad service install -config telad.yaml
+```
 
-# Manage
+The configuration is validated and stored in service metadata. A reference copy is retained on disk for manual editing.
+
+**Mode 2: Inline configuration (recommended for simple setups)**
+
+```bash
+telad service install -hub ws://your-hub:8080 -machine barn -ports "22:SSH,3389:RDP"
+```
+
+Configuration is passed as command-line flags and stored inline. No external file needed. Ideal for single-machine deployments.
+
+**Manage the service:**
+
+```bash
 telad service start
 telad service stop
 telad service restart
+telad service status
 telad service uninstall
 ```
+
+**Reconfigure:** Edit the YAML config file (if one exists) and run `telad service restart`, or reinstall with new parameters.
 
 See [services.md](services.md) for platform-specific details and troubleshooting.
 

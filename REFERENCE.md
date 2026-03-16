@@ -480,20 +480,33 @@ Machine fields:
 
 ### Running telad as a service
 
-`telad` has built-in service management for all platforms:
+`telad` has built-in service management for all platforms. Configuration is stored securely in the service metadata (Windows registry, systemd config, launchd plist), eliminating filesystem permission issues.
+
+**Two installation modes:**
+
+From a config file (recommended for multi-machine setups):
 
 ```bash
-# Install as an OS service (copies config to system path)
 telad service install -config telad.yaml
-
-# Manage the service
-telad service start
-telad service stop
-telad service restart
-telad service uninstall
 ```
 
-System config paths (written by `service install`):
+With inline configuration (recommended for single-machine setups):
+
+```bash
+telad service install -hub ws://your-hub:8080 -machine barn -ports "22:SSH,3389:RDP"
+```
+
+Manage the service:
+
+```bash
+telad service start       # Start the service
+telad service stop        # Stop the service
+telad service restart     # Stop and restart (after editing config)
+telad service status      # Show current state
+telad service uninstall   # Remove the service
+```
+
+Reference copy paths (if using `-config` mode):
 
 | Platform | Path |
 |----------|------|
@@ -1189,7 +1202,8 @@ telad -hub wss://hub.example.com -machine web01 -ports "22:SSH,3389:RDP" -token 
 
 # OS service management
 telad service install -config telad.yaml
-telad service start | stop | restart | uninstall
+telad service install -hub <hub> -machine <id> -ports <specs>
+telad service start | stop | restart | status | uninstall
 ```
 
 ### tela commands

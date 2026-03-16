@@ -5,22 +5,21 @@ on Windows, Linux, and macOS. The service machinery is built into the binary; no
 
 ## How it works
 
-Each binary reads its runtime configuration from a YAML file in a
-system-wide directory:
+Each binary stores its runtime configuration in the service metadata (Windows registry,
+systemd config, launchd plist). This eliminates filesystem permission issues and keeps
+everything in one place.
 
-| OS      | Config directory            |
-|---------|------------------------------|
-| Windows | `%ProgramData%\Tela\`        |
-| Linux   | `/etc/tela/`                 |
-| macOS   | `/etc/tela/`                 |
+Configuration can be:
+1. **Loaded from a YAML file** (for structured multi-machine setups)
+2. **Embedded inline** (for simple single-machine deployments)
 
-When you run `service install`, the binary copies (or generates) a YAML
-config to that directory and registers itself with the OS service manager.
-The service just runs `<binary> service run`, which loads the config from the
-standard location.
+When you run `service install`, the binary encodes the configuration and registers
+it with the OS service manager. The service just runs `<binary> service run`, which
+loads the configuration from metadata (or falls back to a YAML file if present).
 
-**To reconfigure**: edit the YAML file and restart the service. No
-reinstallation required.
+**To reconfigure:**
+- Edit the YAML config file (if one exists) and run `service restart`, or
+- Reinstall with new parameters using `service install`
 
 ---
 
@@ -28,20 +27,33 @@ reinstallation required.
 
 ### Install
 
+Two installation modes are available:
+
+**Mode 1: From a config file (recommended for complex setups)**
+
 ```bash
-# Copy your telad.yaml to the system config dir and register the service.
 # Windows: run from an elevated (Administrator) prompt.
 # Linux/macOS: use sudo.
 
 telad service install -config telad.yaml
 ```
 
-The config file will be copied to (for example) `C:\ProgramData\Tela\telad.yaml`
+The config file is validated, embedded in service metadata, and a reference
+copy is retained on disk at (for example) `C:\ProgramData\Tela\telad.yaml`
 or `/etc/tela/telad.yaml`.
 
 Make sure your `telad.yaml` includes the hub URL, auth token, and machine
 definitions before installing. See [telad.md](telad.md) for the full config
 format and authentication setup.
+
+**Mode 2: Inline configuration (recommended for simple setups)**
+
+```bash
+telad service install -hub ws://your-hub:8080 -machine barn -ports "22:SSH,3389:RDP"
+```
+
+Configuration is passed as command-line flags and stored inline. No external
+file is needed. Ideal for single-machine deployments without additional setup.
 
 ### Config file format
 
