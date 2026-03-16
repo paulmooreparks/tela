@@ -544,33 +544,31 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 
 	var fileCfg *configFile
 
-	// Try to load inline YAML config from service metadata first
-	if svcCfg.YAMLConfig != "" {
-		yamlContent, err := service.DecodeYAMLConfig(svcCfg.YAMLConfig)
-		if err != nil {
-			log.Fatalf("decode inline config: %v", err)
-		}
-
-		// Parse the inline YAML
-		if err := yaml.Unmarshal([]byte(yamlContent), &fileCfg); err != nil {
-			log.Fatalf("parse inline config: %v", err)
-		}
-
-		if fileCfg == nil {
-			log.Fatalf("inline config parsed but is nil")
-		}
-
-		log.Printf("loaded config from service metadata")
-	} else {
-		// Fall back to reading from file
-		yamlPath := service.BinaryConfigPath("telad")
-		var err error
+	// Try the YAML config file first so operators can edit it and just
+	// restart the service.  Fall back to inline metadata (base64 in the
+	// service JSON) when no file exists.
+	yamlPath := service.BinaryConfigPath("telad")
+	if _, err := os.Stat(yamlPath); err == nil {
 		fileCfg, err = loadConfig(yamlPath)
 		if err != nil {
 			log.Fatalf("config %s: %v", yamlPath, err)
 		}
-
 		log.Printf("loaded config from %s", yamlPath)
+	} else if svcCfg.YAMLConfig != "" {
+		yamlContent, err := service.DecodeYAMLConfig(svcCfg.YAMLConfig)
+		if err != nil {
+			log.Fatalf("decode inline config: %v", err)
+		}
+		if err := yaml.Unmarshal([]byte(yamlContent), &fileCfg); err != nil {
+			log.Fatalf("parse inline config: %v", err)
+		}
+		if fileCfg == nil {
+			log.Fatalf("inline config parsed but is nil")
+		}
+		log.Printf("loaded config from service metadata")
+	} else {
+		log.Fatalf("no config found: expected %s or inline metadata in %s",
+			yamlPath, service.ConfigPath("telad"))
 	}
 
 	go runMultiMachine(fileCfg)
