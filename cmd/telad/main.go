@@ -267,15 +267,14 @@ func main() {
 
 func handleServiceCommand() {
 	if len(os.Args) < 3 {
-		cfgPath := service.BinaryConfigPath("telad")
 		fmt.Fprintf(os.Stderr, `telad service -- manage telad as an OS service
 
 Usage:
   telad service install -config <file>
-      Install service (config stored in service metadata, reference copy in %s)
+      Install service with YAML config file
 
   telad service install -hub <url> -machine <id> -ports <spec>
-      Install service with inline configuration (no external file needed)
+      Install service with inline configuration
 
   telad service uninstall               Remove the service
   telad service start                   Start the installed service
@@ -284,8 +283,6 @@ Usage:
   telad service status                  Show service status
   telad service run                     Run in service mode (used by the service manager)
 
-Configuration is stored securely in the Windows registry (no permission issues).
-
 Reconfigure:
   Edit the YAML config file and run "telad service restart", or
   reinstall with new parameters using "telad service install".
@@ -293,7 +290,7 @@ Reconfigure:
 Install examples:
   telad service install -config telad.yaml
   telad service install -hub ws://hub:8080 -machine barn -ports 22:SSH,3389:RDP
-`, cfgPath)
+`)
 		os.Exit(1)
 	}
 
@@ -428,13 +425,11 @@ func serviceInstall() {
 
 	fmt.Println("telad service installed successfully")
 	if destPath != "" {
-		fmt.Printf("  config: %s (reference copy)\n", destPath)
+		fmt.Printf("  config: %s\n", destPath)
 	}
 	fmt.Println("  start:  telad service start")
-	fmt.Println("")
-	fmt.Println("Configuration is stored in the service metadata (no permission issues).")
 	if destPath != "" {
-		fmt.Println("Edit " + destPath + " and run \"telad service restart\" to reconfigure.")
+		fmt.Println("  edit:   " + destPath)
 	}
 }
 

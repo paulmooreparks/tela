@@ -88,6 +88,7 @@ persisted to YAML. No hub restart needed for token/ACL/portal changes.
 - Config persistence: `writeHubConfig` for YAML, `service.SaveConfig` for JSON
 - Mutex conventions: `sync.RWMutex` for read-heavy state (`globalCfgMu`, `machinesMu`)
 - Constant-time comparison for all token checks (`crypto/subtle`)
+- **Output style:** Print only actionable information. Do NOT include reassurance messages like "no permission issues" or explanations of internal mechanics. Users expect features to work; they do not want output confirming that known issues were fixed.
 
 # git management
 
