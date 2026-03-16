@@ -1,5 +1,5 @@
 /*
-tela — Tela Client
+tela -- Tela Client
 
 Purpose:
 
@@ -7,20 +7,20 @@ Purpose:
 	with the target daemon, and establishes an encrypted L3 tunnel.
 
 	Subcommands:
-	  tela connect  — connect to a machine (ad-hoc or via profile)
-	  tela machines — list registered machines and their services
-	  tela services — list services on a specific machine
-	  tela status   — show hub status summary
+	  tela connect  -- connect to a machine (ad-hoc or via profile)
+	  tela machines -- list registered machines and their services
+	  tela services -- list services on a specific machine
+	  tela status   -- show hub status summary
 
 	Service selection (connect):
-	  -ports    — comma-separated port numbers or local:remote pairs
-	  -services — comma-separated service names (resolved via hub API)
-	  -profile  — load a named connection profile (multiple hubs in parallel)
+	  -ports    -- comma-separated port numbers or local:remote pairs
+	  -services -- comma-separated service names (resolved via hub API)
+	  -profile  -- load a named connection profile (multiple hubs in parallel)
 
 	Environment variables (provide defaults so flags can be omitted):
-	  TELA_HUB      — hub WebSocket URL
-	  TELA_MACHINE  — target machine ID
-	  TELA_TOKEN    — authentication token
+	  TELA_HUB      -- hub WebSocket URL
+	  TELA_MACHINE  -- target machine ID
+	  TELA_TOKEN    -- authentication token
 
 Network (per-session addressing):
 
@@ -151,7 +151,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `tela — Tela Client
+	fmt.Fprintf(os.Stderr, `tela -- Tela Client
 
 Usage:
   tela <command> [options]
@@ -266,7 +266,7 @@ func cmdConnect(args []string) {
 			os.Exit(1)
 		}
 		if err == nil {
-			attempt = 0 // successful session — reset backoff
+			attempt = 0 // successful session -- reset backoff
 		}
 
 		// Check for shutdown before reconnecting
@@ -441,7 +441,7 @@ func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("hub returned 401 unauthorized — check your -token")
+		return nil, fmt.Errorf("hub returned 401 unauthorized. Check your -token")
 	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("hub returned HTTP %d", resp.StatusCode)
@@ -579,7 +579,7 @@ func runProfile(name string) {
 					return
 				}
 				if err == nil {
-					attempt = 0 // successful session — reset backoff
+					attempt = 0 // successful session -- reset backoff
 				}
 
 				// Check for shutdown before reconnecting
@@ -698,9 +698,9 @@ func cmdMachines(args []string) {
 		}
 		svcStr := strings.Join(svcs, ", ")
 		if svcStr == "" {
-			svcStr = "—"
+			svcStr = "-"
 		}
-		sess := "—"
+		sess := "-"
 		if m.SessionCount > 0 {
 			sess = fmt.Sprintf("%d active", m.SessionCount)
 		}
@@ -878,7 +878,7 @@ func startWSKeepalive(ws *websocket.Conn) func() {
 var errFatal = fmt.Errorf("fatal")
 
 // errMachineNotFound is returned when the machine isn't registered on the hub.
-// This is retryable — the daemon may reconnect at any time.
+// This is retryable -- the daemon may reconnect at any time.
 var errMachineNotFound = fmt.Errorf("machine not found")
 
 // reconnectDelay calculates the next backoff delay with jitter.
@@ -1026,7 +1026,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 		return nil
 	}
 
-	// Create wsBind — WireGuard datagrams go through the WebSocket
+	// Create wsBind -- WireGuard datagrams go through the WebSocket
 	bind := wsbind.New(wsConn, 256)
 
 	// Create WireGuard device
@@ -1059,7 +1059,7 @@ persistent_keepalive_interval=25
 		dev.Close()
 		return nil
 	}
-	log.Printf("WireGuard tunnel up — client=%s daemon=%s", sessionHelperIP, sessionAgentIP)
+	log.Printf("WireGuard tunnel up -- client=%s daemon=%s", sessionHelperIP, sessionAgentIP)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	done := make(chan struct{})
@@ -1086,7 +1086,7 @@ persistent_keepalive_interval=25
 		}
 	}
 	if len(mappings) == 0 {
-		log.Printf("daemon did not advertise any ports — use -port and -target-port")
+		log.Printf("daemon did not advertise any ports -- use -port and -target-port")
 		dev.Close()
 		return nil
 	}
@@ -1098,7 +1098,7 @@ persistent_keepalive_interval=25
 		listenAddr := fmt.Sprintf("127.0.0.1:%d", m.local)
 		listener, err := net.Listen("tcp", listenAddr)
 		if err != nil {
-			// Port conflict — try local + 10000
+			// Port conflict -- try local + 10000
 			alt := m.local + 10000
 			listenAddr = fmt.Sprintf("127.0.0.1:%d", alt)
 			listener, err = net.Listen("tcp", listenAddr)
@@ -1133,7 +1133,7 @@ persistent_keepalive_interval=25
 
 	// Wait for WebSocket to close (session end) or signal
 	<-done
-	log.Println("session ended — cleaning up")
+	log.Println("session ended -- cleaning up")
 	for _, l := range listeners {
 		l.Close()
 	}
@@ -1287,7 +1287,7 @@ func logVerbose(format string, args ...any) {
 func handleServiceCommand() {
 	if len(os.Args) < 3 {
 		cfgPath := service.BinaryConfigPath("tela")
-		fmt.Fprintf(os.Stderr, `tela service — manage tela as an OS service
+		fmt.Fprintf(os.Stderr, `tela service -- manage tela as an OS service
 
 Usage:
   tela service install -config <file>  Install service (copies config to system dir)
@@ -1396,7 +1396,7 @@ func serviceInstall() {
 	wd, _ := os.Getwd()
 	cfg := &service.Config{
 		BinaryPath:  exePath,
-		Description: "Tela Client — encrypted tunnel client",
+		Description: "Tela Client -- encrypted tunnel client",
 		WorkingDir:  wd,
 	}
 
@@ -1790,7 +1790,7 @@ func queryRemote(remoteName string, remote remoteEntry, hubName string) (string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		return "", fmt.Errorf("remote %q returned 401 unauthorized — try 'tela remote add %s %s' with a valid token", remoteName, remoteName, remote.URL)
+		return "", fmt.Errorf("remote %q returned 401 unauthorized; try 'tela remote add %s %s' with a valid token", remoteName, remoteName, remote.URL)
 	}
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("remote %q returned HTTP %d", remoteName, resp.StatusCode)
@@ -1973,7 +1973,7 @@ func cmdRemoteAdd(args []string) {
 	resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		fmt.Fprintln(os.Stderr, "\nError: unauthorized — check your token")
+		fmt.Fprintln(os.Stderr, "\nError: unauthorized. Check your token")
 		os.Exit(1)
 	}
 	if resp.StatusCode != 200 {

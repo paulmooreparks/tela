@@ -26,7 +26,7 @@ func plistLabel(binaryName string) string {
 // Install creates a launchd plist and loads it.
 func Install(binaryName string, cfg *Config) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 
 	if err := SaveConfig(binaryName, cfg); err != nil {
@@ -36,7 +36,7 @@ func Install(binaryName string, cfg *Config) error {
 	label := plistLabel(binaryName)
 
 	// The binary reads its own YAML config from the system config
-	// directory (e.g. /etc/tela/telahubd.yaml) — no env vars needed.
+	// directory (e.g. /etc/tela/telahubd.yaml) -- no env vars needed.
 	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -78,7 +78,7 @@ func Install(binaryName string, cfg *Config) error {
 // Uninstall unloads and removes the launchd plist.
 func Uninstall(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 
 	path := plistPath(binaryName)
@@ -96,7 +96,7 @@ func Uninstall(binaryName string) error {
 // Start starts the launchd service.
 func Start(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 	label := plistLabel(binaryName)
 	return run("launchctl", "start", label)
@@ -105,7 +105,7 @@ func Start(binaryName string) error {
 // Stop stops the launchd service.
 func Stop(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 	label := plistLabel(binaryName)
 	return run("launchctl", "stop", label)

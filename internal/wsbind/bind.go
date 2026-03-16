@@ -1,21 +1,22 @@
 /*
-  Package wsbind implements a WireGuard conn.Bind that transports
-  WireGuard datagrams as binary WebSocket messages, with an optional
-  upgrade to UDP relay for better performance.
+Package wsbind implements a WireGuard conn.Bind that transports
+WireGuard datagrams as binary WebSocket messages, with an optional
+upgrade to UDP relay for better performance.
 
-  Architecture:
-    WireGuard device ←→ wsBind ←→ WebSocket (or UDP) ←→ Hub relay
+Architecture:
 
-  Transport modes:
-    1. WebSocket (default) — works through any HTTP proxy / Cloudflare.
-    2. UDP relay (upgrade)  — eliminates TCP-over-TCP. Hub relays raw
-       UDP datagrams tagged with an 8-byte session token.
+	WireGuard device ←→ wsBind ←→ WebSocket (or UDP) ←→ Hub relay
 
-  Thread safety:
-    - WebSocket sends serialized via writeMu.
-    - UDP sends are inherently goroutine-safe (single socket).
-    - Receives from both transports merge into RecvCh.
-    - Close is idempotent; bind supports Close→Open cycles.
+Transport modes:
+ 1. WebSocket (default) -- works through any HTTP proxy / Cloudflare.
+ 2. UDP relay (upgrade)  -- eliminates TCP-over-TCP. Hub relays raw
+    UDP datagrams tagged with an 8-byte session token.
+
+Thread safety:
+  - WebSocket sends serialized via writeMu.
+  - UDP sends are inherently goroutine-safe (single socket).
+  - Receives from both transports merge into RecvCh.
+  - Close is idempotent; bind supports Close→Open cycles.
 */
 package wsbind
 
@@ -52,7 +53,7 @@ const (
 // with optional UDP relay upgrade.
 //
 // WireGuard calls Close() then Open() during device state transitions
-// (e.g. Up). The bind must support this cycle — Close/Open are
+// (e.g. Up). The bind must support this cycle -- Close/Open are
 // re-entrant and reset the receive path each time.
 type Bind struct {
 	ws      *websocket.Conn
@@ -122,7 +123,7 @@ func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 		if allOk {
 			return nil
 		}
-		// Direct failed — fall through to relay
+		// Direct failed -- fall through to relay
 	}
 
 	// 2. UDP relay (token-prefixed datagrams via hub)
@@ -224,7 +225,7 @@ func (b *Bind) UpgradeUDP(hubHost string, hubPort int, token []byte) error {
 	b.udpActive = true
 	b.udpMu.Unlock()
 
-	// Start UDP reader — feeds into the same RecvCh as WebSocket
+	// Start UDP reader -- feeds into the same RecvCh as WebSocket
 	go b.udpReader()
 
 	log.Printf("[wsbind] upgraded to UDP relay (%s:%d)", hubHost, hubPort)
@@ -314,7 +315,7 @@ func (b *Bind) udpReader() {
 			}
 			continue
 		}
-		// Unknown source — drop
+		// Unknown source -- drop
 	}
 }
 
@@ -532,7 +533,7 @@ func (b *Bind) Close() error {
 // SetMark is a no-op (SO_MARK is irrelevant for WebSocket/UDP relay transport).
 func (b *Bind) SetMark(mark uint32) error { return nil }
 
-// ParseEndpoint returns a static endpoint — there's only one peer per bind.
+// ParseEndpoint returns a static endpoint -- there's only one peer per bind.
 func (b *Bind) ParseEndpoint(s string) (conn.Endpoint, error) {
 	return &endpoint{}, nil
 }
@@ -548,7 +549,7 @@ func (b *Bind) SendText(data []byte) error {
 	return b.ws.WriteMessage(websocket.TextMessage, data)
 }
 
-// endpoint is a trivial implementation — one peer per bind.
+// endpoint is a trivial implementation -- one peer per bind.
 type endpoint struct{}
 
 func (e *endpoint) ClearSrc()            {}

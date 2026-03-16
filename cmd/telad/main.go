@@ -1,12 +1,12 @@
 /*
-telad — Tela Daemon (WireGuard Agent)
+telad -- Tela Daemon (WireGuard Agent)
 
 Purpose:
 
 	Connects to the Hub via WebSocket, registers one or more machines,
 	and waits. When the Hub signals a session (with the client's WireGuard
 	public key), it creates a userspace WireGuard tunnel using gVisor
-	netstack — no TUN device, no admin/root required.
+	netstack -- no TUN device, no admin/root required.
 
 	Config-file mode (recommended):
 	  telad -config telad.yaml
@@ -140,7 +140,7 @@ var verbose bool
 var stopCh chan struct{}
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `telad — Tela Daemon
+	fmt.Fprintf(os.Stderr, `telad -- Tela Daemon
 
 Register with a Tela Hub and expose local services through an encrypted
 WireGuard tunnel. No TUN device or admin/root required.
@@ -268,7 +268,7 @@ func main() {
 func handleServiceCommand() {
 	if len(os.Args) < 3 {
 		cfgPath := service.BinaryConfigPath("telad")
-		fmt.Fprintf(os.Stderr, `telad service — manage telad as an OS service
+		fmt.Fprintf(os.Stderr, `telad service -- manage telad as an OS service
 
 Usage:
   telad service install -config <file>  Install service (copies config to system dir)
@@ -350,7 +350,7 @@ func serviceInstall() {
 	wd, _ := os.Getwd()
 	cfg := &service.Config{
 		BinaryPath:  exePath,
-		Description: "Tela Daemon — encrypted tunnel agent",
+		Description: "Tela Daemon -- encrypted tunnel agent",
 		WorkingDir:  wd,
 	}
 
@@ -597,7 +597,7 @@ func runSingleMachine(hubURL string, reg registration, targetHost string) {
 	for {
 		wasRegistered := runAgent(logger, hubURL, reg, targetHost)
 		if wasRegistered {
-			attempt = 0 // was registered — reset backoff
+			attempt = 0 // was registered -- reset backoff
 		}
 
 		// Check for shutdown before reconnecting
@@ -775,7 +775,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		switch msg.Type {
 		case "registered":
 			registered = true
-			lg.Printf("registered as: %s — waiting for sessions", msg.MachineID)
+			lg.Printf("registered as: %s -- waiting for sessions", msg.MachineID)
 
 		case "session-request":
 			sessionID := msg.SessionID
@@ -830,7 +830,7 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 		subnet = 1
 	}
 	if subnet > 254 {
-		lg.Printf("[session %s] rejected — session index %d exceeds 254-session limit", sessionID[:8], sessionIdx)
+		lg.Printf("[session %s] rejected -- session index %d exceeds 254-session limit", sessionID[:8], sessionIdx)
 		ws.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "session limit exceeded"))
 		ws.Close()
@@ -839,7 +839,7 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 	sessionAgentIP := fmt.Sprintf("10.77.%d.1", subnet)
 	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)
 
-	lg.Printf("[session %s] starting — agent=%s helper=%s", sessionID[:8], sessionAgentIP, sessionHelperIP)
+	lg.Printf("[session %s] starting -- agent=%s helper=%s", sessionID[:8], sessionAgentIP, sessionHelperIP)
 	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, sessionAgentIP, sessionHelperIP)
 	lg.Printf("[session %s] ended", sessionID[:8])
 }
@@ -862,7 +862,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	}
 	lg.Printf("sent agent pubkey: %s...", pubKeyHex[:8])
 
-	// Create netstack TUN (pure userspace — no admin needed)
+	// Create netstack TUN (pure userspace -- no admin needed)
 	tunDev, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{netip.MustParseAddr(sessionAgentIP)},
 		nil, // no DNS
@@ -873,7 +873,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 		return
 	}
 
-	// Create wsBind — WireGuard datagrams go through the WebSocket
+	// Create wsBind -- WireGuard datagrams go through the WebSocket
 	bind := wsbind.New(ws, 256)
 
 	// Create WireGuard device
@@ -906,7 +906,7 @@ persistent_keepalive_interval=25
 		dev.Close()
 		return
 	}
-	lg.Printf("WireGuard tunnel up — agent=%s helper=%s", sessionAgentIP, sessionHelperIP)
+	lg.Printf("WireGuard tunnel up -- agent=%s helper=%s", sessionAgentIP, sessionHelperIP)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	sessionEnded := make(chan struct{})
@@ -944,7 +944,7 @@ persistent_keepalive_interval=25
 	// Wait for session to end (either session-end message or WS error)
 	<-done
 
-	lg.Println("session ended \u2014 tearing down WireGuard")
+	lg.Println("session ended -- tearing down WireGuard")
 	for _, l := range listeners {
 		l.Close()
 	}
@@ -992,7 +992,7 @@ func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL stri
 					}()
 				}
 			case "session-end":
-				lg.Println("client disconnected — ending session")
+				lg.Println("client disconnected -- ending session")
 				close(sessionEnded)
 				return
 			default:

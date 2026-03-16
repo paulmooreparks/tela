@@ -26,7 +26,7 @@ sudo mv telahubd /usr/local/bin/
 
 # Bootstrap auth (creates /etc/tela/telahubd.yaml with an owner token)
 sudo telahubd user bootstrap
-# → SAVE THE PRINTED TOKEN — it will not be shown again.
+# → SAVE THE PRINTED TOKEN -- it will not be shown again.
 
 # Start the hub
 sudo telahubd
@@ -120,7 +120,7 @@ HUB_NAME=myhub telahubd
 # Custom ports
 HUB_PORT=9090 HUB_UDP_PORT=9091 telahubd
 
-# Behind Cloudflare/proxy — advertise real IP for UDP relay
+# Behind Cloudflare/proxy -- advertise real IP for UDP relay
 HUB_UDP_HOST=myhost.example.com telahubd
 ```
 
@@ -161,7 +161,7 @@ telahubd version
 
 ## Authentication
 
-On first startup, the hub auto-generates an owner token and prints it to stdout (secure by default). Save this token — it will not be displayed again.
+On first startup, the hub auto-generates an owner token and prints it to stdout (secure by default). Save this token. It will not be displayed again.
 
 If you need an open hub (no authentication), remove all tokens from the config file and restart. The hub will log a warning when running in open mode.
 
@@ -240,7 +240,7 @@ tela admin list-portals -hub wss://your-hub.example.com -token <owner-token>
 tela admin remove-portal awansaya -hub wss://your-hub.example.com -token <owner-token>
 ```
 
-Note: `-token` is the **hub's** owner token (authenticates you to the hub). `-portal-token` is the **portal's** admin API token (used by the hub to register with the portal). The `-hub-url` flag is optional — it defaults to the HTTPS form of `-hub`.
+Note: `-token` is the **hub's** owner token (authenticates you to the hub). `-portal-token` is the **portal's** admin API token (used by the hub to register with the portal). The `-hub-url` flag is optional; it defaults to the HTTPS form of `-hub`.
 
 ### Using `telad` with auth
 
@@ -332,7 +332,7 @@ Then add the `tela-hub` network tag to your VM instance.
 
 Running the hub without TLS (`ws://`) works for local development, but production hubs should use TLS (`wss://`). This protects hub authentication tokens in transit and is required by browsers for the hub console over HTTPS.
 
-The recommended approach is **Caddy** as a reverse proxy — it handles TLS certificates automatically via Let's Encrypt, supports WebSocket upgrade out of the box, and requires minimal configuration.
+The recommended approach is **Caddy** as a reverse proxy. It handles TLS certificates automatically via Let's Encrypt, supports WebSocket upgrade out of the box, and requires minimal configuration.
 
 ### Prerequisites
 
@@ -447,7 +447,7 @@ cloudflared tunnel route dns my-hub myhub.example.com
 cloudflared tunnel run my-hub
 ```
 
-With Cloudflare Tunnel, telahubd can stay on port 80 (default) since Caddy isn't needed. Note that Cloudflare Tunnel is TCP-only — the UDP relay (port 41820) won't work through it, and sessions will use WebSocket transport instead.
+With Cloudflare Tunnel, telahubd can stay on port 80 (default) since Caddy isn't needed. Note that Cloudflare Tunnel is TCP-only, so the UDP relay (port 41820) won't work through it, and sessions will use WebSocket transport instead.
 
 ### Alternative: nginx + certbot
 

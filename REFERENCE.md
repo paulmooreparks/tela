@@ -155,17 +155,17 @@ wwwDir: ./www        # Static file directory (hub console)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HUB_PORT` | `80` | HTTP+WS listen port |
-| `HUB_UDP_PORT` | `41820` | UDP relay port |
-| `HUB_UDP_HOST` | (empty) | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
-| `HUB_NAME` | (empty) | Display name for this hub |
-| `HUB_WWW_DIR` | `./www` | Static file directory |
+| `TELAHUBD_PORT` | `80` | HTTP+WS listen port |
+| `TELAHUBD_UDP_PORT` | `41820` | UDP relay port |
+| `TELAHUBD_UDP_HOST` | (empty) | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
+| `TELAHUBD_NAME` | (empty) | Display name for this hub |
+| `TELAHUBD_WWW_DIR` | `./www` | Static file directory |
 | `TELA_OWNER_TOKEN` | (empty) | Bootstrap owner token on first startup (ignored if tokens already exist) |
-| `TELA_PORTAL_URL` | (empty) | Portal URL for auto-registration on first startup (e.g. `https://awansaya.net`) |
-| `TELA_PORTAL_TOKEN` | (empty) | Portal admin API token for registration (used once, not persisted) |
-| `TELA_HUB_URL` | (empty) | Hub's own public URL for portal registration (e.g. `https://gohub.example.com`) |
+| `TELAHUBD_PORTAL_URL` | (empty) | Portal URL for auto-registration on first startup (e.g. `https://awansaya.net`) |
+| `TELAHUBD_PORTAL_TOKEN` | (empty) | Portal admin API token for registration (used once, not persisted) |
+| `TELAHUBD_PUBLIC_URL` | (empty) | Hub's own public URL for portal registration (e.g. `https://gohub.example.com`) |
 
-The only flag `telahubd` accepts is `-config <path>`.
+Flags: `-config <path>` and `-v` (verbose logging).
 
 ### Token management (local CLI)
 
@@ -189,7 +189,8 @@ telahubd user add bob -role admin       # admin role
 **List identities:**
 
 ```bash
-telahubd user list
+telahubd user list                  # tabular output
+telahubd user list -json            # JSON output (machine-readable)
 ```
 
 **Grant/revoke per-machine connect access:**
@@ -229,15 +230,15 @@ For container deployments, you can also auto-register with a portal on first sta
 
 ```bash
 TELA_OWNER_TOKEN=$(openssl rand -hex 32) \
-TELA_PORTAL_URL=https://awansaya.net \
-TELA_PORTAL_TOKEN=<portal-admin-token> \
-TELA_HUB_URL=https://gohub.example.com \
+TELAHUBD_PORTAL_URL=https://awansaya.net \
+TELAHUBD_PORTAL_TOKEN=<portal-admin-token> \
+TELAHUBD_PUBLIC_URL=https://gohub.example.com \
 docker compose up -d
 ```
 
-On first startup (when no portals are configured), the hub discovers the portal's hub directory, registers itself, and stores the sync token. The portal admin token (`TELA_PORTAL_TOKEN`) is used only for the initial POST and is **not** persisted. On subsequent restarts, the env vars are ignored because portal config already exists.
+On first startup (when no portals are configured), the hub discovers the portal's hub directory, registers itself, and stores the sync token. The portal admin token (`TELAHUBD_PORTAL_TOKEN`) is used only for the initial POST and is **not** persisted. On subsequent restarts, the env vars are ignored because portal config already exists.
 
-All three env vars (`TELA_PORTAL_URL`, `TELA_PORTAL_TOKEN`, `TELA_HUB_URL`) plus `HUB_NAME` (or `name` in config) are required for auto-registration.
+All three env vars (`TELAHUBD_PORTAL_URL`, `TELAHUBD_PORTAL_TOKEN`, `TELAHUBD_PUBLIC_URL`) plus `TELAHUBD_NAME` (or `name` in config) are required for auto-registration.
 
 ### Remote token management
 
@@ -249,12 +250,13 @@ Register your hub with a portal (like Awan Saya) for hub name resolution:
 
 ```bash
 telahubd portal add myportal https://awansaya.net
-telahubd portal list
+telahubd portal list                                # tabular output
+telahubd portal list -json                          # JSON output
 telahubd portal remove myportal
 telahubd portal sync                        # push viewer token to all portals
 ```
 
-Registration is idempotent — running `portal add` for an already-registered hub updates the existing entry (URL and viewer token) rather than failing.
+Registration is idempotent. Running `portal add` for an already-registered hub updates the existing entry (URL and viewer token) rather than failing.
 
 #### Sync tokens
 
@@ -292,15 +294,15 @@ curl -X DELETE -H "Authorization: Bearer <owner-token>" \
   'https://hub.example.com/api/admin/portals?name=awansaya'
 ```
 
-The `portalToken` in the POST body is the portal's admin API token. It is used for the registration request but is **not** persisted in the hub config — only the scoped sync token returned by the portal is stored.
+The `portalToken` in the POST body is the portal's admin API token. It is used for the registration request but is **not** persisted in the hub config. Only the scoped sync token returned by the portal is stored.
 
 ### Hub console
 
-The hub serves a built-in web console that is embedded directly into the `telahubd` binary. No external static files are required — a single binary is the complete deployment.
+The hub serves a built-in web console that is embedded directly into the `telahubd` binary. No external static files are required. A single binary is the complete deployment.
 
 The console uses a `console-viewer` token (auto-generated at startup) to show registered machines, services, and session history without requiring user login. The token is delivered to the browser as an `HttpOnly` cookie (`tela_viewer`), so API calls authenticate transparently.
 
-If you need to override the embedded console with custom files, set `HUB_WWW_DIR` (or `wwwDir` in YAML). When set, the hub serves from disk instead of the embedded filesystem.
+If you need to override the embedded console with custom files, set `TELAHUBD_WWW_DIR` (or `wwwDir` in YAML). When set, the hub serves from disk instead of the embedded filesystem.
 
 ### Hub API endpoints
 
@@ -325,7 +327,7 @@ If you need to override the embedded console with custom files, set `HUB_WWW_DIR
 | Port | Protocol | Required | Notes |
 |------|----------|----------|-------|
 | 443 (or custom) | TCP | Yes | WebSocket connections from `tela` and `telad` |
-| 41820 (configurable) | UDP | Optional | UDP relay tier; improves latency when open. When the hub is behind a proxy (e.g. Cloudflare), set `HUB_UDP_HOST` to the real public IP/hostname so clients can reach the UDP port directly. |
+| 41820 (configurable) | UDP | Optional | UDP relay tier; improves latency when open. When the hub is behind a proxy (e.g. Cloudflare), set `TELAHUBD_UDP_HOST` to the real public IP/hostname so clients can reach the UDP port directly. |
 
 No inbound ports are required on the machines running `telad`. Only the hub (or its reverse proxy) needs inbound access.
 
@@ -399,12 +401,12 @@ telad -hub ws://hub -machine web01 -ports "22:SSH:OpenSSH server,3389:RDP:Remote
 
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
-| `-config` | `TELA_CONFIG` | (none) | Path to YAML config file |
+| `-config` | `TELAD_CONFIG` | (none) | Path to YAML config file |
 | `-hub` | `TELA_HUB` | (none) | Hub WebSocket URL |
 | `-machine` | `TELA_MACHINE` | (none) | Machine name for hub registry |
 | `-token` | `TELA_TOKEN` | (none) | Hub auth token |
-| `-ports` | `TELA_PORTS` | (required) | Comma-separated port specs (see below) |
-| `-target-host` | `TELA_TARGET_HOST` | `127.0.0.1` | Target service host (gateway mode) |
+| `-ports` | `TELAD_PORTS` | (required) | Comma-separated port specs (see below) |
+| `-target-host` | `TELAD_TARGET_HOST` | `127.0.0.1` | Target service host (gateway mode) |
 | `-v` | | | Verbose logging |
 
 ### Service declaration format
@@ -497,6 +499,19 @@ System config paths (written by `service install`):
 |----------|------|
 | Linux / macOS | `/etc/tela/telad.yaml` |
 | Windows | `%ProgramData%\Tela\telad.yaml` |
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TELAD_CONFIG` | (none) | Path to YAML config file |
+| `TELA_HUB` | (none) | Hub WebSocket URL |
+| `TELA_MACHINE` | (none) | Machine name for hub registry |
+| `TELA_TOKEN` | (none) | Hub auth token |
+| `TELAD_PORTS` | (none) | Comma-separated port specs (e.g. `22:SSH,3389:RDP`) |
+| `TELAD_TARGET_HOST` | `127.0.0.1` | Target service host (gateway mode) |
+
+Environment variables serve as defaults. Flags override environment variables, and config file values override both.
 
 ---
 
@@ -637,6 +652,28 @@ Prints version and exits.
 ```bash
 tela version
 ```
+
+#### tela service
+
+Manages the `tela` client as a native OS service (Windows SCM, systemd, launchd). This is useful for always-on tunnel scenarios such as a jump server or workstation that must maintain persistent tunnels.
+
+The service config is a connection profile YAML file (the same format used by `tela connect -profile`). At install time, hub values must be full `ws://` or `wss://` URLs (no name resolution in service mode), and service entries must use `remote:` port numbers (no `name:` resolution in service mode).
+
+```bash
+tela service install -config <profile.yaml>
+tela service start
+tela service stop
+tela service restart
+tela service status
+tela service uninstall
+```
+
+System config paths (written by `service install`):
+
+| Platform | Path |
+|----------|------|
+| Linux / macOS | `/etc/tela/tela.yaml` |
+| Windows | `%ProgramData%\Tela\tela.yaml` |
 
 #### Deprecated commands
 
@@ -1021,7 +1058,7 @@ curl -H "Authorization: Bearer <viewer-token>" https://hub.example.com/api/histo
 
 ## 11. Using Tela with Awan Saya
 
-Tela works entirely standalone. When you have multiple hubs or multiple users, Awan Saya adds a portal layer that simplifies hub discovery, provides a multi-hub dashboard, and manages hub-name resolution for the CLI.
+Tela works entirely standalone. When you have multiple hubs or multiple users, [Awan Saya](https://awansaya.net/) adds a portal layer that simplifies hub discovery, provides a multi-hub dashboard, and manages hub-name resolution for the CLI.
 
 **Analogy:** Tela is to Awan Saya as git is to GitHub.
 
@@ -1048,7 +1085,7 @@ You will be prompted for:
 - The hub's public URL (for example, `https://hub.example.com`)
 - A portal admin token (obtained from the portal's settings page)
 
-The hub's `console-viewer` token is sent automatically — you do not need to create a separate viewer token.
+The hub's `console-viewer` token is sent automatically. You do not need to create a separate viewer token.
 
 Registration is idempotent. Running the same command again updates the hub's URL and viewer token on the portal. The portal returns a scoped sync token so that future viewer-token updates happen automatically (see [portal registration](#portal-registration) in section 5).
 
@@ -1099,31 +1136,6 @@ The portal shows a card for each registered hub. Each card displays:
 - Recent history
 
 The portal server proxies all hub status requests server-side. No direct browser-to-hub connectivity is required.
-
-### Hub registration via config.json (self-hosted Awan Saya)
-
-If you run your own Awan Saya instance, you can also register hubs by editing the hub directory file directly:
-
-```json
-{
-  "hubs": [
-    {
-      "name": "dev",
-      "url": "https://dev-hub.example.com",
-      "viewerToken": "<viewer-token>"
-    },
-    {
-      "name": "prod",
-      "url": "https://prod-hub.example.com",
-      "viewerToken": "<viewer-token>"
-    }
-  ]
-}
-```
-
-The `viewerToken` is a hub token with the `viewer` role. The portal uses it to authenticate against the hub's status API. It is never sent to the browser.
-
-For more detail on self-hosted Awan Saya, see the [Awan Saya setup guide](README.md).
 
 ### Portal-mode networking
 
@@ -1212,6 +1224,10 @@ tela admin rotate <id> -hub <hub> [-token <token>]
 tela admin list-portals -hub <hub> [-token <token>]
 tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> [-hub-url <url>] [-portal-token <token>]
 tela admin remove-portal <name> -hub <hub> [-token <token>]
+
+# OS service management
+tela service install -config <profile.yaml>
+tela service start | stop | restart | status | uninstall
 
 # Version
 tela version

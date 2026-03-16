@@ -1,8 +1,8 @@
-// admin.go — "tela admin" subcommands for remote hub management
+// admin.go -- "tela admin" subcommands for remote hub management
 //
 // These commands call the hub's /api/admin/* REST endpoints so you can
 // manage token identities, machine ACLs, and portal registrations from
-// any workstation — no SSH or shell access to the hub required.
+// any workstation -- no SSH or shell access to the hub required.
 //
 // All commands require an owner or admin token passed via -token flag
 // or TELA_OWNER_TOKEN environment variable (falls back to TELA_TOKEN).
@@ -60,7 +60,7 @@ func cmdAdmin(args []string) {
 }
 
 func printAdminUsage() {
-	fmt.Fprintf(os.Stderr, `tela admin — remote hub auth and portal management
+	fmt.Fprintf(os.Stderr, `tela admin -- remote hub auth and portal management
 
 Usage:
   tela admin <command> [options]
@@ -203,7 +203,7 @@ func permuteArgs(fs *flag.FlagSet, args []string) []string {
 						flags = append(flags, args[i])
 					}
 				} else {
-					// Unknown flag — assume it takes a value.
+					// Unknown flag -- assume it takes a value.
 					i++
 					if i < len(args) {
 						flags = append(flags, args[i])
@@ -324,7 +324,7 @@ func cmdAdminAddToken(args []string) {
 	fmt.Println()
 	fmt.Printf("  Token: %s\n", newToken)
 	fmt.Println()
-	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("SAVE THIS TOKEN -- it will not be shown again.")
 	fmt.Println("Change is already active (no hub restart needed).")
 }
 
@@ -451,7 +451,7 @@ func cmdAdminRotate(args []string) {
 	fmt.Printf("Rotated token for '%s'.\n", id)
 	fmt.Printf("  New token: %s\n", newToken)
 	fmt.Println()
-	fmt.Println("SAVE THIS TOKEN — it will not be shown again.")
+	fmt.Println("SAVE THIS TOKEN -- it will not be shown again.")
 	fmt.Println("Change is already active (no hub restart needed).")
 }
 
@@ -564,9 +564,9 @@ func cmdAdminAddPortal(args []string) {
 		fmt.Printf("Added portal '%s' (%s)\n", name, url)
 	}
 	if hasSyncToken {
-		fmt.Println("Sync token received — viewer token updates will be automatic.")
+		fmt.Println("Sync token received -- viewer token updates will be automatic.")
 	} else {
-		fmt.Println("Warning: no sync token returned — upgrade the portal to enable auto-sync.")
+		fmt.Println("Warning: no sync token returned -- upgrade the portal to enable auto-sync.")
 	}
 	fmt.Println("Change is already active (no hub restart needed).")
 }

@@ -18,7 +18,7 @@ func unitPath(binaryName string) string {
 // Install creates a systemd unit file and enables the service.
 func Install(binaryName string, cfg *Config) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 
 	if err := SaveConfig(binaryName, cfg); err != nil {
@@ -27,7 +27,7 @@ func Install(binaryName string, cfg *Config) error {
 
 	svcName := ServiceName(binaryName)
 
-	// Build ExecStart — the binary reads its YAML config from the
+	// Build ExecStart -- the binary reads its YAML config from the
 	// standard system location (e.g. /etc/tela/telad.yaml).
 	// Quote the binary path in case it contains spaces.
 	execStart := `"` + cfg.BinaryPath + `" service run`
@@ -69,7 +69,7 @@ WantedBy=multi-user.target
 // Uninstall stops, disables, and removes the systemd unit file.
 func Uninstall(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 
 	svcName := ServiceName(binaryName)
@@ -90,7 +90,7 @@ func Uninstall(binaryName string) error {
 // Start starts the systemd service.
 func Start(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 	return run("systemctl", "start", ServiceName(binaryName))
 }
@@ -98,7 +98,7 @@ func Start(binaryName string) error {
 // Stop stops the systemd service.
 func Stop(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("root privileges required — run with sudo")
+		return fmt.Errorf("root privileges required. Run with sudo.")
 	}
 	return run("systemctl", "stop", ServiceName(binaryName))
 }

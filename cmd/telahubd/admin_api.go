@@ -1,4 +1,4 @@
-// admin_api.go — REST API for remote hub auth and portal management
+// admin_api.go -- REST API for remote hub auth and portal management
 //
 // All endpoints require Authorization: Bearer <owner-or-admin-token>.
 // Changes take effect immediately (hot-reload) and are persisted to the
@@ -27,7 +27,7 @@ import (
 
 // requireOwnerOrAdmin checks the Authorization header and returns the
 // caller token. Admin API always requires owner/admin auth, even on
-// open hubs — an open hub means "open for relay traffic", not "open
+// open hubs -- an open hub means "open for relay traffic", not "open
 // for management".
 func requireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (string, bool) {
 	callerToken := tokenFromRequest(r)
@@ -78,7 +78,7 @@ type adminAddRequest struct {
 type adminAddResponse struct {
 	ID    string `json:"id"`
 	Role  string `json:"role"`
-	Token string `json:"token"` // full token — shown once
+	Token string `json:"token"` // full token -- shown once
 }
 
 // ── handleAdminTokens dispatches GET / POST / DELETE ───────────────

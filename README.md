@@ -208,7 +208,7 @@ The cascade is fully automatic. Each tier falls through on failure with no user 
 
 ## Running as an OS service
 
-Both `telad` and `telahubd` can run as native OS services (Windows SCM, Linux systemd, macOS launchd). Configuration lives in a YAML file in a system-wide directory. Edit the file and restart to reconfigure; no reinstallation needed.
+`tela`, `telad`, and `telahubd` can all run as native OS services (Windows SCM, Linux systemd, macOS launchd). Configuration lives in a YAML file in a system-wide directory. Edit the file and restart to reconfigure; no reinstallation needed.
 
 ```bash
 # Install telad as a service (copies config to system dir)
@@ -219,9 +219,14 @@ telad service start
 telahubd service install -name myhub -port 80
 telahubd service start
 
+# Install tela client as a service (copies connection profile to system dir)
+tela service install -config myprofile.yaml
+tela service start
+
 # Reconfigure: edit the config, then restart
 telad service restart
 telahubd service restart
+tela service restart
 ```
 
 See [howto/services.md](howto/services.md) for full details.
@@ -241,7 +246,7 @@ The `portal add` command discovers the portal's hub directory endpoint via `/.we
 ## Project structure
 
 ```
-cmd/tela/          Client binary (subcommands: connect, machines, services, status, remote, admin)
+cmd/tela/          Client binary (subcommands: connect, machines, services, status, remote, admin, service)
 cmd/telad/         Daemon binary
 cmd/telahubd/      Hub server binary
 internal/service/   Cross-platform OS service management (Windows SCM, systemd, launchd)

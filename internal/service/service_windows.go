@@ -17,7 +17,7 @@ import (
 // Install registers the service with the Windows Service Control Manager.
 func Install(binaryName string, cfg *Config) error {
 	if !IsElevated() {
-		return fmt.Errorf("administrator privileges required — run from an elevated prompt")
+		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
 	if err := SaveConfig(binaryName, cfg); err != nil {
@@ -36,7 +36,7 @@ func Install(binaryName string, cfg *Config) error {
 	s, err := m.OpenService(svcName)
 	if err == nil {
 		s.Close()
-		return fmt.Errorf("service %q is already installed — uninstall first", svcName)
+		return fmt.Errorf("service %q is already installed. Uninstall first.", svcName)
 	}
 
 	// Build the command line: binary "service" "run"
@@ -45,7 +45,7 @@ func Install(binaryName string, cfg *Config) error {
 	binPath := `"` + cfg.BinaryPath + `" service run`
 
 	s, err = m.CreateService(svcName, binPath, mgr.Config{
-		DisplayName:  svcName + " — Tela",
+		DisplayName:  svcName + " - Tela",
 		Description:  cfg.Description,
 		StartType:    mgr.StartAutomatic,
 		ErrorControl: mgr.ErrorNormal,
@@ -62,7 +62,7 @@ func Install(binaryName string, cfg *Config) error {
 		{Type: mgr.ServiceRestart, Delay: 30 * time.Second},
 	}, 86400) // reset failure count after 24h
 	if err != nil {
-		// Non-fatal — log but continue
+		// Non-fatal -- log but continue
 		fmt.Fprintf(os.Stderr, "warning: could not set recovery actions: %v\n", err)
 	}
 
@@ -72,7 +72,7 @@ func Install(binaryName string, cfg *Config) error {
 // Uninstall removes the service from the SCM and deletes the config file.
 func Uninstall(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("administrator privileges required — run from an elevated prompt")
+		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
 	m, err := mgr.Connect()
@@ -112,7 +112,7 @@ func Uninstall(binaryName string) error {
 // Start starts the installed service.
 func Start(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("administrator privileges required — run from an elevated prompt")
+		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
 	m, err := mgr.Connect()
@@ -136,7 +136,7 @@ func Start(binaryName string) error {
 // Stop stops the running service.
 func Stop(binaryName string) error {
 	if !IsElevated() {
-		return fmt.Errorf("administrator privileges required — run from an elevated prompt")
+		return fmt.Errorf("administrator privileges required. Run from an elevated prompt.")
 	}
 
 	m, err := mgr.Connect()

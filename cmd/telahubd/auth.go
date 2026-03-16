@@ -256,7 +256,7 @@ func bootstrapFromEnv(cfg *hubConfig, cfgPath string) bool {
 		return false
 	}
 	if len(cfg.Auth.Tokens) > 0 {
-		// Already bootstrapped — env var is ignored.
+		// Already bootstrapped -- env var is ignored.
 		return false
 	}
 
@@ -310,11 +310,11 @@ func autoBootstrapAuth(cfg *hubConfig, cfgPath string) bool {
 	bootstrapAuth(cfg, cfgPath, ownerToken)
 
 	fmt.Println("==============================================================")
-	fmt.Println("  AUTH BOOTSTRAPPED — owner token generated automatically")
+	fmt.Println("  AUTH BOOTSTRAPPED -- owner token generated automatically")
 	fmt.Println("")
 	fmt.Printf("  Owner token: %s\n", ownerToken)
 	fmt.Println("")
-	fmt.Println("  Save this token — it will not be displayed again.")
+	fmt.Println("  Save this token -- it will not be displayed again.")
 	fmt.Println("  Use it with: tela admin --hub <URL> --token <TOKEN>")
 	fmt.Println("  Or set env:  TELA_OWNER_TOKEN=" + ownerToken)
 	fmt.Println("==============================================================")

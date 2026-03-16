@@ -1,4 +1,4 @@
-// telahubd — Tela Hub
+// telahubd -- Tela Hub
 //
 // Combined HTTP + WebSocket + UDP relay
 // server on a single port. Serves the hub console (static files), exposes
@@ -388,13 +388,13 @@ func corsHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
-// adminCorsHeaders sets restrictive CORS for admin endpoints — no wildcard origin.
+// adminCorsHeaders sets restrictive CORS for admin endpoints -- no wildcard origin.
 // Cross-origin browser requests to admin endpoints are not expected; admin
 // access is via CLI or same-origin console.
 func adminCorsHeaders(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		// Non-browser request (curl, CLI) — no CORS headers needed.
+		// Non-browser request (curl, CLI) -- no CORS headers needed.
 		return
 	}
 	w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -413,7 +413,7 @@ func tokenFromRequest(r *http.Request) string {
 		return c.Value
 	}
 	if t := r.URL.Query().Get("token"); t != "" {
-		log.Printf("[hub] DEPRECATED: token passed via ?token= query param from %s — use Authorization header instead", r.RemoteAddr)
+		log.Printf("[hub] DEPRECATED: token passed via ?token= query param from %s -- use Authorization header instead", r.RemoteAddr)
 		return t
 	}
 	return ""
@@ -660,7 +660,7 @@ func handleStatic(w http.ResponseWriter, r *http.Request) {
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// Agents and CLI clients don't send an Origin header — always allow.
+		// Agents and CLI clients don't send an Origin header -- always allow.
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			return true
@@ -1104,7 +1104,7 @@ func handleDisconnect(ws *websocket.Conn) {
 
 	switch state.Role {
 	case "agent":
-		// Agent control WS disconnected — close ALL sessions for this machine
+		// Agent control WS disconnected -- close ALL sessions for this machine
 		entry.mu.Lock()
 		entry.ControlWS = nil
 		entry.LastSeen = time.Now()
@@ -1128,7 +1128,7 @@ func handleDisconnect(ws *websocket.Conn) {
 		}
 
 	case "agent-session":
-		// Agent session WS disconnected — remove session, close its client
+		// Agent session WS disconnected -- remove session, close its client
 		sid := state.SessionID
 		entry.mu.Lock()
 		sess := entry.Sessions[sid]
@@ -1145,7 +1145,7 @@ func handleDisconnect(ws *websocket.Conn) {
 		}
 
 	case "client", "helper":
-		// Client disconnected — remove session, notify agent session WS
+		// Client disconnected -- remove session, notify agent session WS
 		sid := state.SessionID
 		entry.mu.Lock()
 		sess := entry.Sessions[sid]
@@ -1279,7 +1279,7 @@ func runUDPRelay() {
 		}
 
 		if peer.Addr != nil {
-			// Peer is on UDP — forward via UDP
+			// Peer is on UDP -- forward via UDP
 			peerTokenBytes, _ := hex.DecodeString(session.PeerTokenHex)
 			relayBuf := udpBufPool.Get().([]byte)[:0]
 			relayBuf = append(relayBuf, peerTokenBytes...)
@@ -1287,7 +1287,7 @@ func runUDPRelay() {
 			conn.WriteToUDP(relayBuf, peer.Addr)
 			udpBufPool.Put(relayBuf)
 		} else if peer.PeerWS != nil {
-			// Peer hasn't upgraded to UDP — fall back to WebSocket relay
+			// Peer hasn't upgraded to UDP -- fall back to WebSocket relay
 			peer.PeerWS.WriteMessage(websocket.BinaryMessage, payload)
 		}
 	}
@@ -1314,7 +1314,7 @@ func runKeepalive() {
 // ── Main ───────────────────────────────────────────────────────────
 
 func printHubUsage() {
-	fmt.Fprintf(os.Stderr, `telahubd — Tela Hub Server
+	fmt.Fprintf(os.Stderr, `telahubd -- Tela Hub Server
 
 Combined HTTP + WebSocket + UDP relay server. Serves the hub console,
 exposes status/history APIs, and relays encrypted WireGuard sessions
@@ -1433,7 +1433,7 @@ func main() {
 	}
 
 	// Auto-bootstrap: if still no auth, generate an owner token.
-	// Secure by default — hubs never run in open mode unless explicitly
+	// Secure by default -- hubs never run in open mode unless explicitly
 	// started with -open.
 	if autoBootstrapAuth(cfg, *configPath) {
 		log.Println("[hub] auth auto-bootstrapped (owner token generated)")
@@ -1534,7 +1534,7 @@ func runHub(stopCh <-chan struct{}) {
 
 	log.Printf("[hub] telahubd %s listening on http+ws://0.0.0.0:%d", version, httpPort)
 	if !globalAuth.isEnabled() {
-		log.Println("[hub] WARNING *** Hub running in OPEN mode — any client may connect and register ***")
+		log.Println("[hub] WARNING *** Hub running in OPEN mode -- any client may connect and register ***")
 		log.Println("[hub] WARNING *** Set TELA_OWNER_TOKEN or use a config file to enable auth ***")
 	}
 	if wwwDirOverride {
@@ -1559,7 +1559,7 @@ func runHub(stopCh <-chan struct{}) {
 func handleServiceCommand() {
 	if len(os.Args) < 3 {
 		cfgPath := service.BinaryConfigPath("telahubd")
-		fmt.Fprintf(os.Stderr, `telahubd service — manage telahubd as an OS service
+		fmt.Fprintf(os.Stderr, `telahubd service -- manage telahubd as an OS service
 
 Usage:
   telahubd service install [flags]  Install service (generates config in system dir)
@@ -1607,7 +1607,7 @@ Install examples:
 
 func hubServiceInstall() {
 	fs := flag.NewFlagSet("service install", flag.ExitOnError)
-	cfgFile := fs.String("config", "", "Path to YAML config file (optional — generates one if omitted)")
+	cfgFile := fs.String("config", "", "Path to YAML config file (optional -- generates one if omitted)")
 	name := fs.String("name", "", "Hub display name")
 	port := fs.Int("port", 80, "HTTP+WS listen port")
 	udpPortFlag := fs.Int("udp-port", 41820, "UDP relay port")
@@ -1652,7 +1652,7 @@ func hubServiceInstall() {
 	wd, _ := os.Getwd()
 	svcCfg := &service.Config{
 		BinaryPath:  exePath,
-		Description: "Tela Hub Server — encrypted tunnel relay",
+		Description: "Tela Hub Server -- encrypted tunnel relay",
 		WorkingDir:  wd,
 	}
 
@@ -1982,10 +1982,10 @@ func registerWithPortal(portalURL, adminToken, regHubName, regHubURL, viewerToke
 	}
 
 	if resp.StatusCode == 401 {
-		return registerResult{}, fmt.Errorf("unauthorized — check your API token")
+		return registerResult{}, fmt.Errorf("unauthorized. Check your API token")
 	}
 	if resp.StatusCode == 409 {
-		// Hub already registered — older portals that don't support upsert
+		// Hub already registered -- older portals that don't support upsert
 		respData.Updated = true
 	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return registerResult{}, fmt.Errorf("portal returned HTTP %d: %s", resp.StatusCode, string(body))
@@ -1999,7 +1999,7 @@ func registerWithPortal(portalURL, adminToken, regHubName, regHubURL, viewerToke
 		HubDirectory: hubDirectory,
 	}
 	if respData.SyncToken == "" && adminToken != "" {
-		// Old portal that doesn't issue sync tokens — keep admin token for compat
+		// Old portal that doesn't issue sync tokens -- keep admin token for compat
 		entry.Token = adminToken
 	}
 
@@ -2016,7 +2016,7 @@ func bootstrapPortalsFromEnv(cfg *hubConfig, cfgPath string) bool {
 		return false
 	}
 	if len(cfg.Portals) > 0 {
-		// Already have portal(s) — env var is ignored (same pattern as auth bootstrap).
+		// Already have portal(s) -- env var is ignored (same pattern as auth bootstrap).
 		return false
 	}
 
@@ -2198,9 +2198,9 @@ func cmdPortalAdd() {
 	}
 
 	if result.Entry.SyncToken != "" {
-		fmt.Println("Sync token received — admin token will not be stored in config")
+		fmt.Println("Sync token received -- admin token will not be stored in config")
 	} else if token != "" {
-		fmt.Println("Warning: portal did not return a sync token — storing admin token (upgrade portal to enable auto-sync)")
+		fmt.Println("Warning: portal did not return a sync token -- storing admin token (upgrade portal to enable auto-sync)")
 	}
 
 	cfg.Portals[name] = result.Entry
@@ -2379,7 +2379,7 @@ func cmdPortalSync() {
 
 	viewerToken := globalAuth.consoleViewerToken()
 	if viewerToken == "" {
-		fmt.Println("No viewer token configured — nothing to sync.")
+		fmt.Println("No viewer token configured -- nothing to sync.")
 		return
 	}
 

@@ -11,7 +11,7 @@ The key idea is: production machines connect outbound to a hub, operators connec
 - Prefer **Pattern A (Endpoint agent)** on each production VM.
 - Expose the smallest possible set of services.
 - Use a dedicated hub for production.
-- **Always enable authentication** — treat hub and agent tokens as secrets.
+- **Always enable authentication** -- treat hub and agent tokens as secrets.
 
 ---
 
@@ -182,9 +182,9 @@ psql -h localhost -U postgres
 - Production hardening is still necessary:
   - Patch systems
   - Strong SSH auth
-  - Least privilege — grant connect access only to the machines each operator needs
-  - Audit access — check `/api/history` on the hub
-  - Rotate tokens periodically — use `tela admin rotate`
+  - Least privilege -- grant connect access only to the machines each operator needs
+  - Audit access -- check `/api/history` on the hub
+  - Rotate tokens periodically -- use `tela admin rotate`
 - Separate hubs per environment are the simplest control boundary.
 
 ---

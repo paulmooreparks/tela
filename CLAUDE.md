@@ -12,10 +12,10 @@ Three binaries, one Go module (`github.com/paulmooreparks/tela`):
 | `telahubd` | `cmd/telahubd/` | Hub server (HTTP + WebSocket + UDP relay on a single port) |
 
 Supporting packages:
-- `internal/service/` — Cross-platform OS service management (Windows SCM, systemd, launchd)
-- `console/` — Embedded static files for the hub's web console
+- `internal/service/` -- Cross-platform OS service management (Windows SCM, systemd, launchd)
+- `console/` -- Embedded static files for the hub's web console
 
-Related project: **Awan Saya** (`c:\Users\paul\source\repos\awansatu`) — portal/registry that discovers and lists hubs. Changes to tela's auth, portal sync, or API contracts may affect Awan Saya.
+Related project: **Awan Saya** (`c:\Users\paul\source\repos\awansatu`) -- portal/registry that discovers and lists hubs. Changes to tela's auth, portal sync, or API contracts may affect Awan Saya.
 
 ## Wirint Style
 

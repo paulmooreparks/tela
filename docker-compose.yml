@@ -1,4 +1,4 @@
-# Tela — Docker Compose
+# Tela -- Docker Compose
 #
 # Runs the Go hub (telahubd). All external traffic is routed via cloudflared.
 #
@@ -7,7 +7,7 @@
 
 services:
   gohub:
-    # Go hub (telahubd) — reachable via gohub.parkscomputing.com.
+    # Go hub (telahubd) -- reachable via gohub.parkscomputing.com.
     build:
       context: .
       dockerfile: docker/gohub/Dockerfile
@@ -18,14 +18,14 @@ services:
       - "3002:80"
       - "41820:41820/udp"
     environment:
-      - HUB_PORT=80
-      - HUB_UDP_PORT=41820
-      - HUB_UDP_HOST=${HUB_UDP_HOST:-}
-      - HUB_NAME=gohub
+      - TELAHUBD_PORT=80
+      - TELAHUBD_UDP_PORT=41820
+      - TELAHUBD_UDP_HOST=${TELAHUBD_UDP_HOST:-}
+      - TELAHUBD_NAME=gohub
       - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
-      - TELA_PORTAL_URL=${TELA_PORTAL_URL:-}
-      - TELA_PORTAL_TOKEN=${TELA_PORTAL_TOKEN:-}
-      - TELA_HUB_URL=${TELA_HUB_URL:-}
+      - TELAHUBD_PORTAL_URL=${TELAHUBD_PORTAL_URL:-}
+      - TELAHUBD_PORTAL_TOKEN=${TELAHUBD_PORTAL_TOKEN:-}
+      - TELAHUBD_PUBLIC_URL=${TELAHUBD_PUBLIC_URL:-}
     volumes:
       - hub-data:/app/data
     restart: unless-stopped

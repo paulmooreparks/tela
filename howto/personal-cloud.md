@@ -70,7 +70,7 @@ Requirements:
 ---
 ## Step 1.5 - Authentication
 
-The hub auto-generates an owner token on first startup (secure by default). For bare-metal installations, the token is printed to stdout — save it. For Docker, set `TELA_OWNER_TOKEN` so you have a known token to use for remote management.
+The hub auto-generates an owner token on first startup (secure by default). For bare-metal installations, the token is printed to stdout. Save it. For Docker, set `TELA_OWNER_TOKEN` so you have a known token to use for remote management.
 
 ### Quick path (Docker)
 
