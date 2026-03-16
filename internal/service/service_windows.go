@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -65,6 +66,12 @@ func Install(binaryName string, cfg *Config) error {
 		// Non-fatal -- log but continue
 		fmt.Fprintf(os.Stderr, "warning: could not set recovery actions: %v\n", err)
 	}
+
+	// Grant SYSTEM read+execute on the binary and config so the service can start.
+	// User-created directories (e.g. "C:\Program Files\Tela") may not inherit
+	// SYSTEM access from the parent.
+	grantSystemAccess(cfg.BinaryPath)
+	grantSystemAccess(ConfigDir())
 
 	return nil
 }
@@ -257,6 +264,25 @@ func (h *Handler) Execute(args []string, r <-chan svc.ChangeRequest, changes cha
 // This should only be called when IsWindowsService() returns true.
 func RunAsService(binaryName string, handler *Handler) error {
 	return svc.Run(ServiceName(binaryName), handler)
+}
+
+// grantSystemAccess uses icacls to ensure the SYSTEM account has read+execute
+// access to the given path. For directories, access is inherited by children.
+// Errors are silently ignored (non-fatal).
+func grantSystemAccess(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	if info.IsDir() {
+		// (OI)(CI) = inherit to files and subdirectories
+		_ = exec.Command("icacls", path, "/grant", "SYSTEM:(OI)(CI)(RX)", "/T", "/Q").Run()
+	} else {
+		_ = exec.Command("icacls", path, "/grant", "SYSTEM:(RX)", "/Q").Run()
+		// Also grant SYSTEM access to the directory containing the binary
+		dir := filepath.Dir(path)
+		_ = exec.Command("icacls", dir, "/grant", "SYSTEM:(OI)(CI)(RX)", "/Q").Run()
+	}
 }
 
 // queryStatusFallback uses sc.exe when the SCM API isn't accessible.
