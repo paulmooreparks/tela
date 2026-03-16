@@ -393,12 +393,8 @@ func serviceInstall() {
 			os.Exit(1)
 		}
 		yamlContent = string(data)
-		destPath = service.BinaryConfigPath("telad")
-
-		// Also write to system directory for reference
-		if err := os.MkdirAll(filepath.Dir(destPath), 0700); err == nil {
-			_ = os.WriteFile(destPath, data, 0600)
-		}
+		// For inline mode, don't create a separate file (config is entirely in metadata)
+		destPath = ""
 	} else {
 		fmt.Fprintf(os.Stderr, "error: use either -config <file> OR (-hub, -machine, -ports)\n")
 		fmt.Fprintf(os.Stderr, "\nUsage:\n")
