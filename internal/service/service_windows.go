@@ -49,17 +49,14 @@ func Install(binaryName string, cfg *Config) error {
 	grantSystemAccess(cfg.BinaryPath)
 	grantSystemAccess(ConfigDir())
 
-	// Build the command line: binary "service" "run"
-	// The service runner will load config from the JSON file.
-	// Quote the binary path in case it contains spaces (e.g. "C:\Program Files\...").
-	binPath := `"` + cfg.BinaryPath + `" service run`
-
-	s, err = m.CreateService(svcName, binPath, mgr.Config{
+	// mgr.CreateService handles quoting the binary path via syscall.EscapeArg.
+	// Pass the bare path and additional args separately.
+	s, err = m.CreateService(svcName, cfg.BinaryPath, mgr.Config{
 		DisplayName:  svcName + " - Tela",
 		Description:  cfg.Description,
 		StartType:    mgr.StartAutomatic,
 		ErrorControl: mgr.ErrorNormal,
-	})
+	}, "service", "run")
 	if err != nil {
 		return fmt.Errorf("create service %q: %w", svcName, err)
 	}
