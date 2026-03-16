@@ -10,6 +10,7 @@
 package service
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,8 +19,9 @@ import (
 )
 
 // Config holds the minimal metadata needed by the OS service manager.
-// The actual runtime configuration (hub URLs, ports, etc.) lives in a
-// YAML file that the binary reads on startup.
+// The actual runtime configuration (hub URLs, ports, etc.) usually lives in a
+// YAML file, but can optionally be stored inline in this JSON for better
+// permission handling on Windows.
 type Config struct {
 	// BinaryPath is the absolute path to the executable.
 	BinaryPath string `json:"binaryPath"`
@@ -29,6 +31,12 @@ type Config struct {
 
 	// WorkingDir is the working directory for the service process.
 	WorkingDir string `json:"workingDir,omitempty"`
+
+	// YAMLConfig optionally stores the binary's YAML config inline (base64-encoded).
+	// If present, YAMLConfig takes precedence over the separate YAML file.
+	// This avoids file permission issues on Windows (service runs as SYSTEM,
+	// which may not have read access to user-created files).
+	YAMLConfig string `json:"yamlConfig,omitempty"`
 }
 
 // Status represents the current state of an installed service.
@@ -103,6 +111,23 @@ func LoadConfig(binaryName string) (*Config, error) {
 //      "telad" → /etc/tela/telad.yaml             (Linux/macOS)
 func BinaryConfigPath(binaryName string) string {
 	return filepath.Join(ConfigDir(), binaryName+".yaml")
+}
+
+// EncodeYAMLConfig encodes YAML content as base64 for storage in Config.YAMLConfig.
+func EncodeYAMLConfig(yamlContent string) string {
+	return base64.StdEncoding.EncodeToString([]byte(yamlContent))
+}
+
+// DecodeYAMLConfig decodes the base64-encoded YAML from Config.YAMLConfig.
+func DecodeYAMLConfig(encoded string) (string, error) {
+	if encoded == "" {
+		return "", nil
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("decode YAML config: %w", err)
+	}
+	return string(data), nil
 }
 
 // Install registers the service with the OS service manager.

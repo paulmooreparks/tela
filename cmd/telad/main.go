@@ -271,7 +271,12 @@ func handleServiceCommand() {
 		fmt.Fprintf(os.Stderr, `telad service -- manage telad as an OS service
 
 Usage:
-  telad service install -config <file>  Install service (copies config to system dir)
+  telad service install -config <file>
+      Install service (config stored in service metadata, reference copy in %s)
+
+  telad service install -hub <url> -machine <id> -ports <spec>
+      Install service with inline configuration (no external file needed)
+
   telad service uninstall               Remove the service
   telad service start                   Start the installed service
   telad service stop                    Stop the running service
@@ -279,13 +284,15 @@ Usage:
   telad service status                  Show service status
   telad service run                     Run in service mode (used by the service manager)
 
-The service reads its configuration from:
-  %s
+Configuration is stored securely in the Windows registry (no permission issues).
 
-Edit that file and run "telad service restart" to reconfigure.
+Reconfigure:
+  Edit the YAML config file and run "telad service restart", or
+  reinstall with new parameters using "telad service install".
 
-Install example:
+Install examples:
   telad service install -config telad.yaml
+  telad service install -hub ws://hub:8080 -machine barn -ports 22:SSH,3389:RDP
 `, cfgPath)
 		os.Exit(1)
 	}
@@ -316,26 +323,89 @@ Install example:
 func serviceInstall() {
 	// Parse flags after "service install"
 	fs := flag.NewFlagSet("service install", flag.ExitOnError)
-	configPath := fs.String("config", "", "Path to YAML config file (required)")
+	configPath := fs.String("config", "", "Path to YAML config file (mutually exclusive with -hub/-machine)")
+	hubURL := fs.String("hub", "", "Hub WebSocket URL (requires -machine, -ports)")
+	machineID := fs.String("machine", "", "Machine ID to register (requires -hub, -ports)")
+	portsStr := fs.String("ports", "", "Comma-separated port specs (requires -hub, -machine)")
 	fs.Parse(os.Args[3:])
 
-	if *configPath == "" {
-		fmt.Fprintf(os.Stderr, "error: -config is required\n")
-		fmt.Fprintf(os.Stderr, "usage: telad service install -config <file>\n")
-		os.Exit(1)
-	}
+	// Determine configuration source
+	var yamlContent string
+	var destPath string
 
-	// Validate the config file
-	absConfig, _ := filepath.Abs(*configPath)
-	if _, err := loadConfig(absConfig); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	if *configPath != "" {
+		// Mode 1: Config file provided
+		if *hubURL != "" || *machineID != "" || *portsStr != "" {
+			fmt.Fprintf(os.Stderr, "error: use either -config OR (-hub, -machine, -ports), not both\n")
+			os.Exit(1)
+		}
 
-	// Copy the config to the system-wide location
-	destPath := service.BinaryConfigPath("telad")
-	if err := copyFile(absConfig, destPath); err != nil {
-		fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
+		// Validate the config file
+		absConfig, _ := filepath.Abs(*configPath)
+		if _, err := loadConfig(absConfig); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Read the config file for embedding
+		data, err := os.ReadFile(absConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading config: %v\n", err)
+			os.Exit(1)
+		}
+		yamlContent = string(data)
+		destPath = service.BinaryConfigPath("telad")
+
+		// Copy to system directory as well (for reference/manual editing)
+		if err := copyFile(absConfig, destPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
+			os.Exit(1)
+		}
+	} else if *hubURL != "" && *machineID != "" && *portsStr != "" {
+		// Mode 2: Configuration from command-line flags
+		services := parsePortSpecs(*portsStr)
+		if len(services) == 0 {
+			fmt.Fprintf(os.Stderr, "error: no valid ports in: %s\n", *portsStr)
+			os.Exit(1)
+		}
+
+		cfg := configFile{
+			Hub: *hubURL,
+			Machines: []machineConfig{
+				{
+					Name:     *machineID,
+					Target:   "127.0.0.1",
+					Services: services,
+				},
+			},
+		}
+
+		// Validate the generated config
+		if cfg.Hub == "" {
+			fmt.Fprintf(os.Stderr, "error: hub URL is required\n")
+			os.Exit(1)
+		}
+
+		// Encode as YAML
+		data, err := yaml.Marshal(&cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error encoding config: %v\n", err)
+			os.Exit(1)
+		}
+		yamlContent = string(data)
+		destPath = service.BinaryConfigPath("telad")
+
+		// Also write to system directory for reference
+		if err := os.MkdirAll(filepath.Dir(destPath), 0700); err == nil {
+			_ = os.WriteFile(destPath, data, 0600)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "error: use either -config <file> OR (-hub, -machine, -ports)\n")
+		fmt.Fprintf(os.Stderr, "\nUsage:\n")
+		fmt.Fprintf(os.Stderr, "  telad service install -config <file>\n")
+		fmt.Fprintf(os.Stderr, "  telad service install -hub <url> -machine <id> -ports <spec>\n")
+		fmt.Fprintf(os.Stderr, "\nExample:\n")
+		fmt.Fprintf(os.Stderr, "  telad service install -hub ws://hub:8080 -machine barn -ports 22:SSH,3389:RDP\n")
 		os.Exit(1)
 	}
 
@@ -352,17 +422,24 @@ func serviceInstall() {
 		BinaryPath:  exePath,
 		Description: "Tela Daemon -- encrypted tunnel agent",
 		WorkingDir:  wd,
+		YAMLConfig:  service.EncodeYAMLConfig(yamlContent),
 	}
 
 	if err := service.Install("telad", cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
 	fmt.Println("telad service installed successfully")
-	fmt.Printf("  config: %s\n", destPath)
+	if destPath != "" {
+		fmt.Printf("  config: %s (reference copy)\n", destPath)
+	}
 	fmt.Println("  start:  telad service start")
 	fmt.Println("")
-	fmt.Println("Edit the config file and run \"telad service restart\" to reconfigure.")
+	fmt.Println("Configuration is stored in the service metadata (no permission issues).")
+	if destPath != "" {
+		fmt.Println("Edit " + destPath + " and run \"telad service restart\" to reconfigure.")
+	}
 }
 
 // copyFile copies src to dst, creating parent directories as needed.
@@ -431,7 +508,7 @@ func serviceStatus() {
 	}
 }
 
-// serviceRunDaemon loads the YAML config from the system directory and
+// serviceRunDaemon loads the YAML config from the service metadata (or file as fallback) and
 // runs telad. It blocks until svcStop is closed.
 func serviceRunDaemon(svcStop <-chan struct{}) {
 	// Bridge service stop channel to the global stopCh so
@@ -454,14 +531,37 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 		os.Chdir(svcCfg.WorkingDir)
 	}
 
-	// Load the YAML config from the system-wide location
-	yamlPath := service.BinaryConfigPath("telad")
-	fileCfg, err := loadConfig(yamlPath)
-	if err != nil {
-		log.Fatalf("config %s: %v", yamlPath, err)
+	var fileCfg *configFile
+
+	// Try to load inline YAML config from service metadata first
+	if svcCfg.YAMLConfig != "" {
+		yamlContent, err := service.DecodeYAMLConfig(svcCfg.YAMLConfig)
+		if err != nil {
+			log.Fatalf("decode inline config: %v", err)
+		}
+
+		// Parse the inline YAML
+		if err := yaml.Unmarshal([]byte(yamlContent), &fileCfg); err != nil {
+			log.Fatalf("parse inline config: %v", err)
+		}
+
+		if fileCfg == nil {
+			log.Fatalf("inline config parsed but is nil")
+		}
+
+		log.Printf("loaded config from service metadata")
+	} else {
+		// Fall back to reading from file
+		yamlPath := service.BinaryConfigPath("telad")
+		var err error
+		fileCfg, err = loadConfig(yamlPath)
+		if err != nil {
+			log.Fatalf("config %s: %v", yamlPath, err)
+		}
+
+		log.Printf("loaded config from %s", yamlPath)
 	}
 
-	log.Printf("loaded config from %s", yamlPath)
 	go runMultiMachine(fileCfg)
 
 	<-svcStop
