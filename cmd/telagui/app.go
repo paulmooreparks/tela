@@ -117,6 +117,40 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// Check for tela updates in background on startup
+	go a.ensureLatestTela()
+}
+
+// ensureLatestTela checks if the managed tela binary is up to date
+// and downloads the latest if not.
+func (a *App) ensureLatestTela() {
+	latest, err := a.latestRelease()
+	if err != nil {
+		return // silently skip if offline
+	}
+
+	bin := "tela"
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	localPath := filepath.Join(telaInstallDir(), bin)
+
+	// Check current version
+	if _, err := os.Stat(localPath); err == nil {
+		out, err := exec.Command(localPath, "version").CombinedOutput()
+		if err == nil {
+			currentVersion := strings.TrimSpace(string(out))
+			// Extract version tag (e.g., "tela v0.2.95 windows/amd64" -> "v0.2.95")
+			parts := strings.Fields(currentVersion)
+			if len(parts) >= 2 && parts[1] == latest {
+				return // already up to date
+			}
+		}
+	}
+
+	// Download latest
+	a.logCommand("Update tela to "+latest, "curl -fSL -o "+localPath+" <github-release-url>")
+	a.installTool("tela", latest)
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -562,6 +596,9 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 	}
 	a.mu.Unlock()
 
+	// Ensure we have the latest tela before connecting
+	a.ensureLatestTela()
+
 	telaPath := a.findTool("tela")
 	if telaPath == "" {
 		// Auto-download from GitHub
@@ -742,12 +779,25 @@ func (a *App) installTool(name, version string) (string, error) {
 		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
 	}
 
-	f, err := os.Create(destPath)
+	// Atomic write: download to temp file, then rename
+	tmpPath := destPath + ".tmp"
+	f, err := os.Create(tmpPath)
 	if err != nil {
 		return "", err
 	}
-	io.Copy(f, resp.Body)
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("download incomplete: %w", err)
+	}
 	f.Close()
+
+	// Replace existing binary atomically
+	os.Remove(destPath) // Windows requires removing before rename
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("install failed: %w", err)
+	}
 
 	if runtime.GOOS != "windows" {
 		os.Chmod(destPath, 0755)
