@@ -665,22 +665,82 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 
 // Disconnect kills the running tela process.
 func (a *App) Disconnect() error {
+	// Try the control API first (graceful shutdown)
+	if a.disconnectViaControlAPI() {
+		a.logCommand("Disconnect", "curl -X DELETE http://localhost:<port>/ -H 'Authorization: Bearer <token>'")
+		a.mu.Lock()
+		a.telaProcess = nil
+		a.connected = false
+		a.mu.Unlock()
+		return nil
+	}
+
+	// Fallback: kill the process directly
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.telaProcess != nil {
 		pid := a.telaProcess.Pid
-		// Try process tree kill first, then direct kill as fallback
 		killProcessTree(pid)
-		// Also try direct kill in case taskkill failed
 		a.telaProcess.Kill()
 		a.telaProcess = nil
 		a.connected = false
-		a.logCommand("Disconnect", fmt.Sprintf("taskkill /PID %d /T /F", pid))
+		a.logCommand("Disconnect (forced)", fmt.Sprintf("taskkill /PID %d /T /F", pid))
 		return nil
 	}
-	// Even if process is nil, mark as disconnected
 	a.connected = false
 	return nil
+}
+
+// disconnectViaControlAPI reads the control file and sends DELETE / to the tela control API.
+func (a *App) disconnectViaControlAPI() bool {
+	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")
+	data, err := os.ReadFile(controlPath)
+	if err != nil {
+		return false
+	}
+
+	var info struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.Port == 0 || info.Token == "" {
+		return false
+	}
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/", info.Port)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+info.Token)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Wait for the process to exit
+	a.mu.Lock()
+	proc := a.telaProcess
+	a.mu.Unlock()
+	if proc != nil {
+		// Give it up to 5 seconds to exit gracefully
+		done := make(chan struct{})
+		go func() {
+			proc.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			// Force kill if it doesn't exit
+			killProcessTree(proc.Pid)
+		}
+	}
+
+	return resp.StatusCode == 202
 }
 
 // GetConnectionState returns the current connection state.
@@ -709,6 +769,37 @@ func (a *App) GetConnectionState() ConnectionState {
 	}
 
 	return state
+}
+
+// GetControlStatus reads live status from the tela control API.
+func (a *App) GetControlStatus() map[string]interface{} {
+	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")
+	data, err := os.ReadFile(controlPath)
+	if err != nil {
+		return nil
+	}
+
+	var info struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.Port == 0 {
+		return nil
+	}
+
+	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", info.Port), nil)
+	req.Header.Set("Authorization", "Bearer "+info.Token)
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result
 }
 
 // --- Tool Management ---

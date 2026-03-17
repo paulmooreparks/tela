@@ -38,6 +38,10 @@ export function GetConnectionState() {
   return window['go']['main']['App']['GetConnectionState']();
 }
 
+export function GetControlStatus() {
+  return window['go']['main']['App']['GetControlStatus']();
+}
+
 export function GetHubStatus(arg1) {
   return window['go']['main']['App']['GetHubStatus'](arg1);
 }

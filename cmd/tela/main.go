@@ -545,6 +545,10 @@ func runProfile(name string) {
 		}()
 	}
 
+	// Start the control API server for this profile.
+	cleanupControl := startControlServer(name, stopCh)
+	defer cleanupControl()
+
 	log.Printf("loaded profile with %d connection(s)", len(profile.Connections))
 
 	var wg sync.WaitGroup

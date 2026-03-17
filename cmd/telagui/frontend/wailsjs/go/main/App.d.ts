@@ -20,6 +20,8 @@ export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 
 export function GetConnectionState():Promise<main.ConnectionState>;
 
+export function GetControlStatus():Promise<Record<string, any>>;
+
 export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
