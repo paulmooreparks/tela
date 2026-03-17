@@ -246,8 +246,9 @@ function renderSidebar(orgs) {
     // Fetch hubs for this org
     goApp.GetOrgHubs(org.id).then(function (hubs) {
       hubs.forEach(function (hub) {
-        // Store hub URL for connections
+        // Store hub URL and token for connections
         if (hub.url) hubUrlMap[hub.name] = hub.url;
+        if (hub.viewerToken) hubTokenMap[hub.name] = hub.viewerToken;
 
         // Container for hub + its machines
         var hubContainer = document.createElement('div');
@@ -368,12 +369,63 @@ function renderMachineDetail(hub, machine) {
   pane.innerHTML = html;
 }
 
-var hubUrlMap = {}; // hub name -> URL
+var hubUrlMap = {};   // hub name -> URL
+var hubTokenMap = {}; // hub name -> viewer token
 
 function connectService(hubName, machineId, serviceName) {
   var hubUrl = hubUrlMap[hubName] || hubName;
 
-  // Ensure connect-status div exists
+  // Check if we have a stored token for this hub
+  goApp.GetStoredToken(hubUrl).then(function (token) {
+    if (token) {
+      doConnect(hubUrl, hubName, machineId, serviceName, token);
+    } else {
+      promptForToken(hubUrl, hubName, machineId, serviceName);
+    }
+  });
+}
+
+function promptForToken(hubUrl, hubName, machineId, serviceName) {
+  var pane = document.getElementById('detail-pane');
+  var statusDiv = document.getElementById('connect-status');
+  if (!statusDiv) {
+    statusDiv = document.createElement('div');
+    statusDiv.id = 'connect-status';
+    statusDiv.className = 'connect-status';
+    pane.appendChild(statusDiv);
+  }
+  statusDiv.innerHTML = '<div class="token-prompt">'
+    + '<p>A connect token is required for <strong>' + escHtml(hubName) + '</strong>.</p>'
+    + '<p class="token-hint">Get this from your hub admin, or run: <code>telahubd user show-owner</code></p>'
+    + '<div class="form-group"><label for="hub-token-input">Hub Token</label>'
+    + '<input type="password" id="hub-token-input" placeholder="Paste your hub token here" style="width:100%"></div>'
+    + '<div class="form-actions">'
+    + '<button class="btn-primary" id="token-submit-btn">Connect</button>'
+    + '</div>'
+    + '<div id="token-error" class="error-msg hidden"></div>'
+    + '</div>';
+
+  document.getElementById('token-submit-btn').onclick = function () {
+    var token = document.getElementById('hub-token-input').value.trim();
+    if (!token) {
+      document.getElementById('token-error').textContent = 'Token is required.';
+      document.getElementById('token-error').classList.remove('hidden');
+      return;
+    }
+    // Store it so we don't ask again
+    goApp.StoreToken(hubUrl, token).then(function () {
+      doConnect(hubUrl, hubName, machineId, serviceName, token);
+    }).catch(function (err) {
+      document.getElementById('token-error').textContent = 'Failed to store token: ' + err;
+      document.getElementById('token-error').classList.remove('hidden');
+    });
+  };
+
+  // Focus the input
+  setTimeout(function () { document.getElementById('hub-token-input').focus(); }, 100);
+}
+
+function doConnect(hubUrl, hubName, machineId, serviceName, token) {
   var pane = document.getElementById('detail-pane');
   var statusDiv = document.getElementById('connect-status');
   if (!statusDiv) {
@@ -384,7 +436,7 @@ function connectService(hubName, machineId, serviceName) {
   }
   statusDiv.innerHTML = '<div class="connect-msg">Connecting to ' + escHtml(machineId) + '/' + escHtml(serviceName) + '...</div>';
 
-  goApp.Connect(hubUrl, machineId, serviceName, '').then(function (msg) {
+  goApp.Connect(hubUrl, machineId, serviceName, token).then(function (msg) {
     statusDiv.innerHTML = '<div class="connect-msg">' + escHtml(msg) + '</div>'
       + '<pre class="connect-output" id="connect-output">Waiting for output...</pre>';
 

@@ -18,8 +18,12 @@ export function GetOrgHubs(arg1:string):Promise<Array<Record<string, any>>>;
 
 export function GetOrganizations():Promise<Array<Record<string, any>>>;
 
+export function GetStoredToken(arg1:string):Promise<string>;
+
 export function InstallTool(arg1:string,arg2:string):Promise<string>;
 
 export function LatestRelease():Promise<string>;
 
 export function SignIn(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function StoreToken(arg1:string,arg2:string):Promise<void>;

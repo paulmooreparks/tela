@@ -389,6 +389,24 @@ body {
   font-weight: 600;
   margin-bottom: 8px;
 }
+.token-prompt {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.token-prompt p { margin-bottom: 12px; }
+.token-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.token-hint code {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
 .connect-error {
   color: var(--danger);
   padding: 12px;

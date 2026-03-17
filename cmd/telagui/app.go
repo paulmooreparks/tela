@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/paulmooreparks/tela/internal/credstore"
 )
 
 // App is the main application struct exposed to the frontend via Wails bindings.
@@ -407,6 +409,43 @@ func (a *App) findConnection(id string) *ActiveConnection {
 		}
 	}
 	return nil
+}
+
+// GetStoredToken checks the credential store for a token for the given hub URL.
+func (a *App) GetStoredToken(hubURL string) string {
+	wsURL := toWSURL(hubURL)
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		return ""
+	}
+	if cred, ok := store.Get(wsURL); ok {
+		return cred.Token
+	}
+	return ""
+}
+
+// StoreToken saves a hub token to the credential store.
+func (a *App) StoreToken(hubURL, token string) error {
+	wsURL := toWSURL(hubURL)
+	a.logCommand("Store credentials for "+wsURL,
+		fmt.Sprintf("tela login %s", wsURL))
+
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		store = &credstore.Store{}
+	}
+	store.Set(wsURL, credstore.Credential{Token: token})
+	return store.Save(credstore.UserPath())
+}
+
+func toWSURL(hubURL string) string {
+	if strings.HasPrefix(hubURL, "https://") {
+		return "wss://" + strings.TrimPrefix(hubURL, "https://")
+	}
+	if strings.HasPrefix(hubURL, "http://") {
+		return "ws://" + strings.TrimPrefix(hubURL, "http://")
+	}
+	return hubURL
 }
 
 func (a *App) findTool(name string) string {

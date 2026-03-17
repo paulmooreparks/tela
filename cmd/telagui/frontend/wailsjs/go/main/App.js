@@ -34,6 +34,10 @@ export function GetOrganizations() {
   return window['go']['main']['App']['GetOrganizations']();
 }
 
+export function GetStoredToken(arg1) {
+  return window['go']['main']['App']['GetStoredToken'](arg1);
+}
+
 export function InstallTool(arg1, arg2) {
   return window['go']['main']['App']['InstallTool'](arg1, arg2);
 }
@@ -44,4 +48,8 @@ export function LatestRelease() {
 
 export function SignIn(arg1, arg2, arg3) {
   return window['go']['main']['App']['SignIn'](arg1, arg2, arg3);
+}
+
+export function StoreToken(arg1, arg2) {
+  return window['go']['main']['App']['StoreToken'](arg1, arg2);
 }
