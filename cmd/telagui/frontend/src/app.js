@@ -19,6 +19,8 @@ function showScreen(id) {
 
 // --- Setup ---
 
+var selectedTools = [];
+
 function continueSetup() {
   var wantConnect = document.getElementById('role-connect').checked;
   var wantHost = document.getElementById('role-host').checked;
@@ -29,77 +31,159 @@ function continueSetup() {
     return;
   }
 
-  var tools = [];
-  if (wantConnect) tools.push('tela');
-  if (wantHost) tools.push('telad');
-  if (wantHub) tools.push('telahubd');
+  selectedTools = [];
+  if (wantConnect) selectedTools.push('tela');
+  if (wantHost) selectedTools.push('telad');
+  if (wantHub) selectedTools.push('telahubd');
 
-  document.getElementById('setup-continue').disabled = true;
-  document.getElementById('setup-continue').textContent = 'Checking tools...';
+  var btn = document.getElementById('setup-continue');
+  btn.disabled = true;
+  btn.textContent = 'Checking tools...';
 
-  checkAndInstallTools(tools).then(function () {
-    showScreen('signin-screen');
+  document.getElementById('tool-status').style.display = '';
+  var toolList = document.getElementById('tool-list');
+  toolList.innerHTML = '<p class="loading">Checking installed tools...</p>';
+
+  goApp.CheckTools().then(function (statuses) {
+    return goApp.LatestRelease().then(function (latestVersion) {
+      window._latestVersion = latestVersion;
+      return statuses;
+    }).catch(function () {
+      window._latestVersion = '';
+      return statuses;
+    });
+  }).then(function (statuses) {
+    toolList.innerHTML = '';
+    var allGood = true;
+
+    selectedTools.forEach(function (name) {
+      var status = statuses.find(function (s) { return s.name === name; });
+      var installed = status && status.installed;
+
+      var item = document.createElement('div');
+      item.className = 'tool-item';
+      item.id = 'tool-' + name;
+
+      var badge = installed
+        ? '<span class="tool-badge installed">Installed</span>'
+        : '<span class="tool-badge missing">Not found</span>';
+      var version = (installed && status.version)
+        ? '<span class="tool-version">' + escHtml(status.version) + '</span>'
+        : '';
+      var installBtn = installed
+        ? ''
+        : ' <button class="btn-small" onclick="installSingleTool(\'' + name + '\')">Install</button>';
+
+      item.innerHTML = '<div><span class="tool-name">' + name + '</span> ' + version + installBtn + '</div>' + badge;
+      toolList.appendChild(item);
+
+      if (!installed) allGood = false;
+    });
+
+    if (allGood) {
+      btn.textContent = 'Sign In';
+      btn.disabled = false;
+      btn.onclick = function () { showScreen('signin-screen'); };
+    } else {
+      // Show install all button
+      btn.textContent = 'Install Missing Tools';
+      btn.disabled = false;
+      btn.onclick = function () { installAllMissing(); };
+    }
   }).catch(function (err) {
-    alert('Error: ' + err);
-    document.getElementById('setup-continue').disabled = false;
-    document.getElementById('setup-continue').textContent = 'Continue';
+    toolList.innerHTML = '<p class="error-msg">Failed to check tools: ' + escHtml(err) + '</p>';
+    btn.textContent = 'Retry';
+    btn.disabled = false;
+    btn.onclick = function () { continueSetup(); };
   });
 }
 
-function checkAndInstallTools(tools) {
-  document.getElementById('tool-status').style.display = '';
+function installSingleTool(name) {
+  var item = document.getElementById('tool-' + name);
+  if (!item) return;
+  var badge = item.querySelector('.tool-badge');
+  badge.className = 'tool-badge installing';
+  badge.textContent = 'Installing...';
+  // Remove the install button
+  var installBtn = item.querySelector('.btn-small');
+  if (installBtn) installBtn.remove();
 
-  return goApp.CheckTools().then(function (statuses) {
-    return goApp.LatestRelease().then(function (latestVersion) {
-      var toolList = document.getElementById('tool-list');
-      toolList.innerHTML = '';
+  var version = window._latestVersion || 'latest';
+  goApp.InstallTool(name, version).then(function (path) {
+    badge.className = 'tool-badge installed';
+    badge.textContent = 'Installed';
+    // Check if all tools are now installed
+    var anyMissing = false;
+    selectedTools.forEach(function (t) {
+      var el = document.getElementById('tool-' + t);
+      if (el && el.querySelector('.tool-badge.missing')) anyMissing = true;
+    });
+    if (!anyMissing) {
+      var btn = document.getElementById('setup-continue');
+      btn.textContent = 'Sign In';
+      btn.onclick = function () { showScreen('signin-screen'); };
+    }
+  }).catch(function (err) {
+    badge.className = 'tool-badge missing';
+    badge.textContent = 'Failed: ' + err;
+  });
+}
 
-      var toInstall = [];
+function installAllMissing() {
+  var btn = document.getElementById('setup-continue');
+  btn.disabled = true;
+  btn.textContent = 'Installing...';
 
-      tools.forEach(function (name) {
-        var status = statuses.find(function (s) { return s.name === name; });
-        var installed = status && status.installed;
+  document.getElementById('install-progress').classList.remove('hidden');
+  var progress = document.getElementById('progress-fill');
+  var statusEl = document.getElementById('install-status');
 
-        var item = document.createElement('div');
-        item.className = 'tool-item';
-        item.id = 'tool-' + name;
+  var version = window._latestVersion || 'latest';
+  var toInstall = [];
+  selectedTools.forEach(function (name) {
+    var el = document.getElementById('tool-' + name);
+    if (el && el.querySelector('.tool-badge.missing')) toInstall.push(name);
+  });
 
-        var badge = installed ? '<span class="tool-badge installed">Installed</span>' : '<span class="tool-badge missing">Not found</span>';
-        var version = (installed && status.version) ? '<span class="tool-version">' + escHtml(status.version) + '</span>' : '';
+  if (toInstall.length === 0) {
+    btn.textContent = 'Sign In';
+    btn.disabled = false;
+    btn.onclick = function () { showScreen('signin-screen'); };
+    return;
+  }
 
-        item.innerHTML = '<div><span class="tool-name">' + name + '</span> ' + version + '</div>' + badge;
-        toolList.appendChild(item);
+  var chain = Promise.resolve();
+  toInstall.forEach(function (name, idx) {
+    chain = chain.then(function () {
+      statusEl.textContent = 'Installing ' + name + '...';
+      progress.style.width = ((idx / toInstall.length) * 100) + '%';
 
-        if (!installed) toInstall.push(name);
-      });
+      var badge = document.querySelector('#tool-' + name + ' .tool-badge');
+      if (badge) {
+        badge.className = 'tool-badge installing';
+        badge.textContent = 'Installing...';
+      }
 
-      if (toInstall.length === 0) return Promise.resolve();
-
-      document.getElementById('install-progress').classList.remove('hidden');
-      var progress = document.getElementById('progress-fill');
-      var statusEl = document.getElementById('install-status');
-
-      var chain = Promise.resolve();
-      toInstall.forEach(function (name, idx) {
-        chain = chain.then(function () {
-          statusEl.textContent = 'Installing ' + name + '...';
-          progress.style.width = ((idx / toInstall.length) * 100) + '%';
-
-          return goApp.InstallTool(name, latestVersion).then(function (path) {
-            var item = document.getElementById('tool-' + name);
-            if (item) {
-              item.querySelector('.tool-badge').className = 'tool-badge installed';
-              item.querySelector('.tool-badge').textContent = 'Installed';
-            }
-          });
-        });
-      });
-
-      return chain.then(function () {
-        progress.style.width = '100%';
-        statusEl.textContent = 'All tools installed.';
+      return goApp.InstallTool(name, version).then(function () {
+        if (badge) {
+          badge.className = 'tool-badge installed';
+          badge.textContent = 'Installed';
+        }
       });
     });
+  });
+
+  chain.then(function () {
+    progress.style.width = '100%';
+    statusEl.textContent = 'All tools installed.';
+    btn.textContent = 'Sign In';
+    btn.disabled = false;
+    btn.onclick = function () { showScreen('signin-screen'); };
+  }).catch(function (err) {
+    statusEl.textContent = 'Install failed: ' + err;
+    btn.textContent = 'Retry';
+    btn.disabled = false;
+    btn.onclick = function () { installAllMissing(); };
   });
 }
 
@@ -162,6 +246,9 @@ function renderSidebar(orgs) {
     // Fetch hubs for this org
     goApp.GetOrgHubs(org.id).then(function (hubs) {
       hubs.forEach(function (hub) {
+        // Store hub URL for connections
+        if (hub.url) hubUrlMap[hub.name] = hub.url;
+
         var hubEl = document.createElement('div');
         hubEl.className = 'hub-item';
         hubEl.innerHTML = '<span class="hub-dot"></span>' + escHtml(hub.name);
@@ -275,17 +362,43 @@ function renderMachineDetail(hub, machine) {
   pane.innerHTML = html;
 }
 
+var hubUrlMap = {}; // hub name -> URL
+
 function connectService(hubName, machineId, serviceName) {
-  var hubUrl = 'wss://' + hubName + '.parkscomputing.com'; // TODO: resolve from hub data
-  // Find the actual hub URL from orgData
-  for (var i = 0; i < orgData.length; i++) {
-    // We'd need to store hub URLs -- for now use the status cache
-  }
+  var hubUrl = hubUrlMap[hubName] || hubName;
 
   goApp.Connect(hubUrl, machineId, serviceName, '').then(function (msg) {
-    alert(msg);
+    var pane = document.getElementById('detail-pane');
+    var statusDiv = document.getElementById('connect-status');
+    if (!statusDiv) {
+      statusDiv = document.createElement('div');
+      statusDiv.id = 'connect-status';
+      statusDiv.className = 'connect-status';
+      pane.appendChild(statusDiv);
+    }
+    statusDiv.innerHTML = '<div class="connect-msg">' + escHtml(msg) + '</div>'
+      + '<pre class="connect-output" id="connect-output">Waiting for output...</pre>';
+
+    // Poll for output
+    var pollId = setInterval(function () {
+      goApp.GetConnectionOutput(machineId, serviceName).then(function (output) {
+        var el = document.getElementById('connect-output');
+        if (el && output) el.textContent = output;
+      });
+    }, 1000);
+
+    // Stop polling after 60s
+    setTimeout(function () { clearInterval(pollId); }, 60000);
   }).catch(function (err) {
-    alert('Connection failed: ' + err);
+    var pane = document.getElementById('detail-pane');
+    var statusDiv = document.getElementById('connect-status');
+    if (!statusDiv) {
+      statusDiv = document.createElement('div');
+      statusDiv.id = 'connect-status';
+      statusDiv.className = 'connect-status';
+      pane.appendChild(statusDiv);
+    }
+    statusDiv.innerHTML = '<div class="connect-msg error-msg">Connection failed: ' + escHtml(err) + '</div>';
   });
 }
 

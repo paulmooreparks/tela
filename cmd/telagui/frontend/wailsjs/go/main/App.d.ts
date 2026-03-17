@@ -8,6 +8,10 @@ export function Connect(arg1:string,arg2:string,arg3:string,arg4:string):Promise
 
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 
+export function GetConnectionOutput(arg1:string,arg2:string):Promise<string>;
+
+export function GetConnections():Promise<Array<main.ActiveConnection>>;
+
 export function GetHubStatus(arg1:string):Promise<Record<string, any>>;
 
 export function GetOrgHubs(arg1:string):Promise<Array<Record<string, any>>>;

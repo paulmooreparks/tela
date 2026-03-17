@@ -14,6 +14,14 @@ export function GetCommandLog() {
   return window['go']['main']['App']['GetCommandLog']();
 }
 
+export function GetConnectionOutput(arg1, arg2) {
+  return window['go']['main']['App']['GetConnectionOutput'](arg1, arg2);
+}
+
+export function GetConnections() {
+  return window['go']['main']['App']['GetConnections']();
+}
+
 export function GetHubStatus(arg1) {
   return window['go']['main']['App']['GetHubStatus'](arg1);
 }

@@ -160,6 +160,19 @@ body {
 }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-small {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  margin-left: 8px;
+}
+.btn-small:hover { background: var(--accent-hover); }
 
 .setup-actions {
   margin-top: 32px;
@@ -365,3 +378,26 @@ body {
   font-family: var(--font);
 }
 .log-copy:hover { background: var(--surface-alt); }
+
+/* Connection status */
+.connect-status {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.connect-msg {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.connect-output {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
