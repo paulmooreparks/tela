@@ -377,6 +377,10 @@ function doConnect() {
     startConnectionPoll();
     updateConnectButton();
     refreshCurrentPane();
+    // Apply saved verbose preference after a short delay for the control API to start
+    if (verboseMode) {
+      setTimeout(function () { goApp.SetVerbose(true); }, 2000);
+    }
   }).catch(function (err) {
     alert('Connection failed: ' + err);
   });
@@ -590,7 +594,12 @@ function refreshTerminal() {
 
 function setVerbose(on) {
   verboseMode = on;
-  goApp.SetVerbose(on);
+  // Only send to control API if connected; otherwise just save the preference
+  goApp.GetConnectionState().then(function (state) {
+    if (state.connected) {
+      goApp.SetVerbose(on);
+    }
+  });
 }
 
 // --- Command Log ---
