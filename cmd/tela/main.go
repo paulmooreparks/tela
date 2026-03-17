@@ -566,9 +566,16 @@ func runProfile(name string) {
 		// Build mappings from profile services
 		var mappings []portMapping
 		var serviceNames []string
+		var serviceLocalOverrides map[string]int // name -> local port override
 		for _, svc := range conn.Services {
 			if svc.Name != "" {
 				serviceNames = append(serviceNames, svc.Name)
+				if svc.Local > 0 {
+					if serviceLocalOverrides == nil {
+						serviceLocalOverrides = make(map[string]int)
+					}
+					serviceLocalOverrides[svc.Name] = svc.Local
+				}
 			} else if svc.Remote > 0 {
 				local := svc.Local
 				if local == 0 {
@@ -584,6 +591,15 @@ func runProfile(name string) {
 			if err != nil {
 				log.Printf("[profile:%d] %v", i+1, err)
 				continue
+			}
+			// Apply local port overrides from the profile.
+			// resolved is in the same order as serviceNames.
+			for j, name := range serviceNames {
+				if j < len(resolved) {
+					if override, ok := serviceLocalOverrides[name]; ok {
+						resolved[j].local = uint16(override)
+					}
+				}
 			}
 			mappings = append(mappings, resolved...)
 		}

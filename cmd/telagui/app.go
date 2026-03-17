@@ -122,7 +122,7 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(ctx context.Context) {
 	a.mu.Lock()
 	if a.telaProcess != nil {
-		a.telaProcess.Kill()
+		killProcessTree(a.telaProcess.Pid)
 		a.telaProcess = nil
 		a.connected = false
 	}
@@ -620,11 +620,13 @@ func (a *App) Disconnect() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.telaProcess != nil {
-		a.telaProcess.Kill()
+		pid := a.telaProcess.Pid
+		// Kill the process tree (important on Windows where child processes survive)
+		killProcessTree(pid)
 		a.telaProcess = nil
 		a.connected = false
 		a.telaOutput = ""
-		a.logCommand("Disconnect", "kill <tela-pid>")
+		a.logCommand("Disconnect", fmt.Sprintf("taskkill /PID %d /T /F", pid))
 		return nil
 	}
 	return fmt.Errorf("not connected")
