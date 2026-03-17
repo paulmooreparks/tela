@@ -669,15 +669,18 @@ func (a *App) Disconnect() error {
 	defer a.mu.Unlock()
 	if a.telaProcess != nil {
 		pid := a.telaProcess.Pid
-		// Kill the process tree (important on Windows where child processes survive)
+		// Try process tree kill first, then direct kill as fallback
 		killProcessTree(pid)
+		// Also try direct kill in case taskkill failed
+		a.telaProcess.Kill()
 		a.telaProcess = nil
 		a.connected = false
-		a.telaOutput = ""
 		a.logCommand("Disconnect", fmt.Sprintf("taskkill /PID %d /T /F", pid))
 		return nil
 	}
-	return fmt.Errorf("not connected")
+	// Even if process is nil, mark as disconnected
+	a.connected = false
+	return nil
 }
 
 // GetConnectionState returns the current connection state.
