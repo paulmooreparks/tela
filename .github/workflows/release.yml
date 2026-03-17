@@ -115,6 +115,7 @@ jobs:
 
   build-gui:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: windows
