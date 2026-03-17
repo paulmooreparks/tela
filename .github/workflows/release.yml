@@ -113,8 +113,79 @@ jobs:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
 
+  build-gui:
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            runner: windows-latest
+            ext: .exe
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+            ext: ""
+          - goos: darwin
+            goarch: arm64
+            runner: macos-latest
+            ext: ""
+          - goos: darwin
+            goarch: amd64
+            runner: macos-13
+            ext: ""
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v0.2.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Install Wails CLI
+        shell: bash
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build telagui
+        shell: bash
+        run: |
+          cd cmd/telagui
+          wails build -ldflags="-X main.version=${{ steps.version.outputs.tag }}"
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp cmd/telagui/build/bin/telagui${{ matrix.ext }} \
+            dist/telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-telagui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+
   release:
-    needs: build
+    needs: [build, build-gui]
     runs-on: ubuntu-latest
 
     steps:
@@ -142,7 +213,7 @@ jobs:
           VERSION="${{ steps.version.outputs.tag }}"
           echo "{\"version\":\"${VERSION}\",\"binaries\":{" > release.json
           first=true
-          for f in tela-* telad-* telahubd-*; do
+          for f in tela-* telad-* telahubd-* telagui-*; do
             hash=$(sha256sum "$f" | cut -d' ' -f1)
             size=$(stat -c%s "$f")
             if [ "$first" = true ]; then
