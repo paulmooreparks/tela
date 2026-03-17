@@ -161,6 +161,12 @@ func (a *App) shutdown(ctx context.Context) {
 		a.connected = false
 	}
 	a.mu.Unlock()
+
+	// Force exit after 2 seconds if goroutines are stuck
+	go func() {
+		time.Sleep(2 * time.Second)
+		os.Exit(0)
+	}()
 }
 
 // --- Command Log ---

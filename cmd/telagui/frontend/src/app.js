@@ -198,15 +198,14 @@ function renderMachineDetail(hub, machine) {
       html += '</div>';
     }
 
-    // Show connection output if connected
-    if (isConnected && connState.output) {
+    // Show connected badge (output is in the Terminal overlay)
+    if (isConnected) {
       html += '<div class="connected-panel">'
         + '<div class="connected-header">'
         + '<span class="connected-badge">Connected</span>'
         + '<span class="connected-pid">PID ' + connState.pid + '</span>'
-        + '</div>'
-        + '<pre class="connect-output">' + escHtml(connState.output) + '</pre>'
-        + '</div>';
+        + '<button class="btn-link" onclick="toggleTerminal()">View Terminal</button>'
+        + '</div></div>';
     }
 
     pane.innerHTML = html;
@@ -376,6 +375,12 @@ function doDisconnect() {
     stopConnectionPoll();
     updateConnectButton();
     refreshCurrentPane();
+    refreshTerminal();
+  }).catch(function (err) {
+    // Force UI update even if disconnect reports an error
+    stopConnectionPoll();
+    updateConnectButton();
+    refreshCurrentPane();
   });
 }
 
@@ -383,13 +388,17 @@ function startConnectionPoll() {
   stopConnectionPoll();
   pollIntervalId = setInterval(function () {
     goApp.GetConnectionState().then(function (state) {
+      // Refresh terminal if visible
+      if (!document.getElementById('terminal-overlay').classList.contains('hidden')) {
+        refreshTerminal();
+      }
       if (!state.connected) {
         stopConnectionPoll();
         updateConnectButton();
         refreshCurrentPane();
       }
     });
-  }, 2000);
+  }, 1000);
 }
 
 function stopConnectionPoll() {
@@ -512,6 +521,53 @@ function dockerAddHub() {
     refreshAll();
   });
 }
+
+// --- Terminal ---
+
+var terminalAutoScroll = true;
+
+function toggleTerminal() {
+  document.getElementById('terminal-overlay').classList.toggle('hidden');
+  if (!document.getElementById('terminal-overlay').classList.contains('hidden')) {
+    refreshTerminal();
+  }
+}
+
+function refreshTerminal() {
+  goApp.GetConnectionState().then(function (state) {
+    var output = document.getElementById('terminal-output');
+    var status = document.getElementById('terminal-status');
+
+    if (state.connected) {
+      status.textContent = 'Connected (PID ' + state.pid + ')';
+      status.className = 'terminal-status connected';
+    } else {
+      status.textContent = 'Disconnected';
+      status.className = 'terminal-status disconnected';
+    }
+
+    if (state.output) {
+      output.textContent = state.output;
+    } else if (!state.connected) {
+      output.textContent = 'Not connected.';
+    }
+
+    if (terminalAutoScroll) {
+      output.scrollTop = output.scrollHeight;
+    }
+  });
+}
+
+// Detect manual scroll to disable auto-scroll
+document.addEventListener('DOMContentLoaded', function () {
+  var el = document.getElementById('terminal-output');
+  if (el) {
+    el.addEventListener('scroll', function () {
+      var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 20;
+      terminalAutoScroll = atBottom;
+    });
+  }
+});
 
 // --- Command Log ---
 

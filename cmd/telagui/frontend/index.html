@@ -15,6 +15,7 @@
       <div class="topbar-right">
         <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
         <button class="topbar-btn" onclick="openAddHubModal()">Add Hub</button>
+        <button class="topbar-btn" id="terminal-btn" onclick="toggleTerminal()">Terminal</button>
         <button class="topbar-btn" onclick="toggleLog()">Command Log</button>
         <button class="topbar-btn" onclick="refreshAll()">Refresh</button>
       </div>
@@ -29,6 +30,16 @@
           <p>Select a hub or machine from the sidebar.</p>
         </div>
       </div>
+    </div>
+
+    <!-- Terminal overlay -->
+    <div class="terminal-overlay hidden" id="terminal-overlay">
+      <div class="terminal-header">
+        <span class="terminal-title">Terminal</span>
+        <span class="terminal-status" id="terminal-status">Disconnected</span>
+        <button class="topbar-btn" onclick="toggleTerminal()">Close</button>
+      </div>
+      <pre class="terminal-output" id="terminal-output">Not connected.</pre>
     </div>
 
     <!-- Command log drawer -->
