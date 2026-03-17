@@ -564,7 +564,12 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 
 	telaPath := a.findTool("tela")
 	if telaPath == "" {
-		return "", fmt.Errorf("tela not found -- install it or add it to PATH")
+		// Auto-download from GitHub
+		var err error
+		telaPath, err = a.EnsureTool("tela")
+		if err != nil {
+			return "", fmt.Errorf("tela not available and download failed: %w", err)
+		}
 	}
 
 	path, err := a.SaveProfile(connectionsJSON)
@@ -667,9 +672,7 @@ func (a *App) findTool(name string) string {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	if p, err := exec.LookPath(bin); err == nil {
-		return p
-	}
+	// Always use the GUI's own managed copy
 	local := filepath.Join(telaInstallDir(), bin)
 	if _, err := os.Stat(local); err == nil {
 		return local
