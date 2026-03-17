@@ -249,11 +249,17 @@ function renderSidebar(orgs) {
         // Store hub URL for connections
         if (hub.url) hubUrlMap[hub.name] = hub.url;
 
+        // Container for hub + its machines
+        var hubContainer = document.createElement('div');
+        hubContainer.className = 'hub-group';
+
         var hubEl = document.createElement('div');
         hubEl.className = 'hub-item';
         hubEl.innerHTML = '<span class="hub-dot"></span>' + escHtml(hub.name);
         hubEl.onclick = function () { selectHub(org, hub, hubEl); };
-        group.appendChild(hubEl);
+        hubContainer.appendChild(hubEl);
+
+        group.appendChild(hubContainer);
 
         // Fetch status for this hub
         goApp.GetHubStatus(hub.name).then(function (status) {
@@ -272,7 +278,7 @@ function renderSidebar(orgs) {
               e.stopPropagation();
               selectMachine(org, hub, m, mEl);
             };
-            group.appendChild(mEl);
+            hubContainer.appendChild(mEl);
           });
         }).catch(function () {
           hubEl.querySelector('.hub-dot').className = 'hub-dot offline';
@@ -367,15 +373,18 @@ var hubUrlMap = {}; // hub name -> URL
 function connectService(hubName, machineId, serviceName) {
   var hubUrl = hubUrlMap[hubName] || hubName;
 
+  // Ensure connect-status div exists
+  var pane = document.getElementById('detail-pane');
+  var statusDiv = document.getElementById('connect-status');
+  if (!statusDiv) {
+    statusDiv = document.createElement('div');
+    statusDiv.id = 'connect-status';
+    statusDiv.className = 'connect-status';
+    pane.appendChild(statusDiv);
+  }
+  statusDiv.innerHTML = '<div class="connect-msg">Connecting to ' + escHtml(machineId) + '/' + escHtml(serviceName) + '...</div>';
+
   goApp.Connect(hubUrl, machineId, serviceName, '').then(function (msg) {
-    var pane = document.getElementById('detail-pane');
-    var statusDiv = document.getElementById('connect-status');
-    if (!statusDiv) {
-      statusDiv = document.createElement('div');
-      statusDiv.id = 'connect-status';
-      statusDiv.className = 'connect-status';
-      pane.appendChild(statusDiv);
-    }
     statusDiv.innerHTML = '<div class="connect-msg">' + escHtml(msg) + '</div>'
       + '<pre class="connect-output" id="connect-output">Waiting for output...</pre>';
 
@@ -387,18 +396,10 @@ function connectService(hubName, machineId, serviceName) {
       });
     }, 1000);
 
-    // Stop polling after 60s
-    setTimeout(function () { clearInterval(pollId); }, 60000);
+    // Stop polling after 5 min
+    setTimeout(function () { clearInterval(pollId); }, 300000);
   }).catch(function (err) {
-    var pane = document.getElementById('detail-pane');
-    var statusDiv = document.getElementById('connect-status');
-    if (!statusDiv) {
-      statusDiv = document.createElement('div');
-      statusDiv.id = 'connect-status';
-      statusDiv.className = 'connect-status';
-      pane.appendChild(statusDiv);
-    }
-    statusDiv.innerHTML = '<div class="connect-msg error-msg">Connection failed: ' + escHtml(err) + '</div>';
+    statusDiv.innerHTML = '<div class="connect-msg connect-error">Connection failed: ' + escHtml(err) + '</div>';
   });
 }
 

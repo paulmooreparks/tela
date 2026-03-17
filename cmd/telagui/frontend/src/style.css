@@ -389,6 +389,13 @@ body {
   font-weight: 600;
   margin-bottom: 8px;
 }
+.connect-error {
+  color: var(--danger);
+  padding: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+}
 .connect-output {
   background: #1e293b;
   color: #e2e8f0;
