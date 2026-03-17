@@ -1,236 +1,103 @@
 'use strict';
 
-// Wails runtime bindings
 var goApp = window.go && window.go.main && window.go.main.App;
 
 // State
-var currentUser = '';
 var orgData = [];
 var hubStatusCache = {};
+var hubUrlMap = {};
+var hubTokenMap = {};
 
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(function (el) {
-    el.classList.add('hidden');
-  });
-  document.getElementById(id).classList.remove('hidden');
+// --- Startup ---
 
-  if (id === 'log-screen') refreshLog();
-}
-
-// --- Setup ---
-
-var selectedTools = [];
-
-function continueSetup() {
-  var wantConnect = document.getElementById('role-connect').checked;
-  var wantHost = document.getElementById('role-host').checked;
-  var wantHub = document.getElementById('role-hub').checked;
-
-  if (!wantConnect && !wantHost && !wantHub) {
-    alert('Select at least one role to continue.');
-    return;
-  }
-
-  selectedTools = [];
-  if (wantConnect) selectedTools.push('tela');
-  if (wantHost) selectedTools.push('telad');
-  if (wantHub) selectedTools.push('telahubd');
-
-  var btn = document.getElementById('setup-continue');
-  btn.disabled = true;
-  btn.textContent = 'Checking tools...';
-
-  document.getElementById('tool-status').style.display = '';
-  var toolList = document.getElementById('tool-list');
-  toolList.innerHTML = '<p class="loading">Checking installed tools...</p>';
-
-  goApp.CheckTools().then(function (statuses) {
-    return goApp.LatestRelease().then(function (latestVersion) {
-      window._latestVersion = latestVersion;
-      return statuses;
-    }).catch(function () {
-      window._latestVersion = '';
-      return statuses;
-    });
-  }).then(function (statuses) {
-    toolList.innerHTML = '';
-    var allGood = true;
-
-    selectedTools.forEach(function (name) {
-      var status = statuses.find(function (s) { return s.name === name; });
-      var installed = status && status.installed;
-
-      var item = document.createElement('div');
-      item.className = 'tool-item';
-      item.id = 'tool-' + name;
-
-      var badge = installed
-        ? '<span class="tool-badge installed">Installed</span>'
-        : '<span class="tool-badge missing">Not found</span>';
-      var version = (installed && status.version)
-        ? '<span class="tool-version">' + escHtml(status.version) + '</span>'
-        : '';
-      var installBtn = installed
-        ? ''
-        : ' <button class="btn-small" onclick="installSingleTool(\'' + name + '\')">Install</button>';
-
-      item.innerHTML = '<div><span class="tool-name">' + name + '</span> ' + version + installBtn + '</div>' + badge;
-      toolList.appendChild(item);
-
-      if (!installed) allGood = false;
-    });
-
-    if (allGood) {
-      btn.textContent = 'Get Started';
-      btn.disabled = false;
-      btn.onclick = function () { showScreen('main-screen'); checkSavedPortals(); };
-    } else {
-      // Show install all button
-      btn.textContent = 'Install Missing Tools';
-      btn.disabled = false;
-      btn.onclick = function () { installAllMissing(); };
+(function init() {
+  // Check for saved portals and load data immediately
+  goApp.GetPortals().then(function (portals) {
+    if (portals && portals.length > 0) {
+      refreshAll();
     }
-  }).catch(function (err) {
-    toolList.innerHTML = '<p class="error-msg">Failed to check tools: ' + escHtml(err) + '</p>';
-    btn.textContent = 'Retry';
-    btn.disabled = false;
-    btn.onclick = function () { continueSetup(); };
   });
+})();
+
+// --- Portal Management ---
+
+function openAddPortalModal() {
+  document.getElementById('add-portal-modal').classList.remove('hidden');
+  document.getElementById('portal-email').focus();
 }
 
-function installSingleTool(name) {
-  var item = document.getElementById('tool-' + name);
-  if (!item) return;
-  var badge = item.querySelector('.tool-badge');
-  badge.className = 'tool-badge installing';
-  badge.textContent = 'Installing...';
-  // Remove the install button
-  var installBtn = item.querySelector('.btn-small');
-  if (installBtn) installBtn.remove();
-
-  var version = window._latestVersion || 'latest';
-  goApp.InstallTool(name, version).then(function (path) {
-    badge.className = 'tool-badge installed';
-    badge.textContent = 'Installed';
-    // Check if all tools are now installed
-    var anyMissing = false;
-    selectedTools.forEach(function (t) {
-      var el = document.getElementById('tool-' + t);
-      if (el && el.querySelector('.tool-badge.missing')) anyMissing = true;
-    });
-    if (!anyMissing) {
-      var btn = document.getElementById('setup-continue');
-      btn.textContent = 'Sign In';
-      btn.onclick = function () { showScreen('signin-screen'); };
-    }
-  }).catch(function (err) {
-    badge.className = 'tool-badge missing';
-    badge.textContent = 'Failed: ' + err;
-  });
+function closeAddPortalModal() {
+  document.getElementById('add-portal-modal').classList.add('hidden');
+  document.getElementById('portal-error').classList.add('hidden');
+  document.getElementById('add-portal-form').reset();
+  document.getElementById('portal-url').value = 'https://awansaya.net';
 }
 
-function installAllMissing() {
-  var btn = document.getElementById('setup-continue');
-  btn.disabled = true;
-  btn.textContent = 'Installing...';
-
-  document.getElementById('install-progress').classList.remove('hidden');
-  var progress = document.getElementById('progress-fill');
-  var statusEl = document.getElementById('install-status');
-
-  var version = window._latestVersion || 'latest';
-  var toInstall = [];
-  selectedTools.forEach(function (name) {
-    var el = document.getElementById('tool-' + name);
-    if (el && el.querySelector('.tool-badge.missing')) toInstall.push(name);
-  });
-
-  if (toInstall.length === 0) {
-    btn.textContent = 'Sign In';
-    btn.disabled = false;
-    btn.onclick = function () { showScreen('signin-screen'); };
-    return;
-  }
-
-  var chain = Promise.resolve();
-  toInstall.forEach(function (name, idx) {
-    chain = chain.then(function () {
-      statusEl.textContent = 'Installing ' + name + '...';
-      progress.style.width = ((idx / toInstall.length) * 100) + '%';
-
-      var badge = document.querySelector('#tool-' + name + ' .tool-badge');
-      if (badge) {
-        badge.className = 'tool-badge installing';
-        badge.textContent = 'Installing...';
-      }
-
-      return goApp.InstallTool(name, version).then(function () {
-        if (badge) {
-          badge.className = 'tool-badge installed';
-          badge.textContent = 'Installed';
-        }
-      });
-    });
-  });
-
-  chain.then(function () {
-    progress.style.width = '100%';
-    statusEl.textContent = 'All tools installed.';
-    btn.textContent = 'Sign In';
-    btn.disabled = false;
-    btn.onclick = function () { showScreen('signin-screen'); };
-  }).catch(function (err) {
-    statusEl.textContent = 'Install failed: ' + err;
-    btn.textContent = 'Retry';
-    btn.disabled = false;
-    btn.onclick = function () { installAllMissing(); };
-  });
-}
-
-// --- Sign In ---
-
-function doSignIn(event) {
+function submitAddPortal(event) {
   event.preventDefault();
   var url = document.getElementById('portal-url').value.trim();
-  var email = document.getElementById('signin-email').value.trim();
-  var password = document.getElementById('signin-password').value;
+  var email = document.getElementById('portal-email').value.trim();
+  var password = document.getElementById('portal-password').value;
 
-  var btn = document.getElementById('signin-btn');
-  var errEl = document.getElementById('signin-error');
+  var btn = document.getElementById('portal-submit-btn');
+  var errEl = document.getElementById('portal-error');
   btn.disabled = true;
-  btn.textContent = 'Signing in...';
+  btn.textContent = 'Connecting...';
   errEl.classList.add('hidden');
 
-  goApp.AddPortal(url, email, password).then(function (name) {
-    currentUser = name;
-    document.getElementById('main-user').textContent = name;
-    showScreen('main-screen');
+  goApp.AddPortal(url, email, password).then(function () {
+    closeAddPortalModal();
+    btn.disabled = false;
+    btn.textContent = 'Connect';
     refreshAll();
   }).catch(function (err) {
     errEl.textContent = err;
     errEl.classList.remove('hidden');
     btn.disabled = false;
-    btn.textContent = 'Sign In';
+    btn.textContent = 'Connect';
   });
 }
 
-function checkSavedPortals() {
-  goApp.GetPortals().then(function (portals) {
-    if (!portals || portals.length === 0) {
-      // No portals saved, show empty state with add button
-      var sidebar = document.getElementById('org-tree');
-      sidebar.innerHTML = '<div class="sidebar-empty">'
-        + '<p>No portals connected.</p>'
-        + '<button class="btn-primary" onclick="showScreen(\'signin-screen\')">Add Portal</button>'
-        + '</div>';
-    } else {
-      // Try to reconnect to saved portals
-      refreshAll();
+// --- Command Log ---
+
+function toggleLog() {
+  var drawer = document.getElementById('log-drawer');
+  drawer.classList.toggle('hidden');
+  if (!drawer.classList.contains('hidden')) refreshLog();
+}
+
+function refreshLog() {
+  goApp.GetCommandLog().then(function (entries) {
+    var el = document.getElementById('log-content');
+    if (!entries || entries.length === 0) {
+      el.innerHTML = '<p class="empty-hint">Actions you take will appear here with their CLI equivalents.</p>';
+      return;
     }
+
+    var html = '';
+    entries.slice().reverse().forEach(function (entry) {
+      html += '<div class="log-entry">'
+        + '<div class="log-time">' + escHtml(entry.time) + '</div>'
+        + '<div class="log-desc">' + escHtml(entry.description) + '</div>'
+        + '<div class="log-cmd-wrap">'
+        + '<code class="log-cmd">' + escHtml(entry.command) + '</code>'
+        + '<button class="log-copy" onclick="copyText(this, \'' + escAttr(entry.command) + '\')">Copy</button>'
+        + '</div></div>';
+    });
+    el.innerHTML = html;
   });
 }
 
-// --- Main Screen ---
+function copyText(btn, text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+    });
+  }
+}
+
+// --- Main Data ---
 
 function refreshAll() {
   var sidebar = document.getElementById('org-tree');
@@ -238,9 +105,18 @@ function refreshAll() {
 
   goApp.GetOrganizations().then(function (orgs) {
     orgData = orgs;
+    if (!orgs || orgs.length === 0) {
+      sidebar.innerHTML = '<div class="sidebar-empty" id="sidebar-empty">'
+        + '<p>No organizations found.</p>'
+        + '<p class="hint">Click <strong>Add Portal</strong> to connect.</p></div>';
+      return;
+    }
     renderSidebar(orgs);
   }).catch(function (err) {
-    sidebar.innerHTML = '<p class="loading">Error: ' + escHtml(err) + '</p>';
+    sidebar.innerHTML = '<div class="sidebar-empty">'
+      + '<p>Could not load data.</p>'
+      + '<p class="hint">' + escHtml(String(err)) + '</p>'
+      + '<button class="btn-primary" onclick="openAddPortalModal()">Add Portal</button></div>';
   });
 }
 
@@ -259,14 +135,11 @@ function renderSidebar(orgs) {
 
     sidebar.appendChild(group);
 
-    // Fetch hubs for this org
     goApp.GetOrgHubs(org.id).then(function (hubs) {
       hubs.forEach(function (hub) {
-        // Store hub URL and token for connections
         if (hub.url) hubUrlMap[hub.name] = hub.url;
         if (hub.viewerToken) hubTokenMap[hub.name] = hub.viewerToken;
 
-        // Container for hub + its machines
         var hubContainer = document.createElement('div');
         hubContainer.className = 'hub-group';
 
@@ -278,7 +151,6 @@ function renderSidebar(orgs) {
 
         group.appendChild(hubContainer);
 
-        // Fetch status for this hub
         goApp.GetHubStatus(hub.name).then(function (status) {
           var machines = status.machines || [];
           var isOnline = machines.length > 0 || !status.error;
@@ -305,6 +177,8 @@ function renderSidebar(orgs) {
   });
 }
 
+// --- Detail Pane ---
+
 function selectHub(org, hub, el) {
   document.querySelectorAll('.hub-item, .machine-item').forEach(function (e) {
     e.classList.remove('selected');
@@ -326,7 +200,9 @@ function selectHub(org, hub, el) {
     html += '<h3 style="margin-bottom:12px">' + machines.length + ' machine(s)</h3>';
     machines.forEach(function (m) {
       var svcCount = (m.services || []).length;
-      var dot = m.agentConnected ? '<span class="hub-dot online" style="display:inline-block;width:8px;height:8px"></span>' : '<span class="hub-dot offline" style="display:inline-block;width:8px;height:8px"></span>';
+      var dot = m.agentConnected
+        ? '<span class="hub-dot online" style="display:inline-block;width:8px;height:8px"></span>'
+        : '<span class="hub-dot offline" style="display:inline-block;width:8px;height:8px"></span>';
       html += '<div class="service-card" style="cursor:pointer" onclick="selectMachineByName(\'' + escAttr(hub.name) + '\', \'' + escAttr(m.id || m.hostname) + '\')">'
         + '<div class="service-info">'
         + '<span class="service-name">' + dot + ' ' + escHtml(m.id || m.hostname) + '</span>'
@@ -382,16 +258,16 @@ function renderMachineDetail(hub, machine) {
     html += '</div>';
   }
 
+  html += '<div id="connect-status"></div>';
   pane.innerHTML = html;
 }
 
-var hubUrlMap = {};   // hub name -> URL
-var hubTokenMap = {}; // hub name -> viewer token
+// --- Connect ---
 
 function connectService(hubName, machineId, serviceName) {
   var hubUrl = hubUrlMap[hubName] || hubName;
+  var statusDiv = document.getElementById('connect-status');
 
-  // Check if we have a stored token for this hub
   goApp.GetStoredToken(hubUrl).then(function (token) {
     if (token) {
       doConnect(hubUrl, hubName, machineId, serviceName, token);
@@ -402,19 +278,12 @@ function connectService(hubName, machineId, serviceName) {
 }
 
 function promptForToken(hubUrl, hubName, machineId, serviceName) {
-  var pane = document.getElementById('detail-pane');
   var statusDiv = document.getElementById('connect-status');
-  if (!statusDiv) {
-    statusDiv = document.createElement('div');
-    statusDiv.id = 'connect-status';
-    statusDiv.className = 'connect-status';
-    pane.appendChild(statusDiv);
-  }
   statusDiv.innerHTML = '<div class="token-prompt">'
     + '<p>A connect token is required for <strong>' + escHtml(hubName) + '</strong>.</p>'
     + '<p class="token-hint">Get this from your hub admin, or run: <code>telahubd user show-owner</code></p>'
     + '<div class="form-group"><label for="hub-token-input">Hub Token</label>'
-    + '<input type="password" id="hub-token-input" placeholder="Paste your hub token here" style="width:100%"></div>'
+    + '<input type="password" id="hub-token-input" placeholder="Paste your hub token here"></div>'
     + '<div class="form-actions">'
     + '<button class="btn-primary" id="token-submit-btn">Connect</button>'
     + '</div>'
@@ -428,7 +297,6 @@ function promptForToken(hubUrl, hubName, machineId, serviceName) {
       document.getElementById('token-error').classList.remove('hidden');
       return;
     }
-    // Store it so we don't ask again
     goApp.StoreToken(hubUrl, token).then(function () {
       doConnect(hubUrl, hubName, machineId, serviceName, token);
     }).catch(function (err) {
@@ -437,26 +305,17 @@ function promptForToken(hubUrl, hubName, machineId, serviceName) {
     });
   };
 
-  // Focus the input
   setTimeout(function () { document.getElementById('hub-token-input').focus(); }, 100);
 }
 
 function doConnect(hubUrl, hubName, machineId, serviceName, token) {
-  var pane = document.getElementById('detail-pane');
   var statusDiv = document.getElementById('connect-status');
-  if (!statusDiv) {
-    statusDiv = document.createElement('div');
-    statusDiv.id = 'connect-status';
-    statusDiv.className = 'connect-status';
-    pane.appendChild(statusDiv);
-  }
   statusDiv.innerHTML = '<div class="connect-msg">Connecting to ' + escHtml(machineId) + '/' + escHtml(serviceName) + '...</div>';
 
   goApp.Connect(hubUrl, machineId, serviceName, token).then(function (msg) {
     statusDiv.innerHTML = '<div class="connect-msg">' + escHtml(msg) + '</div>'
       + '<pre class="connect-output" id="connect-output">Waiting for output...</pre>';
 
-    // Poll for output
     var pollId = setInterval(function () {
       goApp.GetConnectionOutput(machineId, serviceName).then(function (output) {
         var el = document.getElementById('connect-output');
@@ -464,44 +323,10 @@ function doConnect(hubUrl, hubName, machineId, serviceName, token) {
       });
     }, 1000);
 
-    // Stop polling after 5 min
     setTimeout(function () { clearInterval(pollId); }, 300000);
   }).catch(function (err) {
     statusDiv.innerHTML = '<div class="connect-msg connect-error">Connection failed: ' + escHtml(err) + '</div>';
   });
-}
-
-// --- Command Log ---
-
-function refreshLog() {
-  goApp.GetCommandLog().then(function (entries) {
-    var el = document.getElementById('log-content');
-    if (!entries || entries.length === 0) {
-      el.innerHTML = '<p class="empty-state">No commands recorded yet. Actions you take in the GUI will appear here with their CLI equivalents.</p>';
-      return;
-    }
-
-    var html = '';
-    entries.slice().reverse().forEach(function (entry) {
-      html += '<div class="log-entry">'
-        + '<div class="log-time">' + escHtml(entry.time) + '</div>'
-        + '<div class="log-desc">' + escHtml(entry.description) + '</div>'
-        + '<div class="log-cmd-wrap">'
-        + '<code class="log-cmd">' + escHtml(entry.command) + '</code>'
-        + '<button class="log-copy" onclick="copyText(this, ' + escAttr(JSON.stringify(entry.command)) + ')">Copy</button>'
-        + '</div></div>';
-    });
-    el.innerHTML = html;
-  });
-}
-
-function copyText(btn, text) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(function () {
-      btn.textContent = 'Copied';
-      setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
-    });
-  }
 }
 
 // --- Utilities ---

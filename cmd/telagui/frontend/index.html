@@ -8,125 +8,69 @@
 </head>
 <body>
   <div id="app">
-    <!-- Setup screen (first launch) -->
-    <div id="setup-screen" class="screen">
-      <div class="setup-container">
-        <h1>Welcome to Tela</h1>
-        <p class="subtitle">Encrypted remote access, simplified.</p>
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="app-title">Tela</span>
+      </div>
+      <div class="topbar-right">
+        <button class="topbar-btn" id="add-portal-btn" onclick="openAddPortalModal()">Add Portal</button>
+        <button class="topbar-btn" id="toggle-log-btn" onclick="toggleLog()">Command Log</button>
+        <button class="topbar-btn" onclick="refreshAll()">Refresh</button>
+      </div>
+    </div>
 
-        <div class="setup-section">
-          <h2>How will you use Tela?</h2>
-          <div class="role-cards">
-            <label class="role-card">
-              <input type="checkbox" id="role-connect" checked>
-              <div class="role-content">
-                <div class="role-icon">&#x1F5A5;</div>
-                <div class="role-title">Connect to machines</div>
-                <div class="role-desc">Access remote machines through hubs</div>
-                <div class="role-tool">Installs: tela</div>
-              </div>
-            </label>
-            <label class="role-card">
-              <input type="checkbox" id="role-host">
-              <div class="role-content">
-                <div class="role-icon">&#x1F4E1;</div>
-                <div class="role-title">Host machines</div>
-                <div class="role-desc">Make this machine accessible remotely</div>
-                <div class="role-tool">Installs: telad</div>
-              </div>
-            </label>
-            <label class="role-card">
-              <input type="checkbox" id="role-hub">
-              <div class="role-content">
-                <div class="role-icon">&#x1F310;</div>
-                <div class="role-title">Run a hub</div>
-                <div class="role-desc">Relay connections between agents and clients</div>
-                <div class="role-tool">Installs: telahubd</div>
-              </div>
-            </label>
-          </div>
+    <div class="main-content">
+      <div class="sidebar" id="org-tree">
+        <div class="sidebar-empty" id="sidebar-empty">
+          <p>No portals connected.</p>
+          <p class="hint">Click <strong>Add Portal</strong> to connect to an Awan Saya portal and see your hubs and machines.</p>
         </div>
-
-        <div class="setup-section" id="tool-status" style="display:none">
-          <h2>Tool Status</h2>
-          <div id="tool-list"></div>
-          <div id="install-progress" class="hidden">
-            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-            <p id="install-status">Installing...</p>
-          </div>
-        </div>
-
-        <div class="setup-actions">
-          <button class="btn-primary" id="setup-continue" onclick="continueSetup()">Continue</button>
+      </div>
+      <div class="detail-pane" id="detail-pane">
+        <div class="empty-state">
+          <p>Select a hub or machine from the sidebar.</p>
         </div>
       </div>
     </div>
 
-    <!-- Sign-in screen -->
-    <div id="signin-screen" class="screen hidden">
-      <div class="setup-container">
-        <h1>Sign in to Awan Saya</h1>
-        <p class="subtitle">Connect to your portal to see hubs, machines, and services.</p>
-        <form id="signin-form" onsubmit="doSignIn(event)">
-          <div class="form-group">
-            <label for="portal-url">Portal URL</label>
-            <input type="url" id="portal-url" value="https://awansaya.net" required>
-          </div>
-          <div class="form-group">
-            <label for="signin-email">Email</label>
-            <input type="email" id="signin-email" required>
-          </div>
-          <div class="form-group">
-            <label for="signin-password">Password</label>
-            <input type="password" id="signin-password" required>
-          </div>
-          <div id="signin-error" class="error-msg hidden"></div>
-          <div class="form-actions">
-            <button type="submit" class="btn-primary" id="signin-btn">Sign In</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Main screen -->
-    <div id="main-screen" class="screen hidden">
-      <div class="topbar">
-        <div class="topbar-left">
-          <span class="app-title">Tela</span>
-          <span class="user-name" id="main-user"></span>
-        </div>
-        <div class="topbar-right">
-          <button class="topbar-btn" onclick="showScreen('signin-screen')">Add Portal</button>
-          <button class="topbar-btn" onclick="showScreen('log-screen')">Command Log</button>
-          <button class="topbar-btn" onclick="refreshAll()">Refresh</button>
-        </div>
-      </div>
-
-      <div class="main-content">
-        <div class="sidebar" id="org-tree">
-          <p class="loading">Loading...</p>
-        </div>
-        <div class="detail-pane" id="detail-pane">
-          <div class="empty-state">
-            <p>Select a hub or machine from the sidebar to see details.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Command Log screen -->
-    <div id="log-screen" class="screen hidden">
-      <div class="topbar">
-        <div class="topbar-left">
-          <span class="app-title">Command Log</span>
-        </div>
-        <div class="topbar-right">
-          <button class="topbar-btn" onclick="showScreen('main-screen')">Back</button>
-        </div>
+    <!-- Command log drawer -->
+    <div class="log-drawer hidden" id="log-drawer">
+      <div class="log-drawer-header">
+        <span class="log-drawer-title">Command Log</span>
+        <button class="topbar-btn" onclick="toggleLog()">Close</button>
       </div>
       <div class="log-content" id="log-content">
-        <p class="empty-state">No commands recorded yet. Actions you take in the GUI will appear here with their CLI equivalents.</p>
+        <p class="empty-hint">Actions you take will appear here with their CLI equivalents.</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Add Portal Modal -->
+  <div class="modal-overlay hidden" id="add-portal-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Add Portal</h3>
+        <button class="modal-close" onclick="closeAddPortalModal()">&times;</button>
+      </div>
+      <form id="add-portal-form" onsubmit="submitAddPortal(event)">
+        <div class="form-group">
+          <label for="portal-url">Portal URL</label>
+          <input type="url" id="portal-url" value="https://awansaya.net" required>
+        </div>
+        <div class="form-group">
+          <label for="portal-email">Email</label>
+          <input type="email" id="portal-email" required>
+        </div>
+        <div class="form-group">
+          <label for="portal-password">Password</label>
+          <input type="password" id="portal-password" required>
+        </div>
+        <div id="portal-error" class="error-msg hidden"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeAddPortalModal()">Cancel</button>
+          <button type="submit" class="btn-primary" id="portal-submit-btn">Connect</button>
+        </div>
+      </form>
     </div>
   </div>
 
