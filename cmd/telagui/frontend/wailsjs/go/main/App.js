@@ -73,3 +73,7 @@ export function ResolveAllPorts(arg1) {
 export function SaveProfile(arg1) {
   return window['go']['main']['App']['SaveProfile'](arg1);
 }
+
+export function SetVerbose(arg1) {
+  return window['go']['main']['App']['SetVerbose'](arg1);
+}

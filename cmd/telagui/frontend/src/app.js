@@ -7,6 +7,18 @@ var selectedServices = {};
 var pollIntervalId = null;
 var selectedHubURL = null;
 var selectedMachineId = null;
+var verboseMode = false;
+
+// --- Tabs ---
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(function (el) { el.classList.add('hidden'); });
+  document.querySelectorAll('.main-tab').forEach(function (el) { el.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  btn.classList.add('active');
+  if (name === 'terminal') refreshTerminal();
+  if (name === 'log') refreshLog();
+}
 
 // --- Startup ---
 loadSavedSelections().then(refreshAll);
@@ -371,14 +383,21 @@ function doConnect() {
 }
 
 function doDisconnect() {
+  // Show "Disconnecting..." state immediately
+  var btn = document.getElementById('connect-btn');
+  btn.textContent = 'Disconnecting...';
+  btn.className = 'topbar-btn disconnecting-btn';
+  btn.disabled = true;
+
   goApp.Disconnect().then(function () {
     stopConnectionPoll();
+    btn.disabled = false;
     updateConnectButton();
     refreshCurrentPane();
     refreshTerminal();
   }).catch(function (err) {
-    // Force UI update even if disconnect reports an error
     stopConnectionPoll();
+    btn.disabled = false;
     updateConnectButton();
     refreshCurrentPane();
   });
@@ -389,7 +408,7 @@ function startConnectionPoll() {
   pollIntervalId = setInterval(function () {
     goApp.GetConnectionState().then(function (state) {
       // Refresh terminal if visible
-      if (!document.getElementById('terminal-overlay').classList.contains('hidden')) {
+      if (!document.getElementById('tab-terminal').classList.contains('hidden')) {
         refreshTerminal();
       }
       if (!state.connected) {
@@ -526,13 +545,6 @@ function dockerAddHub() {
 
 var terminalAutoScroll = true;
 
-function toggleTerminal() {
-  document.getElementById('terminal-overlay').classList.toggle('hidden');
-  if (!document.getElementById('terminal-overlay').classList.contains('hidden')) {
-    refreshTerminal();
-  }
-}
-
 function refreshTerminal() {
   goApp.GetConnectionState().then(function (state) {
     var output = document.getElementById('terminal-output');
@@ -569,12 +581,12 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 });
 
-// --- Command Log ---
-
-function toggleLog() {
-  document.getElementById('log-drawer').classList.toggle('hidden');
-  refreshLog();
+function setVerbose(on) {
+  verboseMode = on;
+  goApp.SetVerbose(on);
 }
+
+// --- Command Log ---
 
 function refreshLog() {
   goApp.GetCommandLog().then(function (entries) {

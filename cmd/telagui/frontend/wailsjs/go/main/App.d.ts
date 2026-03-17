@@ -37,3 +37,5 @@ export function RemoveHub(arg1:string):Promise<void>;
 export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>;
 
 export function SaveProfile(arg1:string):Promise<string>;
+
+export function SetVerbose(arg1:boolean):Promise<void>;

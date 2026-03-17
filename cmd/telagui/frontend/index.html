@@ -14,41 +14,50 @@
       </div>
       <div class="topbar-right">
         <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
-        <button class="topbar-btn" onclick="openAddHubModal()">Add Hub</button>
-        <button class="topbar-btn" id="terminal-btn" onclick="toggleTerminal()">Terminal</button>
-        <button class="topbar-btn" onclick="toggleLog()">Command Log</button>
-        <button class="topbar-btn" onclick="refreshAll()">Refresh</button>
       </div>
     </div>
 
-    <div class="main-content">
-      <div class="sidebar" id="sidebar">
-        <p class="loading">Loading hubs...</p>
-      </div>
-      <div class="detail-pane" id="detail-pane">
-        <div class="empty-state">
-          <p>Select a hub or machine from the sidebar.</p>
+    <!-- Tab bar -->
+    <div class="main-tab-bar">
+      <button class="main-tab active" onclick="switchTab('profile', this)">Profile</button>
+      <button class="main-tab" onclick="switchTab('terminal', this)">Terminal</button>
+      <button class="main-tab" onclick="switchTab('log', this)">Command Log</button>
+    </div>
+
+    <!-- Profile tab -->
+    <div class="tab-pane" id="tab-profile">
+      <div class="main-content">
+        <div class="sidebar" id="sidebar">
+          <div class="sidebar-header">
+            <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
+            <button class="btn-secondary btn-sm" onclick="refreshAll()">Refresh</button>
+          </div>
+          <div id="sidebar-content">
+            <p class="loading">Loading hubs...</p>
+          </div>
+        </div>
+        <div class="detail-pane" id="detail-pane">
+          <div class="empty-state">
+            <p>Select a hub or machine from the sidebar.</p>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Terminal overlay -->
-    <div class="terminal-overlay hidden" id="terminal-overlay">
-      <div class="terminal-header">
-        <span class="terminal-title">Terminal</span>
-        <span class="terminal-status" id="terminal-status">Disconnected</span>
-        <button class="topbar-btn" onclick="toggleTerminal()">Close</button>
+    <!-- Terminal tab -->
+    <div class="tab-pane hidden" id="tab-terminal">
+      <div class="terminal-pane">
+        <div class="terminal-header">
+          <span class="terminal-status" id="terminal-status">Disconnected</span>
+          <label class="verbose-toggle"><input type="checkbox" id="verbose-check" onchange="setVerbose(this.checked)"> Verbose</label>
+        </div>
+        <pre class="terminal-output" id="terminal-output">Not connected.</pre>
       </div>
-      <pre class="terminal-output" id="terminal-output">Not connected.</pre>
     </div>
 
-    <!-- Command log drawer -->
-    <div class="log-drawer hidden" id="log-drawer">
-      <div class="log-drawer-header">
-        <span class="log-drawer-title">Command Log</span>
-        <button class="topbar-btn" onclick="toggleLog()">Close</button>
-      </div>
-      <div class="log-content" id="log-content">
+    <!-- Command Log tab -->
+    <div class="tab-pane hidden" id="tab-log">
+      <div class="log-pane" id="log-content">
         <p class="empty-hint">Actions you take will appear here with their CLI equivalents.</p>
       </div>
     </div>

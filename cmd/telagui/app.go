@@ -771,6 +771,39 @@ func (a *App) GetConnectionState() ConnectionState {
 	return state
 }
 
+// SetVerbose toggles verbose logging on the running tela instance via control API.
+func (a *App) SetVerbose(on bool) error {
+	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")
+	data, err := os.ReadFile(controlPath)
+	if err != nil {
+		return fmt.Errorf("not connected")
+	}
+	var info struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.Port == 0 {
+		return fmt.Errorf("invalid control file")
+	}
+
+	req, _ := http.NewRequest("PUT", fmt.Sprintf("http://127.0.0.1:%d/verbose", info.Port), nil)
+	req.Header.Set("Authorization", "Bearer "+info.Token)
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("control API unreachable: %w", err)
+	}
+	resp.Body.Close()
+
+	state := "off"
+	if on {
+		state = "on"
+	}
+	a.logCommand("Set verbose "+state, "# toggled via control API PUT /verbose")
+	return nil
+}
+
 // GetControlStatus reads live status from the tela control API.
 func (a *App) GetControlStatus() map[string]interface{} {
 	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")

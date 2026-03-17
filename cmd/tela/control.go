@@ -168,6 +168,8 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 			go func() {
 				// Small delay so the response is sent before shutdown.
 				time.Sleep(100 * time.Millisecond)
+				log.Println("[control] shutdown requested via control API")
+				log.Println("shutting down all connections")
 				close(stopCh)
 			}()
 
@@ -210,6 +212,22 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		// For now, return accepted. Reconnect logic can be wired up later
 		// when a dedicated reconnect channel is available.
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "reconnect requested"})
+	})
+
+	mux.HandleFunc("/verbose", func(w http.ResponseWriter, r *http.Request) {
+		if !checkControlAuth(w, r, token) {
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, map[string]bool{"verbose": verbose})
+		case http.MethodPut:
+			verbose = !verbose
+			log.Printf("[control] verbose logging %s", map[bool]string{true: "enabled", false: "disabled"}[verbose])
+			writeJSON(w, http.StatusOK, map[string]bool{"verbose": verbose})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 
 	server := &http.Server{Handler: mux}
