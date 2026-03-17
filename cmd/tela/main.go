@@ -132,6 +132,8 @@ func main() {
 		cmdStatus(os.Args[2:])
 	case "remote":
 		cmdRemote(os.Args[2:])
+	case "profile":
+		cmdProfile(os.Args[2:])
 	case "login":
 		cmdLogin(os.Args[2:])
 	case "logout":
@@ -162,6 +164,7 @@ Commands:
   machines  List registered machines and their services
   services  List services on a specific machine
   status    Show hub status summary
+  profile   Manage connection profiles (list, show, create, delete)
   remote    Manage hub directory remotes (add, remove, list)
   login     Store hub credentials in the credential store
   logout    Remove hub credentials from the credential store
@@ -625,6 +628,167 @@ func runProfile(name string) {
 	}
 
 	wg.Wait()
+}
+
+// ── "tela profile" ─────────────────────────────────────────────────
+
+func cmdProfile(args []string) {
+	if len(args) == 0 {
+		cmdProfileList()
+		return
+	}
+
+	switch args[0] {
+	case "list", "ls":
+		cmdProfileList()
+	case "show":
+		cmdProfileShow(args[1:])
+	case "create":
+		cmdProfileCreate(args[1:])
+	case "delete", "rm":
+		cmdProfileDelete(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown profile subcommand: %s\n\n", args[0])
+		fmt.Fprintln(os.Stderr, `Usage:
+  tela profile                        List saved profiles
+  tela profile list                   List saved profiles
+  tela profile show <name>            Show profile contents
+  tela profile create <name>          Create a new profile
+  tela profile delete <name>          Delete a profile`)
+		os.Exit(1)
+	}
+}
+
+func cmdProfileList() {
+	dir := profilesDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("No profiles found.")
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Error reading profiles directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	var found bool
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+			ext := filepath.Ext(name)
+			fmt.Println(strings.TrimSuffix(name, ext))
+			found = true
+		}
+	}
+	if !found {
+		fmt.Println("No profiles found.")
+	}
+}
+
+func cmdProfileShow(args []string) {
+	fs := flag.NewFlagSet("profile show", flag.ExitOnError)
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela profile show <name>")
+		os.Exit(1)
+	}
+
+	name := fs.Arg(0)
+	path := filepath.Join(profilesDir(), name+".yaml")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Try .yml extension
+			path = filepath.Join(profilesDir(), name+".yml")
+			data, err = os.ReadFile(path)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Print(string(data))
+}
+
+func cmdProfileCreate(args []string) {
+	fs := flag.NewFlagSet("profile create", flag.ExitOnError)
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela profile create <name>")
+		os.Exit(1)
+	}
+
+	name := fs.Arg(0)
+	dir := profilesDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating profiles directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	path := filepath.Join(dir, name+".yaml")
+
+	// Check if profile already exists
+	if _, err := os.Stat(path); err == nil {
+		fmt.Fprintf(os.Stderr, "Error: profile %q already exists\n", name)
+		os.Exit(1)
+	}
+
+	content := `# Tela connection profile: ` + name + `
+# Add connections below. Example:
+#
+# connections:
+#   - hub: wss://hub.example.com
+#     machine: mybox
+#     token: ${MY_TOKEN}
+#     services:
+#       - remote: 22
+#         local: 2222
+#       - name: rdp
+connections: []
+`
+
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing profile: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Created profile %q at %s\n", name, path)
+}
+
+func cmdProfileDelete(args []string) {
+	fs := flag.NewFlagSet("profile delete", flag.ExitOnError)
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela profile delete <name>")
+		os.Exit(1)
+	}
+
+	name := fs.Arg(0)
+	path := filepath.Join(profilesDir(), name+".yaml")
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		// Try .yml extension
+		path = filepath.Join(profilesDir(), name+".yml")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: profile %q not found\n", name)
+			os.Exit(1)
+		}
+	}
+
+	if err := os.Remove(path); err != nil {
+		fmt.Fprintf(os.Stderr, "Error deleting profile: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Deleted profile %q\n", name)
 }
 
 // ── "tela machines" ────────────────────────────────────────────────

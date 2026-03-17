@@ -2,8 +2,12 @@
 
 var goApp = window.go && window.go.main && window.go.main.App;
 var hubStatusCache = {};
+var selectedHubURL = null;
+// selectedServices: { "hubURL||machineId||serviceName": { hub, machine, service, localPort } }
+var selectedServices = {};
+var pollIntervalId = null;
 
-// --- Startup: load known hubs immediately ---
+// --- Startup ---
 refreshAll();
 
 // --- Sidebar ---
@@ -28,6 +32,7 @@ function refreshAll() {
 
       var hubEl = document.createElement('div');
       hubEl.className = 'hub-item';
+      if (selectedHubURL === hub.url) hubEl.classList.add('selected');
       hubEl.innerHTML = '<span class="hub-dot"></span>'
         + '<span class="hub-name">' + escHtml(hub.name) + '</span>'
         + (!hub.hasToken ? '<span class="no-token-badge">no token</span>' : '');
@@ -49,12 +54,13 @@ function refreshAll() {
               var dotClass = m.agentConnected ? 'online' : 'offline';
               mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
                 + escHtml(m.id || m.hostname);
-              mEl.onclick = function (e) {
-                e.stopPropagation();
-                selectMachine(hub, m, mEl);
-              };
               hubContainer.appendChild(mEl);
             });
+          }
+
+          // If this hub is currently selected, re-render the detail pane
+          if (selectedHubURL === hub.url) {
+            renderHubDetail(hub);
           }
         }).catch(function () {
           hubEl.querySelector('.hub-dot').className = 'hub-dot offline';
@@ -69,165 +75,253 @@ function refreshAll() {
 function selectHub(hub, el) {
   clearSelection();
   el.classList.add('selected');
+  selectedHubURL = hub.url;
+  renderHubDetail(hub);
+}
 
+function renderHubDetail(hub) {
   var pane = document.getElementById('detail-pane');
   var status = hubStatusCache[hub.url] || {};
   var machines = status.machines || [];
 
-  var html = '<div class="detail-header">'
-    + '<h2>' + escHtml(hub.name) + '</h2>'
-    + '<div class="meta">' + escHtml(hub.url) + '</div>'
-    + '<div class="detail-actions">'
-    + '<button class="btn-secondary btn-sm" onclick="removeHub(\'' + escAttr(hub.url) + '\')">Remove Hub</button>'
-    + '</div></div>';
+  // Check connection state
+  goApp.GetConnectionState().then(function (connState) {
+    var isConnected = connState.connected;
 
-  if (status.error) {
-    html += '<div class="connect-error">' + escHtml(status.error) + '</div>';
-  } else if (machines.length === 0) {
-    html += '<p style="color:var(--text-muted)">No machines registered.</p>';
-  } else {
-    machines.forEach(function (m) {
-      var svcCount = (m.services || []).length;
-      var dot = m.agentConnected
-        ? '<span class="hub-dot online" style="display:inline-block"></span>'
-        : '<span class="hub-dot offline" style="display:inline-block"></span>';
-      html += '<div class="service-card" style="cursor:pointer" onclick="selectMachineByURL(\'' + escAttr(hub.url) + '\', \'' + escAttr(m.id || m.hostname) + '\')">'
-        + '<div class="service-info">'
-        + '<span class="service-name">' + dot + ' ' + escHtml(m.id || m.hostname) + '</span>'
-        + '<span class="service-port">' + svcCount + ' service(s)</span>'
-        + '</div></div>';
-    });
-  }
-  pane.innerHTML = html;
-}
+    var html = '<div class="detail-header">'
+      + '<h2>' + escHtml(status.hubName || hub.name) + '</h2>'
+      + '<div class="meta">' + escHtml(hub.url) + '</div>'
+      + '<div class="detail-actions">'
+      + '<button class="btn-secondary btn-sm" onclick="removeHub(\'' + escAttr(hub.url) + '\')">Remove Hub</button>'
+      + '</div></div>';
 
-function selectMachine(hub, machine, el) {
-  clearSelection();
-  el.classList.add('selected');
-  renderMachineDetail(hub, machine);
-}
+    if (status.error) {
+      html += '<div class="connect-error">' + escHtml(status.error) + '</div>';
+    } else if (machines.length === 0) {
+      html += '<p style="color:var(--text-muted)">No machines registered.</p>';
+    } else {
+      // Render machines with checkboxes
+      machines.forEach(function (m) {
+        var machineId = m.id || m.hostname;
+        var dot = m.agentConnected
+          ? '<span class="hub-dot online" style="display:inline-block"></span>'
+          : '<span class="hub-dot offline" style="display:inline-block"></span>';
 
-function selectMachineByURL(hubURL, machineId) {
-  var status = hubStatusCache[hubURL];
-  if (!status || !status.machines) return;
-  var machine = status.machines.find(function (m) {
-    return (m.id || m.hostname) === machineId;
+        html += '<div class="machine-card">'
+          + '<div class="machine-card-header">'
+          + dot + ' <strong>' + escHtml(machineId) + '</strong>'
+          + '<span class="machine-meta">' + (m.agentConnected ? 'Online' : 'Offline') + '</span>'
+          + '</div>';
+
+        var services = m.services || [];
+        if (services.length === 0) {
+          html += '<p class="no-services">No services advertised.</p>';
+        } else {
+          html += '<div class="service-checklist">';
+          services.forEach(function (svc) {
+            var key = hub.url + '||' + machineId + '||' + svc.name;
+            var checked = selectedServices[key] ? ' checked' : '';
+            var disabled = isConnected ? ' disabled' : '';
+            var localPort = selectedServices[key]
+              ? selectedServices[key].localPort
+              : svc.port;
+
+            html += '<label class="service-check-item">'
+              + '<input type="checkbox"' + checked + disabled
+              + ' onchange="toggleService(\'' + escAttr(hub.url) + '\', \'' + escAttr(machineId) + '\', \'' + escAttr(svc.name) + '\', ' + svc.port + ', this.checked)">'
+              + '<span class="service-check-name">' + escHtml(svc.name) + '</span>'
+              + '<span class="service-check-port">:' + svc.port + ' ' + escHtml(svc.proto || 'tcp') + '</span>';
+
+            if (selectedServices[key]) {
+              html += '<span class="local-port-label">local :' + localPort + '</span>';
+            }
+
+            html += '</label>';
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+    }
+
+    // Action buttons
+    if (!isConnected) {
+      var hasSelections = Object.keys(selectedServices).length > 0;
+      html += '<div class="profile-actions">'
+        + '<button class="btn-primary' + (hasSelections ? '' : ' disabled') + '"'
+        + ' onclick="saveAndConnect()"'
+        + (hasSelections ? '' : ' disabled')
+        + '>Save &amp; Connect</button>'
+        + '</div>';
+    } else {
+      // Connected mode: show local port assignments and disconnect
+      html += renderConnectedState(connState);
+    }
+
+    pane.innerHTML = html;
   });
-  if (machine) renderMachineDetail({ url: hubURL, name: hubNameFromURL(hubURL) }, machine);
 }
 
-function renderMachineDetail(hub, machine) {
-  var pane = document.getElementById('detail-pane');
-  var services = machine.services || [];
-
-  var html = '<div class="detail-header">'
-    + '<h2>' + escHtml(machine.id || machine.hostname) + '</h2>'
-    + '<div class="meta">' + (machine.agentConnected ? 'Online' : 'Offline')
-    + ' on ' + escHtml(hub.name || hubNameFromURL(hub.url)) + '</div>'
+function renderConnectedState(connState) {
+  var html = '<div class="connected-panel">'
+    + '<div class="connected-header">'
+    + '<span class="connected-badge">Connected</span>'
+    + '<span class="connected-pid">PID ' + connState.pid + '</span>'
     + '</div>';
 
-  if (services.length === 0) {
-    html += '<p style="color:var(--text-muted)">No services advertised.</p>';
-  } else {
-    html += '<div class="service-list">';
-    services.forEach(function (svc) {
-      html += '<div class="service-card">'
-        + '<div class="service-info">'
-        + '<span class="service-name">' + escHtml(svc.name) + '</span>'
-        + '<span class="service-port">:' + svc.port + ' ' + (svc.proto || 'tcp') + '</span>'
-        + '</div>'
-        + '<button class="service-connect" onclick="connectService(\'' + escAttr(hub.url) + '\', \'' + escAttr(machine.id || machine.hostname) + '\', \'' + escAttr(svc.name) + '\')">Connect</button>'
-        + '</div>';
+  if (connState.connections && connState.connections.length > 0) {
+    html += '<div class="connected-services">';
+    connState.connections.forEach(function (conn) {
+      conn.services.forEach(function (svc) {
+        html += '<div class="connected-svc-row">'
+          + '<span class="connected-svc-name">' + escHtml(conn.machine) + ' / ' + escHtml(svc.name) + '</span>'
+          + '<span class="connected-svc-local">localhost:' + svc.local + '</span>'
+          + '</div>';
+      });
     });
     html += '</div>';
   }
 
-  html += '<div id="connect-status"></div>';
-  pane.innerHTML = html;
+  if (connState.output) {
+    html += '<pre class="connect-output">' + escHtml(connState.output) + '</pre>';
+  }
+
+  html += '<div class="profile-actions">'
+    + '<button class="btn-danger" onclick="doDisconnect()">Disconnect</button>'
+    + '</div></div>';
+
+  return html;
+}
+
+function toggleService(hubURL, machineId, serviceName, servicePort, checked) {
+  var key = hubURL + '||' + machineId + '||' + serviceName;
+  if (checked) {
+    goApp.AssignLocalPort(servicePort).then(function (localPort) {
+      selectedServices[key] = {
+        hub: hubURL,
+        machine: machineId,
+        service: serviceName,
+        servicePort: servicePort,
+        localPort: localPort
+      };
+      // Re-render to update the local port display and button state
+      refreshDetailPane();
+    });
+  } else {
+    delete selectedServices[key];
+    refreshDetailPane();
+  }
+}
+
+function refreshDetailPane() {
+  if (!selectedHubURL) return;
+  goApp.GetKnownHubs().then(function (hubs) {
+    var hub = null;
+    for (var i = 0; i < hubs.length; i++) {
+      if (hubs[i].url === selectedHubURL) {
+        hub = hubs[i];
+        break;
+      }
+    }
+    if (hub) renderHubDetail(hub);
+  });
 }
 
 function clearSelection() {
-  document.querySelectorAll('.hub-item, .machine-item').forEach(function (e) {
+  document.querySelectorAll('.hub-item').forEach(function (e) {
     e.classList.remove('selected');
   });
 }
 
-function hubNameFromURL(url) {
-  return url.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '').replace(/\/$/, '');
-}
+// --- Save & Connect ---
 
-// --- Connect ---
-
-function connectService(hubURL, machineId, serviceName) {
-  var statusDiv = document.getElementById('connect-status');
-
-  goApp.GetStoredToken(hubURL).then(function (token) {
-    if (token) {
-      doConnect(hubURL, machineId, serviceName, token);
-    } else {
-      promptForToken(hubURL, machineId, serviceName);
+function saveAndConnect() {
+  // Build profile connections from selected services
+  // Group by hub+machine
+  var groups = {};
+  Object.keys(selectedServices).forEach(function (key) {
+    var sel = selectedServices[key];
+    var groupKey = sel.hub + '||' + sel.machine;
+    if (!groups[groupKey]) {
+      groups[groupKey] = {
+        hub: sel.hub,
+        machine: sel.machine,
+        services: []
+      };
     }
-  });
-}
-
-function promptForToken(hubURL, machineId, serviceName) {
-  var statusDiv = document.getElementById('connect-status');
-  statusDiv.innerHTML = '<div class="token-prompt">'
-    + '<p>A connect token is required for <strong>' + escHtml(hubNameFromURL(hubURL)) + '</strong>.</p>'
-    + '<p class="token-hint">Get this from your hub admin, or run: <code>telahubd user show-owner</code></p>'
-    + '<div class="form-group"><label>Hub Token</label>'
-    + '<input type="password" id="hub-token-input" placeholder="Paste token"></div>'
-    + '<button class="btn-primary" id="token-submit-btn">Connect</button>'
-    + '<div id="token-error" class="error-msg hidden"></div>'
-    + '</div>';
-
-  document.getElementById('token-submit-btn').onclick = function () {
-    var token = document.getElementById('hub-token-input').value.trim();
-    if (!token) {
-      document.getElementById('token-error').textContent = 'Token is required.';
-      document.getElementById('token-error').classList.remove('hidden');
-      return;
-    }
-    goApp.AddHub(hubURL, token).then(function () {
-      doConnect(hubURL, machineId, serviceName, token);
-      refreshAll(); // update sidebar to show token status
+    groups[groupKey].services.push({
+      name: sel.service,
+      local: sel.localPort
     });
-  };
+  });
 
-  setTimeout(function () { document.getElementById('hub-token-input').focus(); }, 50);
-}
+  var connections = [];
+  Object.keys(groups).forEach(function (k) {
+    var g = groups[k];
+    connections.push({
+      hub: toWSURL(g.hub),
+      machine: g.machine,
+      token: '${TELA_TOKEN}',
+      services: g.services
+    });
+  });
 
-function doConnect(hubURL, machineId, serviceName, token) {
-  var statusDiv = document.getElementById('connect-status');
-  statusDiv.innerHTML = '<div class="connect-msg">Connecting to ' + escHtml(machineId) + '/' + escHtml(serviceName) + '...</div>';
+  if (connections.length === 0) return;
 
-  goApp.Connect(hubURL, machineId, serviceName, token).then(function (msg) {
-    statusDiv.innerHTML = '<div class="connect-msg">' + escHtml(msg) + '</div>'
-      + '<pre class="connect-output" id="connect-output">Waiting for output...</pre>'
-      + '<button class="btn-secondary btn-sm" style="margin-top:8px" onclick="disconnectService(\'' + escAttr(machineId) + '\', \'' + escAttr(serviceName) + '\')">Disconnect</button>';
+  var pane = document.getElementById('detail-pane');
+  var statusDiv = document.createElement('div');
+  statusDiv.className = 'connect-msg';
+  statusDiv.textContent = 'Saving profile and connecting...';
+  pane.appendChild(statusDiv);
 
-    var pollId = setInterval(function () {
-      goApp.GetConnectionOutput(machineId, serviceName).then(function (output) {
-        var el = document.getElementById('connect-output');
-        if (el && output) el.textContent = output;
-      });
-    }, 1000);
-    setTimeout(function () { clearInterval(pollId); }, 300000);
+  goApp.Connect(JSON.stringify(connections)).then(function (msg) {
+    // Start polling connection state
+    startConnectionPoll();
+    refreshDetailPane();
   }).catch(function (err) {
-    statusDiv.innerHTML = '<div class="connect-error">Connection failed: ' + escHtml(err) + '</div>';
+    statusDiv.className = 'connect-error';
+    statusDiv.textContent = 'Connection failed: ' + err;
   });
 }
 
-function disconnectService(machineId, serviceName) {
-  goApp.Disconnect(machineId, serviceName).then(function () {
-    var statusDiv = document.getElementById('connect-status');
-    if (statusDiv) statusDiv.innerHTML = '<div class="connect-msg">Disconnected.</div>';
+function doDisconnect() {
+  goApp.Disconnect().then(function () {
+    stopConnectionPoll();
+    refreshDetailPane();
+  }).catch(function (err) {
+    alert('Disconnect failed: ' + err);
   });
+}
+
+function startConnectionPoll() {
+  stopConnectionPoll();
+  pollIntervalId = setInterval(function () {
+    goApp.GetConnectionState().then(function (state) {
+      if (!state.connected) {
+        stopConnectionPoll();
+        refreshDetailPane();
+      }
+    });
+  }, 2000);
+}
+
+function stopConnectionPoll() {
+  if (pollIntervalId) {
+    clearInterval(pollIntervalId);
+    pollIntervalId = null;
+  }
 }
 
 function removeHub(url) {
   if (!confirm('Remove this hub?')) return;
   goApp.RemoveHub(url).then(function () {
+    // Clear selections for this hub
+    Object.keys(selectedServices).forEach(function (key) {
+      if (key.indexOf(url + '||') === 0) {
+        delete selectedServices[key];
+      }
+    });
+    selectedHubURL = null;
     refreshAll();
     document.getElementById('detail-pane').innerHTML = '<div class="empty-state"><p>Hub removed.</p></div>';
   });
@@ -237,18 +331,18 @@ function removeHub(url) {
 
 function openAddHubModal() {
   document.getElementById('add-hub-modal').classList.remove('hidden');
-  showAddHubTab('manual');
+  showAddHubTab('manual', document.querySelector('.tab[data-tab="manual"]'));
 }
 
 function closeAddHubModal() {
   document.getElementById('add-hub-modal').classList.add('hidden');
 }
 
-function showAddHubTab(tab) {
+function showAddHubTab(tab, btn) {
   document.querySelectorAll('.tab-content').forEach(function (el) { el.classList.add('hidden'); });
   document.querySelectorAll('.tab').forEach(function (el) { el.classList.remove('active'); });
   document.getElementById('tab-' + tab).classList.remove('hidden');
-  event.target.classList.add('active');
+  if (btn) btn.classList.add('active');
 
   if (tab === 'docker') refreshDockerContainers();
 }
@@ -272,22 +366,22 @@ function submitAddHub(event) {
 // --- Docker Integration ---
 
 function refreshDockerContainers() {
-  var select = document.getElementById('docker-container');
-  select.innerHTML = '<option value="">Loading...</option>';
+  var sel = document.getElementById('docker-container');
+  sel.innerHTML = '<option value="">Loading...</option>';
   goApp.DockerListContainers().then(function (names) {
-    select.innerHTML = '';
+    sel.innerHTML = '';
     if (!names || names.length === 0) {
-      select.innerHTML = '<option value="">No containers running</option>';
+      sel.innerHTML = '<option value="">No containers running</option>';
       return;
     }
     names.forEach(function (name) {
       var opt = document.createElement('option');
       opt.value = name;
       opt.textContent = name;
-      select.appendChild(opt);
+      sel.appendChild(opt);
     });
-  }).catch(function (err) {
-    select.innerHTML = '<option value="">Docker not available</option>';
+  }).catch(function () {
+    sel.innerHTML = '<option value="">Docker not available</option>';
   });
 }
 
@@ -322,34 +416,6 @@ function dockerAddHub() {
   goApp.AddHub(url, token).then(function () {
     closeAddHubModal();
     refreshAll();
-  });
-}
-
-// --- Portal (optional) ---
-
-function submitPortalSignIn(event) {
-  event.preventDefault();
-  var url = document.getElementById('portal-url').value.trim();
-  var email = document.getElementById('portal-email').value.trim();
-  var password = document.getElementById('portal-password').value;
-  var errEl = document.getElementById('portal-error');
-  var btn = document.getElementById('portal-submit-btn');
-
-  btn.disabled = true;
-  btn.textContent = 'Connecting...';
-  errEl.classList.add('hidden');
-
-  goApp.PortalSignIn(url, email, password).then(function (name) {
-    btn.disabled = false;
-    btn.textContent = 'Sign In';
-    closeAddHubModal();
-    // Portal sign-in succeeded -- TODO: discover hubs from portal and add them
-    alert('Signed in as ' + name + '. Portal hub discovery coming soon.');
-  }).catch(function (err) {
-    errEl.textContent = err;
-    errEl.classList.remove('hidden');
-    btn.disabled = false;
-    btn.textContent = 'Sign In';
   });
 }
 
@@ -398,4 +464,11 @@ function escHtml(s) {
 
 function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+
+function toWSURL(url) {
+  if (url.indexOf('https://') === 0) return 'wss://' + url.substring(8);
+  if (url.indexOf('http://') === 0) return 'ws://' + url.substring(7);
+  if (url.indexOf('wss://') !== 0 && url.indexOf('ws://') !== 0) return 'wss://' + url;
+  return url;
 }

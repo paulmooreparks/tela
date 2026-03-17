@@ -4,9 +4,11 @@ import {main} from '../models';
 
 export function AddHub(arg1:string,arg2:string):Promise<void>;
 
-export function Connect(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function AssignLocalPort(arg1:number):Promise<number>;
 
-export function Disconnect(arg1:string,arg2:string):Promise<void>;
+export function Connect(arg1:string):Promise<string>;
+
+export function Disconnect():Promise<void>;
 
 export function DockerGetToken(arg1:string,arg2:string):Promise<string>;
 
@@ -16,9 +18,7 @@ export function EnsureTool(arg1:string):Promise<string>;
 
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 
-export function GetConnectionOutput(arg1:string,arg2:string):Promise<string>;
-
-export function GetConnections():Promise<Array<main.ActiveConnection>>;
+export function GetConnectionState():Promise<main.ConnectionState>;
 
 export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
@@ -26,6 +26,6 @@ export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
 export function GetStoredToken(arg1:string):Promise<string>;
 
-export function PortalSignIn(arg1:string,arg2:string,arg3:string):Promise<string>;
-
 export function RemoveHub(arg1:string):Promise<void>;
+
+export function SaveProfile(arg1:string):Promise<string>;

@@ -6,12 +6,16 @@ export function AddHub(arg1, arg2) {
   return window['go']['main']['App']['AddHub'](arg1, arg2);
 }
 
-export function Connect(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['Connect'](arg1, arg2, arg3, arg4);
+export function AssignLocalPort(arg1) {
+  return window['go']['main']['App']['AssignLocalPort'](arg1);
 }
 
-export function Disconnect(arg1, arg2) {
-  return window['go']['main']['App']['Disconnect'](arg1, arg2);
+export function Connect(arg1) {
+  return window['go']['main']['App']['Connect'](arg1);
+}
+
+export function Disconnect() {
+  return window['go']['main']['App']['Disconnect']();
 }
 
 export function DockerGetToken(arg1, arg2) {
@@ -30,12 +34,8 @@ export function GetCommandLog() {
   return window['go']['main']['App']['GetCommandLog']();
 }
 
-export function GetConnectionOutput(arg1, arg2) {
-  return window['go']['main']['App']['GetConnectionOutput'](arg1, arg2);
-}
-
-export function GetConnections() {
-  return window['go']['main']['App']['GetConnections']();
+export function GetConnectionState() {
+  return window['go']['main']['App']['GetConnectionState']();
 }
 
 export function GetHubStatus(arg1) {
@@ -50,10 +50,10 @@ export function GetStoredToken(arg1) {
   return window['go']['main']['App']['GetStoredToken'](arg1);
 }
 
-export function PortalSignIn(arg1, arg2, arg3) {
-  return window['go']['main']['App']['PortalSignIn'](arg1, arg2, arg3);
-}
-
 export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
+}
+
+export function SaveProfile(arg1) {
+  return window['go']['main']['App']['SaveProfile'](arg1);
 }

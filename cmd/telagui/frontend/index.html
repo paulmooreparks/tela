@@ -25,7 +25,7 @@
       </div>
       <div class="detail-pane" id="detail-pane">
         <div class="empty-state">
-          <p>Select a hub or machine from the sidebar.</p>
+          <p>Select a hub from the sidebar.</p>
         </div>
       </div>
     </div>
@@ -52,9 +52,8 @@
       <div class="modal-body">
         <!-- Tab bar -->
         <div class="tab-bar">
-          <button class="tab active" onclick="showAddHubTab('manual')">Manual</button>
-          <button class="tab" onclick="showAddHubTab('docker')">Docker</button>
-          <button class="tab" onclick="showAddHubTab('portal')">Portal</button>
+          <button class="tab active" data-tab="manual" onclick="showAddHubTab('manual', this)">Manual</button>
+          <button class="tab" data-tab="docker" onclick="showAddHubTab('docker', this)">Docker</button>
         </div>
 
         <!-- Manual tab -->
@@ -100,30 +99,6 @@
             <button type="button" class="btn-primary" onclick="dockerAddHub()">Add This Hub</button>
           </div>
           <div id="docker-error" class="error-msg hidden"></div>
-        </div>
-
-        <!-- Portal tab -->
-        <div class="tab-content hidden" id="tab-portal">
-          <p class="tab-desc">Sign in to an Awan Saya portal to discover hubs.</p>
-          <form onsubmit="submitPortalSignIn(event)">
-            <div class="form-group">
-              <label for="portal-url">Portal URL</label>
-              <input type="url" id="portal-url" value="https://awansaya.net" required>
-            </div>
-            <div class="form-group">
-              <label for="portal-email">Email</label>
-              <input type="email" id="portal-email" required>
-            </div>
-            <div class="form-group">
-              <label for="portal-password">Password</label>
-              <input type="password" id="portal-password" required>
-            </div>
-            <div id="portal-error" class="error-msg hidden"></div>
-            <div class="modal-actions">
-              <button type="button" class="btn-secondary" onclick="closeAddHubModal()">Cancel</button>
-              <button type="submit" class="btn-primary" id="portal-submit-btn">Sign In</button>
-            </div>
-          </form>
         </div>
       </div>
     </div>
