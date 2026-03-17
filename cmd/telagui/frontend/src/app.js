@@ -262,7 +262,14 @@ function resolveAllPortsAndUpdate() {
   });
 }
 
+var persistTimer = null;
+
 function persistSelections() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(doPersistSelections, 500);
+}
+
+function doPersistSelections() {
   // Build profile and save immediately
   var groups = {};
   Object.keys(selectedServices).forEach(function (key) {
