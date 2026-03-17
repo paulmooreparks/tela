@@ -121,18 +121,29 @@ jobs:
             goarch: amd64
             runner: windows-latest
             ext: .exe
+            suffix: ""
           - goos: linux
             goarch: amd64
             runner: ubuntu-22.04
             ext: ""
+            webkit: "4.0"
+            suffix: ""
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+            ext: ""
+            webkit: "4.1"
+            suffix: "-gtk41"
           - goos: darwin
             goarch: arm64
             runner: macos-latest
             ext: ""
+            suffix: ""
           - goos: darwin
             goarch: amd64
             runner: macos-13
             ext: ""
+            suffix: ""
 
     runs-on: ${{ matrix.runner }}
 
@@ -159,7 +170,7 @@ jobs:
         if: matrix.goos == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-${{ matrix.webkit || '4.0' }}-dev
 
       - name: Install Wails CLI
         shell: bash
@@ -169,19 +180,23 @@ jobs:
         shell: bash
         run: |
           cd cmd/telagui
-          wails build -ldflags="-X main.version=${{ steps.version.outputs.tag }}"
+          TAGS=""
+          if [ "${{ matrix.webkit }}" = "4.1" ]; then
+            TAGS="-tags webkit2_41"
+          fi
+          wails build $TAGS -ldflags="-X main.version=${{ steps.version.outputs.tag }}"
 
       - name: Prepare artifact
         shell: bash
         run: |
           mkdir -p dist
           cp cmd/telagui/build/bin/telagui${{ matrix.ext }} \
-            dist/telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+            dist/telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}${{ matrix.ext }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-telagui-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: binaries-telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}
           path: dist/
 
   release:
