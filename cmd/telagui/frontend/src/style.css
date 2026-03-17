@@ -57,6 +57,21 @@ body {
   font-family: var(--font);
 }
 .topbar-btn:hover { background: rgba(255,255,255,0.1); }
+.topbar-btn.connect-btn {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.topbar-btn.connect-btn:hover { background: var(--accent-hover); }
+.topbar-btn.connect-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.topbar-btn.disconnect-btn {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+  font-weight: 600;
+}
+.topbar-btn.disconnect-btn:hover { background: var(--danger-hover); }
 
 /* --- Main layout --- */
 .main-content {
@@ -138,6 +153,16 @@ body {
 .detail-header h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 .detail-header .meta { font-size: 13px; color: var(--text-muted); }
 .detail-actions { margin-top: 8px; }
+
+.hub-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+.stat { display: flex; flex-direction: column; }
+.stat-value { font-size: 24px; font-weight: 700; }
+.stat-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.hub-actions { margin-top: 16px; }
 
 /* No-token badge */
 .no-token-badge {

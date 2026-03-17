@@ -13,6 +13,7 @@
         <span class="app-title">Tela</span>
       </div>
       <div class="topbar-right">
+        <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
         <button class="topbar-btn" onclick="openAddHubModal()">Add Hub</button>
         <button class="topbar-btn" onclick="toggleLog()">Command Log</button>
         <button class="topbar-btn" onclick="refreshAll()">Refresh</button>
@@ -21,11 +22,11 @@
 
     <div class="main-content">
       <div class="sidebar" id="sidebar">
-        <p class="loading" id="sidebar-loading">Loading hubs...</p>
+        <p class="loading">Loading hubs...</p>
       </div>
       <div class="detail-pane" id="detail-pane">
         <div class="empty-state">
-          <p>Select a hub from the sidebar.</p>
+          <p>Select a hub or machine from the sidebar.</p>
         </div>
       </div>
     </div>
@@ -50,13 +51,11 @@
         <button class="modal-close" onclick="closeAddHubModal()">&times;</button>
       </div>
       <div class="modal-body">
-        <!-- Tab bar -->
         <div class="tab-bar">
           <button class="tab active" data-tab="manual" onclick="showAddHubTab('manual', this)">Manual</button>
           <button class="tab" data-tab="docker" onclick="showAddHubTab('docker', this)">Docker</button>
         </div>
 
-        <!-- Manual tab -->
         <div class="tab-content" id="tab-manual">
           <form onsubmit="submitAddHub(event)">
             <div class="form-group">
@@ -75,12 +74,11 @@
           </form>
         </div>
 
-        <!-- Docker tab -->
         <div class="tab-content hidden" id="tab-docker">
           <p class="tab-desc">Extract a token from a running telahubd Docker container.</p>
           <div class="form-group">
             <label>Container</label>
-            <select id="docker-container"><option value="">Loading containers...</option></select>
+            <select id="docker-container"><option value="">Loading...</option></select>
             <button type="button" class="btn-link" onclick="refreshDockerContainers()">Refresh</button>
           </div>
           <div class="form-group">

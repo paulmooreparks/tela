@@ -320,12 +320,35 @@ func (a *App) RemoveHub(url string) error {
 	wsURL := toWSURL(url)
 	a.logCommand("Remove hub "+wsURL, "tela logout "+wsURL)
 
+	// Remove from credential store
 	store, err := credstore.Load(credstore.UserPath())
-	if err != nil {
-		return err
+	if err == nil {
+		store.Remove(wsURL)
+		store.Save(credstore.UserPath())
 	}
-	store.Remove(wsURL)
-	return store.Save(credstore.UserPath())
+
+	// Remove from hubs.yaml aliases
+	hubsFile := filepath.Join(telaConfigDir(), "hubs.yaml")
+	if data, err := os.ReadFile(hubsFile); err == nil {
+		var cfg struct {
+			Hubs map[string]string `yaml:"hubs"`
+		}
+		if yaml.Unmarshal(data, &cfg) == nil && cfg.Hubs != nil {
+			changed := false
+			for name, hubURL := range cfg.Hubs {
+				if hubURL == url || hubURL == wsURL {
+					delete(cfg.Hubs, name)
+					changed = true
+				}
+			}
+			if changed {
+				out, _ := yaml.Marshal(&cfg)
+				os.WriteFile(hubsFile, out, 0600)
+			}
+		}
+	}
+
+	return nil
 }
 
 // GetStoredToken checks the credential store for a token for the given hub URL.
