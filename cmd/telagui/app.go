@@ -409,11 +409,14 @@ func (a *App) AssignLocalPort(servicePort int) int {
 }
 
 func isPortAvailable(port int) bool {
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-	if err != nil {
-		return false
+	// Check both loopback and all interfaces (Docker binds on 0.0.0.0)
+	for _, addr := range []string{"127.0.0.1", "0.0.0.0"} {
+		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
+		if err != nil {
+			return false
+		}
+		ln.Close()
 	}
-	ln.Close()
 	return true
 }
 
