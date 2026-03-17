@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +14,31 @@ import (
 	"sync"
 	"time"
 )
+
+// controlOutput captures log output for the browser terminal.
+var (
+	controlOutput   string
+	controlOutputMu sync.RWMutex
+)
+
+// controlLogWriter captures log output to the controlOutput buffer.
+type controlLogWriter struct {
+	original *os.File
+}
+
+func (w *controlLogWriter) Write(p []byte) (int, error) {
+	// Write to original stderr
+	n, err := w.original.Write(p)
+	// Also capture to buffer
+	controlOutputMu.Lock()
+	controlOutput += string(p)
+	// Cap at 1MB to prevent unbounded growth
+	if len(controlOutput) > 1024*1024 {
+		controlOutput = controlOutput[len(controlOutput)-512*1024:]
+	}
+	controlOutputMu.Unlock()
+	return n, err
+}
 
 // controlInfo is the JSON structure written to the control file.
 type controlInfo struct {
@@ -91,6 +117,9 @@ func controlFilePath() string {
 // It writes the control file and returns a cleanup function that removes it
 // and shuts down the server.
 func startControlServer(profileName string, stopCh chan struct{}) func() {
+	// Capture log output for the browser terminal
+	log.SetOutput(&controlLogWriter{original: os.Stderr})
+
 	// Generate a 32-byte random token (64 hex chars).
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
@@ -228,6 +257,64 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	// Browser-accessible terminal -- no auth required (localhost only)
+	// Shows live tela output in a browser window.
+	mux.HandleFunc("/terminal", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Tela Terminal</title>
+<style>
+body { margin:0; background:#1e293b; color:#e2e8f0; font-family:monospace; font-size:13px; }
+#hdr { padding:8px 16px; background:#0f172a; border-bottom:1px solid #334155; display:flex; align-items:center; gap:12px; position:sticky; top:0; }
+#hdr span { font-weight:700; }
+#status { font-size:12px; }
+#out { padding:12px 16px; white-space:pre-wrap; word-break:break-all; }
+</style></head><body>
+<div id="hdr"><span>Tela Terminal</span><span id="status">Loading...</span></div>
+<pre id="out"></pre>
+<script>
+var token=%q;
+var autoScroll=true;
+window.addEventListener("scroll",function(){
+  autoScroll=(window.innerHeight+window.scrollY)>=(document.body.scrollHeight-30);
+});
+function poll(){
+  fetch("/",{headers:{"Authorization":"Bearer "+token}})
+  .then(function(r){return r.json()})
+  .then(function(d){
+    document.getElementById("status").textContent=d.uptime?"Connected ("+d.uptime+")":"Unknown";
+  }).catch(function(){});
+  fetch("/output",{headers:{"Authorization":"Bearer "+token}})
+  .then(function(r){return r.text()})
+  .then(function(t){
+    if(t){document.getElementById("out").textContent=t;}
+    if(autoScroll)window.scrollTo(0,document.body.scrollHeight);
+  }).catch(function(){});
+}
+setInterval(poll,1000);
+poll();
+</script></body></html>`, token)
+	})
+
+	// Raw output endpoint for the browser terminal
+	mux.HandleFunc("/output", func(w http.ResponseWriter, r *http.Request) {
+		if !checkControlAuth(w, r, token) {
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		controlOutputMu.RLock()
+		defer controlOutputMu.RUnlock()
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Write([]byte(controlOutput))
 	})
 
 	server := &http.Server{Handler: mux}

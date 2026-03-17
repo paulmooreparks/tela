@@ -137,7 +137,9 @@ func (a *App) ensureLatestTela() {
 
 	// Check current version
 	if _, err := os.Stat(localPath); err == nil {
-		out, err := exec.Command(localPath, "version").CombinedOutput()
+		cmd := exec.Command(localPath, "version")
+		hideConsoleWindow(cmd)
+		out, err := cmd.CombinedOutput()
 		if err == nil {
 			currentVersion := strings.TrimSpace(string(out))
 			// Extract version tag (e.g., "tela v0.2.95 windows/amd64" -> "v0.2.95")

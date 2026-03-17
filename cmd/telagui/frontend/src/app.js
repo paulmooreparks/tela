@@ -558,28 +558,35 @@ function refreshTerminal() {
       status.className = 'terminal-status disconnected';
     }
 
+    var prevLength = output.textContent.length;
     if (state.output) {
       output.textContent = state.output;
     } else if (!state.connected) {
       output.textContent = 'Not connected.';
     }
 
-    if (terminalAutoScroll) {
-      output.scrollTop = output.scrollHeight;
+    // Auto-scroll to bottom if content changed and user hasn't scrolled up
+    if (terminalAutoScroll && output.textContent.length !== prevLength) {
+      requestAnimationFrame(function () {
+        output.scrollTop = output.scrollHeight;
+      });
     }
   });
 }
 
-// Detect manual scroll to disable auto-scroll
-document.addEventListener('DOMContentLoaded', function () {
-  var el = document.getElementById('terminal-output');
-  if (el) {
-    el.addEventListener('scroll', function () {
-      var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 20;
-      terminalAutoScroll = atBottom;
-    });
-  }
-});
+// Set up scroll detection on the terminal output
+(function () {
+  // Use a short delay to ensure the DOM is ready
+  setTimeout(function () {
+    var el = document.getElementById('terminal-output');
+    if (el) {
+      el.addEventListener('scroll', function () {
+        var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 30;
+        terminalAutoScroll = atBottom;
+      });
+    }
+  }, 100);
+})();
 
 function setVerbose(on) {
   verboseMode = on;

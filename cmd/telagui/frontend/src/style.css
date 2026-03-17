@@ -525,6 +525,7 @@ body {
   flex-direction: column;
   background: #1e293b;
   min-height: 0;
+  overflow: hidden;
 }
 .terminal-header {
   display: flex;
