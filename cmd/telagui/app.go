@@ -424,13 +424,13 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 		return "", fmt.Errorf("invalid connections: %w", err)
 	}
 
-	// Resolve tokens: if a connection has no token, look it up from the credential store.
-	// Replace actual tokens with ${TELA_TOKEN} in the profile and set the env var.
+	// Resolve tokens from credential store for each connection.
+	// Tokens are written directly into the profile (file is 0600).
 	for i := range connections {
-		if connections[i].Token == "" {
+		if connections[i].Token == "" || connections[i].Token == "${TELA_TOKEN}" {
 			token := credstore.LookupToken(connections[i].Hub)
 			if token != "" {
-				connections[i].Token = "${TELA_TOKEN}"
+				connections[i].Token = token
 			}
 		}
 	}
@@ -475,30 +475,11 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 		return "", err
 	}
 
-	// Collect all distinct hub tokens for the environment
-	var connections []ProfileConnection
-	if err := json.Unmarshal([]byte(connectionsJSON), &connections); err != nil {
-		return "", fmt.Errorf("invalid connections: %w", err)
-	}
-
-	// Build a combined token env var (use the first hub's token for TELA_TOKEN)
-	var envToken string
-	for _, c := range connections {
-		token := credstore.LookupToken(c.Hub)
-		if token != "" {
-			envToken = token
-			break
-		}
-	}
-
 	cmdStr := "tela connect -profile " + path
 	a.logCommand("Connect using profile", cmdStr)
 
 	cmd := exec.Command(telaPath, "connect", "-profile", path)
 	hideConsoleWindow(cmd)
-
-	// Pass token as environment variable
-	cmd.Env = append(os.Environ(), "TELA_TOKEN="+envToken)
 
 	outPipe, _ := cmd.StdoutPipe()
 	cmd.Stderr = cmd.Stdout

@@ -125,7 +125,10 @@ body {
   font-size: 13px;
   border-left: 3px solid transparent;
   color: var(--text-muted);
+  cursor: pointer;
 }
+.machine-item:hover { background: var(--sidebar-hover); }
+.machine-item.selected { background: var(--sidebar-hover); border-left-color: var(--accent); color: var(--text); }
 .machine-dot {
   width: 6px;
   height: 6px;

@@ -222,7 +222,6 @@ function persistSelections() {
     connections.push({
       hub: toWSURL(g.hub),
       machine: g.machine,
-      token: '${TELA_TOKEN}',
       services: g.services
     });
   });
@@ -292,7 +291,6 @@ function doConnect() {
     connections.push({
       hub: toWSURL(g.hub),
       machine: g.machine,
-      token: '${TELA_TOKEN}',
       services: g.services
     });
   });
