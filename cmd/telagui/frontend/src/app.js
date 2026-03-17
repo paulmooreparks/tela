@@ -9,7 +9,27 @@ var selectedHubURL = null;
 var selectedMachineId = null;
 
 // --- Startup ---
-refreshAll();
+loadSavedSelections().then(refreshAll);
+
+function loadSavedSelections() {
+  return goApp.LoadProfile().then(function (connections) {
+    if (!connections) return;
+    connections.forEach(function (conn) {
+      var hubURL = conn.hub;
+      var machineId = conn.machine;
+      (conn.services || []).forEach(function (svc) {
+        var key = hubURL + '||' + machineId + '||' + svc.name;
+        selectedServices[key] = {
+          hub: hubURL,
+          machine: machineId,
+          service: svc.name,
+          servicePort: svc.local, // best guess -- actual port comes from hub status
+          localPort: svc.local
+        };
+      });
+    });
+  }).catch(function () {});
+}
 
 // --- Sidebar ---
 

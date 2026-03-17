@@ -420,6 +420,19 @@ func isPortAvailable(port int) bool {
 	return true
 }
 
+// LoadProfile reads the saved profile and returns its connections.
+func (a *App) LoadProfile() []ProfileConnection {
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return nil
+	}
+	var profile Profile
+	if err := yaml.Unmarshal(data, &profile); err != nil {
+		return nil
+	}
+	return profile.Connections
+}
+
 // SaveProfile writes the profile YAML and returns its path.
 func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 	var connections []ProfileConnection

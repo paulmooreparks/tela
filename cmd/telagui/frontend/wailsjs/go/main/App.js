@@ -50,6 +50,10 @@ export function GetStoredToken(arg1) {
   return window['go']['main']['App']['GetStoredToken'](arg1);
 }
 
+export function LoadProfile() {
+  return window['go']['main']['App']['LoadProfile']();
+}
+
 export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
 }
