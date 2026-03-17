@@ -2424,6 +2424,8 @@ func handleUserCommand() {
 		cmdUserList()
 	case "show-owner":
 		cmdUserShowOwner()
+	case "show-viewer":
+		cmdUserShowViewer()
 	case "add":
 		cmdUserAdd()
 	case "remove":
@@ -2447,6 +2449,7 @@ func printUserUsage() {
 Usage:
   telahubd user bootstrap [-config <path>]         First-run: generate owner token
   telahubd user show-owner [-config <path>]          Print the owner token (for scripting)
+  telahubd user show-viewer [-config <path>]         Print the viewer token (for scripting)
   telahubd user list [-config <path>] [-json]       List all token identities
   telahubd user add <id> [-config <path>] [-role owner|admin]
                                                      Add a new token identity
@@ -2642,6 +2645,31 @@ func cmdUserShowOwner() {
 		}
 	}
 	fmt.Fprintln(os.Stderr, "no owner token found")
+	os.Exit(1)
+}
+
+func cmdUserShowViewer() {
+	fs := flag.NewFlagSet("user show-viewer", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to config file")
+	fs.Parse(permuteArgs(fs, os.Args[3:]))
+
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = userCmdConfigPathDefault()
+	}
+	cfg, err := loadOrCreateHubConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	for _, t := range cfg.Auth.Tokens {
+		if t.HubRole == "viewer" {
+			fmt.Println(t.Token)
+			return
+		}
+	}
+	fmt.Fprintln(os.Stderr, "no viewer token found")
 	os.Exit(1)
 }
 
