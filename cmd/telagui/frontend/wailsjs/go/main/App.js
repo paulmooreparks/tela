@@ -62,8 +62,8 @@ export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
 }
 
-export function ReserveLocalPort(arg1) {
-  return window['go']['main']['App']['ReserveLocalPort'](arg1);
+export function ResolveAllPorts(arg1) {
+  return window['go']['main']['App']['ResolveAllPorts'](arg1);
 }
 
 export function SaveProfile(arg1) {

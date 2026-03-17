@@ -423,12 +423,63 @@ func (a *App) AssignLocalPort(servicePort int) int {
 	return servicePort
 }
 
-// ReserveLocalPort marks a port as assigned without finding a new one.
-// Used when restoring saved selections.
-func (a *App) ReserveLocalPort(port int) {
+// PortRequest is a service that needs a local port assigned.
+type PortRequest struct {
+	Key         string `json:"key"`         // unique key like "hub||machine||service"
+	ServicePort int    `json:"servicePort"` // the advertised remote port
+}
+
+// PortAssignment is the result of port resolution.
+type PortAssignment struct {
+	Key       string `json:"key"`
+	LocalPort int    `json:"localPort"`
+}
+
+// ResolveAllPorts takes all selected services and assigns clash-free local ports.
+// Called whenever selections change. Resets all previous assignments.
+func (a *App) ResolveAllPorts(requestsJSON string) ([]PortAssignment, error) {
+	var requests []PortRequest
+	if err := json.Unmarshal([]byte(requestsJSON), &requests); err != nil {
+		return nil, fmt.Errorf("invalid requests: %w", err)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.assignedPorts[port] = true
+
+	// Reset all assignments
+	a.assignedPorts = make(map[int]bool)
+
+	var results []PortAssignment
+	for _, req := range requests {
+		port := req.ServicePort
+
+		// Try the advertised port
+		if !a.assignedPorts[port] && isPortAvailable(port) {
+			a.assignedPorts[port] = true
+			results = append(results, PortAssignment{Key: req.Key, LocalPort: port})
+			continue
+		}
+
+		// Try port + 10000, then increment
+		candidate := port + 10000
+		found := false
+		for i := 0; i < 100; i++ {
+			if !a.assignedPorts[candidate] && isPortAvailable(candidate) {
+				a.assignedPorts[candidate] = true
+				results = append(results, PortAssignment{Key: req.Key, LocalPort: candidate})
+				found = true
+				break
+			}
+			candidate++
+		}
+		if !found {
+			// Last resort -- use the original port
+			a.assignedPorts[port] = true
+			results = append(results, PortAssignment{Key: req.Key, LocalPort: port})
+		}
+	}
+
+	return results, nil
 }
 
 // ReleaseLocalPort frees a previously assigned port.

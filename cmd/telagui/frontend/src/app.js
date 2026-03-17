@@ -14,6 +14,7 @@ loadSavedSelections().then(refreshAll);
 function loadSavedSelections() {
   return goApp.LoadProfile().then(function (connections) {
     if (!connections) return;
+    var requests = [];
     connections.forEach(function (conn) {
       var hubURL = conn.hub;
       var machineId = conn.machine;
@@ -26,10 +27,21 @@ function loadSavedSelections() {
           servicePort: svc.local,
           localPort: svc.local
         };
-        // Reserve this port in the assignment tracker
-        goApp.ReserveLocalPort(svc.local);
+        requests.push({ key: key, servicePort: svc.local });
       });
     });
+    // Resolve ports to catch any new clashes since last save
+    if (requests.length > 0) {
+      return goApp.ResolveAllPorts(JSON.stringify(requests)).then(function (assignments) {
+        if (assignments) {
+          assignments.forEach(function (a) {
+            if (selectedServices[a.key]) {
+              selectedServices[a.key].localPort = a.localPort;
+            }
+          });
+        }
+      });
+    }
   }).catch(function () {});
 }
 
@@ -206,26 +218,48 @@ function renderMachineDetail(hub, machine) {
 function toggleService(hubURL, machineId, serviceName, servicePort, checked) {
   var key = hubURL + '||' + machineId + '||' + serviceName;
   if (checked) {
-    goApp.AssignLocalPort(servicePort).then(function (localPort) {
-      selectedServices[key] = {
-        hub: hubURL,
-        machine: machineId,
-        service: serviceName,
-        servicePort: servicePort,
-        localPort: localPort
-      };
-      updateConnectButton();
-      persistSelections();
-      refreshCurrentPane();
-    });
+    selectedServices[key] = {
+      hub: hubURL,
+      machine: machineId,
+      service: serviceName,
+      servicePort: servicePort,
+      localPort: 0 // will be resolved
+    };
   } else {
-    var old = selectedServices[key];
-    if (old) goApp.ReleaseLocalPort(old.localPort);
     delete selectedServices[key];
+  }
+  resolveAllPortsAndUpdate();
+}
+
+function resolveAllPortsAndUpdate() {
+  // Build port requests from all selections
+  var requests = [];
+  Object.keys(selectedServices).forEach(function (key) {
+    requests.push({
+      key: key,
+      servicePort: selectedServices[key].servicePort
+    });
+  });
+
+  if (requests.length === 0) {
     updateConnectButton();
     persistSelections();
     refreshCurrentPane();
+    return;
   }
+
+  goApp.ResolveAllPorts(JSON.stringify(requests)).then(function (assignments) {
+    if (assignments) {
+      assignments.forEach(function (a) {
+        if (selectedServices[a.key]) {
+          selectedServices[a.key].localPort = a.localPort;
+        }
+      });
+    }
+    updateConnectButton();
+    persistSelections();
+    refreshCurrentPane();
+  });
 }
 
 function persistSelections() {
