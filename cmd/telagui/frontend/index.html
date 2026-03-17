@@ -13,18 +13,15 @@
         <span class="app-title">Tela</span>
       </div>
       <div class="topbar-right">
-        <button class="topbar-btn" id="add-portal-btn" onclick="openAddPortalModal()">Add Portal</button>
-        <button class="topbar-btn" id="toggle-log-btn" onclick="toggleLog()">Command Log</button>
+        <button class="topbar-btn" onclick="openAddHubModal()">Add Hub</button>
+        <button class="topbar-btn" onclick="toggleLog()">Command Log</button>
         <button class="topbar-btn" onclick="refreshAll()">Refresh</button>
       </div>
     </div>
 
     <div class="main-content">
-      <div class="sidebar" id="org-tree">
-        <div class="sidebar-empty" id="sidebar-empty">
-          <p>No portals connected.</p>
-          <p class="hint">Click <strong>Add Portal</strong> to connect to an Awan Saya portal and see your hubs and machines.</p>
-        </div>
+      <div class="sidebar" id="sidebar">
+        <p class="loading" id="sidebar-loading">Loading hubs...</p>
       </div>
       <div class="detail-pane" id="detail-pane">
         <div class="empty-state">
@@ -45,32 +42,90 @@
     </div>
   </div>
 
-  <!-- Add Portal Modal -->
-  <div class="modal-overlay hidden" id="add-portal-modal">
+  <!-- Add Hub Modal -->
+  <div class="modal-overlay hidden" id="add-hub-modal">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3>Add Portal</h3>
-        <button class="modal-close" onclick="closeAddPortalModal()">&times;</button>
+        <h3>Add Hub</h3>
+        <button class="modal-close" onclick="closeAddHubModal()">&times;</button>
       </div>
-      <form id="add-portal-form" onsubmit="submitAddPortal(event)">
-        <div class="form-group">
-          <label for="portal-url">Portal URL</label>
-          <input type="url" id="portal-url" value="https://awansaya.net" required>
+      <div class="modal-body">
+        <!-- Tab bar -->
+        <div class="tab-bar">
+          <button class="tab active" onclick="showAddHubTab('manual')">Manual</button>
+          <button class="tab" onclick="showAddHubTab('docker')">Docker</button>
+          <button class="tab" onclick="showAddHubTab('portal')">Portal</button>
         </div>
-        <div class="form-group">
-          <label for="portal-email">Email</label>
-          <input type="email" id="portal-email" required>
+
+        <!-- Manual tab -->
+        <div class="tab-content" id="tab-manual">
+          <form onsubmit="submitAddHub(event)">
+            <div class="form-group">
+              <label for="hub-url">Hub URL</label>
+              <input type="text" id="hub-url" placeholder="wss://myhub.example.com" required>
+            </div>
+            <div class="form-group">
+              <label for="hub-token">Token</label>
+              <input type="password" id="hub-token" placeholder="Paste hub token" required>
+            </div>
+            <div id="add-hub-error" class="error-msg hidden"></div>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" onclick="closeAddHubModal()">Cancel</button>
+              <button type="submit" class="btn-primary">Add Hub</button>
+            </div>
+          </form>
         </div>
-        <div class="form-group">
-          <label for="portal-password">Password</label>
-          <input type="password" id="portal-password" required>
+
+        <!-- Docker tab -->
+        <div class="tab-content hidden" id="tab-docker">
+          <p class="tab-desc">Extract a token from a running telahubd Docker container.</p>
+          <div class="form-group">
+            <label>Container</label>
+            <select id="docker-container"><option value="">Loading containers...</option></select>
+            <button type="button" class="btn-link" onclick="refreshDockerContainers()">Refresh</button>
+          </div>
+          <div class="form-group">
+            <label>Hub URL (external)</label>
+            <input type="text" id="docker-hub-url" placeholder="wss://myhub.example.com">
+          </div>
+          <div class="form-row">
+            <button type="button" class="btn-primary" onclick="dockerGetOwner()">Get Owner Token</button>
+            <button type="button" class="btn-secondary" onclick="dockerGetViewer()">Get Viewer Token</button>
+          </div>
+          <div id="docker-result" class="hidden">
+            <div class="form-group">
+              <label>Token</label>
+              <div class="token-display" id="docker-token-value"></div>
+            </div>
+            <button type="button" class="btn-primary" onclick="dockerAddHub()">Add This Hub</button>
+          </div>
+          <div id="docker-error" class="error-msg hidden"></div>
         </div>
-        <div id="portal-error" class="error-msg hidden"></div>
-        <div class="modal-actions">
-          <button type="button" class="btn-secondary" onclick="closeAddPortalModal()">Cancel</button>
-          <button type="submit" class="btn-primary" id="portal-submit-btn">Connect</button>
+
+        <!-- Portal tab -->
+        <div class="tab-content hidden" id="tab-portal">
+          <p class="tab-desc">Sign in to an Awan Saya portal to discover hubs.</p>
+          <form onsubmit="submitPortalSignIn(event)">
+            <div class="form-group">
+              <label for="portal-url">Portal URL</label>
+              <input type="url" id="portal-url" value="https://awansaya.net" required>
+            </div>
+            <div class="form-group">
+              <label for="portal-email">Email</label>
+              <input type="email" id="portal-email" required>
+            </div>
+            <div class="form-group">
+              <label for="portal-password">Password</label>
+              <input type="password" id="portal-password" required>
+            </div>
+            <div id="portal-error" class="error-msg hidden"></div>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" onclick="closeAddHubModal()">Cancel</button>
+              <button type="submit" class="btn-primary" id="portal-submit-btn">Sign In</button>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 

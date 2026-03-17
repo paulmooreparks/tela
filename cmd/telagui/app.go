@@ -19,26 +19,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// PortalConnection represents a connected portal.
-type PortalConnection struct {
-	URL         string `json:"url" yaml:"url"`
-	DisplayName string `json:"displayName" yaml:"display_name"`
-	Email       string `json:"email" yaml:"email"`
-	Connected   bool   `json:"connected" yaml:"-"`
-}
-
-// SavedPortals is the on-disk format for portal connections.
-type SavedPortals struct {
-	Portals []PortalConnection `yaml:"portals"`
-}
-
 // App is the main application struct exposed to the frontend via Wails bindings.
 type App struct {
 	ctx context.Context
 
 	mu          sync.Mutex
 	cmdLog      []CommandLogEntry
-	portals     []PortalConnection
 	httpClient  *http.Client
 	connections []ActiveConnection
 }
@@ -50,12 +36,57 @@ type CommandLogEntry struct {
 	Command     string `json:"command"`
 }
 
+// KnownHub is a hub the GUI knows about from the local registry.
+type KnownHub struct {
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	HasToken   bool   `json:"hasToken"`
+	Source     string `json:"source"` // "credentials", "hubs", "remote"
+}
+
+// HubStatus is the status of a hub and its machines.
+type HubStatus struct {
+	Online   bool            `json:"online"`
+	HubName  string          `json:"hubName"`
+	Machines []MachineStatus `json:"machines"`
+	Error    string          `json:"error,omitempty"`
+}
+
+// MachineStatus is the status of a machine on a hub.
+type MachineStatus struct {
+	ID             string          `json:"id"`
+	Hostname       string          `json:"hostname"`
+	OS             string          `json:"os"`
+	AgentConnected bool            `json:"agentConnected"`
+	SessionCount   int             `json:"sessionCount"`
+	LastSeen       string          `json:"lastSeen"`
+	Services       []ServiceInfo   `json:"services"`
+}
+
+// ServiceInfo describes a service on a machine.
+type ServiceInfo struct {
+	Name  string `json:"name"`
+	Port  int    `json:"port"`
+	Proto string `json:"proto"`
+}
+
+// ActiveConnection tracks a running tela connect process.
+type ActiveConnection struct {
+	Machine string     `json:"machine"`
+	Service string     `json:"service"`
+	HubName string     `json:"hubName"`
+	Pid     int        `json:"pid"`
+	Output  string     `json:"output"`
+	Running bool       `json:"running"`
+	process *os.Process `json:"-"`
+}
+
 // NewApp creates a new App instance.
 func NewApp() *App {
 	jar, _ := cookiejar.New(nil)
 	return &App{
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 15 * time.Second,
 			Jar:     jar,
 		},
 	}
@@ -63,12 +94,9 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	// Load saved portals and reconnect
-	a.loadSavedPortals()
 }
 
 func (a *App) shutdown(ctx context.Context) {
-	// Kill all child tela processes
 	a.mu.Lock()
 	for _, conn := range a.connections {
 		if conn.Running && conn.process != nil {
@@ -78,119 +106,8 @@ func (a *App) shutdown(ctx context.Context) {
 	a.mu.Unlock()
 }
 
-func portalsConfigPath() string {
-	return filepath.Join(credstore.UserDir(), "portals.yaml")
-}
-
-func (a *App) loadSavedPortals() {
-	data, err := os.ReadFile(portalsConfigPath())
-	if err != nil {
-		return
-	}
-	var saved SavedPortals
-	if err := yaml.Unmarshal(data, &saved); err != nil {
-		return
-	}
-	a.mu.Lock()
-	a.portals = saved.Portals
-	a.mu.Unlock()
-}
-
-func (a *App) savePortals() error {
-	a.mu.Lock()
-	saved := SavedPortals{Portals: a.portals}
-	a.mu.Unlock()
-
-	data, err := yaml.Marshal(&saved)
-	if err != nil {
-		return err
-	}
-	dir := filepath.Dir(portalsConfigPath())
-	os.MkdirAll(dir, 0700)
-	return os.WriteFile(portalsConfigPath(), data, 0600)
-}
-
-// GetPortals returns all saved portals with their connection status.
-func (a *App) GetPortals() []PortalConnection {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	result := make([]PortalConnection, len(a.portals))
-	copy(result, a.portals)
-	return result
-}
-
-// AddPortal signs in to a portal and saves it.
-func (a *App) AddPortal(portalURL, email, password string) (string, error) {
-	portalURL = strings.TrimRight(portalURL, "/")
-	a.logCommand("Sign in to "+portalURL,
-		fmt.Sprintf("tela remote add portal %s", portalURL))
-
-	body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
-	resp, err := a.httpClient.Post(portalURL+"/api/login", "application/json", strings.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("connection failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-
-	if resp.StatusCode != 200 {
-		errMsg, _ := result["error"].(string)
-		if errMsg == "" {
-			errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
-		}
-		return "", fmt.Errorf("%s", errMsg)
-	}
-
-	name, _ := result["displayName"].(string)
-	if name == "" {
-		name = email
-	}
-
-	portal := PortalConnection{
-		URL:         portalURL,
-		DisplayName: name,
-		Email:       email,
-		Connected:   true,
-	}
-
-	a.mu.Lock()
-	// Replace existing or add new
-	found := false
-	for i, p := range a.portals {
-		if p.URL == portalURL {
-			a.portals[i] = portal
-			found = true
-			break
-		}
-	}
-	if !found {
-		a.portals = append(a.portals, portal)
-	}
-	a.mu.Unlock()
-
-	a.savePortals()
-	return name, nil
-}
-
-// RemovePortal removes a saved portal.
-func (a *App) RemovePortal(portalURL string) error {
-	a.mu.Lock()
-	var filtered []PortalConnection
-	for _, p := range a.portals {
-		if p.URL != portalURL {
-			filtered = append(filtered, p)
-		}
-	}
-	a.portals = filtered
-	a.mu.Unlock()
-	return a.savePortals()
-}
-
 // --- Command Log ---
 
-// GetCommandLog returns the full command history.
 func (a *App) GetCommandLog() []CommandLogEntry {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -209,210 +126,226 @@ func (a *App) logCommand(description, command string) {
 	})
 }
 
-// --- Tool Management ---
+// --- Local Registry ---
 
-// ToolStatus reports whether a tela binary is installed and its version.
-type ToolStatus struct {
-	Name      string `json:"name"`
-	Installed bool   `json:"installed"`
-	Version   string `json:"version"`
-	Path      string `json:"path"`
-}
-
-// CheckTools reports the install status of tela, telad, and telahubd.
-// Checks PATH first, then the app's own install directory.
-func (a *App) CheckTools() []ToolStatus {
-	tools := []string{"tela", "telad", "telahubd"}
-	var results []ToolStatus
-	for _, name := range tools {
-		bin := name
-		if runtime.GOOS == "windows" {
-			bin += ".exe"
-		}
-		// Check PATH first
-		found := ""
-		p, err := exec.LookPath(bin)
-		if err == nil {
-			found = p
-		}
-		// Then check app's own install directory
-		if found == "" {
-			local := filepath.Join(telaInstallDir(), bin)
-			if _, err := os.Stat(local); err == nil {
-				found = local
-			}
-		}
-		if found == "" {
-			results = append(results, ToolStatus{Name: name, Installed: false})
-			continue
-		}
-		version := ""
-		out, err := exec.Command(found, "version").CombinedOutput()
-		if err == nil {
-			version = strings.TrimSpace(string(out))
-		}
-		results = append(results, ToolStatus{
-			Name:      name,
-			Installed: true,
-			Version:   version,
-			Path:      found,
-		})
-	}
-	return results
-}
-
-// LatestRelease returns the latest release tag from GitHub.
-func (a *App) LatestRelease() (string, error) {
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to check releases: %w", err)
-	}
-	defer resp.Body.Close()
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", fmt.Errorf("failed to parse release: %w", err)
-	}
-	return release.TagName, nil
-}
-
-// InstallTool downloads and installs a tela binary from GitHub releases.
-func (a *App) InstallTool(name string, version string) (string, error) {
-	osSuffix := runtime.GOOS
-	archSuffix := runtime.GOARCH
-	ext := ""
+func telaConfigDir() string {
 	if runtime.GOOS == "windows" {
-		ext = ".exe"
-	}
-
-	url := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s-%s-%s%s",
-		version, name, osSuffix, archSuffix, ext)
-
-	installDir := telaInstallDir()
-	if err := os.MkdirAll(installDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create install dir: %w", err)
-	}
-	destPath := filepath.Join(installDir, name+ext)
-
-	a.logCommand("Install "+name+" "+version,
-		fmt.Sprintf("curl -fSL -o %q %s", destPath, url))
-
-	dlClient := &http.Client{Timeout: 120 * time.Second}
-	resp, err := dlClient.Get(url)
-	if err != nil {
-		return "", fmt.Errorf("download failed: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
-	}
-
-	f, err := os.Create(destPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to create file: %w", err)
-	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		f.Close()
-		return "", fmt.Errorf("download failed: %w", err)
-	}
-	f.Close()
-
-	if runtime.GOOS != "windows" {
-		os.Chmod(destPath, 0755)
-	}
-
-	return destPath, nil
-}
-
-func telaInstallDir() string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Tela", "bin")
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "tela")
+		}
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".tela", "bin")
+	return filepath.Join(home, ".tela")
 }
 
-// --- Portal Connection ---
+// GetKnownHubs returns all hubs the user has configured locally.
+// Reads from credentials.yaml, hubs.yaml, and config.yaml remotes.
+func (a *App) GetKnownHubs() []KnownHub {
+	seen := make(map[string]bool)
+	var hubs []KnownHub
 
-// SignIn authenticates with an Awan Saya portal and stores the session.
-// SignIn delegates to AddPortal for backward compatibility.
-func (a *App) SignIn(portalURL, email, password string) (string, error) {
-	return a.AddPortal(portalURL, email, password)
-}
-
-// GetOrganizations returns the user's organizations from the portal.
-func (a *App) GetOrganizations() ([]map[string]interface{}, error) {
-	data, err := a.portalGet("/api/me/organizations")
-	if err != nil {
-		return nil, err
-	}
-	orgs, ok := data["organizations"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response format")
-	}
-	var result []map[string]interface{}
-	for _, o := range orgs {
-		if m, ok := o.(map[string]interface{}); ok {
-			result = append(result, m)
+	// 1. Credential store -- hubs with stored tokens
+	store, err := credstore.Load(credstore.UserPath())
+	if err == nil && store != nil {
+		for url, cred := range store.Hubs {
+			name := hubNameFromURL(url)
+			hubs = append(hubs, KnownHub{
+				Name:     name,
+				URL:      url,
+				HasToken: cred.Token != "",
+				Source:   "credentials",
+			})
+			seen[url] = true
 		}
 	}
-	return result, nil
-}
 
-// GetOrgHubs returns hubs for an organization.
-func (a *App) GetOrgHubs(orgID string) ([]map[string]interface{}, error) {
-	data, err := a.portalGet("/api/organizations/" + orgID + "/hubs")
-	if err != nil {
-		return nil, err
-	}
-	hubs, ok := data["hubs"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response format")
-	}
-	var result []map[string]interface{}
-	for _, h := range hubs {
-		if m, ok := h.(map[string]interface{}); ok {
-			result = append(result, m)
+	// 2. Hub aliases -- short names mapped to URLs
+	hubsFile := filepath.Join(telaConfigDir(), "hubs.yaml")
+	if data, err := os.ReadFile(hubsFile); err == nil {
+		var cfg struct {
+			Hubs map[string]string `yaml:"hubs"`
+		}
+		if yaml.Unmarshal(data, &cfg) == nil {
+			for name, url := range cfg.Hubs {
+				if !seen[url] {
+					_, hasToken := store.Hubs[url]
+					hubs = append(hubs, KnownHub{
+						Name:     name,
+						URL:      url,
+						HasToken: hasToken,
+						Source:   "hubs",
+					})
+					seen[url] = true
+				}
+			}
 		}
 	}
-	return result, nil
+
+	return hubs
 }
 
-// GetHubStatus returns machine/service status for a hub.
-func (a *App) GetHubStatus(hubName string) (map[string]interface{}, error) {
-	return a.portalGet("/api/hub-status/" + hubName)
+func hubNameFromURL(url string) string {
+	// wss://gohub.parkscomputing.com -> gohub.parkscomputing.com
+	url = strings.TrimPrefix(url, "wss://")
+	url = strings.TrimPrefix(url, "ws://")
+	url = strings.TrimPrefix(url, "https://")
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.TrimSuffix(url, "/")
+	return url
 }
 
-// ActiveConnection tracks a running tela connect process.
-type ActiveConnection struct {
-	Machine string     `json:"machine"`
-	Service string     `json:"service"`
-	HubName string     `json:"hubName"`
-	Pid     int        `json:"pid"`
-	Output  string     `json:"output"`
-	Running bool       `json:"running"`
-	process *os.Process `json:"-"`
+// GetHubStatus queries a hub for its machine/service status.
+func (a *App) GetHubStatus(hubURL string) HubStatus {
+	token := credstore.LookupToken(hubURL)
+	if token == "" {
+		return HubStatus{Error: "no token stored for this hub"}
+	}
+
+	// Convert wss:// to https:// for the API call
+	apiURL := hubURL
+	apiURL = strings.Replace(apiURL, "wss://", "https://", 1)
+	apiURL = strings.Replace(apiURL, "ws://", "http://", 1)
+	apiURL = strings.TrimSuffix(apiURL, "/") + "/api/status"
+
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return HubStatus{Error: err.Error()}
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return HubStatus{Error: err.Error()}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return HubStatus{Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
+	}
+
+	var raw struct {
+		HubName  string `json:"hubName"`
+		Machines []struct {
+			ID             string `json:"id"`
+			Hostname       string `json:"hostname"`
+			OS             string `json:"os"`
+			AgentConnected bool   `json:"agentConnected"`
+			SessionCount   int    `json:"sessionCount"`
+			LastSeen       string `json:"lastSeen"`
+			Services       []struct {
+				Name  string `json:"name"`
+				Port  int    `json:"port"`
+				Proto string `json:"proto"`
+			} `json:"services"`
+		} `json:"machines"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return HubStatus{Error: err.Error()}
+	}
+
+	status := HubStatus{
+		Online:  true,
+		HubName: raw.HubName,
+	}
+	for _, m := range raw.Machines {
+		ms := MachineStatus{
+			ID:             m.ID,
+			Hostname:       m.Hostname,
+			OS:             m.OS,
+			AgentConnected: m.AgentConnected,
+			SessionCount:   m.SessionCount,
+			LastSeen:       m.LastSeen,
+		}
+		for _, s := range m.Services {
+			ms.Services = append(ms.Services, ServiceInfo{
+				Name:  s.Name,
+				Port:  s.Port,
+				Proto: s.Proto,
+			})
+		}
+		status.Machines = append(status.Machines, ms)
+	}
+	return status
 }
 
-// Connect starts a tela connection to a machine service in the background.
+// --- Hub Management ---
+
+// AddHub stores a hub URL and token in the credential store.
+func (a *App) AddHub(url, token string) error {
+	wsURL := toWSURL(url)
+	a.logCommand("Add hub "+wsURL, "tela login "+wsURL)
+
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		store = &credstore.Store{Hubs: make(map[string]credstore.Credential)}
+	}
+	store.Set(wsURL, credstore.Credential{Token: token})
+	return store.Save(credstore.UserPath())
+}
+
+// RemoveHub removes a hub from the credential store.
+func (a *App) RemoveHub(url string) error {
+	wsURL := toWSURL(url)
+	a.logCommand("Remove hub "+wsURL, "tela logout "+wsURL)
+
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		return err
+	}
+	store.Remove(wsURL)
+	return store.Save(credstore.UserPath())
+}
+
+// GetStoredToken checks the credential store for a token for the given hub URL.
+func (a *App) GetStoredToken(hubURL string) string {
+	return credstore.LookupToken(toWSURL(hubURL))
+}
+
+// --- Docker Integration ---
+
+// DockerGetToken runs telahubd user show-owner inside a Docker container.
+func (a *App) DockerGetToken(container, role string) (string, error) {
+	if role == "" {
+		role = "show-owner"
+	}
+	cmd := fmt.Sprintf("docker exec %s telahubd user %s -config /app/data/telahubd.yaml",
+		container, role)
+	a.logCommand("Get "+role+" token from container "+container, cmd)
+
+	out, err := exec.Command("docker", "exec", container,
+		"telahubd", "user", role, "-config", "/app/data/telahubd.yaml").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// DockerListContainers lists running Docker containers (for hub discovery).
+func (a *App) DockerListContainers() ([]string, error) {
+	out, err := exec.Command("docker", "ps", "--format", "{{.Names}}").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("docker not available: %s", strings.TrimSpace(string(out)))
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var names []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			names = append(names, line)
+		}
+	}
+	return names, nil
+}
+
+// --- Connect ---
+
 func (a *App) Connect(hubURL, machine, service, token string) (string, error) {
 	telaPath := a.findTool("tela")
 	if telaPath == "" {
-		return "", fmt.Errorf("tela not found in PATH or install directory")
+		return "", fmt.Errorf("tela not found -- install it or add it to PATH")
 	}
 
-	// Build a wss:// URL from the hub's HTTP URL
-	wsURL := hubURL
-	if strings.HasPrefix(wsURL, "https://") {
-		wsURL = "wss://" + strings.TrimPrefix(wsURL, "https://")
-	} else if strings.HasPrefix(wsURL, "http://") {
-		wsURL = "ws://" + strings.TrimPrefix(wsURL, "http://")
-	} else if !strings.HasPrefix(wsURL, "wss://") && !strings.HasPrefix(wsURL, "ws://") {
-		wsURL = "wss://" + wsURL
-	}
+	wsURL := toWSURL(hubURL)
 
 	args := []string{"connect",
 		"-hub", wsURL,
@@ -423,7 +356,6 @@ func (a *App) Connect(hubURL, machine, service, token string) (string, error) {
 		args = append(args, "-token", token)
 	}
 
-	// Build sanitized command string for the log
 	cmdStr := "tela connect -hub " + wsURL + " -machine " + machine + " -services " + service
 	if token != "" {
 		cmdStr += " -token $TELA_TOKEN"
@@ -431,11 +363,8 @@ func (a *App) Connect(hubURL, machine, service, token string) (string, error) {
 	a.logCommand("Connect to "+machine+" via "+service, cmdStr)
 
 	cmd := exec.Command(telaPath, args...)
-
-	// Hide console window on Windows
 	hideConsoleWindow(cmd)
 
-	// Capture output
 	outPipe, _ := cmd.StdoutPipe()
 	cmd.Stderr = cmd.Stdout
 
@@ -443,10 +372,9 @@ func (a *App) Connect(hubURL, machine, service, token string) (string, error) {
 		return "", fmt.Errorf("failed to start tela: %w", err)
 	}
 
-	connID := fmt.Sprintf("%s/%s", machine, service)
+	connID := machine + "/" + service
 	pid := cmd.Process.Pid
 
-	// Read output in background
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -472,7 +400,6 @@ func (a *App) Connect(hubURL, machine, service, token string) (string, error) {
 		a.mu.Unlock()
 	}()
 
-	// Track the connection
 	a.mu.Lock()
 	a.connections = append(a.connections, ActiveConnection{
 		Machine: machine,
@@ -487,7 +414,6 @@ func (a *App) Connect(hubURL, machine, service, token string) (string, error) {
 	return fmt.Sprintf("Connecting to %s/%s (pid %d)", machine, service, pid), nil
 }
 
-// GetConnections returns all active/recent connections.
 func (a *App) GetConnections() []ActiveConnection {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -496,7 +422,6 @@ func (a *App) GetConnections() []ActiveConnection {
 	return result
 }
 
-// GetConnectionOutput returns the output for a specific connection.
 func (a *App) GetConnectionOutput(machine, service string) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -505,6 +430,18 @@ func (a *App) GetConnectionOutput(machine, service string) string {
 		return conn.Output
 	}
 	return ""
+}
+
+func (a *App) Disconnect(machine, service string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	conn := a.findConnection(machine + "/" + service)
+	if conn != nil && conn.Running && conn.process != nil {
+		conn.process.Kill()
+		conn.Running = false
+		return nil
+	}
+	return fmt.Errorf("connection not found")
 }
 
 func (a *App) findConnection(id string) *ActiveConnection {
@@ -516,42 +453,7 @@ func (a *App) findConnection(id string) *ActiveConnection {
 	return nil
 }
 
-// GetStoredToken checks the credential store for a token for the given hub URL.
-func (a *App) GetStoredToken(hubURL string) string {
-	wsURL := toWSURL(hubURL)
-	store, err := credstore.Load(credstore.UserPath())
-	if err != nil {
-		return ""
-	}
-	if cred, ok := store.Get(wsURL); ok {
-		return cred.Token
-	}
-	return ""
-}
-
-// StoreToken saves a hub token to the credential store.
-func (a *App) StoreToken(hubURL, token string) error {
-	wsURL := toWSURL(hubURL)
-	a.logCommand("Store credentials for "+wsURL,
-		fmt.Sprintf("tela login %s", wsURL))
-
-	store, err := credstore.Load(credstore.UserPath())
-	if err != nil {
-		store = &credstore.Store{}
-	}
-	store.Set(wsURL, credstore.Credential{Token: token})
-	return store.Save(credstore.UserPath())
-}
-
-func toWSURL(hubURL string) string {
-	if strings.HasPrefix(hubURL, "https://") {
-		return "wss://" + strings.TrimPrefix(hubURL, "https://")
-	}
-	if strings.HasPrefix(hubURL, "http://") {
-		return "ws://" + strings.TrimPrefix(hubURL, "http://")
-	}
-	return hubURL
-}
+// --- Tool Management ---
 
 func (a *App) findTool(name string) string {
 	bin := name
@@ -568,25 +470,94 @@ func (a *App) findTool(name string) string {
 	return ""
 }
 
-func (a *App) portalGet(path string) (map[string]interface{}, error) {
-	a.mu.Lock()
-	var portalURL string
-	for _, p := range a.portals {
-		if p.Connected {
-			portalURL = p.URL
-			break
-		}
+func telaInstallDir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Tela", "bin")
 	}
-	a.mu.Unlock()
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".tela", "bin")
+}
 
-	if portalURL == "" {
-		return nil, fmt.Errorf("not signed in to any portal")
+// EnsureTool checks if a tool is installed, downloads it if not.
+func (a *App) EnsureTool(name string) (string, error) {
+	path := a.findTool(name)
+	if path != "" {
+		return path, nil
 	}
-	url := portalURL + path
 
-	resp, err := a.httpClient.Get(url)
+	// Download from GitHub
+	version, err := a.latestRelease()
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return "", fmt.Errorf("cannot determine latest version: %w", err)
+	}
+
+	return a.installTool(name, version)
+}
+
+func (a *App) latestRelease() (string, error) {
+	req, _ := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+	json.NewDecoder(resp.Body).Decode(&release)
+	return release.TagName, nil
+}
+
+func (a *App) installTool(name, version string) (string, error) {
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	url := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s-%s-%s%s",
+		version, name, runtime.GOOS, runtime.GOARCH, ext)
+
+	installDir := telaInstallDir()
+	os.MkdirAll(installDir, 0755)
+	destPath := filepath.Join(installDir, name+ext)
+
+	a.logCommand("Install "+name+" "+version,
+		fmt.Sprintf("curl -fSL -o %q %s", destPath, url))
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+	}
+
+	f, err := os.Create(destPath)
+	if err != nil {
+		return "", err
+	}
+	io.Copy(f, resp.Body)
+	f.Close()
+
+	if runtime.GOOS != "windows" {
+		os.Chmod(destPath, 0755)
+	}
+	return destPath, nil
+}
+
+// --- Portal (optional) ---
+
+// PortalSignIn connects to an Awan Saya portal for hub discovery.
+func (a *App) PortalSignIn(portalURL, email, password string) (string, error) {
+	portalURL = strings.TrimRight(portalURL, "/")
+	a.logCommand("Sign in to portal "+portalURL,
+		"tela remote add portal "+portalURL)
+
+	body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+	resp, err := a.httpClient.Post(portalURL+"/api/login", "application/json", strings.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("connection failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -598,7 +569,27 @@ func (a *App) portalGet(path string) (map[string]interface{}, error) {
 		if errMsg == "" {
 			errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
 		}
-		return nil, fmt.Errorf("%s", errMsg)
+		return "", fmt.Errorf("%s", errMsg)
 	}
-	return result, nil
+
+	name, _ := result["displayName"].(string)
+	if name == "" {
+		name = email
+	}
+	return name, nil
+}
+
+// --- Helpers ---
+
+func toWSURL(hubURL string) string {
+	if strings.HasPrefix(hubURL, "https://") {
+		return "wss://" + strings.TrimPrefix(hubURL, "https://")
+	}
+	if strings.HasPrefix(hubURL, "http://") {
+		return "ws://" + strings.TrimPrefix(hubURL, "http://")
+	}
+	if !strings.HasPrefix(hubURL, "wss://") && !strings.HasPrefix(hubURL, "ws://") {
+		return "wss://" + hubURL
+	}
+	return hubURL
 }

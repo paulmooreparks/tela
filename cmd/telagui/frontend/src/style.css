@@ -207,6 +207,7 @@ body {
   color: var(--text-muted);
   padding: 0 4px;
 }
+.modal-body { padding: 0; }
 .modal-dialog form { padding: 20px; }
 .modal-actions {
   display: flex;
@@ -263,6 +264,63 @@ body {
   font-family: var(--font);
 }
 .btn-secondary:hover { background: var(--surface-alt); }
+.btn-sm { padding: 4px 12px; font-size: 12px; }
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font);
+  text-decoration: underline;
+}
+
+/* Tabs */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+}
+.tab {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  font-family: var(--font);
+}
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.tab:hover { color: var(--text); }
+.tab-content { padding: 20px; }
+.tab-desc { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
+.form-row { display: flex; gap: 8px; margin-top: 12px; }
+
+/* Token display */
+.token-display {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+/* No-token badge */
+.no-token-badge {
+  font-size: 10px;
+  color: var(--danger);
+  margin-left: 6px;
+}
+
+/* Detail actions */
+.detail-actions { margin-top: 8px; }
 
 /* --- Token Prompt --- */
 .token-prompt {
