@@ -20,13 +20,22 @@
   --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
 body {
   font-family: var(--font);
   background: var(--bg);
   color: var(--text);
-  height: 100vh;
   display: flex;
   flex-direction: column;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
 .hidden { display: none !important; }
@@ -112,7 +121,7 @@ body {
   font-weight: 600;
 }
 .main-tab:hover { color: var(--text); }
-.tab-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.tab-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
 /* --- Sidebar Header --- */
 .sidebar-header {
@@ -127,6 +136,7 @@ body {
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* Sidebar */
