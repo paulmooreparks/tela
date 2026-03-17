@@ -38,6 +38,24 @@ export namespace main {
 	        this.command = source["command"];
 	    }
 	}
+	export class PortalConnection {
+	    url: string;
+	    displayName: string;
+	    email: string;
+	    connected: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortalConnection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.displayName = source["displayName"];
+	        this.email = source["email"];
+	        this.connected = source["connected"];
+	    }
+	}
 	export class ToolStatus {
 	    name: string;
 	    installed: boolean;

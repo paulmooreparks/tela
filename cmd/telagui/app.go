@@ -16,7 +16,21 @@ import (
 	"time"
 
 	"github.com/paulmooreparks/tela/internal/credstore"
+	"gopkg.in/yaml.v3"
 )
+
+// PortalConnection represents a connected portal.
+type PortalConnection struct {
+	URL         string `json:"url" yaml:"url"`
+	DisplayName string `json:"displayName" yaml:"display_name"`
+	Email       string `json:"email" yaml:"email"`
+	Connected   bool   `json:"connected" yaml:"-"`
+}
+
+// SavedPortals is the on-disk format for portal connections.
+type SavedPortals struct {
+	Portals []PortalConnection `yaml:"portals"`
+}
 
 // App is the main application struct exposed to the frontend via Wails bindings.
 type App struct {
@@ -24,8 +38,7 @@ type App struct {
 
 	mu          sync.Mutex
 	cmdLog      []CommandLogEntry
-	portalURL   string
-	portalToken string
+	portals     []PortalConnection
 	httpClient  *http.Client
 	connections []ActiveConnection
 }
@@ -50,9 +63,129 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// Load saved portals and reconnect
+	a.loadSavedPortals()
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	// Kill all child tela processes
+	a.mu.Lock()
+	for _, conn := range a.connections {
+		if conn.Running && conn.process != nil {
+			conn.process.Kill()
+		}
+	}
+	a.mu.Unlock()
+}
+
+func portalsConfigPath() string {
+	return filepath.Join(credstore.UserDir(), "portals.yaml")
+}
+
+func (a *App) loadSavedPortals() {
+	data, err := os.ReadFile(portalsConfigPath())
+	if err != nil {
+		return
+	}
+	var saved SavedPortals
+	if err := yaml.Unmarshal(data, &saved); err != nil {
+		return
+	}
+	a.mu.Lock()
+	a.portals = saved.Portals
+	a.mu.Unlock()
+}
+
+func (a *App) savePortals() error {
+	a.mu.Lock()
+	saved := SavedPortals{Portals: a.portals}
+	a.mu.Unlock()
+
+	data, err := yaml.Marshal(&saved)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(portalsConfigPath())
+	os.MkdirAll(dir, 0700)
+	return os.WriteFile(portalsConfigPath(), data, 0600)
+}
+
+// GetPortals returns all saved portals with their connection status.
+func (a *App) GetPortals() []PortalConnection {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	result := make([]PortalConnection, len(a.portals))
+	copy(result, a.portals)
+	return result
+}
+
+// AddPortal signs in to a portal and saves it.
+func (a *App) AddPortal(portalURL, email, password string) (string, error) {
+	portalURL = strings.TrimRight(portalURL, "/")
+	a.logCommand("Sign in to "+portalURL,
+		fmt.Sprintf("tela remote add portal %s", portalURL))
+
+	body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+	resp, err := a.httpClient.Post(portalURL+"/api/login", "application/json", strings.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if resp.StatusCode != 200 {
+		errMsg, _ := result["error"].(string)
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		}
+		return "", fmt.Errorf("%s", errMsg)
+	}
+
+	name, _ := result["displayName"].(string)
+	if name == "" {
+		name = email
+	}
+
+	portal := PortalConnection{
+		URL:         portalURL,
+		DisplayName: name,
+		Email:       email,
+		Connected:   true,
+	}
+
+	a.mu.Lock()
+	// Replace existing or add new
+	found := false
+	for i, p := range a.portals {
+		if p.URL == portalURL {
+			a.portals[i] = portal
+			found = true
+			break
+		}
+	}
+	if !found {
+		a.portals = append(a.portals, portal)
+	}
+	a.mu.Unlock()
+
+	a.savePortals()
+	return name, nil
+}
+
+// RemovePortal removes a saved portal.
+func (a *App) RemovePortal(portalURL string) error {
+	a.mu.Lock()
+	var filtered []PortalConnection
+	for _, p := range a.portals {
+		if p.URL != portalURL {
+			filtered = append(filtered, p)
+		}
+	}
+	a.portals = filtered
+	a.mu.Unlock()
+	return a.savePortals()
 }
 
 // --- Command Log ---
@@ -205,39 +338,9 @@ func telaInstallDir() string {
 // --- Portal Connection ---
 
 // SignIn authenticates with an Awan Saya portal and stores the session.
+// SignIn delegates to AddPortal for backward compatibility.
 func (a *App) SignIn(portalURL, email, password string) (string, error) {
-	portalURL = strings.TrimRight(portalURL, "/")
-	a.logCommand("Sign in to "+portalURL,
-		fmt.Sprintf("tela remote add portal %s", portalURL))
-
-	body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
-	resp, err := a.httpClient.Post(portalURL+"/api/login", "application/json", strings.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("connection failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-
-	if resp.StatusCode != 200 {
-		errMsg, _ := result["error"].(string)
-		if errMsg == "" {
-			errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
-		}
-		return "", fmt.Errorf("%s", errMsg)
-	}
-
-	// Store portal URL for subsequent API calls
-	a.mu.Lock()
-	a.portalURL = portalURL
-	a.mu.Unlock()
-
-	name, _ := result["displayName"].(string)
-	if name == "" {
-		name = email
-	}
-	return name, nil
+	return a.AddPortal(portalURL, email, password)
 }
 
 // GetOrganizations returns the user's organizations from the portal.
@@ -285,12 +388,13 @@ func (a *App) GetHubStatus(hubName string) (map[string]interface{}, error) {
 
 // ActiveConnection tracks a running tela connect process.
 type ActiveConnection struct {
-	Machine string `json:"machine"`
-	Service string `json:"service"`
-	HubName string `json:"hubName"`
-	Pid     int    `json:"pid"`
-	Output  string `json:"output"`
-	Running bool   `json:"running"`
+	Machine string     `json:"machine"`
+	Service string     `json:"service"`
+	HubName string     `json:"hubName"`
+	Pid     int        `json:"pid"`
+	Output  string     `json:"output"`
+	Running bool       `json:"running"`
+	process *os.Process `json:"-"`
 }
 
 // Connect starts a tela connection to a machine service in the background.
@@ -376,6 +480,7 @@ func (a *App) Connect(hubURL, machine, service, token string) (string, error) {
 		HubName: hubURL,
 		Pid:     pid,
 		Running: true,
+		process: cmd.Process,
 	})
 	a.mu.Unlock()
 
@@ -465,12 +570,19 @@ func (a *App) findTool(name string) string {
 
 func (a *App) portalGet(path string) (map[string]interface{}, error) {
 	a.mu.Lock()
-	url := a.portalURL + path
+	var portalURL string
+	for _, p := range a.portals {
+		if p.Connected {
+			portalURL = p.URL
+			break
+		}
+	}
 	a.mu.Unlock()
 
-	if url == path {
-		return nil, fmt.Errorf("not signed in")
+	if portalURL == "" {
+		return nil, fmt.Errorf("not signed in to any portal")
 	}
+	url := portalURL + path
 
 	resp, err := a.httpClient.Get(url)
 	if err != nil {

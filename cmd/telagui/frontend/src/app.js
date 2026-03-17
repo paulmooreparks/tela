@@ -81,9 +81,9 @@ function continueSetup() {
     });
 
     if (allGood) {
-      btn.textContent = 'Sign In';
+      btn.textContent = 'Get Started';
       btn.disabled = false;
-      btn.onclick = function () { showScreen('signin-screen'); };
+      btn.onclick = function () { showScreen('main-screen'); checkSavedPortals(); };
     } else {
       // Show install all button
       btn.textContent = 'Install Missing Tools';
@@ -201,7 +201,7 @@ function doSignIn(event) {
   btn.textContent = 'Signing in...';
   errEl.classList.add('hidden');
 
-  goApp.SignIn(url, email, password).then(function (name) {
+  goApp.AddPortal(url, email, password).then(function (name) {
     currentUser = name;
     document.getElementById('main-user').textContent = name;
     showScreen('main-screen');
@@ -211,6 +211,22 @@ function doSignIn(event) {
     errEl.classList.remove('hidden');
     btn.disabled = false;
     btn.textContent = 'Sign In';
+  });
+}
+
+function checkSavedPortals() {
+  goApp.GetPortals().then(function (portals) {
+    if (!portals || portals.length === 0) {
+      // No portals saved, show empty state with add button
+      var sidebar = document.getElementById('org-tree');
+      sidebar.innerHTML = '<div class="sidebar-empty">'
+        + '<p>No portals connected.</p>'
+        + '<button class="btn-primary" onclick="showScreen(\'signin-screen\')">Add Portal</button>'
+        + '</div>';
+    } else {
+      // Try to reconnect to saved portals
+      refreshAll();
+    }
   });
 }
 

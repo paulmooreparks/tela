@@ -222,6 +222,12 @@ body {
   padding: 8px 0;
 }
 .sidebar .loading { padding: 16px; color: var(--text-muted); }
+.sidebar-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.sidebar-empty p { margin-bottom: 12px; }
 .org-group { margin-bottom: 4px; }
 .org-label {
   display: block;
