@@ -190,8 +190,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp cmd/telagui/build/bin/telagui${{ matrix.ext }} \
-            dist/telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}${{ matrix.ext }}
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            # macOS: Wails produces a .app bundle -- tar it up
+            cd cmd/telagui/build/bin
+            tar czf telagui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz telagui.app
+            mv telagui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ../../../../dist/
+          else
+            cp cmd/telagui/build/bin/telagui${{ matrix.ext }} \
+              dist/telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}${{ matrix.ext }}
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
