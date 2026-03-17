@@ -23,9 +23,11 @@ function loadSavedSelections() {
           hub: hubURL,
           machine: machineId,
           service: svc.name,
-          servicePort: svc.local, // best guess -- actual port comes from hub status
+          servicePort: svc.local,
           localPort: svc.local
         };
+        // Reserve this port in the assignment tracker
+        goApp.ReserveLocalPort(svc.local);
       });
     });
   }).catch(function () {});
@@ -217,6 +219,8 @@ function toggleService(hubURL, machineId, serviceName, servicePort, checked) {
       refreshCurrentPane();
     });
   } else {
+    var old = selectedServices[key];
+    if (old) goApp.ReleaseLocalPort(old.localPort);
     delete selectedServices[key];
     updateConnectButton();
     persistSelections();

@@ -54,8 +54,16 @@ export function LoadProfile() {
   return window['go']['main']['App']['LoadProfile']();
 }
 
+export function ReleaseLocalPort(arg1) {
+  return window['go']['main']['App']['ReleaseLocalPort'](arg1);
+}
+
 export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
+}
+
+export function ReserveLocalPort(arg1) {
+  return window['go']['main']['App']['ReserveLocalPort'](arg1);
 }
 
 export function SaveProfile(arg1) {

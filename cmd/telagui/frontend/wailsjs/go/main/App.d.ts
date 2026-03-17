@@ -28,6 +28,10 @@ export function GetStoredToken(arg1:string):Promise<string>;
 
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
+export function ReleaseLocalPort(arg1:number):Promise<void>;
+
 export function RemoveHub(arg1:string):Promise<void>;
+
+export function ReserveLocalPort(arg1:number):Promise<void>;
 
 export function SaveProfile(arg1:string):Promise<string>;

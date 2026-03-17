@@ -24,9 +24,10 @@ import (
 type App struct {
 	ctx context.Context
 
-	mu         sync.Mutex
-	cmdLog     []CommandLogEntry
-	httpClient *http.Client
+	mu            sync.Mutex
+	cmdLog        []CommandLogEntry
+	httpClient    *http.Client
+	assignedPorts map[int]bool // ports already assigned in this session
 
 	// Profile-based connection state
 	telaProcess *os.Process
@@ -110,6 +111,7 @@ func NewApp() *App {
 			Timeout: 15 * time.Second,
 			Jar:     jar,
 		},
+		assignedPorts: make(map[int]bool),
 	}
 }
 
@@ -394,18 +396,46 @@ func (a *App) DockerListContainers() ([]string, error) {
 
 // --- Profile-Based Connection ---
 
-// AssignLocalPort picks a local port for a service. Uses the service's
-// advertised port if available, otherwise tries port+10000.
+// AssignLocalPort picks a unique local port for a service. Checks system
+// availability AND avoids ports already assigned to other selected services.
 func (a *App) AssignLocalPort(servicePort int) int {
-	if isPortAvailable(servicePort) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// Try the advertised port first
+	if !a.assignedPorts[servicePort] && isPortAvailable(servicePort) {
+		a.assignedPorts[servicePort] = true
 		return servicePort
 	}
-	alt := servicePort + 10000
-	if isPortAvailable(alt) {
-		return alt
+
+	// Try port + 10000, then increment until we find one
+	candidate := servicePort + 10000
+	for i := 0; i < 100; i++ {
+		if !a.assignedPorts[candidate] && isPortAvailable(candidate) {
+			a.assignedPorts[candidate] = true
+			return candidate
+		}
+		candidate++
 	}
-	// Fall back to letting the OS assign one
+
+	// Last resort
+	a.assignedPorts[servicePort] = true
 	return servicePort
+}
+
+// ReserveLocalPort marks a port as assigned without finding a new one.
+// Used when restoring saved selections.
+func (a *App) ReserveLocalPort(port int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.assignedPorts[port] = true
+}
+
+// ReleaseLocalPort frees a previously assigned port.
+func (a *App) ReleaseLocalPort(port int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.assignedPorts, port)
 }
 
 func isPortAvailable(port int) bool {
