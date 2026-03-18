@@ -22,6 +22,14 @@ export function Connect(arg1) {
   return window['go']['main']['App']['Connect'](arg1);
 }
 
+export function CreateProfile(arg1) {
+  return window['go']['main']['App']['CreateProfile'](arg1);
+}
+
+export function DeleteProfile(arg1) {
+  return window['go']['main']['App']['DeleteProfile'](arg1);
+}
+
 export function DetectCredentialType(arg1) {
   return window['go']['main']['App']['DetectCredentialType'](arg1);
 }
@@ -60,6 +68,10 @@ export function GetConnectionState() {
 
 export function GetControlStatus() {
   return window['go']['main']['App']['GetControlStatus']();
+}
+
+export function GetCurrentProfile() {
+  return window['go']['main']['App']['GetCurrentProfile']();
 }
 
 export function GetHubStatus(arg1) {
@@ -106,6 +118,10 @@ export function IsQuitting() {
   return window['go']['main']['App']['IsQuitting']();
 }
 
+export function ListProfiles() {
+  return window['go']['main']['App']['ListProfiles']();
+}
+
 export function LoadProfile() {
   return window['go']['main']['App']['LoadProfile']();
 }
@@ -124,6 +140,10 @@ export function ReleaseLocalPort(arg1) {
 
 export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
+}
+
+export function RenameProfile(arg1, arg2) {
+  return window['go']['main']['App']['RenameProfile'](arg1, arg2);
 }
 
 export function ResolveAllPorts(arg1) {
@@ -156,4 +176,8 @@ export function ShouldAutoConnect() {
 
 export function ShowWindow() {
   return window['go']['main']['App']['ShowWindow']();
+}
+
+export function SwitchProfile(arg1) {
+  return window['go']['main']['App']['SwitchProfile'](arg1);
 }

@@ -569,7 +569,7 @@ func profilesDir() string {
 }
 
 func profilePath() string {
-	return filepath.Join(profilesDir(), "telagui.yaml")
+	return filepath.Join(profilesDir(), currentProfileName+".yaml")
 }
 
 // GetKnownHubs returns all hubs the user has configured locally.
@@ -1378,7 +1378,123 @@ func (a *App) installTool(name, version string) (string, error) {
 	return destPath, nil
 }
 
-// --- Settings ---
+// --- Profile Management ---
+
+// currentProfileName tracks which profile is active.
+var currentProfileName = "telagui"
+
+// ListProfiles returns all available profile names.
+func (a *App) ListProfiles() []string {
+	dir := profilesDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return []string{currentProfileName}
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".yaml") {
+			names = append(names, strings.TrimSuffix(name, ".yaml"))
+		} else if strings.HasSuffix(name, ".yml") {
+			names = append(names, strings.TrimSuffix(name, ".yml"))
+		}
+	}
+	if len(names) == 0 {
+		return []string{currentProfileName}
+	}
+	return names
+}
+
+// GetCurrentProfile returns the active profile name.
+func (a *App) GetCurrentProfile() string {
+	return currentProfileName
+}
+
+// SwitchProfile changes the active profile. Disconnects first if connected.
+func (a *App) SwitchProfile(name string) error {
+	if name == currentProfileName {
+		return nil
+	}
+
+	// Disconnect if connected
+	a.Disconnect()
+	time.Sleep(500 * time.Millisecond)
+
+	currentProfileName = name
+	a.logCommand("Switch profile to "+name, "tela connect -profile "+name)
+	return nil
+}
+
+// CreateProfile creates a new empty profile.
+func (a *App) CreateProfile(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("profile name cannot be empty")
+	}
+
+	dir := profilesDir()
+	os.MkdirAll(dir, 0700)
+	path := filepath.Join(dir, name+".yaml")
+
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("profile %q already exists", name)
+	}
+
+	content := "connections: []\n"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		return fmt.Errorf("create profile: %w", err)
+	}
+
+	a.logCommand("Create profile "+name, "tela profile create "+name)
+	return nil
+}
+
+// RenameProfile renames a profile file.
+func (a *App) RenameProfile(oldName, newName string) error {
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return fmt.Errorf("profile name cannot be empty")
+	}
+
+	dir := profilesDir()
+	oldPath := filepath.Join(dir, oldName+".yaml")
+	newPath := filepath.Join(dir, newName+".yaml")
+
+	if _, err := os.Stat(oldPath); err != nil {
+		return fmt.Errorf("profile %q not found", oldName)
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return fmt.Errorf("profile %q already exists", newName)
+	}
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("rename profile: %w", err)
+	}
+
+	if currentProfileName == oldName {
+		currentProfileName = newName
+	}
+
+	a.logCommand("Rename profile "+oldName+" to "+newName, "# renamed "+oldPath+" to "+newPath)
+	return nil
+}
+
+// DeleteProfile deletes a profile file.
+func (a *App) DeleteProfile(name string) error {
+	if name == currentProfileName {
+		return fmt.Errorf("cannot delete the active profile")
+	}
+	path := filepath.Join(profilesDir(), name+".yaml")
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("delete profile: %w", err)
+	}
+	a.logCommand("Delete profile "+name, "tela profile delete "+name)
+	return nil
+}
+
 
 // Settings holds user preferences persisted to disk.
 type Settings struct {

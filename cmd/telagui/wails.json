@@ -1,6 +1,6 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "Tela",
+  "name": "TelaGUI",
   "outputfilename": "telagui",
   "nsisType": "multiple",
   "frontend:install": "",

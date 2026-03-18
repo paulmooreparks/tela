@@ -12,6 +12,10 @@ export function ClearCredentialStore():Promise<void>;
 
 export function Connect(arg1:string):Promise<string>;
 
+export function CreateProfile(arg1:string):Promise<void>;
+
+export function DeleteProfile(arg1:string):Promise<void>;
+
 export function DetectCredentialType(arg1:string):Promise<string>;
 
 export function Disconnect():Promise<void>;
@@ -31,6 +35,8 @@ export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 export function GetConnectionState():Promise<main.ConnectionState>;
 
 export function GetControlStatus():Promise<Record<string, any>>;
+
+export function GetCurrentProfile():Promise<string>;
 
 export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
@@ -54,6 +60,8 @@ export function IsPackageManaged():Promise<boolean>;
 
 export function IsQuitting():Promise<boolean>;
 
+export function ListProfiles():Promise<Array<string>>;
+
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;
@@ -63,6 +71,8 @@ export function QuitApp():Promise<void>;
 export function ReleaseLocalPort(arg1:number):Promise<void>;
 
 export function RemoveHub(arg1:string):Promise<void>;
+
+export function RenameProfile(arg1:string,arg2:string):Promise<void>;
 
 export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>;
 
@@ -79,3 +89,5 @@ export function SetVerbose(arg1:boolean):Promise<void>;
 export function ShouldAutoConnect():Promise<boolean>;
 
 export function ShowWindow():Promise<void>;
+
+export function SwitchProfile(arg1:string):Promise<void>;

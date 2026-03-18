@@ -72,7 +72,7 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
-InstallDir "$PROGRAMFILES64\Tela" # Install to C:\Program Files\Tela
+InstallDir "$PROGRAMFILES64\Tela" # Install to C:\Program Files\Tela (not TelaGUI)
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit

@@ -24,6 +24,7 @@ function switchTab(name, btn) {
 
 // --- Startup ---
 refreshVersionDisplay();
+refreshProfileList();
 loadSavedSelections().then(function () {
   refreshAll();
   // Auto-connect if enabled and there are saved selections
@@ -131,6 +132,47 @@ function loadSavedSelections() {
       });
     }
   }).catch(function () {});
+}
+
+function refreshProfileList() {
+  goApp.ListProfiles().then(function (profiles) {
+    var select = document.getElementById('profile-select');
+    goApp.GetCurrentProfile().then(function (current) {
+      select.innerHTML = '';
+      profiles.forEach(function (name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === current) opt.selected = true;
+        select.appendChild(opt);
+      });
+    });
+  });
+}
+
+function switchProfile(name) {
+  goApp.SwitchProfile(name).then(function () {
+    selectedServices = {};
+    loadSavedSelections().then(function () {
+      refreshAll();
+      updateConnectButton();
+    });
+  });
+}
+
+function newProfile() {
+  var name = prompt('New profile name:');
+  if (!name) return;
+  goApp.CreateProfile(name).then(function () {
+    goApp.SwitchProfile(name).then(function () {
+      selectedServices = {};
+      refreshProfileList();
+      refreshAll();
+      updateConnectButton();
+    });
+  }).catch(function (err) {
+    alert('Failed: ' + err);
+  });
 }
 
 function doRefresh() {

@@ -35,10 +35,16 @@
       <div class="main-content">
         <div class="sidebar" id="sidebar">
           <div class="sidebar-header">
-            <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
-            <button class="btn-secondary btn-sm" onclick="doRefresh()">Refresh</button>
-            <button class="btn-secondary btn-sm" onclick="importProfile()" title="Import profile">Import</button>
-            <button class="btn-secondary btn-sm" onclick="exportProfile()" title="Export profile">Export</button>
+            <div class="profile-switcher">
+              <select id="profile-select" class="profile-dropdown" onchange="switchProfile(this.value)"></select>
+              <button class="btn-link btn-sm" onclick="newProfile()" title="New profile">+</button>
+            </div>
+            <div class="sidebar-actions">
+              <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
+              <button class="btn-secondary btn-sm" onclick="doRefresh()">Refresh</button>
+              <button class="btn-secondary btn-sm" onclick="importProfile()" title="Import">Import</button>
+              <button class="btn-secondary btn-sm" onclick="exportProfile()" title="Export">Export</button>
+            </div>
           </div>
           <div id="sidebar-content">
             <p class="loading">Loading hubs...</p>
