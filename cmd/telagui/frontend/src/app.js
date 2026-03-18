@@ -75,7 +75,16 @@ function restartToUpdate() {
   var btn = document.getElementById('update-btn');
   btn.textContent = 'Updating...';
   btn.disabled = true;
-  goApp.RestartToUpdate();
+  goApp.RestartToUpdate().then(function () {
+    // If we're still here, it was a package-managed install (CLI-only update)
+    btn.classList.add('hidden');
+    btn.disabled = false;
+    refreshVersionDisplay();
+  }).catch(function (err) {
+    btn.textContent = 'Update failed';
+    btn.disabled = false;
+    setTimeout(function () { btn.classList.add('hidden'); }, 3000);
+  });
 }
 
 function loadSavedSelections() {
