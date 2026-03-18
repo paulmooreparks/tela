@@ -766,7 +766,7 @@ function updateConnectButton() {
       btn.textContent = 'Connect';
       btn.className = 'topbar-btn connect-btn' + (hasSelections ? '' : ' disabled');
       btn.title = hasSelections ? '' : 'Select services in Profiles first';
-      if (quitBtn) { quitBtn.className = 'topbar-btn'; quitBtn.textContent = 'Quit'; }
+      if (quitBtn) { quitBtn.className = 'topbar-btn connect-btn'; quitBtn.textContent = 'Quit'; }
     }
   });
 }
@@ -817,10 +817,9 @@ function doConnect() {
 }
 
 function doQuit() {
-  var quitBtn = document.getElementById('quit-btn');
-  var connectBtn = document.getElementById('connect-btn');
-  if (quitBtn) { quitBtn.textContent = 'Quitting...'; quitBtn.className = 'topbar-btn disconnecting-btn'; quitBtn.disabled = true; }
-  if (connectBtn) { connectBtn.textContent = 'Disconnecting...'; connectBtn.className = 'topbar-btn disconnecting-btn'; connectBtn.disabled = true; }
+  // Don't change button state here -- OnBeforeClose shows a
+  // confirmation dialog when connected. If cancelled, buttons
+  // must stay unchanged. The app exits immediately on confirm.
   goApp.QuitApp();
 }
 

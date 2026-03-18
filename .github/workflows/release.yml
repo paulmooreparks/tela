@@ -230,10 +230,12 @@ jobs:
           Write-Host "makensis location:"
           Get-Command makensis -ErrorAction SilentlyContinue | Select-Object Source
           cd cmd/telagui
-          # Set version in info.json for the NSIS installer
+          # Set version in wails.json so NSIS installer gets the correct version
           $VERSION = "${{ steps.version.outputs.tag }}"
           $VERSION_NUM = $VERSION.TrimStart("v")
-          (Get-Content build/windows/info.json) -replace '\{\{\.Info\.ProductVersion\}\}', $VERSION_NUM | Set-Content build/windows/info.json
+          $wailsJson = Get-Content wails.json | ConvertFrom-Json
+          $wailsJson.info.productVersion = $VERSION_NUM
+          $wailsJson | ConvertTo-Json -Depth 10 | Set-Content wails.json
           wails build -nsis -ldflags="-X main.version=$VERSION"
           Write-Host "Build output:"
           Get-ChildItem -Path build/bin -Recurse | Select-Object FullName, Length

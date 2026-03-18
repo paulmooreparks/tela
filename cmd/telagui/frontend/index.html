@@ -18,7 +18,7 @@
       <div class="topbar-right">
         <button class="topbar-btn update-btn hidden" id="update-btn" onclick="restartToUpdate()">Restart to Update</button>
         <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
-        <button class="topbar-btn" id="quit-btn" onclick="doQuit()">Quit</button>
+        <button class="topbar-btn connect-btn" id="quit-btn" onclick="doQuit()">Quit</button>
       </div>
     </div>
 
@@ -47,7 +47,7 @@
     </div>
 
     <!-- Profile tab -->
-    <div class="tab-pane" role="tabpanel hidden" id="tab-profile">
+    <div class="tab-pane hidden" role="tabpanel" id="tab-profile">
       <div class="main-content">
         <div class="sidebar" id="sidebar">
           <div class="sidebar-resize-handle" id="sidebar-resize"></div>
@@ -75,7 +75,7 @@
     </div>
 
     <!-- Terminal tab -->
-    <div class="tab-pane" role="tabpanel hidden" id="tab-terminal">
+    <div class="tab-pane hidden" role="tabpanel" id="tab-terminal">
       <div class="terminal-pane">
         <div class="terminal-header">
           <span class="terminal-status" id="terminal-status">Disconnected</span>
@@ -93,14 +93,14 @@
     </div>
 
     <!-- Command Log tab -->
-    <div class="tab-pane" role="tabpanel hidden" id="tab-log">
+    <div class="tab-pane hidden" role="tabpanel" id="tab-log">
       <div class="log-pane" id="log-content">
         <p class="empty-hint">Actions you take will appear here with their CLI equivalents.</p>
       </div>
     </div>
 
     <!-- Hubs tab -->
-    <div class="tab-pane" role="tabpanel hidden" id="tab-hubs">
+    <div class="tab-pane hidden" role="tabpanel" id="tab-hubs">
       <div class="hubs-pane">
         <h1>Hubs</h1>
         <p class="hubs-desc">Manage hub credentials. Add new hubs or remove existing ones.</p>
@@ -114,7 +114,7 @@
     </div>
 
     <!-- Settings tab -->
-    <div class="tab-pane" role="tabpanel hidden" id="tab-settings">
+    <div class="tab-pane hidden" role="tabpanel" id="tab-settings">
       <div class="settings-pane">
         <h1>Settings</h1>
 
@@ -181,7 +181,7 @@
     </div>
 
     <!-- About tab -->
-    <div class="tab-pane" role="tabpanel hidden" id="tab-about">
+    <div class="tab-pane hidden" role="tabpanel" id="tab-about">
       <div class="about-pane">
         <div class="about-header">
           <img src="/src/logo.png" class="about-logo" alt="Tela">
