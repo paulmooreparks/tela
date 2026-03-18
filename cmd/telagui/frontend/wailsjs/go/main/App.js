@@ -146,6 +146,10 @@ export function SetVerbose(arg1) {
   return window['go']['main']['App']['SetVerbose'](arg1);
 }
 
+export function ShouldAutoConnect() {
+  return window['go']['main']['App']['ShouldAutoConnect']();
+}
+
 export function ShowWindow() {
   return window['go']['main']['App']['ShowWindow']();
 }

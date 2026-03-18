@@ -135,8 +135,21 @@ func (a *App) startup(ctx context.Context) {
 	// Set up system tray icon
 	a.setupTray()
 
+	// Load settings and apply startup preferences
+	settings := a.GetSettings()
+
+	if settings.StartMinimized {
+		go func() {
+			// Small delay to let the window initialize
+			time.Sleep(300 * time.Millisecond)
+			wailsRuntime.WindowHide(a.ctx)
+		}()
+	}
+
 	// Check for updates to all binaries (GUI and CLI) in background
-	go a.checkForUpdates()
+	if settings.AutoCheckUpdates {
+		go a.checkForUpdates()
+	}
 }
 
 // checkForUpdates checks if any managed binary (telagui or tela CLI) is
@@ -470,6 +483,17 @@ func (a *App) shutdown(ctx context.Context) {
 }
 
 // --- Window Management ---
+
+// ShouldAutoConnect returns true if auto-connect is enabled and there's a saved profile.
+func (a *App) ShouldAutoConnect() bool {
+	settings := a.GetSettings()
+	if !settings.AutoConnect {
+		return false
+	}
+	// Check if there's a saved profile with connections
+	connections := a.LoadProfile()
+	return len(connections) > 0
+}
 
 // ShowWindow brings the window back from the system tray.
 func (a *App) ShowWindow() {

@@ -24,7 +24,17 @@ function switchTab(name, btn) {
 
 // --- Startup ---
 refreshVersionDisplay();
-loadSavedSelections().then(refreshAll);
+loadSavedSelections().then(function () {
+  refreshAll();
+  // Auto-connect if enabled and there are saved selections
+  goApp.ShouldAutoConnect().then(function (should) {
+    if (should && Object.keys(selectedServices).length > 0) {
+      setTimeout(function () {
+        doConnect();
+      }, 1500); // delay to let hub status load
+    }
+  });
+});
 
 // Check for updates after a short delay (versions need time to fetch)
 setTimeout(function () {
