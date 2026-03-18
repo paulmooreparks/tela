@@ -125,16 +125,16 @@ jobs:
             suffix: ""
           - goos: linux
             goarch: amd64
-            runner: ubuntu-22.04
-            ext: ""
-            webkit: "4.0"
-            suffix: ""
-          - goos: linux
-            goarch: amd64
             runner: ubuntu-latest
             ext: ""
             webkit: "4.1"
-            suffix: "-gtk41"
+            suffix: ""
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-22.04
+            ext: ""
+            webkit: "4.0"
+            suffix: "-gtk40"
           - goos: darwin
             goarch: arm64
             runner: macos-latest
