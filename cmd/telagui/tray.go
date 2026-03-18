@@ -29,8 +29,8 @@ func (a *App) setupTray() {
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("Quit", "Quit TelaGUI")
 
-		// Click tray icon to show window
-		systray.SetOnClick(func(menu systray.IMenu) {
+		// Double-click tray icon to show window (leaves single-click for menu)
+		systray.SetOnDClick(func(menu systray.IMenu) {
 			wailsRuntime.WindowShow(a.ctx)
 		})
 
