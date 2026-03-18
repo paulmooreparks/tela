@@ -146,8 +146,8 @@ func (a *App) checkForUpdates() {
 
 	needsUpdate := false
 
-	// Check telagui version (skip for dev builds)
-	if !isDevBuild() && version != latest {
+	// Check telagui version
+	if version != latest {
 		needsUpdate = true
 	}
 
@@ -181,48 +181,41 @@ func (a *App) checkForUpdates() {
 	}
 }
 
-// selfUpdatePath returns the path where a pending update binary is staged.
-func selfUpdatePath() string {
-	ext := ""
-	if runtime.GOOS == "windows" {
-		ext = ".exe"
-	}
-	return filepath.Join(telaInstallDir(), "telagui-update"+ext)
-}
-
-// selfInstalledPath returns where telagui should live in the managed install dir.
-func selfInstalledPath() string {
-	ext := ""
-	if runtime.GOOS == "windows" {
-		ext = ".exe"
-	}
-	return filepath.Join(telaInstallDir(), "telagui"+ext)
-}
-
-// isDevBuild returns true if running from outside the managed install directory.
-func isDevBuild() bool {
+// selfExePath returns the absolute path of the currently running telagui binary.
+func selfExePath() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return true
+		return ""
 	}
 	exe, _ = filepath.Abs(exe)
-	installed, _ := filepath.Abs(selfInstalledPath())
-	return exe != installed
+	return exe
 }
 
-// applyPendingSelfUpdate checks for a staged update binary and swaps it in.
-// Always targets the managed install directory, not the running binary's location.
-func (a *App) applyPendingSelfUpdate() {
-	if isDevBuild() {
-		return // dev builds don't self-update
+// selfUpdatePath returns the staging path for a pending update (next to the running binary).
+func selfUpdatePath() string {
+	exe := selfExePath()
+	if exe == "" {
+		return ""
 	}
+	ext := filepath.Ext(exe)
+	base := strings.TrimSuffix(exe, ext)
+	return base + "-update" + ext
+}
 
+// applyPendingSelfUpdate checks for a staged update binary and swaps it in place.
+func (a *App) applyPendingSelfUpdate() {
 	updatePath := selfUpdatePath()
+	if updatePath == "" {
+		return
+	}
 	if _, err := os.Stat(updatePath); err != nil {
 		return // no pending update
 	}
 
-	currentPath := selfInstalledPath()
+	currentPath := selfExePath()
+	if currentPath == "" {
+		return
+	}
 
 	if runtime.GOOS == "windows" {
 		// Can't overwrite running exe -- rename current to .old first
@@ -292,21 +285,14 @@ func (a *App) RestartToUpdate() error {
 	a.logCommand("Update tela to "+ver, "# downloading tela "+ver)
 	a.installTool("tela", ver)
 
-	if isDevBuild() {
-		// Dev builds: update CLI tools only, don't replace the dev binary
-		a.logCommand("Dev build: CLI updated, restart manually to use new version", "")
-		a.mu.Lock()
-		a.updatePending = false
-		a.mu.Unlock()
-		return nil
-	}
-
-	// Download telagui update to staging path
+	// Download telagui update to staging path (next to running binary)
 	a.logCommand("Update telagui to "+ver, "# downloading telagui "+ver)
 	a.downloadSelfUpdate(ver)
 
-	// Determine relaunch path (always the installed path)
-	exe := selfInstalledPath()
+	exe := selfExePath()
+	if exe == "" {
+		return fmt.Errorf("cannot determine executable path")
+	}
 
 	// On Unix, apply the self-update now (can replace while running)
 	if runtime.GOOS != "windows" {
@@ -314,7 +300,7 @@ func (a *App) RestartToUpdate() error {
 	}
 	// On Windows, applyPendingSelfUpdate runs on next startup
 
-	// Relaunch from the installed path
+	// Relaunch from the same path
 	cmd := exec.Command(exe)
 	cmd.Start()
 
