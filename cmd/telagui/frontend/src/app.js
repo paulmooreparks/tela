@@ -49,7 +49,7 @@ function switchTab(name, btn) {
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
       var newWidth = e.clientX;
-      if (newWidth < 298) newWidth = 298;
+      if (newWidth < 312) newWidth = 312;
       if (newWidth > 600) newWidth = 600;
       sidebar.style.width = newWidth + 'px';
     });
@@ -70,7 +70,7 @@ function switchTab(name, btn) {
 // --- Startup ---
 refreshVersionDisplay();
 refreshProfileList();
-refreshProfilePath();
+
 loadSavedSelections().then(function () {
   refreshAll();
   // Auto-connect if enabled and there are saved selections
@@ -188,10 +188,9 @@ function refreshProfilePath() {
 }
 
 function copyProfilePath() {
-  var el = document.getElementById('profile-path');
-  if (el && navigator.clipboard) {
-    navigator.clipboard.writeText(el.textContent);
-  }
+  goApp.GetProfilePath().then(function (path) {
+    if (navigator.clipboard) navigator.clipboard.writeText(path);
+  });
 }
 
 function refreshProfileList() {
@@ -229,7 +228,7 @@ function switchProfile(name) {
     selectedHubURL = null;
     selectedMachineId = null;
     document.getElementById('detail-pane').innerHTML = '';
-    refreshProfilePath();
+    
     loadSavedSelections().then(function () {
       refreshAll();
       updateConnectButton();
@@ -244,7 +243,7 @@ function newProfile() {
     goApp.SwitchProfile(name).then(function () {
       selectedServices = {};
       refreshProfileList();
-      refreshProfilePath();
+      
       refreshAll();
       updateConnectButton();
     });
@@ -417,10 +416,15 @@ function showProfileYaml() {
     });
   });
 
-  pane.innerHTML = '<div class="profile-yaml-preview">'
-    + '<h3>Profile Preview</h3>'
-    + '<pre class="connect-output">' + escHtml(yaml) + '</pre>'
-    + '</div>';
+  goApp.GetProfilePath().then(function (path) {
+    pane.innerHTML = '<div class="profile-yaml-preview">'
+      + '<div class="profile-yaml-header">'
+      + '<h3>Profile Preview</h3>'
+      + '<span class="profile-path" title="Click to copy" onclick="copyProfilePath()">' + escHtml(path) + '</span>'
+      + '</div>'
+      + '<pre class="connect-output">' + escHtml(yaml) + '</pre>'
+      + '</div>';
+  });
 }
 
 // --- Detail Pane: Hub View ---
