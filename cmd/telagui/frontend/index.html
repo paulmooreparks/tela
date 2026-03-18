@@ -42,9 +42,9 @@
               <button class="profile-new-btn" onclick="newProfile()" title="New profile">+</button>
             </div>
             <div class="sidebar-actions">
-              <button class="btn-secondary btn-sm" onclick="doRefresh()">Refresh</button>
-              <button class="btn-secondary btn-sm" onclick="importProfile()" title="Import">Import</button>
-              <button class="btn-secondary btn-sm" onclick="exportProfile()" title="Export">Export</button>
+              <button class="btn-primary btn-sm" onclick="doRefresh()">Refresh</button>
+              <button class="btn-primary btn-sm" onclick="importProfile()" title="Import">Import</button>
+              <button class="btn-primary btn-sm" onclick="exportProfile()" title="Export">Export</button>
             </div>
           </div>
           <div id="sidebar-content">
@@ -66,9 +66,9 @@
           <span class="terminal-status" id="terminal-status">Disconnected</span>
           <div class="terminal-actions">
             <span class="copy-toast" id="copy-toast"></span>
-            <button class="term-btn" onclick="copyTerminal()">Copy All</button>
-            <button class="term-btn" onclick="saveTerminal()">Save to File</button>
-            <button class="term-btn verbose-btn" id="verbose-btn" onclick="toggleVerbose()">
+            <button class="term-btn term-btn-green" onclick="copyTerminal()">Copy All</button>
+            <button class="term-btn term-btn-green" onclick="saveTerminal()">Save to File</button>
+            <button class="term-btn term-btn-green verbose-btn" id="verbose-btn" onclick="toggleVerbose()">
               <span class="verbose-check-icon" id="verbose-icon">&#x2610;</span> Verbose
             </button>
           </div>

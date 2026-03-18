@@ -648,6 +648,8 @@ body {
   font-family: var(--font);
 }
 .term-btn:hover { background: #475569; }
+.term-btn-green { background: var(--accent); border-color: var(--accent); color: #fff; }
+.term-btn-green:hover { background: var(--accent-hover); }
 .term-btn.verbose-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .verbose-check-icon { font-size: 13px; }
 .copy-toast {
