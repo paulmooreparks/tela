@@ -66,6 +66,13 @@ body {
   font-family: var(--font);
 }
 .topbar-btn:hover { background: rgba(255,255,255,0.1); }
+.topbar-btn.update-btn {
+  background: #f39c12;
+  color: #fff;
+  border-color: #f39c12;
+  font-weight: 600;
+}
+.topbar-btn.update-btn:hover { background: #e67e22; }
 .topbar-btn.connect-btn {
   background: var(--accent);
   color: #fff;

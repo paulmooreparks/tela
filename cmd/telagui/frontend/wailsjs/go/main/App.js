@@ -54,6 +54,14 @@ export function GetStoredToken(arg1) {
   return window['go']['main']['App']['GetStoredToken'](arg1);
 }
 
+export function GetUpdateVersion() {
+  return window['go']['main']['App']['GetUpdateVersion']();
+}
+
+export function HasUpdate() {
+  return window['go']['main']['App']['HasUpdate']();
+}
+
 export function LoadProfile() {
   return window['go']['main']['App']['LoadProfile']();
 }
@@ -68,6 +76,10 @@ export function RemoveHub(arg1) {
 
 export function ResolveAllPorts(arg1) {
   return window['go']['main']['App']['ResolveAllPorts'](arg1);
+}
+
+export function RestartToUpdate() {
+  return window['go']['main']['App']['RestartToUpdate']();
 }
 
 export function SaveProfile(arg1) {

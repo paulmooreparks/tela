@@ -23,6 +23,28 @@ function switchTab(name, btn) {
 // --- Startup ---
 loadSavedSelections().then(refreshAll);
 
+// Check for updates after a short delay
+setTimeout(checkForUpdate, 3000);
+
+function checkForUpdate() {
+  goApp.HasUpdate().then(function (pending) {
+    var btn = document.getElementById('update-btn');
+    if (pending) {
+      goApp.GetUpdateVersion().then(function (ver) {
+        btn.textContent = 'Restart to Update (' + ver + ')';
+        btn.classList.remove('hidden');
+      });
+    }
+  });
+}
+
+function restartToUpdate() {
+  var btn = document.getElementById('update-btn');
+  btn.textContent = 'Updating...';
+  btn.disabled = true;
+  goApp.RestartToUpdate();
+}
+
 function loadSavedSelections() {
   return goApp.LoadProfile().then(function (connections) {
     if (!connections) return;

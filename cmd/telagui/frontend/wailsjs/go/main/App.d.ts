@@ -28,6 +28,10 @@ export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
 export function GetStoredToken(arg1:string):Promise<string>;
 
+export function GetUpdateVersion():Promise<string>;
+
+export function HasUpdate():Promise<boolean>;
+
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
 export function ReleaseLocalPort(arg1:number):Promise<void>;
@@ -35,6 +39,8 @@ export function ReleaseLocalPort(arg1:number):Promise<void>;
 export function RemoveHub(arg1:string):Promise<void>;
 
 export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>;
+
+export function RestartToUpdate():Promise<void>;
 
 export function SaveProfile(arg1:string):Promise<string>;
 
