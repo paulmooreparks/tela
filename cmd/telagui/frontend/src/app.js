@@ -195,8 +195,17 @@ function refreshProfileList() {
 }
 
 function switchProfile(name) {
+  // Cancel any pending persist so old selections don't write to the new profile
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
   goApp.SwitchProfile(name).then(function () {
     selectedServices = {};
+    hubStatusCache = {};
+    selectedHubURL = null;
+    selectedMachineId = null;
+    document.getElementById('detail-pane').innerHTML = '<div class="empty-state"><p>Profile switched to ' + escHtml(name) + '. Select a hub or machine.</p></div>';
     loadSavedSelections().then(function () {
       refreshAll();
       updateConnectButton();
