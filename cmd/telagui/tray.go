@@ -2,10 +2,14 @@ package main
 
 import (
 	_ "embed"
+	"runtime"
 
 	"github.com/energye/systray"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+//go:embed build/windows/icon.ico
+var trayIconICO []byte
 
 //go:embed build/appicon.png
 var trayIconPNG []byte
@@ -13,7 +17,11 @@ var trayIconPNG []byte
 // setupTray creates the system tray icon with a context menu.
 func (a *App) setupTray() {
 	go systray.Run(func() {
-		systray.SetIcon(trayIconPNG)
+		if runtime.GOOS == "windows" {
+			systray.SetIcon(trayIconICO)
+		} else {
+			systray.SetIcon(trayIconPNG)
+		}
 		systray.SetTitle("TelaGUI")
 		systray.SetTooltip("TelaGUI - Tela connection manager")
 
