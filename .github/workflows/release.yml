@@ -219,11 +219,19 @@ jobs:
         shell: powershell
         run: |
           choco install nsis -y --no-progress
+          $env:PATH = "C:\Program Files (x86)\NSIS;$env:PATH"
+          Write-Host "makensis location:"
+          Get-Command makensis -ErrorAction SilentlyContinue | Select-Object Source
           cd cmd/telagui
           wails build -nsis -ldflags="-X main.version=${{ steps.version.outputs.tag }}"
+          Write-Host "Build output:"
+          Get-ChildItem -Path build/bin -Recurse | Select-Object FullName, Length
           $installer = Get-ChildItem -Path build/bin -Filter "*installer*" -Recurse | Select-Object -First 1
           if ($installer) {
+            Write-Host "Found installer: $($installer.FullName)"
             Copy-Item $installer.FullName -Destination "../../dist/telagui-windows-amd64-setup.exe"
+          } else {
+            Write-Host "WARNING: No installer file found in build/bin"
           }
 
       - name: Upload build artifacts
