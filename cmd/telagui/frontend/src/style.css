@@ -316,7 +316,7 @@ body {
 .profile-yaml-preview {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 180px); /* topbar + tabs + padding */
+  height: calc(100vh - 140px); /* topbar(44) + tabs(36) + padding(48) + margin(12) */
 }
 .profile-yaml-header {
   display: flex;
@@ -326,7 +326,7 @@ body {
   flex-shrink: 0;
 }
 .profile-yaml-header h3 { font-size: 16px; font-weight: 700; }
-.profile-yaml-preview .connect-output { flex: 1; min-height: 0; overflow-y: auto; }
+.profile-yaml-preview .connect-output { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
 .detail-header { margin-bottom: 20px; }
 .detail-header h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 .detail-header .meta { font-size: 13px; color: var(--text-muted); }
