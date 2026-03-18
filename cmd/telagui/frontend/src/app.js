@@ -827,8 +827,10 @@ function refreshSettings() {
   goApp.GetSettings().then(function (s) {
     document.getElementById('setting-autoConnect').checked = s.autoConnect;
     document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;
-    document.getElementById('setting-minimizeToTray').checked = s.minimizeToTray;
+    var radios = document.querySelectorAll('input[name="minimizeTo"]');
+    radios.forEach(function (r) { r.checked = (r.value === (s.minimizeTo || 'taskbar')); });
     document.getElementById('setting-startMinimized').checked = s.startMinimized;
+    document.getElementById('setting-minimizeOnClose').checked = s.minimizeOnClose;
     document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
   });
@@ -841,8 +843,9 @@ function saveSetting() {
   var s = {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
-    minimizeToTray: document.getElementById('setting-minimizeToTray').checked,
+    minimizeTo: document.querySelector('input[name="minimizeTo"]:checked').value,
     startMinimized: document.getElementById('setting-startMinimized').checked,
+    minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
     autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
     verboseDefault: document.getElementById('setting-verboseDefault').checked
   };

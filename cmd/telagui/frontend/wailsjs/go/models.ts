@@ -235,8 +235,9 @@ export namespace main {
 	export class Settings {
 	    autoConnect: boolean;
 	    reconnectOnDrop: boolean;
-	    minimizeToTray: boolean;
+	    minimizeTo: string;
 	    startMinimized: boolean;
+	    minimizeOnClose: boolean;
 	    autoCheckUpdates: boolean;
 	    verboseDefault: boolean;
 	
@@ -248,8 +249,9 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.autoConnect = source["autoConnect"];
 	        this.reconnectOnDrop = source["reconnectOnDrop"];
-	        this.minimizeToTray = source["minimizeToTray"];
+	        this.minimizeTo = source["minimizeTo"];
 	        this.startMinimized = source["startMinimized"];
+	        this.minimizeOnClose = source["minimizeOnClose"];
 	        this.autoCheckUpdates = source["autoCheckUpdates"];
 	        this.verboseDefault = source["verboseDefault"];
 	    }

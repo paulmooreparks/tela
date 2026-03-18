@@ -36,9 +36,13 @@ func main() {
 				return false // allow quit
 			}
 			s := app.GetSettings()
-			if s.MinimizeToTray {
-				wailsRuntime.WindowHide(app.ctx)
-				return true // prevent close, hide instead
+			if s.MinimizeOnClose {
+				if s.MinimizeTo == "tray" {
+					wailsRuntime.WindowHide(app.ctx)
+				} else {
+					wailsRuntime.WindowMinimise(app.ctx)
+				}
+				return true // prevent close, minimize instead
 			}
 			return false // allow close
 		},

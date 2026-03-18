@@ -141,11 +141,15 @@ func (a *App) startup(ctx context.Context) {
 	// Apply startup settings
 	settings := a.GetSettings()
 
-	// Start minimized (belt-and-suspenders with StartHidden in main.go)
+	// Apply start minimized
 	if settings.StartMinimized {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
-			wailsRuntime.WindowHide(a.ctx)
+			if settings.MinimizeTo == "tray" {
+				wailsRuntime.WindowHide(a.ctx)
+			} else {
+				wailsRuntime.WindowMinimise(a.ctx)
+			}
 		}()
 	}
 
@@ -1378,20 +1382,22 @@ func (a *App) installTool(name, version string) (string, error) {
 
 // Settings holds user preferences persisted to disk.
 type Settings struct {
-	AutoConnect     bool `yaml:"autoConnect" json:"autoConnect"`
-	ReconnectOnDrop bool `yaml:"reconnectOnDrop" json:"reconnectOnDrop"`
-	MinimizeToTray  bool `yaml:"minimizeToTray" json:"minimizeToTray"`
-	StartMinimized  bool `yaml:"startMinimized" json:"startMinimized"`
-	AutoCheckUpdates bool `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
-	VerboseDefault  bool `yaml:"verboseDefault" json:"verboseDefault"`
+	AutoConnect      bool   `yaml:"autoConnect" json:"autoConnect"`
+	ReconnectOnDrop  bool   `yaml:"reconnectOnDrop" json:"reconnectOnDrop"`
+	MinimizeTo       string `yaml:"minimizeTo" json:"minimizeTo"`             // "taskbar" or "tray"
+	StartMinimized   bool   `yaml:"startMinimized" json:"startMinimized"`
+	MinimizeOnClose  bool   `yaml:"minimizeOnClose" json:"minimizeOnClose"`
+	AutoCheckUpdates bool   `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
+	VerboseDefault   bool   `yaml:"verboseDefault" json:"verboseDefault"`
 }
 
 func defaultSettings() Settings {
 	return Settings{
 		AutoConnect:      false,
 		ReconnectOnDrop:  true,
-		MinimizeToTray:   false,
+		MinimizeTo:       "taskbar",
 		StartMinimized:   false,
+		MinimizeOnClose:  false,
 		AutoCheckUpdates: true,
 		VerboseDefault:   false,
 	}

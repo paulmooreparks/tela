@@ -792,6 +792,30 @@ body {
   font-size: 12px;
   word-break: break-all;
 }
+.settings-radio-group {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+}
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.settings-radio input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.settings-select {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 14px;
+  font-family: var(--font);
+}
 .settings-actions {
   display: flex;
   gap: 8px;

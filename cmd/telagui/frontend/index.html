@@ -17,6 +17,7 @@
       <div class="topbar-right">
         <button class="topbar-btn update-btn hidden" id="update-btn" onclick="restartToUpdate()">Restart to Update</button>
         <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
+        <button class="topbar-btn" onclick="goApp.QuitApp()">Quit</button>
       </div>
     </div>
 
@@ -101,18 +102,28 @@
 
         <div class="settings-section">
           <h2>Appearance</h2>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-minimizeToTray" onchange="saveSetting()">
+          <div class="settings-item settings-item-static">
             <div class="settings-item-text">
-              <span class="settings-item-label">Minimize to system tray on close</span>
-              <span class="settings-item-desc">Keep TelaGUI running in the system tray when the window is closed.</span>
+              <span class="settings-item-label">Minimize to</span>
+              <span class="settings-item-desc">Where TelaGUI goes when minimized.</span>
+              <div class="settings-radio-group">
+                <label class="settings-radio"><input type="radio" name="minimizeTo" value="taskbar" onchange="saveSetting()"> Taskbar</label>
+                <label class="settings-radio"><input type="radio" name="minimizeTo" value="tray" onchange="saveSetting()"> System tray</label>
+              </div>
             </div>
-          </label>
+          </div>
           <label class="settings-item">
             <input type="checkbox" id="setting-startMinimized" onchange="saveSetting()">
             <div class="settings-item-text">
               <span class="settings-item-label">Start minimized</span>
-              <span class="settings-item-desc">Launch TelaGUI minimized to the taskbar or system tray.</span>
+              <span class="settings-item-desc">Launch minimized to the selected destination above.</span>
+            </div>
+          </label>
+          <label class="settings-item">
+            <input type="checkbox" id="setting-minimizeOnClose" onchange="saveSetting()">
+            <div class="settings-item-text">
+              <span class="settings-item-label">Minimize on window close</span>
+              <span class="settings-item-desc">Minimize instead of exiting when you click the X button.</span>
             </div>
           </label>
         </div>
