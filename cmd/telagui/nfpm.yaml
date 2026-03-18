@@ -1,0 +1,42 @@
+# nfpm configuration for building .deb and .rpm packages
+# Built by: nfpm pkg --packager deb --target dist/
+# Docs: https://nfpm.goreleaser.com/
+
+name: telagui
+arch: "${GOARCH}"
+platform: linux
+version: "${VERSION}"
+maintainer: "Paul Parks <info@parkscomputing.com>"
+description: |
+  TelaGUI - Desktop client for Tela encrypted remote access.
+  Select hubs, machines, and services. One click to connect.
+  Manages CLI tools automatically.
+vendor: "Paul Parks"
+homepage: "https://github.com/paulmooreparks/tela"
+license: "MIT"
+
+depends:
+  - libgtk-3-0
+  - libwebkit2gtk-4.1-0
+
+contents:
+  - src: ./build/bin/telagui
+    dst: /usr/bin/telagui
+    file_info:
+      mode: 0755
+
+  - src: ../../logo.png
+    dst: /usr/share/icons/hicolor/256x256/apps/telagui.png
+
+  - src: ./telagui.desktop
+    dst: /usr/share/applications/telagui.desktop
+
+overrides:
+  deb:
+    depends:
+      - libgtk-3-0t64 | libgtk-3-0
+      - libwebkit2gtk-4.1-0
+  rpm:
+    depends:
+      - gtk3
+      - webkit2gtk4.1

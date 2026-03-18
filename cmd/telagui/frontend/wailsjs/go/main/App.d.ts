@@ -36,6 +36,8 @@ export function GetVersion():Promise<string>;
 
 export function HasUpdate():Promise<boolean>;
 
+export function IsPackageManaged():Promise<boolean>;
+
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
 export function ReleaseLocalPort(arg1:number):Promise<void>;

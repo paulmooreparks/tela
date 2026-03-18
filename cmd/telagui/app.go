@@ -181,6 +181,34 @@ func (a *App) checkForUpdates() {
 	}
 }
 
+// isPackageManaged returns true if telagui was installed via a package manager
+// (deb, rpm, msi, dmg). In that case, self-update is disabled and the user
+// should update via their package manager.
+func isPackageManaged() bool {
+	exe := selfExePath()
+	if exe == "" {
+		return false
+	}
+	// Linux: installed to /usr/bin or /usr/local/bin by deb/rpm
+	if strings.HasPrefix(exe, "/usr/bin/") || strings.HasPrefix(exe, "/usr/local/bin/") {
+		return true
+	}
+	// macOS: installed to /Applications
+	if strings.HasPrefix(exe, "/Applications/") {
+		return true
+	}
+	// Windows: installed to Program Files
+	pf := os.Getenv("ProgramFiles")
+	pfx86 := os.Getenv("ProgramFiles(x86)")
+	if pf != "" && strings.HasPrefix(strings.ToLower(exe), strings.ToLower(pf)) {
+		return true
+	}
+	if pfx86 != "" && strings.HasPrefix(strings.ToLower(exe), strings.ToLower(pfx86)) {
+		return true
+	}
+	return false
+}
+
 // selfExePath returns the absolute path of the currently running telagui binary.
 func selfExePath() string {
 	exe, err := os.Executable()
@@ -314,6 +342,11 @@ func (a *App) HasUpdate() bool {
 	return a.updatePending
 }
 
+// IsPackageManaged returns true if installed via a package manager.
+func (a *App) IsPackageManaged() bool {
+	return isPackageManaged()
+}
+
 // GetUpdateVersion returns the version of the pending update.
 func (a *App) GetUpdateVersion() string {
 	a.mu.Lock()
@@ -338,6 +371,15 @@ func (a *App) RestartToUpdate() error {
 	a.logCommand("Update tela to "+ver, "# downloading tela "+ver)
 	a.installTool("tela", ver)
 
+	if isPackageManaged() {
+		// Package-managed: CLI updated, GUI must be updated via package manager
+		a.mu.Lock()
+		a.updatePending = false
+		a.mu.Unlock()
+		a.logCommand("CLI updated to "+ver, "# GUI update available via your package manager")
+		return nil
+	}
+
 	// Download telagui update to staging path (next to running binary)
 	a.logCommand("Update telagui to "+ver, "# downloading telagui "+ver)
 	a.downloadSelfUpdate(ver)
@@ -348,8 +390,6 @@ func (a *App) RestartToUpdate() error {
 	}
 
 	// Apply the update now before relaunching.
-	// On Windows, we can rename a running exe (just can't delete it).
-	// applyPendingSelfUpdate renames current -> .old, update -> current.
 	a.applyPendingSelfUpdate()
 
 	// Relaunch from the same path (which is now the new binary)

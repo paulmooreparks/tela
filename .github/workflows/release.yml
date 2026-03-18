@@ -202,6 +202,28 @@ jobs:
               dist/telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}${{ matrix.ext }}
           fi
 
+      - name: Build Linux packages
+        if: matrix.goos == 'linux'
+        shell: bash
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+          cd cmd/telagui
+          export VERSION="${{ steps.version.outputs.tag }}"
+          VERSION="${VERSION#v}"  # strip leading v for nfpm
+          export GOARCH="${{ matrix.goarch }}"
+          nfpm pkg --packager deb --target ../../dist/telagui-${{ matrix.goarch }}${{ matrix.suffix || '' }}.deb
+          nfpm pkg --packager rpm --target ../../dist/telagui-${{ matrix.goarch }}${{ matrix.suffix || '' }}.rpm
+
+      - name: Build Windows installer
+        if: matrix.goos == 'windows'
+        shell: bash
+        run: |
+          cd cmd/telagui
+          wails build -nsis -ldflags="-X main.version=${{ steps.version.outputs.tag }}" || true
+          if [ -f build/bin/telagui-amd64-installer.exe ]; then
+            cp build/bin/telagui-amd64-installer.exe ../../dist/telagui-windows-amd64-setup.exe
+          fi
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

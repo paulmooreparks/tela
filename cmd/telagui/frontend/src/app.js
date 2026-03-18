@@ -50,12 +50,21 @@ function checkForUpdate() {
     var btn = document.getElementById('update-btn');
     if (pending) {
       goApp.GetUpdateVersion().then(function (ver) {
-        // Only show if something is actually behind
         goApp.GetToolVersions().then(function (tv) {
-          if (tv.guiBehind || tv.cliBehind) {
-            btn.textContent = 'Restart to Update (' + ver + ')';
-            btn.classList.remove('hidden');
-          }
+          if (!tv.guiBehind && !tv.cliBehind) return;
+
+          goApp.IsPackageManaged().then(function (managed) {
+            if (managed) {
+              if (tv.cliBehind) {
+                btn.textContent = 'Update CLI (' + ver + ')';
+                btn.classList.remove('hidden');
+              }
+              // Don't offer GUI update for package-managed installs
+            } else {
+              btn.textContent = 'Restart to Update (' + ver + ')';
+              btn.classList.remove('hidden');
+            }
+          });
         });
       });
     }

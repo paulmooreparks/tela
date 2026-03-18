@@ -70,6 +70,10 @@ export function HasUpdate() {
   return window['go']['main']['App']['HasUpdate']();
 }
 
+export function IsPackageManaged() {
+  return window['go']['main']['App']['IsPackageManaged']();
+}
+
 export function LoadProfile() {
   return window['go']['main']['App']['LoadProfile']();
 }

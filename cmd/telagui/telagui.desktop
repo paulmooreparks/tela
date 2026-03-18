@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=TelaGUI
+Comment=Desktop client for Tela encrypted remote access
+Exec=telagui
+Icon=telagui
+Terminal=false
+Type=Application
+Categories=Network;RemoteAccess;
+Keywords=tela;vpn;wireguard;remote;ssh;tunnel;
