@@ -11,8 +11,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // controlOutput captures log output for the browser terminal.
@@ -37,6 +40,20 @@ func (w *controlLogWriter) Write(p []byte) (int, error) {
 		controlOutput = controlOutput[len(controlOutput)-512*1024:]
 	}
 	controlOutputMu.Unlock()
+
+	// Batch log lines for WebSocket broadcast (debounce: 100ms max).
+	logBatchMu.Lock()
+	logBatchBuf.Write(p)
+	if logBatchTimer == nil {
+		logBatchTimer = time.AfterFunc(100*time.Millisecond, func() {
+			logBatchMu.Lock()
+			logBatchTimer = nil
+			logBatchMu.Unlock()
+			flushLogBatch()
+		})
+	}
+	logBatchMu.Unlock()
+
 	return n, err
 }
 
@@ -66,6 +83,23 @@ func addBoundService(svc BoundService) {
 	boundServicesMu.Lock()
 	defer boundServicesMu.Unlock()
 	boundServices = append(boundServices, svc)
+
+	// Emit service_bound event to WebSocket clients.
+	emitEvent(struct {
+		Type    string `json:"type"`
+		Name    string `json:"name"`
+		Local   int    `json:"local"`
+		Remote  int    `json:"remote"`
+		Machine string `json:"machine"`
+		Hub     string `json:"hub"`
+	}{
+		Type:    "service_bound",
+		Name:    svc.Name,
+		Local:   svc.Local,
+		Remote:  svc.Remote,
+		Machine: svc.Machine,
+		Hub:     svc.Hub,
+	})
 }
 
 // activeConnection describes one tunnel connection for the control API.
@@ -106,6 +140,91 @@ func snapshotBoundServices() []BoundService {
 	out := make([]BoundService, len(boundServices))
 	copy(out, boundServices)
 	return out
+}
+
+// ── WebSocket event broadcasting ──────────────────────────────────
+
+// wsClient represents a connected WebSocket client.
+type wsClient struct {
+	conn   *websocket.Conn
+	events chan []byte
+}
+
+var (
+	wsClientsMu sync.Mutex
+	wsClients   []*wsClient
+)
+
+// wsEvent is the JSON envelope for server-to-client events.
+type wsEvent struct {
+	Type string `json:"type"`
+}
+
+// addWSClient registers a new WebSocket client for event broadcasting.
+func addWSClient(c *wsClient) {
+	wsClientsMu.Lock()
+	defer wsClientsMu.Unlock()
+	wsClients = append(wsClients, c)
+}
+
+// removeWSClient unregisters a WebSocket client.
+func removeWSClient(c *wsClient) {
+	wsClientsMu.Lock()
+	defer wsClientsMu.Unlock()
+	for i, cl := range wsClients {
+		if cl == c {
+			wsClients = append(wsClients[:i], wsClients[i+1:]...)
+			return
+		}
+	}
+}
+
+// broadcastEvent sends a JSON event to all connected WebSocket clients.
+// If a client's channel is full, the event is dropped for that client.
+func broadcastEvent(data []byte) {
+	wsClientsMu.Lock()
+	defer wsClientsMu.Unlock()
+	for _, c := range wsClients {
+		select {
+		case c.events <- data:
+		default:
+			// Channel full, drop event for this client.
+		}
+	}
+}
+
+// emitEvent marshals an event and broadcasts it to all WebSocket clients.
+func emitEvent(v interface{}) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("[control] failed to marshal event: %v", err)
+		return
+	}
+	broadcastEvent(data)
+}
+
+// controlLogWriter debounce state for WebSocket log_line events.
+var (
+	logBatchMu    sync.Mutex
+	logBatchBuf   strings.Builder
+	logBatchTimer *time.Timer
+)
+
+// flushLogBatch sends any buffered log lines as a log_line event.
+func flushLogBatch() {
+	logBatchMu.Lock()
+	if logBatchBuf.Len() == 0 {
+		logBatchMu.Unlock()
+		return
+	}
+	text := logBatchBuf.String()
+	logBatchBuf.Reset()
+	logBatchMu.Unlock()
+
+	emitEvent(struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}{Type: "log_line", Text: text})
 }
 
 // controlFilePath returns the path to the control socket info file.
@@ -257,6 +376,120 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	// WebSocket upgrade for real-time events.
+	var controlUpgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Localhost only, allow all origins.
+		},
+	}
+
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		// Auth via query param.
+		qToken := r.URL.Query().Get("token")
+		if subtle.ConstantTimeCompare([]byte(qToken), []byte(token)) != 1 {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		conn, err := controlUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("[control] WebSocket upgrade failed: %v", err)
+			return
+		}
+
+		client := &wsClient{
+			conn:   conn,
+			events: make(chan []byte, 64),
+		}
+		addWSClient(client)
+		log.Printf("[control] WebSocket client connected")
+
+		// Emit initial connection_state.
+		emitEvent(struct {
+			Type        string `json:"type"`
+			Connected   bool   `json:"connected"`
+			ProfileName string `json:"profileName"`
+		}{Type: "connection_state", Connected: true, ProfileName: profileName})
+
+		// Writer goroutine: sends events and ping keepalives.
+		go func() {
+			ticker := time.NewTicker(wsPingInterval)
+			defer ticker.Stop()
+			defer func() {
+				removeWSClient(client)
+				conn.Close()
+			}()
+			for {
+				select {
+				case msg, ok := <-client.events:
+					if !ok {
+						return
+					}
+					_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+					if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+						return
+					}
+				case <-ticker.C:
+					if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(wsWriteWait)); err != nil {
+						return
+					}
+				case <-stopCh:
+					// Connection is shutting down. Try to send a final event.
+					data, _ := json.Marshal(struct {
+						Type      string `json:"type"`
+						Connected bool   `json:"connected"`
+					}{Type: "connection_state", Connected: false})
+					_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+					_ = conn.WriteMessage(websocket.TextMessage, data)
+					_ = conn.WriteMessage(websocket.CloseMessage,
+						websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutting down"))
+					return
+				}
+			}
+		}()
+
+		// Reader goroutine: reads commands from client.
+		conn.SetReadDeadline(time.Now().Add(wsPongWait))
+		conn.SetPongHandler(func(string) error {
+			conn.SetReadDeadline(time.Now().Add(wsPongWait))
+			return nil
+		})
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				break
+			}
+			var cmd struct {
+				Type    string `json:"type"`
+				Enabled *bool  `json:"enabled,omitempty"`
+			}
+			if err := json.Unmarshal(msg, &cmd); err != nil {
+				continue
+			}
+			switch cmd.Type {
+			case "disconnect":
+				log.Println("[control] disconnect requested via WebSocket")
+				log.Println("shutting down all connections")
+				close(stopCh)
+			case "reconnect":
+				log.Println("[control] reconnect requested via WebSocket")
+				// Placeholder: reconnect logic can be wired up later.
+			case "set_verbose":
+				if cmd.Enabled != nil {
+					verbose = *cmd.Enabled
+				} else {
+					verbose = !verbose
+				}
+				log.Printf("[control] verbose logging %s (via WebSocket)",
+					map[bool]string{true: "enabled", false: "disabled"}[verbose])
+			}
+		}
+		// Reader exited; clean up.
+		removeWSClient(client)
+		conn.Close()
+		log.Printf("[control] WebSocket client disconnected")
 	})
 
 	// Browser-accessible terminal -- no auth required (localhost only)

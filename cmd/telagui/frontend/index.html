@@ -17,13 +17,14 @@
       <div class="topbar-right">
         <button class="topbar-btn update-btn hidden" id="update-btn" onclick="restartToUpdate()">Restart to Update</button>
         <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
-        <button class="topbar-btn" id="quit-btn" onclick="goApp.QuitApp()">Quit</button>
+        <button class="topbar-btn" id="quit-btn" onclick="doQuit()">Quit</button>
       </div>
     </div>
 
     <!-- Tab bar -->
     <div class="main-tab-bar">
-      <button class="main-tab active" onclick="switchTab('profile', this)">Profiles</button>
+      <button class="main-tab active" onclick="switchTab('status', this)">Status</button>
+      <button class="main-tab" onclick="switchTab('profile', this)">Profiles</button>
       <button class="main-tab" onclick="switchTab('terminal', this)">Terminal</button>
       <button class="main-tab" onclick="switchTab('log', this)">Command Log</button>
       <button class="main-tab" onclick="switchTab('hubs', this)">Hubs</button>
@@ -31,8 +32,21 @@
       <button class="main-tab" onclick="switchTab('about', this)">About</button>
     </div>
 
+    <!-- Status tab -->
+    <div class="tab-pane" id="tab-status">
+      <div class="status-pane">
+        <div class="status-header">
+          <h1 id="status-profile-name">telagui</h1>
+          <span class="status-connection-state" id="status-conn-state">Disconnected</span>
+        </div>
+        <div id="status-services">
+          <p class="empty-hint">No services selected. Go to <strong>Profiles</strong> to select hubs, machines, and services.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Profile tab -->
-    <div class="tab-pane" id="tab-profile">
+    <div class="tab-pane hidden" id="tab-profile">
       <div class="main-content">
         <div class="sidebar" id="sidebar">
           <div class="sidebar-resize-handle" id="sidebar-resize"></div>

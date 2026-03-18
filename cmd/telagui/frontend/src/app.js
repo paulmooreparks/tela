@@ -16,11 +16,216 @@ function switchTab(name, btn) {
   document.querySelectorAll('.main-tab').forEach(function (el) { el.classList.remove('active'); });
   document.getElementById('tab-' + name).classList.remove('hidden');
   btn.classList.add('active');
+  if (name === 'status') refreshStatus();
   if (name === 'terminal') refreshTerminal();
   if (name === 'log') refreshLog();
   if (name === 'about') refreshAbout();
   if (name === 'settings') refreshSettings();
   if (name === 'hubs') refreshHubsTab();
+}
+
+// --- Status Tab ---
+
+function refreshStatus() {
+  goApp.GetCurrentProfile().then(function (profileName) {
+    document.getElementById('status-profile-name').textContent = profileName;
+  });
+
+  goApp.GetConnectionState().then(function (state) {
+    var badge = document.getElementById('status-conn-state');
+    if (state.connected) {
+      badge.textContent = 'Connected (PID ' + state.pid + ')';
+      badge.className = 'status-connection-state connected';
+    } else {
+      badge.textContent = 'Disconnected';
+      badge.className = 'status-connection-state disconnected';
+    }
+
+    var container = document.getElementById('status-services');
+
+    // Build service list from selectedServices OR from saved profile
+    var groups = {};
+    var keys = Object.keys(selectedServices);
+
+    if (keys.length > 0) {
+      keys.forEach(function (key) {
+        var sel = selectedServices[key];
+        var gk = sel.hub + '||' + sel.machine;
+        if (!groups[gk]) {
+          groups[gk] = { hub: sel.hub, hubName: hubNameFromURL(sel.hub), machine: sel.machine, services: [] };
+        }
+        groups[gk].services.push({ service: sel.service, servicePort: sel.servicePort, localPort: sel.localPort });
+      });
+    }
+
+    // If no live selections, load from saved profile
+    if (Object.keys(groups).length === 0) {
+      var profileConns = null;
+      // Use a synchronous-style call via then
+      goApp.LoadProfile().then(function (conns) {
+        if (!conns || conns.length === 0) {
+          container.innerHTML = '<p class="empty-hint">No services selected. Go to <strong>Profiles</strong> to select hubs, machines, and services.</p>';
+          return;
+        }
+        var g2 = {};
+        conns.forEach(function (conn) {
+          var gk = conn.hub + '||' + conn.machine;
+          if (!g2[gk]) {
+            g2[gk] = { hub: conn.hub, hubName: hubNameFromURL(conn.hub), machine: conn.machine, services: [] };
+          }
+          (conn.services || []).forEach(function (svc) {
+            g2[gk].services.push({ service: svc.name, servicePort: svc.local, localPort: svc.local });
+          });
+        });
+        renderStatusTable(container, g2, state);
+      });
+      return;
+    }
+
+    renderStatusTable(container, groups, state);
+  });
+}
+
+function renderStatusTable(container, groups, state) {
+    if (Object.keys(groups).length === 0) {
+      container.innerHTML = '<p class="empty-hint">No services selected. Go to <strong>Profiles</strong> to select hubs, machines, and services.</p>';
+      return;
+    }
+
+    // Collect all local ports for live checking
+    var allPorts = [];
+    Object.keys(groups).forEach(function (gk) {
+      groups[gk].services.forEach(function (svc) {
+        allPorts.push(svc.localPort);
+      });
+    });
+
+    // Parse transport info from tela output per machine
+    function getMachineTransport(machine, output) {
+      if (!output) return '';
+      // Find the most recent transport for this machine
+      var lines = output.split('\n');
+      var transport = 'WebSocket';
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line.indexOf('requesting session for: ' + machine) !== -1 ||
+            line.indexOf('→ ' + machine) !== -1) {
+          // Reset for this machine's block
+          transport = 'WebSocket';
+        }
+        if (line.indexOf('upgraded to UDP relay') !== -1) transport = 'UDP relay';
+        if (line.indexOf('hole-punching') !== -1) transport = 'P2P (punching)';
+        if (line.indexOf('direct tunnel failed') !== -1) transport = 'UDP relay';
+        if (line.indexOf('tunnel connected to') !== -1) transport = transport; // keep current
+      }
+      return transport;
+    }
+
+    // No port probing -- will be replaced by WebSocket events
+    var portCheckPromise = Promise.resolve({});
+
+    portCheckPromise.then(function (liveMap) {
+      var html = '<table class="status-service-table"><thead><tr>'
+        + '<th style="width:30px"></th>'
+        + '<th style="width:22%">Service</th>'
+        + '<th style="width:15%">Remote</th>'
+        + '<th style="width:22%">Local</th>'
+        + '<th style="width:18%">Status</th>'
+        + '<th style="width:18%">Transport</th>'
+        + '</tr></thead><tbody>';
+
+      Object.keys(groups).forEach(function (gk) {
+        var g = groups[gk];
+        var transport = state.connected ? getMachineTransport(g.machine, state.output) : '';
+
+        html += '<tr class="status-machine-row"><td colspan="6">'
+          + '<strong>' + escHtml(g.machine) + '</strong>'
+          + '<span class="status-hub-label">on ' + escHtml(g.hubName) + '</span>'
+          + '</td></tr>';
+
+        g.services.forEach(function (svc) {
+          var indicatorClass = 'unavailable';
+          var statusText = 'Not connected';
+          var localClass = 'inactive';
+          var transportText = '';
+
+          if (state.connected) {
+            var portStr = 'localhost:' + svc.localPort;
+            var skipStr = 'SKIP port ' + svc.servicePort;
+            var isLive = liveMap && liveMap[svc.localPort];
+
+            if (state.output && state.output.indexOf(skipStr) !== -1) {
+              indicatorClass = 'warning';
+              statusText = 'Port conflict';
+            } else if (isLive) {
+              indicatorClass = 'available';
+              statusText = 'Active';
+              localClass = 'active';
+              transportText = transport;
+            } else if (state.output && state.output.indexOf(portStr) !== -1) {
+              indicatorClass = 'available';
+              statusText = 'Listening';
+              localClass = 'active';
+              transportText = transport;
+            } else {
+              indicatorClass = 'unavailable';
+              statusText = 'Connecting...';
+            }
+          }
+
+          html += '<tr>'
+            + '<td><span class="status-svc-indicator ' + indicatorClass + '"></span></td>'
+            + '<td>' + escHtml(svc.service) + '</td>'
+            + '<td><span class="status-remote-port">:' + svc.servicePort + '</span></td>'
+            + '<td><span class="status-local-port ' + localClass + '">localhost:' + svc.localPort + '</span></td>'
+            + '<td>' + statusText + '</td>'
+            + '<td><span class="status-remote-port">' + transportText + '</span></td>'
+            + '</tr>';
+        });
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    });
+  });
+}
+
+// --- WebSocket Events ---
+// Listen for real-time events from tela control API
+if (window.runtime) {
+  window.runtime.EventsOn('tela:event', function (eventJSON) {
+    try {
+      var evt = JSON.parse(eventJSON);
+      handleTelaEvent(evt);
+    } catch (e) {}
+  });
+}
+
+function handleTelaEvent(evt) {
+  switch (evt.type) {
+    case 'service_bound':
+      // Update status display
+      refreshStatus();
+      break;
+    case 'log_line':
+      // Append to terminal if visible
+      if (!document.getElementById('tab-terminal').classList.contains('hidden')) {
+        var output = document.getElementById('terminal-output');
+        if (output && !terminalFrozen) {
+          output.textContent += evt.text;
+          if (terminalAutoScroll) {
+            requestAnimationFrame(function () {
+              output.scrollTop = output.scrollHeight;
+            });
+          }
+        }
+      }
+      break;
+    case 'connection_state':
+      updateConnectButton();
+      refreshStatus();
+      break;
+  }
 }
 
 // --- Sidebar Resize ---
@@ -72,6 +277,7 @@ refreshVersionDisplay();
 refreshProfileList();
 
 loadSavedSelections().then(function () {
+  refreshStatus();
   refreshAll();
   // Auto-connect if enabled and there are saved selections
   goApp.ShouldAutoConnect().then(function (should) {
@@ -686,6 +892,11 @@ function doConnect() {
     startConnectionPoll();
     updateConnectButton();
     refreshCurrentPane();
+    refreshStatus();
+    // Connect WebSocket for real-time events (delay for control API to start)
+    setTimeout(function () {
+      goApp.ConnectControlWS().catch(function () {});
+    }, 2000);
     // Apply verbose preference (saved toggle or default setting)
     setTimeout(function () {
       if (verboseMode) {
@@ -708,6 +919,18 @@ function doConnect() {
   });
 }
 
+function doQuit() {
+  var connectBtn = document.getElementById('connect-btn');
+  var quitBtn = document.getElementById('quit-btn');
+  quitBtn.textContent = 'Quitting...';
+  quitBtn.disabled = true;
+  quitBtn.className = 'topbar-btn disconnecting-btn';
+  connectBtn.textContent = 'Disconnecting...';
+  connectBtn.className = 'topbar-btn disconnecting-btn';
+  connectBtn.disabled = true;
+  goApp.QuitApp();
+}
+
 function doDisconnect() {
   // Show "Disconnecting..." state immediately
   var btn = document.getElementById('connect-btn');
@@ -716,16 +939,20 @@ function doDisconnect() {
   btn.disabled = true;
 
   goApp.Disconnect().then(function () {
+    goApp.DisconnectControlWS();
     stopConnectionPoll();
     btn.disabled = false;
     updateConnectButton();
     refreshCurrentPane();
     refreshTerminal();
+    refreshStatus();
   }).catch(function (err) {
+    goApp.DisconnectControlWS();
     stopConnectionPoll();
     btn.disabled = false;
     updateConnectButton();
     refreshCurrentPane();
+    refreshStatus();
   });
 }
 
@@ -733,9 +960,12 @@ function startConnectionPoll() {
   stopConnectionPoll();
   pollIntervalId = setInterval(function () {
     goApp.GetConnectionState().then(function (state) {
-      // Refresh terminal if visible
+      // Refresh terminal and status if visible
       if (!document.getElementById('tab-terminal').classList.contains('hidden')) {
         refreshTerminal();
+      }
+      if (!document.getElementById('tab-status').classList.contains('hidden')) {
+        refreshStatus();
       }
       if (!state.connected) {
         stopConnectionPoll();

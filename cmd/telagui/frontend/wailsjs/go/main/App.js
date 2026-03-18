@@ -22,6 +22,10 @@ export function Connect(arg1) {
   return window['go']['main']['App']['Connect'](arg1);
 }
 
+export function ConnectControlWS() {
+  return window['go']['main']['App']['ConnectControlWS']();
+}
+
 export function CreateProfile(arg1) {
   return window['go']['main']['App']['CreateProfile'](arg1);
 }
@@ -36,6 +40,10 @@ export function DetectCredentialType(arg1) {
 
 export function Disconnect() {
   return window['go']['main']['App']['Disconnect']();
+}
+
+export function DisconnectControlWS() {
+  return window['go']['main']['App']['DisconnectControlWS']();
 }
 
 export function DockerGetToken(arg1, arg2) {
@@ -64,6 +72,14 @@ export function GetCommandLog() {
 
 export function GetConnectionState() {
   return window['go']['main']['App']['GetConnectionState']();
+}
+
+export function GetControlConnections() {
+  return window['go']['main']['App']['GetControlConnections']();
+}
+
+export function GetControlServices() {
+  return window['go']['main']['App']['GetControlServices']();
 }
 
 export function GetControlStatus() {
@@ -172,6 +188,10 @@ export function SaveSidebarWidth(arg1) {
 
 export function SaveTerminalOutput(arg1) {
   return window['go']['main']['App']['SaveTerminalOutput'](arg1);
+}
+
+export function SendControlCommand(arg1) {
+  return window['go']['main']['App']['SendControlCommand'](arg1);
 }
 
 export function SetVerbose(arg1) {

@@ -12,6 +12,8 @@ export function ClearCredentialStore():Promise<void>;
 
 export function Connect(arg1:string):Promise<string>;
 
+export function ConnectControlWS():Promise<void>;
+
 export function CreateProfile(arg1:string):Promise<void>;
 
 export function DeleteProfile(arg1:string):Promise<void>;
@@ -19,6 +21,8 @@ export function DeleteProfile(arg1:string):Promise<void>;
 export function DetectCredentialType(arg1:string):Promise<string>;
 
 export function Disconnect():Promise<void>;
+
+export function DisconnectControlWS():Promise<void>;
 
 export function DockerGetToken(arg1:string,arg2:string):Promise<string>;
 
@@ -33,6 +37,10 @@ export function GetCLIPath():Promise<string>;
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 
 export function GetConnectionState():Promise<main.ConnectionState>;
+
+export function GetControlConnections():Promise<Array<Record<string, any>>>;
+
+export function GetControlServices():Promise<Array<Record<string, any>>>;
 
 export function GetControlStatus():Promise<Record<string, any>>;
 
@@ -87,6 +95,8 @@ export function SaveSettings(arg1:string):Promise<void>;
 export function SaveSidebarWidth(arg1:number):Promise<void>;
 
 export function SaveTerminalOutput(arg1:string):Promise<string>;
+
+export function SendControlCommand(arg1:string):Promise<void>;
 
 export function SetVerbose(arg1:boolean):Promise<void>;
 

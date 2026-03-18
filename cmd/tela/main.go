@@ -1326,6 +1326,14 @@ persistent_keepalive_interval=25
 			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
 		}
 		listeners = append(listeners, listener)
+		// Record bound service for the control API
+		addBoundService(BoundService{
+			Name:    portLabel(m.remote),
+			Local:   int(m.local),
+			Remote:  int(m.remote),
+			Machine: machineID,
+			Hub:     hubURL,
+		})
 		go func(l net.Listener, remote uint16) {
 			for {
 				localConn, err := l.Accept()
