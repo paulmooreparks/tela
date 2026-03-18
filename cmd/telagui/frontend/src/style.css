@@ -53,6 +53,7 @@ body {
   -webkit-app-region: drag;
 }
 .topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; }
+.app-logo { height: 22px; width: auto; margin-right: 4px; filter: brightness(1.2); }
 .app-title { font-weight: 700; font-size: 15px; }
 .app-versions { font-size: 11px; color: #94a3b8; font-family: var(--mono); display: flex; gap: 10px; }
 .app-versions .ver-label { color: #64748b; }
