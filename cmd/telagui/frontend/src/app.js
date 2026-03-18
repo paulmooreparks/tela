@@ -157,6 +157,13 @@ if (window.runtime) {
       }
     } catch (e) {}
   });
+
+  window.runtime.EventsOn('app:quitting', function () {
+    var quitBtn = document.getElementById('quit-btn');
+    var connectBtn = document.getElementById('connect-btn');
+    if (quitBtn) { quitBtn.textContent = 'Quitting...'; quitBtn.className = 'topbar-btn disconnecting-btn'; quitBtn.disabled = true; }
+    if (connectBtn) { connectBtn.textContent = 'Disconnecting...'; connectBtn.className = 'topbar-btn disconnecting-btn'; connectBtn.disabled = true; }
+  });
 }
 
 // --- Sidebar Resize ---

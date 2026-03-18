@@ -545,15 +545,19 @@ func (a *App) QuitApp() {
 }
 
 // confirmQuit is called by OnBeforeClose after the user confirms exit.
-// It sets the quitting flag and cleans up.
+// It sets the quitting flag, notifies the frontend, and cleans up.
 func (a *App) confirmQuit() {
 	a.mu.Lock()
 	a.quitting = true
 	a.mu.Unlock()
+
+	// Notify frontend so it can update button states.
+	wailsRuntime.EventsEmit(a.ctx, "app:quitting")
+
 	a.Disconnect()
 	// Force exit after a short delay in case goroutines are stuck.
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 		os.Exit(0)
 	}()
 }
