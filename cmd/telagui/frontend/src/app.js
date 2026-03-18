@@ -18,6 +18,7 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   if (name === 'terminal') refreshTerminal();
   if (name === 'log') refreshLog();
+  if (name === 'about') refreshAbout();
 }
 
 // --- Startup ---
@@ -743,6 +744,15 @@ function refreshTerminal() {
   }, 100);
 })();
 
+
+// --- About ---
+
+function refreshAbout() {
+  goApp.GetToolVersions().then(function (tv) {
+    var el = document.getElementById('about-version');
+    el.textContent = 'telagui ' + (tv.gui || 'dev') + '  |  tela ' + (tv.cli || 'not installed');
+  });
+}
 
 // --- Command Log ---
 

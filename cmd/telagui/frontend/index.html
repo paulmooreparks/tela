@@ -25,6 +25,7 @@
       <button class="main-tab active" onclick="switchTab('profile', this)">Profile</button>
       <button class="main-tab" onclick="switchTab('terminal', this)">Terminal</button>
       <button class="main-tab" onclick="switchTab('log', this)">Command Log</button>
+      <button class="main-tab" onclick="switchTab('about', this)">About</button>
     </div>
 
     <!-- Profile tab -->
@@ -72,6 +73,57 @@
       </div>
     </div>
   </div>
+
+    <!-- About tab -->
+    <div class="tab-pane hidden" id="tab-about">
+      <div class="about-pane">
+        <div class="about-header">
+          <img src="/src/logo.png" class="about-logo" alt="Tela">
+          <div>
+            <h1>TelaGUI</h1>
+            <p class="about-version" id="about-version"></p>
+          </div>
+        </div>
+
+        <div class="about-section">
+          <h2>About Tela</h2>
+          <p>Tela is a free and open-source (FOSS) encrypted remote-access fabric using WireGuard tunnels. It provides secure, zero-configuration connectivity between machines across any network topology.</p>
+          <p>TelaGUI is the desktop client for Tela. It manages connections to hubs, selects machines and services, and handles CLI tools automatically.</p>
+        </div>
+
+        <div class="about-section">
+          <h2>Links</h2>
+          <ul class="about-links">
+            <li><a href="https://github.com/paulmooreparks/tela" target="_blank">Tela on GitHub</a></li>
+            <li><a href="https://awansaya.net/" target="_blank">Awan Saya Portal</a></li>
+            <li><a href="https://github.com/paulmooreparks/tela/releases" target="_blank">Releases</a></li>
+            <li><a href="https://github.com/paulmooreparks/tela/issues" target="_blank">Report an Issue</a></li>
+          </ul>
+        </div>
+
+        <div class="about-section">
+          <h2>License</h2>
+          <p>Tela is licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank">Apache License 2.0</a>.</p>
+          <p>Copyright 2024-2026 Paul Parks.</p>
+        </div>
+
+        <div class="about-section">
+          <h2>Key Dependencies</h2>
+          <table class="about-deps">
+            <thead><tr><th>Library</th><th>License</th></tr></thead>
+            <tbody>
+              <tr><td><a href="https://github.com/wailsapp/wails" target="_blank">Wails</a></td><td>MIT</td></tr>
+              <tr><td><a href="https://git.zx2c4.com/wireguard-go" target="_blank">wireguard-go</a></td><td>MIT</td></tr>
+              <tr><td><a href="https://gvisor.dev/" target="_blank">gVisor netstack</a></td><td>Apache 2.0</td></tr>
+              <tr><td><a href="https://github.com/gorilla/websocket" target="_blank">gorilla/websocket</a></td><td>BSD-2-Clause</td></tr>
+              <tr><td><a href="https://github.com/go-yaml/yaml" target="_blank">yaml.v3</a></td><td>MIT / Apache 2.0</td></tr>
+              <tr><td><a href="https://golang.org/" target="_blank">Go standard library</a></td><td>BSD-3-Clause</td></tr>
+            </tbody>
+          </table>
+          <p class="about-note">Full dependency list: <a href="https://github.com/paulmooreparks/tela/blob/main/go.mod" target="_blank">go.mod</a></p>
+        </div>
+      </div>
+    </div>
 
   <!-- Add Hub Modal -->
   <div class="modal-overlay hidden" id="add-hub-modal">
