@@ -192,7 +192,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admi
 - **Token-based auth**: Named token identities with role-based access control (owner/admin/user/viewer). Per-machine ACLs control who can register and connect. On first startup, the hub auto-generates an owner token (secure by default). A `console-viewer` token is auto-generated for the hub's built-in web console.
 - **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin`. No shell access to the hub required.
 - **Credential storage**: `tela login` and `telad login` store hub tokens securely (0600 file permissions) so you don't need to pass tokens on every command. Credentials persist and are found automatically.
-- **One-time pairing codes**: Generate short-lived codes (e.g., `ABCD-1234`) on the hub. Agents exchange codes for permanent tokens via `telad pair`. No manual token copying or exposure in logs.
+- **One-time pairing codes**: Generate short-lived codes (e.g., `ABCD-1234`) for users (`tela pair`) and agents (`telad pair`). Codes are single-use, time-limited (10 minutes to 7 days), and replace manual token copying. Users paste a code in TelaGUI or the CLI to get connected.
 - **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
 - **No admin required**: gVisor netstack operates entirely in userspace. No TUN device, no root/Administrator.
 - **Outbound-only**: Both tela and telad initiate outbound connections to the hub. No inbound ports needed on either end.

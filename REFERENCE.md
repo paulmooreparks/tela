@@ -244,36 +244,70 @@ All three env vars (`TELAHUBD_PORTAL_URL`, `TELAHUBD_PORTAL_TOKEN`, `TELAHUBD_PU
 
 Once bootstrapped, use `tela admin` from any workstation (see [section 7](#7-tela-the-client-cli) for details).
 
-### Agent onboarding with pairing codes
+### Pairing codes
 
-For a secure agent onboarding workflow without manual token copying, use one-time pairing codes.
+Pairing codes are single-use, time-limited codes that let users and agents get tokens without copying 64-character hex strings. An admin generates a code, sends it to the user (via email, chat, or verbally), and the user exchanges it for a permanent token.
 
-**Generate a pairing code (on any workstation with admin access to the hub):**
+There are two types:
+
+- **Connect codes** (default): for users who want to connect to machines via `tela` or TelaGUI
+- **Register codes**: for agents that need to register machines via `telad`
+
+#### Client pairing (connecting users)
+
+**Generate a connect code:**
 
 ```bash
-tela admin pair-code web01 -hub https://hub.example.com -token <owner-or-admin-token>
+tela admin pair-code -hub wss://hub.example.com -token <owner-token>
+```
+
+For a distributed team where the user may not be online immediately:
+
+```bash
+tela admin pair-code -hub wss://hub.example.com -token <owner-token> -expires 24h
 ```
 
 Output:
 ```
 Generated pairing code: ABCD-1234
-Expires: 2026-03-16T19:45:00Z
+Type: connect
+Expires: 2026-03-19T10:30:00Z
 
-Agent onboarding command:
-  telad pair -hub wss://hub.example.com -code ABCD-1234
+User onboarding command:
+  tela pair -hub wss://hub.example.com -code ABCD-1234
 ```
 
-**Exchange the code for a permanent token (on the agent machine):**
+**Exchange the code (on the user's machine):**
+
+```bash
+tela pair -hub wss://hub.example.com -code ABCD-1234
+```
+
+Or in TelaGUI: click Add Hub, paste the hub URL and the pairing code. TelaGUI auto-detects that it is a pairing code (not a raw token) and exchanges it automatically.
+
+This creates a token with `user` role (can connect to machines, cannot administer the hub) and stores it in the credential store.
+
+**To restrict which machines the user can access:**
+
+```bash
+tela admin pair-code -hub wss://hub.example.com -token <owner-token> -machines web01,db01
+```
+
+#### Agent pairing (registering machines)
+
+**Generate a register code:**
+
+```bash
+tela admin pair-code web01 -hub wss://hub.example.com -token <owner-token> -type register
+```
+
+**Exchange the code (on the agent machine):**
 
 ```bash
 telad pair -hub wss://hub.example.com -code ABCD-1234
 ```
 
-This automatically:
-- Exchanges the code for a permanent token
-- Creates a token identity (e.g., `web01-agent`)
-- Stores the token in the system credential store (persists across restarts)
-- Outputs the identity for your records
+This creates a token with register permission for the specified machine and stores it in the system credential store.
 
 **Then start the agent without passing tokens:**
 
@@ -282,13 +316,26 @@ telad -hub wss://hub.example.com -machine web01 -ports "22:SSH,3389:RDP"
 # Token is found automatically from the credential store
 ```
 
-**Pairing code details:**
+#### Pairing code reference
 
-- Codes are short-lived and single-use (default: 10-minute expiry, configurable)
-- Code format: `XXXX-XXXX` (alphanumeric)
-- Entropy: 36^8 = ~2.8 trillion combinations with 10-minute expiry (brute-force infeasible)
-- No token exposure in logs or shell history
-- Optional: specify a different role during code generation (`-role admin`, `-role viewer`, etc.)
+| Property | Value |
+|----------|-------|
+| Format | `XXXX-XXXX` (alphanumeric) |
+| Entropy | 36^8 = ~2.8 trillion combinations |
+| Default expiry | 10 minutes |
+| Maximum expiry | 7 days |
+| Redemption | Single-use (deleted after exchange) |
+| Brute-force risk | Infeasible within expiry window |
+
+**Flags for `tela admin pair-code`:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-type` | `connect` | `connect` (for users) or `register` (for agents) |
+| `-expires` | `10m` | Duration string: `10m`, `1h`, `24h`, `7d` |
+| `-machines` | `*` | Comma-separated machine IDs (connect type only) |
+| `-hub` | required | Hub URL |
+| `-token` | required | Admin/owner token |
 
 ### Portal registration
 

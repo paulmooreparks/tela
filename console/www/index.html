@@ -487,6 +487,7 @@
       <a href="#top">Top</a>
       <a href="#machines">Machines</a>
       <a href="#activity">Activity</a>
+      <a href="#pairing" id="subnav-pairing" class="hidden">Pairing</a>
       <a href="#download" id="subnav-download" class="hidden">Download</a>
       <a href="#cli">CLI Reference</a>
       <a href="#about">About</a>
@@ -546,6 +547,55 @@
         <div class="release-version" id="release-version"></div>
         <div id="release-hashes"></div>
         <p class="release-note">Binaries are built by <a href="https://github.com/paulmooreparks/tela/actions">GitHub Actions</a> from <a href="https://github.com/paulmooreparks/tela">public source</a>. Verify: <code>sha256sum tela</code></p>
+      </div>
+    </div>
+
+    <!-- Pairing Code Generator (admin-only, hidden until access confirmed) -->
+    <div class="card hidden" id="pairing">
+      <div class="card-head">
+        <div class="card-head-copy">
+          <h2>Generate Pairing Code</h2>
+          <p style="color:var(--color-text-muted);font-size:0.88rem;margin-top:2px;">Create a one-time code to onboard agents or clients without sharing tokens.</p>
+        </div>
+      </div>
+      <div id="pairing-form">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:0.88rem;font-weight:600;color:var(--color-text-muted);">
+            Type
+            <select id="pair-type" style="padding:6px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:0.88rem;font-family:inherit;">
+              <option value="connect" selected>Connect (for users)</option>
+              <option value="register">Register (for agents)</option>
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:0.88rem;font-weight:600;color:var(--color-text-muted);">
+            Expiration
+            <select id="pair-expiry" style="padding:6px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:0.88rem;font-family:inherit;">
+              <option value="600" selected>10 minutes</option>
+              <option value="3600">1 hour</option>
+              <option value="86400">24 hours</option>
+              <option value="604800">7 days</option>
+            </select>
+          </label>
+          <label id="pair-machine-label" style="display:flex;flex-direction:column;gap:4px;font-size:0.88rem;font-weight:600;color:var(--color-text-muted);">
+            <span id="pair-machine-title">Machine scope</span>
+            <input id="pair-machine" type="text" value="*" placeholder="* (all machines)" style="padding:6px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:0.88rem;font-family:inherit;min-width:140px;">
+          </label>
+        </div>
+        <button class="panel-action-button" id="pair-generate-btn" type="button">Generate Code</button>
+        <span id="pair-error" style="color:var(--color-error);font-size:0.88rem;margin-left:12px;"></span>
+      </div>
+      <div id="pairing-result" class="hidden" style="margin-top:16px;">
+        <div style="text-align:center;padding:16px 0 8px;">
+          <span id="pair-code-display" style="font-family:'Courier New',Courier,monospace;font-size:2rem;font-weight:700;letter-spacing:4px;color:var(--color-primary);"></span>
+          <div style="margin-top:8px;">
+            <button class="btn-action" id="pair-code-copy-btn" type="button" style="font-size:0.85rem;padding:5px 14px;">Copy code</button>
+          </div>
+        </div>
+        <div style="font-size:0.82rem;color:var(--color-text-muted);text-align:center;margin-bottom:10px;" id="pair-expires-label"></div>
+        <div class="code-block-wrap" id="pair-cmd-wrap">
+          <div class="code-block"><code id="pair-cmd-text"></code></div>
+          <button class="code-copy-btn" type="button" onclick="copyCmd(this)">&#x1F4CB; Copy</button>
+        </div>
       </div>
     </div>
 
@@ -915,6 +965,149 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
           infoEl.style.display = 'block';
         })
         .catch(function () { /* no release yet — card stays hidden */ });
+    })();
+
+    // ── Pairing code generator (admin-only) ─────────────────────────
+    (function () {
+      var pairingCard = document.getElementById('pairing');
+      var pairingSubnav = document.getElementById('subnav-pairing');
+      var pairType = document.getElementById('pair-type');
+      var pairExpiry = document.getElementById('pair-expiry');
+      var pairMachine = document.getElementById('pair-machine');
+      var pairMachineLabel = document.getElementById('pair-machine-label');
+      var pairMachineTitle = document.getElementById('pair-machine-title');
+      var pairGenerateBtn = document.getElementById('pair-generate-btn');
+      var pairError = document.getElementById('pair-error');
+      var pairingResult = document.getElementById('pairing-result');
+      var pairCodeDisplay = document.getElementById('pair-code-display');
+      var pairCodeCopyBtn = document.getElementById('pair-code-copy-btn');
+      var pairExpiresLabel = document.getElementById('pair-expires-label');
+      var pairCmdText = document.getElementById('pair-cmd-text');
+
+      // Check if current token has admin access by probing an admin endpoint.
+      // We use GET /api/admin/tokens which requires owner/admin auth.
+      function checkAdminAccess() {
+        var url = '/api/admin/tokens';
+        if (window.TELA_CONSOLE_TOKEN) {
+          url += '?token=' + encodeURIComponent(window.TELA_CONSOLE_TOKEN);
+        }
+        fetch(url).then(function (r) {
+          if (r.status === 200) {
+            pairingCard.classList.remove('hidden');
+            pairingSubnav.classList.remove('hidden');
+          }
+        }).catch(function () { /* no admin access */ });
+      }
+      checkAdminAccess();
+
+      // Update label when type changes
+      pairType.addEventListener('change', function () {
+        if (pairType.value === 'register') {
+          pairMachineTitle.textContent = 'Machine ID';
+          pairMachine.value = '';
+          pairMachine.placeholder = 'e.g. my-server';
+        } else {
+          pairMachineTitle.textContent = 'Machine scope';
+          pairMachine.value = '*';
+          pairMachine.placeholder = '* (all machines)';
+        }
+      });
+
+      // Generate pairing code
+      pairGenerateBtn.addEventListener('click', function () {
+        pairError.textContent = '';
+        pairingResult.classList.add('hidden');
+
+        var codeType = pairType.value;
+        var expiresIn = parseInt(pairExpiry.value, 10);
+        var machineVal = pairMachine.value.trim();
+
+        if (codeType === 'register' && !machineVal) {
+          pairError.textContent = 'Machine ID is required for register codes.';
+          return;
+        }
+
+        var payload = {
+          type: codeType,
+          expiresIn: expiresIn
+        };
+
+        if (codeType === 'register') {
+          payload.machineId = machineVal;
+        } else {
+          if (machineVal && machineVal !== '*') {
+            payload.machines = machineVal.split(',').map(function (s) { return s.trim(); });
+          }
+        }
+
+        pairGenerateBtn.disabled = true;
+        pairGenerateBtn.textContent = 'Generating...';
+
+        var url = '/api/admin/pair-code';
+        var headers = { 'Content-Type': 'application/json' };
+        if (window.TELA_CONSOLE_TOKEN) {
+          headers['Authorization'] = 'Bearer ' + window.TELA_CONSOLE_TOKEN;
+        }
+
+        fetch(url, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(payload)
+        })
+        .then(function (r) {
+          return r.json().then(function (data) {
+            if (!r.ok) {
+              throw new Error(data.error || 'Failed to generate pairing code');
+            }
+            return data;
+          });
+        })
+        .then(function (data) {
+          pairCodeDisplay.textContent = data.code;
+
+          var expDate = new Date(data.expiresAt);
+          pairExpiresLabel.textContent = 'Expires: ' + expDate.toLocaleString();
+
+          var hubUrl = location.protocol + '//' + location.host;
+          var cmd;
+          if (data.type === 'register') {
+            cmd = 'telad pair -hub ' + hubUrl + ' -code ' + data.code;
+          } else {
+            cmd = 'tela pair -hub ' + hubUrl + ' -code ' + data.code;
+          }
+          pairCmdText.textContent = cmd;
+
+          pairingResult.classList.remove('hidden');
+        })
+        .catch(function (err) {
+          pairError.textContent = err.message;
+        })
+        .then(function () {
+          pairGenerateBtn.disabled = false;
+          pairGenerateBtn.textContent = 'Generate Code';
+        });
+      });
+
+      // Copy code button
+      pairCodeCopyBtn.addEventListener('click', function () {
+        var code = pairCodeDisplay.textContent;
+        var origText = pairCodeCopyBtn.textContent;
+        function showCopied() {
+          pairCodeCopyBtn.textContent = 'Copied!';
+          setTimeout(function () { pairCodeCopyBtn.textContent = origText; }, 1500);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(code).then(showCopied);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = code;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showCopied();
+        }
+      });
     })();
 
     // ── OS detection for downloads ───────────────────────────────────
