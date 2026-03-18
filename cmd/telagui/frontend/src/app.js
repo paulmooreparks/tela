@@ -22,7 +22,7 @@ function switchTab(name, btn) {
 
 // --- Startup ---
 goApp.GetVersion().then(function (v) {
-  document.getElementById('app-version').textContent = v === 'dev' ? '' : v;
+  document.getElementById('app-version').textContent = v || 'dev';
 });
 loadSavedSelections().then(refreshAll);
 
