@@ -1313,6 +1313,163 @@ func (a *App) installTool(name, version string) (string, error) {
 	return destPath, nil
 }
 
+// --- Settings ---
+
+// Settings holds user preferences persisted to disk.
+type Settings struct {
+	AutoConnect     bool `yaml:"autoConnect" json:"autoConnect"`
+	ReconnectOnDrop bool `yaml:"reconnectOnDrop" json:"reconnectOnDrop"`
+	MinimizeToTray  bool `yaml:"minimizeToTray" json:"minimizeToTray"`
+	StartMinimized  bool `yaml:"startMinimized" json:"startMinimized"`
+	AutoCheckUpdates bool `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
+	VerboseDefault  bool `yaml:"verboseDefault" json:"verboseDefault"`
+}
+
+func defaultSettings() Settings {
+	return Settings{
+		AutoConnect:      false,
+		ReconnectOnDrop:  true,
+		MinimizeToTray:   false,
+		StartMinimized:   false,
+		AutoCheckUpdates: true,
+		VerboseDefault:   false,
+	}
+}
+
+func settingsPath() string {
+	return filepath.Join(telaConfigDir(), "telagui-settings.yaml")
+}
+
+// GetSettings loads settings from disk, returning defaults if not found.
+func (a *App) GetSettings() Settings {
+	data, err := os.ReadFile(settingsPath())
+	if err != nil {
+		return defaultSettings()
+	}
+	s := defaultSettings()
+	if err := yaml.Unmarshal(data, &s); err != nil {
+		return defaultSettings()
+	}
+	return s
+}
+
+// SaveSettings persists settings to disk.
+func (a *App) SaveSettings(jsonStr string) error {
+	var s Settings
+	if err := json.Unmarshal([]byte(jsonStr), &s); err != nil {
+		return fmt.Errorf("invalid settings: %w", err)
+	}
+
+	data, err := yaml.Marshal(&s)
+	if err != nil {
+		return fmt.Errorf("marshal settings: %w", err)
+	}
+
+	dir := telaConfigDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+
+	if err := os.WriteFile(settingsPath(), data, 0600); err != nil {
+		return fmt.Errorf("write settings: %w", err)
+	}
+
+	a.logCommand("Save settings", "# saved to "+settingsPath())
+	return nil
+}
+
+// GetCLIPath returns the path to the tela CLI binary.
+func (a *App) GetCLIPath() string {
+	path := a.findTool("tela")
+	if path == "" {
+		return "not installed"
+	}
+	return path
+}
+
+// ClearCredentialStore deletes the credential store file.
+func (a *App) ClearCredentialStore() error {
+	credPath := credstore.UserPath()
+	if _, err := os.Stat(credPath); os.IsNotExist(err) {
+		return nil
+	}
+	if err := os.Remove(credPath); err != nil {
+		return fmt.Errorf("remove credential store: %w", err)
+	}
+	a.logCommand("Clear credential store", "rm "+credPath)
+	return nil
+}
+
+// ImportProfile opens a file dialog and reads a profile YAML, replacing the current profile.
+func (a *App) ImportProfile() error {
+	dialog, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Import Profile",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "YAML Files", Pattern: "*.yaml;*.yml"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dialog failed: %w", err)
+	}
+	if dialog == "" {
+		return nil // user cancelled
+	}
+
+	data, err := os.ReadFile(dialog)
+	if err != nil {
+		return fmt.Errorf("read profile: %w", err)
+	}
+
+	// Validate that it parses as a profile
+	var profile Profile
+	if err := yaml.Unmarshal(data, &profile); err != nil {
+		return fmt.Errorf("invalid profile YAML: %w", err)
+	}
+
+	dir := profilesDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create profiles dir: %w", err)
+	}
+
+	if err := os.WriteFile(profilePath(), data, 0600); err != nil {
+		return fmt.Errorf("write profile: %w", err)
+	}
+
+	a.logCommand("Import profile", "# imported from "+dialog)
+	return nil
+}
+
+// ExportProfile opens a save dialog and writes the current profile YAML.
+func (a *App) ExportProfile() error {
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return fmt.Errorf("no profile to export: %w", err)
+	}
+
+	dialog, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		DefaultFilename: "telagui-profile.yaml",
+		Title:           "Export Profile",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "YAML Files", Pattern: "*.yaml;*.yml"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dialog failed: %w", err)
+	}
+	if dialog == "" {
+		return nil // user cancelled
+	}
+
+	if err := os.WriteFile(dialog, data, 0600); err != nil {
+		return fmt.Errorf("save profile: %w", err)
+	}
+
+	a.logCommand("Export profile", "# exported to "+dialog)
+	return nil
+}
+
 // --- Helpers ---
 
 func toWSURL(hubURL string) string {

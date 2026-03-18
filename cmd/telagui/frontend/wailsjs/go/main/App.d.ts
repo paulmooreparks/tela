@@ -8,6 +8,8 @@ export function AssignLocalPort(arg1:number):Promise<number>;
 
 export function CheckForUpdatesNow():Promise<void>;
 
+export function ClearCredentialStore():Promise<void>;
+
 export function Connect(arg1:string):Promise<string>;
 
 export function DetectCredentialType(arg1:string):Promise<string>;
@@ -20,6 +22,10 @@ export function DockerListContainers():Promise<Array<string>>;
 
 export function EnsureTool(arg1:string):Promise<string>;
 
+export function ExportProfile():Promise<void>;
+
+export function GetCLIPath():Promise<string>;
+
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 
 export function GetConnectionState():Promise<main.ConnectionState>;
@@ -30,6 +36,8 @@ export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
+export function GetSettings():Promise<main.Settings>;
+
 export function GetStoredToken(arg1:string):Promise<string>;
 
 export function GetToolVersions():Promise<main.ToolVersions>;
@@ -39,6 +47,8 @@ export function GetUpdateVersion():Promise<string>;
 export function GetVersion():Promise<string>;
 
 export function HasUpdate():Promise<boolean>;
+
+export function ImportProfile():Promise<void>;
 
 export function IsPackageManaged():Promise<boolean>;
 
@@ -55,6 +65,8 @@ export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>
 export function RestartToUpdate():Promise<void>;
 
 export function SaveProfile(arg1:string):Promise<string>;
+
+export function SaveSettings(arg1:string):Promise<void>;
 
 export function SaveTerminalOutput(arg1:string):Promise<string>;
 

@@ -19,6 +19,7 @@ function switchTab(name, btn) {
   if (name === 'terminal') refreshTerminal();
   if (name === 'log') refreshLog();
   if (name === 'about') refreshAbout();
+  if (name === 'settings') refreshSettings();
 }
 
 // --- Startup ---
@@ -788,6 +789,59 @@ function refreshTerminal() {
   }, 100);
 })();
 
+
+// --- Settings ---
+
+function refreshSettings() {
+  goApp.GetSettings().then(function (s) {
+    document.getElementById('setting-autoConnect').checked = s.autoConnect;
+    document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;
+    document.getElementById('setting-minimizeToTray').checked = s.minimizeToTray;
+    document.getElementById('setting-startMinimized').checked = s.startMinimized;
+    document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
+    document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
+  });
+  goApp.GetCLIPath().then(function (path) {
+    document.getElementById('settings-cli-path').textContent = path;
+  });
+}
+
+function saveSetting() {
+  var s = {
+    autoConnect: document.getElementById('setting-autoConnect').checked,
+    reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
+    minimizeToTray: document.getElementById('setting-minimizeToTray').checked,
+    startMinimized: document.getElementById('setting-startMinimized').checked,
+    autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
+    verboseDefault: document.getElementById('setting-verboseDefault').checked
+  };
+  goApp.SaveSettings(JSON.stringify(s));
+}
+
+function clearCredentialStore() {
+  if (!confirm('This will delete all stored hub tokens. You will need to re-authenticate with each hub. Continue?')) return;
+  goApp.ClearCredentialStore().then(function () {
+    refreshAll();
+  }).catch(function (err) {
+    alert('Failed to clear credential store: ' + err);
+  });
+}
+
+function importProfile() {
+  goApp.ImportProfile().then(function () {
+    loadSavedSelections().then(function () {
+      refreshAll();
+    });
+  }).catch(function (err) {
+    if (err) alert('Import failed: ' + err);
+  });
+}
+
+function exportProfile() {
+  goApp.ExportProfile().catch(function (err) {
+    if (err) alert('Export failed: ' + err);
+  });
+}
 
 // --- About ---
 

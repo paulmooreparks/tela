@@ -232,6 +232,28 @@ export namespace main {
 	
 	
 	
+	export class Settings {
+	    autoConnect: boolean;
+	    reconnectOnDrop: boolean;
+	    minimizeToTray: boolean;
+	    startMinimized: boolean;
+	    autoCheckUpdates: boolean;
+	    verboseDefault: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Settings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.autoConnect = source["autoConnect"];
+	        this.reconnectOnDrop = source["reconnectOnDrop"];
+	        this.minimizeToTray = source["minimizeToTray"];
+	        this.startMinimized = source["startMinimized"];
+	        this.autoCheckUpdates = source["autoCheckUpdates"];
+	        this.verboseDefault = source["verboseDefault"];
+	    }
+	}
 	export class ToolVersions {
 	    gui: string;
 	    cli: string;

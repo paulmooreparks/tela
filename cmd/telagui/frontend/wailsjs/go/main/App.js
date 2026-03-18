@@ -14,6 +14,10 @@ export function CheckForUpdatesNow() {
   return window['go']['main']['App']['CheckForUpdatesNow']();
 }
 
+export function ClearCredentialStore() {
+  return window['go']['main']['App']['ClearCredentialStore']();
+}
+
 export function Connect(arg1) {
   return window['go']['main']['App']['Connect'](arg1);
 }
@@ -38,6 +42,14 @@ export function EnsureTool(arg1) {
   return window['go']['main']['App']['EnsureTool'](arg1);
 }
 
+export function ExportProfile() {
+  return window['go']['main']['App']['ExportProfile']();
+}
+
+export function GetCLIPath() {
+  return window['go']['main']['App']['GetCLIPath']();
+}
+
 export function GetCommandLog() {
   return window['go']['main']['App']['GetCommandLog']();
 }
@@ -58,6 +70,10 @@ export function GetKnownHubs() {
   return window['go']['main']['App']['GetKnownHubs']();
 }
 
+export function GetSettings() {
+  return window['go']['main']['App']['GetSettings']();
+}
+
 export function GetStoredToken(arg1) {
   return window['go']['main']['App']['GetStoredToken'](arg1);
 }
@@ -76,6 +92,10 @@ export function GetVersion() {
 
 export function HasUpdate() {
   return window['go']['main']['App']['HasUpdate']();
+}
+
+export function ImportProfile() {
+  return window['go']['main']['App']['ImportProfile']();
 }
 
 export function IsPackageManaged() {
@@ -108,6 +128,10 @@ export function RestartToUpdate() {
 
 export function SaveProfile(arg1) {
   return window['go']['main']['App']['SaveProfile'](arg1);
+}
+
+export function SaveSettings(arg1) {
+  return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
 export function SaveTerminalOutput(arg1) {
