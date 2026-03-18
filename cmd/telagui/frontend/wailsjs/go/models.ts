@@ -240,6 +240,7 @@ export namespace main {
 	    minimizeOnClose: boolean;
 	    autoCheckUpdates: boolean;
 	    verboseDefault: boolean;
+	    sidebarWidth: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -254,6 +255,7 @@ export namespace main {
 	        this.minimizeOnClose = source["minimizeOnClose"];
 	        this.autoCheckUpdates = source["autoCheckUpdates"];
 	        this.verboseDefault = source["verboseDefault"];
+	        this.sidebarWidth = source["sidebarWidth"];
 	    }
 	}
 	export class ToolVersions {

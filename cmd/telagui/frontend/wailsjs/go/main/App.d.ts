@@ -82,6 +82,8 @@ export function SaveProfile(arg1:string):Promise<string>;
 
 export function SaveSettings(arg1:string):Promise<void>;
 
+export function SaveSidebarWidth(arg1:number):Promise<void>;
+
 export function SaveTerminalOutput(arg1:string):Promise<string>;
 
 export function SetVerbose(arg1:boolean):Promise<void>;

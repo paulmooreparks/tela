@@ -1505,6 +1505,7 @@ type Settings struct {
 	MinimizeOnClose  bool   `yaml:"minimizeOnClose" json:"minimizeOnClose"`
 	AutoCheckUpdates bool   `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
 	VerboseDefault   bool   `yaml:"verboseDefault" json:"verboseDefault"`
+	SidebarWidth     int    `yaml:"sidebarWidth" json:"sidebarWidth"`
 }
 
 func defaultSettings() Settings {
@@ -1563,6 +1564,14 @@ func (a *App) SaveSettings(jsonStr string) error {
 
 	a.logCommand("Save settings", "# saved to "+settingsPath())
 	return nil
+}
+
+// SaveSidebarWidth persists the sidebar width.
+func (a *App) SaveSidebarWidth(width int) {
+	s := a.GetSettings()
+	s.SidebarWidth = width
+	data, _ := yaml.Marshal(&s)
+	os.WriteFile(settingsPath(), data, 0600)
 }
 
 // GetCLIPath returns the path to the tela CLI binary.

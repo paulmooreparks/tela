@@ -162,6 +162,10 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
+export function SaveSidebarWidth(arg1) {
+  return window['go']['main']['App']['SaveSidebarWidth'](arg1);
+}
+
 export function SaveTerminalOutput(arg1) {
   return window['go']['main']['App']['SaveTerminalOutput'](arg1);
 }

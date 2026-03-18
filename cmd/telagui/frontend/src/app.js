@@ -29,6 +29,13 @@ function switchTab(name, btn) {
     var sidebar = document.getElementById('sidebar');
     if (!handle || !sidebar) return;
 
+    // Restore saved width
+    goApp.GetSettings().then(function (s) {
+      if (s.sidebarWidth > 0) {
+        sidebar.style.width = s.sidebarWidth + 'px';
+      }
+    });
+
     var dragging = false;
 
     handle.addEventListener('mousedown', function (e) {
@@ -41,7 +48,7 @@ function switchTab(name, btn) {
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
       var newWidth = e.clientX;
-      if (newWidth < 340) newWidth = 340;
+      if (newWidth < 200) newWidth = 200;
       if (newWidth > 600) newWidth = 600;
       sidebar.style.width = newWidth + 'px';
     });
@@ -51,6 +58,9 @@ function switchTab(name, btn) {
         dragging = false;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        // Save width to settings
+        var width = parseInt(sidebar.style.width);
+        if (width) goApp.SaveSidebarWidth(width);
       }
     });
   }, 200);
