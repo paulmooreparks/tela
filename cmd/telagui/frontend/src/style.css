@@ -264,6 +264,16 @@ body {
 }
 .machine-item:hover { background: var(--sidebar-hover); }
 .machine-item.selected { background: var(--sidebar-hover); border-left-color: var(--accent); color: var(--text); }
+.machine-item input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.machine-excluded {
+  opacity: 0.45;
+}
 .machine-dot {
   width: 6px;
   height: 6px;
@@ -287,6 +297,8 @@ body {
   color: var(--text-muted);
   font-size: 15px;
 }
+.profile-yaml-preview { padding: 0; }
+.profile-yaml-preview h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
 .detail-header { margin-bottom: 20px; }
 .detail-header h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 .detail-header .meta { font-size: 13px; color: var(--text-muted); }

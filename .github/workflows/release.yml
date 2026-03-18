@@ -230,7 +230,11 @@ jobs:
           Write-Host "makensis location:"
           Get-Command makensis -ErrorAction SilentlyContinue | Select-Object Source
           cd cmd/telagui
-          wails build -nsis -ldflags="-X main.version=${{ steps.version.outputs.tag }}"
+          # Set version in info.json for the NSIS installer
+          VERSION="${{ steps.version.outputs.tag }}"
+          VERSION_NUM="${VERSION#v}"  # strip leading v
+          sed -i "s/{{.Info.ProductVersion}}/${VERSION_NUM}/g" build/windows/info.json
+          wails build -nsis -ldflags="-X main.version=${VERSION}"
           Write-Host "Build output:"
           Get-ChildItem -Path build/bin -Recurse | Select-Object FullName, Length
           $installer = Get-ChildItem -Path build/bin -Filter "*installer*" -Recurse | Select-Object -First 1

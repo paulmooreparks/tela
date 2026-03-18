@@ -17,7 +17,7 @@
       <div class="topbar-right">
         <button class="topbar-btn update-btn hidden" id="update-btn" onclick="restartToUpdate()">Restart to Update</button>
         <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
-        <button class="topbar-btn" onclick="goApp.QuitApp()">Quit</button>
+        <button class="topbar-btn" id="quit-btn" onclick="goApp.QuitApp()">Quit</button>
       </div>
     </div>
 
@@ -52,9 +52,7 @@
           </div>
         </div>
         <div class="detail-pane" id="detail-pane">
-          <div class="empty-state">
-            <p>Select a hub or machine from the sidebar.</p>
-          </div>
+          <div id="profile-yaml-view"></div>
         </div>
       </div>
     </div>

@@ -265,6 +265,32 @@ function toggleHubInclusion(hubURL, included) {
   refreshAll();
 }
 
+// Track which machines are included
+var includedMachines = {};
+
+function isMachineIncluded(hubURL, machineId) {
+  var key = hubURL + '||' + machineId;
+  if (includedMachines[key] !== undefined) return includedMachines[key];
+  // Default: included if it has any selected services
+  var hasServices = Object.keys(selectedServices).some(function (k) {
+    return k.indexOf(hubURL + '||' + machineId + '||') === 0;
+  });
+  return hasServices;
+}
+
+function toggleMachineInclusion(hubURL, machineId, included) {
+  var key = hubURL + '||' + machineId;
+  includedMachines[key] = included;
+  if (!included) {
+    // Remove all service selections for this machine
+    Object.keys(selectedServices).forEach(function (k) {
+      if (k.indexOf(hubURL + '||' + machineId + '||') === 0) delete selectedServices[k];
+    });
+    resolveAllPortsAndUpdate();
+  }
+  refreshAll();
+}
+
 function refreshAll() {
   var content = document.getElementById('sidebar-content');
   content.innerHTML = '<p class="loading">Loading hubs...</p>';
@@ -308,13 +334,17 @@ function refreshAll() {
           if (status.machines && included) {
             status.machines.forEach(function (m) {
               var mId = m.id || m.hostname;
+              var machineIncluded = isMachineIncluded(hub.url, mId);
               var mEl = document.createElement('div');
-              mEl.className = 'machine-item';
+              mEl.className = 'machine-item' + (machineIncluded ? '' : ' machine-excluded');
               if (selectedHubURL === hub.url && selectedMachineId === mId) mEl.classList.add('selected');
               var dotClass = m.agentConnected ? 'online' : 'offline';
-              mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
+              mEl.innerHTML = '<input type="checkbox"' + (machineIncluded ? ' checked' : '')
+                + ' onclick="event.stopPropagation(); toggleMachineInclusion(\'' + escAttr(hub.url) + '\', \'' + escAttr(mId) + '\', this.checked)">'
+                + '<span class="machine-dot ' + dotClass + '"></span>'
                 + escHtml(mId);
               mEl.onclick = function (e) {
+                if (e.target.tagName === 'INPUT') return;
                 e.stopPropagation();
                 selectMachine(hub, m, mEl);
               };
@@ -328,7 +358,45 @@ function refreshAll() {
     });
 
     updateConnectButton();
+    showProfileYaml();
   });
+}
+
+function showProfileYaml() {
+  var pane = document.getElementById('detail-pane');
+  if (selectedHubURL || selectedMachineId) return; // something selected, don't overwrite
+
+  var keys = Object.keys(selectedServices);
+  if (keys.length === 0) {
+    pane.innerHTML = '<div class="empty-state"><p>Select hubs, machines, and services from the sidebar to build your connection profile.</p></div>';
+    return;
+  }
+
+  // Build a readable YAML preview
+  var groups = {};
+  keys.forEach(function (key) {
+    var sel = selectedServices[key];
+    var gk = sel.hub + '||' + sel.machine;
+    if (!groups[gk]) groups[gk] = { hub: sel.hub, machine: sel.machine, services: [] };
+    groups[gk].services.push({ name: sel.service, local: sel.localPort });
+  });
+
+  var yaml = 'connections:\n';
+  Object.keys(groups).forEach(function (k) {
+    var g = groups[k];
+    yaml += '  - hub: ' + toWSURL(g.hub) + '\n';
+    yaml += '    machine: ' + g.machine + '\n';
+    yaml += '    services:\n';
+    g.services.forEach(function (s) {
+      yaml += '      - name: ' + s.name + '\n';
+      yaml += '        local: ' + s.local + '\n';
+    });
+  });
+
+  pane.innerHTML = '<div class="profile-yaml-preview">'
+    + '<h3>Profile Preview</h3>'
+    + '<pre class="connect-output">' + escHtml(yaml) + '</pre>'
+    + '</div>';
 }
 
 // --- Detail Pane: Hub View ---
@@ -402,7 +470,8 @@ function renderMachineDetail(hub, machine) {
       services.forEach(function (svc) {
         var key = hub.url + '||' + machineId + '||' + svc.name;
         var checked = selectedServices[key] ? ' checked' : '';
-        var disabled = isConnected ? ' disabled' : '';
+        var machineExcluded = !isMachineIncluded(hub.url, machineId);
+        var disabled = (isConnected || machineExcluded) ? ' disabled' : '';
         var localPort = selectedServices[key] ? selectedServices[key].localPort : svc.port;
 
         html += '<label class="service-check-item">'
@@ -537,14 +606,17 @@ function refreshCurrentPane() {
 
 function updateConnectButton() {
   var btn = document.getElementById('connect-btn');
+  var quitBtn = document.getElementById('quit-btn');
   goApp.GetConnectionState().then(function (state) {
     if (state.connected) {
       btn.textContent = 'Disconnect';
       btn.className = 'topbar-btn disconnect-btn';
+      if (quitBtn) quitBtn.className = 'topbar-btn disconnect-btn';
     } else {
       var hasSelections = Object.keys(selectedServices).length > 0;
       btn.textContent = 'Connect';
       btn.className = 'topbar-btn connect-btn' + (hasSelections ? '' : ' disabled');
+      if (quitBtn) quitBtn.className = 'topbar-btn';
     }
   });
 }
