@@ -10,6 +10,8 @@ export function CheckForUpdatesNow():Promise<void>;
 
 export function ClearCredentialStore():Promise<void>;
 
+export function ConfirmDisconnect():Promise<boolean>;
+
 export function Connect(arg1:string):Promise<string>;
 
 export function ConnectControlWS():Promise<void>;

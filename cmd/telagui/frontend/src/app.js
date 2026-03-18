@@ -831,9 +831,8 @@ function doQuit() {
 }
 
 function doDisconnect() {
-  // Confirm before disconnecting
-  goApp.IsConnected().then(function (connected) {
-    if (connected && !confirm('Are you sure you want to disconnect?')) return;
+  goApp.ConfirmDisconnect().then(function (confirmed) {
+    if (!confirmed) return;
     performDisconnect();
   });
 }

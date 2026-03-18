@@ -18,6 +18,10 @@ export function ClearCredentialStore() {
   return window['go']['main']['App']['ClearCredentialStore']();
 }
 
+export function ConfirmDisconnect() {
+  return window['go']['main']['App']['ConfirmDisconnect']();
+}
+
 export function Connect(arg1) {
   return window['go']['main']['App']['Connect'](arg1);
 }

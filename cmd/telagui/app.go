@@ -576,6 +576,22 @@ func (a *App) IsConnected() bool {
 	return a.connected
 }
 
+// ConfirmDisconnect shows a native confirmation dialog if connected.
+// Returns true if not connected or if the user confirms.
+func (a *App) ConfirmDisconnect() bool {
+	if !a.IsConnected() {
+		return true
+	}
+	result, _ := wailsRuntime.MessageDialog(a.ctx, wailsRuntime.MessageDialogOptions{
+		Type:          wailsRuntime.QuestionDialog,
+		Title:         "Disconnect",
+		Message:       "Are you sure you want to disconnect?",
+		DefaultButton: "No",
+		Buttons:       []string{"Yes", "No"},
+	})
+	return result == "Yes"
+}
+
 // --- Command Log ---
 
 // GetCommandLog returns all command log entries.
