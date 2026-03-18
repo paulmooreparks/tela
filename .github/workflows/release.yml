@@ -193,9 +193,16 @@ jobs:
         run: |
           mkdir -p dist
           if [ "${{ matrix.goos }}" = "darwin" ]; then
-            # macOS: Wails produces a .app bundle -- tar it up
+            # macOS: Wails produces a .app bundle (named after wails.json "name")
             cd cmd/telagui/build/bin
-            tar czf telagui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz telagui.app
+            # Find the .app bundle regardless of name
+            APP_BUNDLE=$(ls -d *.app 2>/dev/null | head -1)
+            if [ -z "$APP_BUNDLE" ]; then
+              echo "ERROR: No .app bundle found in build/bin"
+              ls -la
+              exit 1
+            fi
+            tar czf telagui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz "$APP_BUNDLE"
             mv telagui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ../../../../dist/
           else
             cp cmd/telagui/build/bin/telagui${{ matrix.ext }} \
