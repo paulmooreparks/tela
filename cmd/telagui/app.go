@@ -135,18 +135,8 @@ func (a *App) startup(ctx context.Context) {
 	// Set up system tray icon
 	a.setupTray()
 
-	// Load settings and apply startup preferences
+	// Check for updates (respects AutoCheckUpdates setting)
 	settings := a.GetSettings()
-
-	if settings.StartMinimized {
-		go func() {
-			// Small delay to let the window initialize
-			time.Sleep(300 * time.Millisecond)
-			wailsRuntime.WindowHide(a.ctx)
-		}()
-	}
-
-	// Check for updates to all binaries (GUI and CLI) in background
 	if settings.AutoCheckUpdates {
 		go a.checkForUpdates()
 	}
@@ -505,6 +495,12 @@ func (a *App) ShowWindow() {
 // QuitApp exits the application (used from tray menu).
 func (a *App) QuitApp() {
 	a.Disconnect()
+	// Force exit after a short delay -- Wails Quit may not work
+	// if called from a systray goroutine
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		os.Exit(0)
+	}()
 	wailsRuntime.Quit(a.ctx)
 }
 

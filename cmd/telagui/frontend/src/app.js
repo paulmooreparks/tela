@@ -461,10 +461,23 @@ function doConnect() {
     startConnectionPoll();
     updateConnectButton();
     refreshCurrentPane();
-    // Apply saved verbose preference after a short delay for the control API to start
-    if (verboseMode) {
-      setTimeout(function () { goApp.SetVerbose(true); }, 2000);
-    }
+    // Apply verbose preference (saved toggle or default setting)
+    setTimeout(function () {
+      if (verboseMode) {
+        goApp.SetVerbose(true);
+      } else {
+        goApp.GetSettings().then(function (s) {
+          if (s.verboseDefault) {
+            verboseMode = true;
+            var btn = document.getElementById('verbose-btn');
+            var icon = document.getElementById('verbose-icon');
+            if (btn) btn.classList.add('active');
+            if (icon) icon.innerHTML = '\u2611';
+            goApp.SetVerbose(true);
+          }
+        });
+      }
+    }, 2000);
   }).catch(function (err) {
     alert('Connection failed: ' + err);
   });
@@ -503,6 +516,14 @@ function startConnectionPoll() {
         stopConnectionPoll();
         updateConnectButton();
         refreshCurrentPane();
+        // Auto-reconnect if enabled
+        goApp.GetSettings().then(function (s) {
+          if (s.reconnectOnDrop && Object.keys(selectedServices).length > 0) {
+            setTimeout(function () {
+              doConnect();
+            }, 3000);
+          }
+        });
       }
     });
   }, 1000);
