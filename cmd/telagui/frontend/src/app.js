@@ -21,6 +21,9 @@ function switchTab(name, btn) {
 }
 
 // --- Startup ---
+goApp.GetVersion().then(function (v) {
+  document.getElementById('app-version').textContent = v === 'dev' ? '' : v;
+});
 loadSavedSelections().then(refreshAll);
 
 // Check for updates after a short delay

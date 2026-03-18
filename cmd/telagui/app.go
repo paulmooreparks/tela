@@ -245,6 +245,11 @@ func (a *App) applyPendingSelfUpdate() {
 }
 
 
+// GetVersion returns the current telagui version.
+func (a *App) GetVersion() string {
+	return version
+}
+
 // HasUpdate returns true if a self-update is pending.
 func (a *App) HasUpdate() bool {
 	a.mu.Lock()

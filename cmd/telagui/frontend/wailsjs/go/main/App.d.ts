@@ -30,6 +30,8 @@ export function GetStoredToken(arg1:string):Promise<string>;
 
 export function GetUpdateVersion():Promise<string>;
 
+export function GetVersion():Promise<string>;
+
 export function HasUpdate():Promise<boolean>;
 
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
