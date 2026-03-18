@@ -10,6 +10,10 @@ export function AssignLocalPort(arg1) {
   return window['go']['main']['App']['AssignLocalPort'](arg1);
 }
 
+export function CheckForUpdatesNow() {
+  return window['go']['main']['App']['CheckForUpdatesNow']();
+}
+
 export function Connect(arg1) {
   return window['go']['main']['App']['Connect'](arg1);
 }

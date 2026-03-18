@@ -6,6 +6,8 @@ export function AddHub(arg1:string,arg2:string):Promise<void>;
 
 export function AssignLocalPort(arg1:number):Promise<number>;
 
+export function CheckForUpdatesNow():Promise<void>;
+
 export function Connect(arg1:string):Promise<string>;
 
 export function Disconnect():Promise<void>;

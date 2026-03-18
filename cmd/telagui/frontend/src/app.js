@@ -112,6 +112,14 @@ function loadSavedSelections() {
   }).catch(function () {});
 }
 
+function doRefresh() {
+  refreshAll();
+  goApp.CheckForUpdatesNow().then(function () {
+    refreshVersionDisplay();
+    checkForUpdate();
+  });
+}
+
 // --- Sidebar ---
 
 function refreshAll() {

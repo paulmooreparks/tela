@@ -337,6 +337,11 @@ func (a *App) GetToolVersions() ToolVersions {
 	return tv
 }
 
+// CheckForUpdatesNow re-checks for updates (called by Refresh button).
+func (a *App) CheckForUpdatesNow() {
+	a.checkForUpdates()
+}
+
 // HasUpdate returns true if a self-update is pending.
 func (a *App) HasUpdate() bool {
 	a.mu.Lock()
