@@ -313,8 +313,13 @@ body {
   color: var(--text-muted);
   font-size: 15px;
 }
-.profile-yaml-preview { padding: 0; }
-.profile-yaml-preview h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+.profile-yaml-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.profile-yaml-preview h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; flex-shrink: 0; }
+.profile-yaml-preview .connect-output { flex: 1; min-height: 0; }
 .detail-header { margin-bottom: 20px; }
 .detail-header h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 .detail-header .meta { font-size: 13px; color: var(--text-muted); }
