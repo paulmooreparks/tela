@@ -41,18 +41,8 @@ func (w *controlLogWriter) Write(p []byte) (int, error) {
 	}
 	controlOutputMu.Unlock()
 
-	// Batch log lines for WebSocket broadcast (debounce: 100ms max).
-	logBatchMu.Lock()
-	logBatchBuf.Write(p)
-	if logBatchTimer == nil {
-		logBatchTimer = time.AfterFunc(100*time.Millisecond, func() {
-			logBatchMu.Lock()
-			logBatchTimer = nil
-			logBatchMu.Unlock()
-			flushLogBatch()
-		})
-	}
-	logBatchMu.Unlock()
+	// Log lines are available via GET /output, not pushed via WebSocket
+	// to avoid recursive loops and UI flooding.
 
 	return n, err
 }

@@ -535,6 +535,10 @@ func loadProfile(name string) (*connectionProfile, error) {
 // runProfile loads a connection profile and runs all connections in parallel.
 // It blocks until all connections exit or stopCh is closed.
 func runProfile(name string) {
+	if exe, err := os.Executable(); err == nil {
+		log.Printf("tela %s %s/%s (%s)", version, runtime.GOOS, runtime.GOARCH, exe)
+	}
+
 	profile, err := loadProfile(name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -1334,7 +1338,7 @@ persistent_keepalive_interval=25
 			Machine: machineID,
 			Hub:     hubURL,
 		})
-		go func(l net.Listener, remote uint16) {
+		go func(l net.Listener, remote uint16, local uint16, machine string) {
 			for {
 				localConn, err := l.Accept()
 				if err != nil {
@@ -1343,9 +1347,9 @@ persistent_keepalive_interval=25
 				if tc, ok := localConn.(*net.TCPConn); ok {
 					tc.SetNoDelay(true)
 				}
-				go handleNetstackClient(tnet, localConn, int(remote), sessionAgentIP)
+				go handleNetstackClient(tnet, localConn, int(remote), sessionAgentIP, machine, int(local))
 			}
-		}(listener, m.remote)
+		}(listener, m.remote, m.local, machineID)
 	}
 
 	if len(listeners) == 0 {
@@ -1380,7 +1384,7 @@ func portLabel(port uint16) string {
 
 // handleNetstackClient dials the agent through the WireGuard tunnel
 // (via netstack) and pipes data bidirectionally.
-func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int, sessionAgentIP string) {
+func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int, sessionAgentIP string, machine string, localPort int) {
 	defer localConn.Close()
 
 	// Dial through the WireGuard tunnel to the agent's netstack
@@ -1394,6 +1398,29 @@ func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int
 
 	log.Printf("tunnel connected to %s", agentAddr)
 
+	// Emit tunnel_active event
+	emitEvent(struct {
+		Type      string `json:"type"`
+		Machine   string `json:"machine"`
+		LocalPort int    `json:"localPort"`
+		Remote    int    `json:"remote"`
+		Active    bool   `json:"active"`
+	}{Type: "tunnel_activity", Machine: machine, LocalPort: localPort, Remote: targetPort, Active: true})
+
+	// Emit inactive when first copy direction closes (client disconnected)
+	var inactiveOnce sync.Once
+	emitInactive := func() {
+		inactiveOnce.Do(func() {
+			emitEvent(struct {
+				Type      string `json:"type"`
+				Machine   string `json:"machine"`
+				LocalPort int    `json:"localPort"`
+				Remote    int    `json:"remote"`
+				Active    bool   `json:"active"`
+			}{Type: "tunnel_activity", Machine: machine, LocalPort: localPort, Remote: targetPort, Active: false})
+		})
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -1402,6 +1429,7 @@ func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int
 		defer wg.Done()
 		n, _ := io.Copy(tunnelConn, localConn)
 		logVerbose("local→tunnel closed (%d bytes)", n)
+		emitInactive()
 	}()
 
 	// tunnel → local
@@ -1409,6 +1437,7 @@ func handleNetstackClient(tnet *netstack.Net, localConn net.Conn, targetPort int
 		defer wg.Done()
 		n, _ := io.Copy(localConn, tunnelConn)
 		logVerbose("tunnel→local closed (%d bytes)", n)
+		emitInactive()
 	}()
 
 	wg.Wait()

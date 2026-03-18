@@ -19,6 +19,7 @@ export namespace main {
 	export class ProfileService {
 	    name: string;
 	    local: number;
+	    remote?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileService(source);
@@ -28,6 +29,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.local = source["local"];
+	        this.remote = source["remote"];
 	    }
 	}
 	export class ProfileConnection {

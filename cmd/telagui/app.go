@@ -104,8 +104,9 @@ type ProfileConnection struct {
 
 // ProfileService represents one service in a profile connection.
 type ProfileService struct {
-	Name  string `yaml:"name" json:"name"`
-	Local int    `yaml:"local" json:"local"`
+	Name   string `yaml:"name" json:"name"`
+	Local  int    `yaml:"local" json:"local"`
+	Remote int    `yaml:"remote,omitempty" json:"remote,omitempty"`
 }
 
 // Profile is the top-level profile YAML structure.
@@ -189,7 +190,6 @@ func (a *App) checkForUpdates() {
 
 	if _, err := os.Stat(localPath); err != nil {
 		// tela not installed -- download it now (first run)
-		a.logCommand("Install tela "+latest, "# first run, downloading tela CLI")
 		a.installTool("tela", latest)
 	} else {
 		// tela exists -- check version
@@ -404,7 +404,6 @@ func (a *App) RestartToUpdate() error {
 	time.Sleep(1 * time.Second)
 
 	// Update tela CLI
-	a.logCommand("Update tela to "+ver, "# downloading tela "+ver)
 	a.installTool("tela", ver)
 
 	if isPackageManaged() {
@@ -412,12 +411,10 @@ func (a *App) RestartToUpdate() error {
 		a.mu.Lock()
 		a.updatePending = false
 		a.mu.Unlock()
-		a.logCommand("CLI updated to "+ver, "# GUI update available via your package manager")
 		return nil
 	}
 
 	// Download telagui update to staging path (next to running binary)
-	a.logCommand("Update telagui to "+ver, "# downloading telagui "+ver)
 	a.downloadSelfUpdate(ver)
 
 	exe := selfExePath()
@@ -955,7 +952,6 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 		return "", fmt.Errorf("write profile: %w", err)
 	}
 
-	a.logCommand("Save profile", "cat "+path)
 	return path, nil
 }
 
@@ -1159,11 +1155,6 @@ func (a *App) SetVerbose(on bool) error {
 	}
 	resp.Body.Close()
 
-	state := "off"
-	if on {
-		state = "on"
-	}
-	a.logCommand("Set verbose "+state, "# toggled via control API PUT /verbose")
 	return nil
 }
 
@@ -1190,7 +1181,6 @@ func (a *App) SaveTerminalOutput(content string) (string, error) {
 	if err := os.WriteFile(dialog, []byte(content), 0600); err != nil {
 		return "", fmt.Errorf("save failed: %w", err)
 	}
-	a.logCommand("Save terminal output", "# saved to "+dialog)
 	return dialog, nil
 }
 
@@ -1617,7 +1607,6 @@ func (a *App) RenameProfile(oldName, newName string) error {
 		currentProfileName = newName
 	}
 
-	a.logCommand("Rename profile "+oldName+" to "+newName, "# renamed "+oldPath+" to "+newPath)
 	return nil
 }
 
@@ -1701,7 +1690,6 @@ func (a *App) SaveSettings(jsonStr string) error {
 		return fmt.Errorf("write settings: %w", err)
 	}
 
-	a.logCommand("Save settings", "# saved to "+settingsPath())
 	return nil
 }
 
@@ -1771,7 +1759,6 @@ func (a *App) ImportProfile() error {
 		return fmt.Errorf("write profile: %w", err)
 	}
 
-	a.logCommand("Import profile", "# imported from "+dialog)
 	return nil
 }
 
@@ -1801,7 +1788,6 @@ func (a *App) ExportProfile() error {
 		return fmt.Errorf("save profile: %w", err)
 	}
 
-	a.logCommand("Export profile", "# exported to "+dialog)
 	return nil
 }
 
