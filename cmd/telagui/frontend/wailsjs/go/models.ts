@@ -242,6 +242,7 @@ export namespace main {
 	    minimizeOnClose: boolean;
 	    autoCheckUpdates: boolean;
 	    verboseDefault: boolean;
+	    confirmDisconnect: boolean;
 	    sidebarWidth: number;
 	
 	    static createFrom(source: any = {}) {
@@ -257,6 +258,7 @@ export namespace main {
 	        this.minimizeOnClose = source["minimizeOnClose"];
 	        this.autoCheckUpdates = source["autoCheckUpdates"];
 	        this.verboseDefault = source["verboseDefault"];
+	        this.confirmDisconnect = source["confirmDisconnect"];
 	        this.sidebarWidth = source["sidebarWidth"];
 	    }
 	}

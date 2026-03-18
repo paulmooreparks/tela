@@ -38,7 +38,7 @@ func main() {
 				wailsRuntime.WindowHide(app.ctx)
 				return true // hide to tray instead of closing
 			}
-			if app.IsConnected() {
+			if app.IsConnected() && s.ConfirmDisconnect {
 				result, _ := wailsRuntime.MessageDialog(app.ctx, wailsRuntime.MessageDialogOptions{
 					Type:          wailsRuntime.QuestionDialog,
 					Title:         "Disconnect",

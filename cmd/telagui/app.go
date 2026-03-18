@@ -576,10 +576,15 @@ func (a *App) IsConnected() bool {
 	return a.connected
 }
 
-// ConfirmDisconnect shows a native confirmation dialog if connected.
-// Returns true if not connected or if the user confirms.
+// ConfirmDisconnect shows a native confirmation dialog if connected
+// and the confirmDisconnect setting is enabled.
+// Returns true if not connected, confirmation is disabled, or user confirms.
 func (a *App) ConfirmDisconnect() bool {
 	if !a.IsConnected() {
+		return true
+	}
+	s := a.GetSettings()
+	if !s.ConfirmDisconnect {
 		return true
 	}
 	result, _ := wailsRuntime.MessageDialog(a.ctx, wailsRuntime.MessageDialogOptions{
@@ -1720,9 +1725,10 @@ type Settings struct {
 	MinimizeTo       string `yaml:"minimizeTo" json:"minimizeTo"`             // "taskbar" or "tray"
 	StartMinimized   bool   `yaml:"startMinimized" json:"startMinimized"`
 	MinimizeOnClose  bool   `yaml:"minimizeOnClose" json:"minimizeOnClose"`
-	AutoCheckUpdates bool   `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
-	VerboseDefault   bool   `yaml:"verboseDefault" json:"verboseDefault"`
-	SidebarWidth     int    `yaml:"sidebarWidth" json:"sidebarWidth"`
+	AutoCheckUpdates    bool   `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
+	VerboseDefault      bool   `yaml:"verboseDefault" json:"verboseDefault"`
+	ConfirmDisconnect   bool   `yaml:"confirmDisconnect" json:"confirmDisconnect"`
+	SidebarWidth        int    `yaml:"sidebarWidth" json:"sidebarWidth"`
 }
 
 func defaultSettings() Settings {
@@ -1732,8 +1738,9 @@ func defaultSettings() Settings {
 		MinimizeTo:       "taskbar",
 		StartMinimized:   false,
 		MinimizeOnClose:  false,
-		AutoCheckUpdates: true,
-		VerboseDefault:   false,
+		AutoCheckUpdates:  true,
+		VerboseDefault:    false,
+		ConfirmDisconnect: true,
 	}
 }
 

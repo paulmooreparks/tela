@@ -1256,6 +1256,7 @@ function refreshSettings() {
   goApp.GetSettings().then(function (s) {
     document.getElementById('setting-autoConnect').checked = s.autoConnect;
     document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;
+    document.getElementById('setting-confirmDisconnect').checked = s.confirmDisconnect;
     document.getElementById('setting-minimizeOnClose').checked = s.minimizeOnClose;
     document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
@@ -1269,6 +1270,7 @@ function saveSetting() {
   var s = {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
+    confirmDisconnect: document.getElementById('setting-confirmDisconnect').checked,
     minimizeTo: 'tray',
     startMinimized: false,
     minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
