@@ -102,6 +102,10 @@ export function IsPackageManaged() {
   return window['go']['main']['App']['IsPackageManaged']();
 }
 
+export function IsQuitting() {
+  return window['go']['main']['App']['IsQuitting']();
+}
+
 export function LoadProfile() {
   return window['go']['main']['App']['LoadProfile']();
 }

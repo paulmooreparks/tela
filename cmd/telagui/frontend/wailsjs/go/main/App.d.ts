@@ -52,6 +52,8 @@ export function ImportProfile():Promise<void>;
 
 export function IsPackageManaged():Promise<boolean>;
 
+export function IsQuitting():Promise<boolean>;
+
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;

@@ -32,6 +32,9 @@ func main() {
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		OnBeforeClose: func(ctx context.Context) bool {
+			if app.IsQuitting() {
+				return false // allow quit
+			}
 			s := app.GetSettings()
 			if s.MinimizeToTray {
 				wailsRuntime.WindowHide(app.ctx)
