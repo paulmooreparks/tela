@@ -371,8 +371,10 @@ func (a *App) RestartToUpdate() error {
 		return fmt.Errorf("no update available")
 	}
 
-	// Disconnect if connected
+	// Disconnect if connected and wait for clean shutdown
 	a.Disconnect()
+	// Give tela a moment to fully exit and release ports
+	time.Sleep(1 * time.Second)
 
 	// Update tela CLI
 	a.logCommand("Update tela to "+ver, "# downloading tela "+ver)
