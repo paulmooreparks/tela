@@ -590,6 +590,13 @@ body {
 .term-btn:hover { background: #475569; }
 .term-btn.verbose-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .verbose-check-icon { font-size: 13px; }
+.copy-toast {
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.copy-toast.visible { opacity: 1; }
 .terminal-output.frozen { opacity: 0.95; }
 .terminal-output::selection { background: #3b82f680; color: #fff; }
 .terminal-output {

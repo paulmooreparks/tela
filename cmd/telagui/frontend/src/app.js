@@ -616,10 +616,21 @@ function unfreezeTerminal() {
   refreshTerminal();
 }
 
+function showCopyToast() {
+  var toast = document.getElementById('copy-toast');
+  toast.textContent = 'Copied to clipboard';
+  toast.classList.add('visible');
+  clearTimeout(toast._fadeTimer);
+  toast._fadeTimer = setTimeout(function () {
+    toast.classList.remove('visible');
+  }, 3000);
+}
+
 function copyTerminal() {
   freezeTerminal();
   var text = document.getElementById('terminal-output').textContent;
   navigator.clipboard.writeText(text).then(function () {
+    showCopyToast();
     setTimeout(unfreezeTerminal, 200);
   });
 }
@@ -703,7 +714,9 @@ function refreshTerminal() {
     el.addEventListener('mouseup', function () {
       var sel = window.getSelection();
       if (sel && sel.toString().length > 0) {
-        navigator.clipboard.writeText(sel.toString()).catch(function () {});
+        navigator.clipboard.writeText(sel.toString()).then(function () {
+          showCopyToast();
+        }).catch(function () {});
         // Keep frozen briefly so the selection is visible
         setTimeout(unfreezeTerminal, 1500);
       } else {

@@ -18,6 +18,8 @@ import (
 
 	"log"
 
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"github.com/paulmooreparks/tela/internal/credstore"
 	"gopkg.in/yaml.v3"
 )
@@ -1089,17 +1091,31 @@ func (a *App) SetVerbose(on bool) error {
 	return nil
 }
 
-// SaveTerminalOutput saves the terminal output to a timestamped file.
+// SaveTerminalOutput saves the terminal output using a save dialog.
 func (a *App) SaveTerminalOutput(content string) (string, error) {
-	dir := filepath.Join(telaConfigDir(), "logs")
-	os.MkdirAll(dir, 0700)
 	filename := fmt.Sprintf("tela-%s.log", time.Now().Format("2006-01-02-150405"))
-	path := filepath.Join(dir, filename)
-	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+
+	dialog, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		DefaultFilename: filename,
+		Title:           "Save Terminal Output",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "Log Files", Pattern: "*.log"},
+			{DisplayName: "Text Files", Pattern: "*.txt"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("dialog failed: %w", err)
+	}
+	if dialog == "" {
+		return "", nil // user cancelled
+	}
+
+	if err := os.WriteFile(dialog, []byte(content), 0600); err != nil {
 		return "", fmt.Errorf("save failed: %w", err)
 	}
-	a.logCommand("Save terminal output", "# saved to "+path)
-	return path, nil
+	a.logCommand("Save terminal output", "# saved to "+dialog)
+	return dialog, nil
 }
 
 // GetControlStatus reads live status from the tela control API.
