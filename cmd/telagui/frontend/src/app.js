@@ -831,7 +831,14 @@ function doQuit() {
 }
 
 function doDisconnect() {
-  // Show "Disconnecting..." state immediately
+  // Confirm before disconnecting
+  goApp.IsConnected().then(function (connected) {
+    if (connected && !confirm('Are you sure you want to disconnect?')) return;
+    performDisconnect();
+  });
+}
+
+function performDisconnect() {
   var btn = document.getElementById('connect-btn');
   btn.textContent = 'Disconnecting...';
   btn.className = 'topbar-btn disconnecting-btn';

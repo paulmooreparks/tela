@@ -41,8 +41,8 @@ func main() {
 			if app.IsConnected() {
 				result, _ := wailsRuntime.MessageDialog(app.ctx, wailsRuntime.MessageDialogOptions{
 					Type:          wailsRuntime.QuestionDialog,
-					Title:         "Quit TelaGUI",
-					Message:       "You are connected. Quit and disconnect all tunnels?",
+					Title:         "Disconnect",
+					Message:       "Are you sure you want to disconnect?",
 					DefaultButton: "No",
 					Buttons:       []string{"Yes", "No"},
 				})

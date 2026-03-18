@@ -47,8 +47,10 @@ func (a *App) setupTray() {
 		})
 
 		mQuit.Click(func() {
-			a.confirmQuit()
-			systray.Quit()
+			// Show window first so the confirmation dialog is visible,
+			// then go through the normal quit path (OnBeforeClose).
+			a.ShowWindow()
+			a.QuitApp()
 		})
 	}, func() {
 		// cleanup on systray exit
