@@ -1417,6 +1417,10 @@ func (a *App) GetSettings() Settings {
 	if err := yaml.Unmarshal(data, &s); err != nil {
 		return defaultSettings()
 	}
+	// Migrate old settings: ensure minimizeTo has a valid value
+	if s.MinimizeTo != "taskbar" && s.MinimizeTo != "tray" {
+		s.MinimizeTo = "taskbar"
+	}
 	return s
 }
 

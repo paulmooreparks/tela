@@ -24,7 +24,7 @@ func main() {
 		Title:       "TelaGUI",
 		Width:       1024,
 		Height:      700,
-		StartHidden: settings.StartMinimized,
+		StartHidden: settings.StartMinimized && settings.MinimizeTo == "tray",
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
