@@ -71,7 +71,12 @@ import (
 var version = "dev"
 
 const (
-	mtu            = 1420
+	// Default WireGuard MTU. 1280 is the IPv6 minimum and works reliably
+	// across WebSocket-over-TLS, NAT, VPN, and WSL2 network stacks.
+	// The standard WireGuard MTU of 1420 causes fragmentation when tunneled
+	// over WebSocket+TLS (~100 bytes overhead), leading to failed SSH key
+	// exchanges and other large-packet issues.
+	defaultMTU     = 1280
 	wsPingInterval = 20 * time.Second
 	wsPongWait     = 45 * time.Second
 	wsWriteWait    = 5 * time.Second
@@ -1226,7 +1231,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	tunDev, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{netip.MustParseAddr(sessionHelperIP)},
 		nil, // no DNS
-		mtu,
+		defaultMTU,
 	)
 	if err != nil {
 		log.Printf("netstack creation failed: %v", err)
