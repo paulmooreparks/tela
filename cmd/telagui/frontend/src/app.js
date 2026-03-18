@@ -20,6 +20,7 @@ function switchTab(name, btn) {
   if (name === 'log') refreshLog();
   if (name === 'about') refreshAbout();
   if (name === 'settings') refreshSettings();
+  if (name === 'hubs') refreshHubsTab();
 }
 
 // --- Sidebar Resize ---
@@ -238,6 +239,32 @@ function doRefresh() {
 
 // --- Sidebar ---
 
+// Track which hubs are included in the current profile
+var includedHubs = {};
+
+function isHubIncluded(hubURL) {
+  // A hub is included if it has any selected services OR is explicitly included
+  if (includedHubs[hubURL] !== undefined) return includedHubs[hubURL];
+  // Default: included if it has any selected services
+  var hasServices = Object.keys(selectedServices).some(function (key) {
+    return key.indexOf(hubURL + '||') === 0;
+  });
+  return hasServices;
+}
+
+function toggleHubInclusion(hubURL, included) {
+  includedHubs[hubURL] = included;
+  if (!included) {
+    // Remove all service selections for this hub
+    Object.keys(selectedServices).forEach(function (key) {
+      if (key.indexOf(hubURL + '||') === 0) delete selectedServices[key];
+    });
+    persistSelections();
+    updateConnectButton();
+  }
+  refreshAll();
+}
+
 function refreshAll() {
   var content = document.getElementById('sidebar-content');
   content.innerHTML = '<p class="loading">Loading hubs...</p>';
@@ -246,32 +273,39 @@ function refreshAll() {
     if (!hubs || hubs.length === 0) {
       content.innerHTML = '<div class="sidebar-empty">'
         + '<p>No hubs configured.</p>'
-        + '<p class="hint">Click <strong>Add Hub</strong> to get started.</p></div>';
+        + '<p class="hint">Go to the <strong>Hubs</strong> tab to add one.</p></div>';
       return;
     }
 
     content.innerHTML = '';
     hubs.forEach(function (hub) {
       var hubContainer = document.createElement('div');
-      hubContainer.className = 'hub-group';
+      var included = isHubIncluded(hub.url);
+      hubContainer.className = 'profile-hub-group' + (included ? '' : ' profile-hub-excluded');
 
-      var hubEl = document.createElement('div');
-      hubEl.className = 'hub-item';
-      if (selectedHubURL === hub.url && !selectedMachineId) hubEl.classList.add('selected');
-      hubEl.innerHTML = '<span class="hub-dot"></span>'
+      // Hub header with checkbox
+      var hubHeader = document.createElement('div');
+      hubHeader.className = 'profile-hub-header';
+      if (selectedHubURL === hub.url && !selectedMachineId) hubHeader.classList.add('selected');
+      hubHeader.innerHTML = '<input type="checkbox"' + (included ? ' checked' : '')
+        + ' onclick="event.stopPropagation(); toggleHubInclusion(\'' + escAttr(hub.url) + '\', this.checked)">'
+        + '<span class="hub-dot"></span>'
         + '<span class="hub-name">' + escHtml(hub.name) + '</span>'
         + (!hub.hasToken ? '<span class="no-token-badge">no token</span>' : '');
-      hubEl.onclick = function () { selectHub(hub, hubEl); };
-      hubContainer.appendChild(hubEl);
+      hubHeader.onclick = function (e) {
+        if (e.target.tagName === 'INPUT') return;
+        selectHub(hub, hubHeader);
+      };
+      hubContainer.appendChild(hubHeader);
 
       content.appendChild(hubContainer);
 
       if (hub.hasToken) {
         goApp.GetHubStatus(hub.url).then(function (status) {
           hubStatusCache[hub.url] = status;
-          hubEl.querySelector('.hub-dot').className = 'hub-dot ' + (status.online ? 'online' : 'offline');
+          hubHeader.querySelector('.hub-dot').className = 'hub-dot ' + (status.online ? 'online' : 'offline');
 
-          if (status.machines) {
+          if (status.machines && included) {
             status.machines.forEach(function (m) {
               var mId = m.id || m.hostname;
               var mEl = document.createElement('div');
@@ -288,7 +322,7 @@ function refreshAll() {
             });
           }
         }).catch(function () {
-          hubEl.querySelector('.hub-dot').className = 'hub-dot offline';
+          hubHeader.querySelector('.hub-dot').className = 'hub-dot offline';
         });
       }
     });
@@ -333,10 +367,6 @@ function renderHubDetail(hub) {
   if (status.error) {
     html += '<div class="connect-error">' + escHtml(status.error) + '</div>';
   }
-
-  html += '<div class="hub-actions">'
-    + '<button class="btn-secondary btn-sm" onclick="removeHub(\'' + escAttr(hub.url) + '\')">Remove Hub</button>'
-    + '</div>';
 
   pane.innerHTML = html;
 }
@@ -631,6 +661,66 @@ function stopConnectionPoll() {
   }
 }
 
+// --- Hubs Tab ---
+
+function refreshHubsTab() {
+  var list = document.getElementById('hubs-list');
+  if (!list) return;
+  list.innerHTML = '<p class="loading">Loading hubs...</p>';
+
+  goApp.GetKnownHubs().then(function (hubs) {
+    if (!hubs || hubs.length === 0) {
+      list.innerHTML = '<div class="sidebar-empty">'
+        + '<p>No hubs configured.</p>'
+        + '<p class="hint">Click <strong>Add Hub</strong> to get started.</p></div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    hubs.forEach(function (hub) {
+      var card = document.createElement('div');
+      card.className = 'hub-card';
+
+      var dotClass = 'unknown';
+      var status = hubStatusCache[hub.url];
+      if (status) {
+        dotClass = status.online ? 'online' : 'offline';
+      }
+
+      var tokenHtml;
+      if (hub.hasToken) {
+        tokenHtml = '<span class="token-status-yes">token stored</span>';
+      } else {
+        tokenHtml = '<span class="token-status-no">no token</span>';
+      }
+
+      card.innerHTML = '<span class="hub-card-dot ' + dotClass + '"></span>'
+        + '<div class="hub-card-info">'
+        + '<div class="hub-card-name">' + escHtml(hub.name) + '</div>'
+        + '<div class="hub-card-url">' + escHtml(hub.url) + '</div>'
+        + '<div class="hub-card-token">' + tokenHtml + '</div>'
+        + '</div>'
+        + '<div class="hub-card-actions">'
+        + '<button class="btn-danger btn-sm" onclick="removeHub(\'' + escAttr(hub.url) + '\')">Remove</button>'
+        + '</div>';
+
+      list.appendChild(card);
+
+      // Fetch status if not cached
+      if (!status && hub.hasToken) {
+        goApp.GetHubStatus(hub.url).then(function (s) {
+          hubStatusCache[hub.url] = s;
+          var dot = card.querySelector('.hub-card-dot');
+          if (dot) dot.className = 'hub-card-dot ' + (s.online ? 'online' : 'offline');
+        }).catch(function () {
+          var dot = card.querySelector('.hub-card-dot');
+          if (dot) dot.className = 'hub-card-dot offline';
+        });
+      }
+    });
+  });
+}
+
 // --- Hub Management ---
 
 function removeHub(url) {
@@ -639,11 +729,13 @@ function removeHub(url) {
   Object.keys(selectedServices).forEach(function (key) {
     if (key.indexOf(url + '||') === 0) delete selectedServices[key];
   });
+  delete includedHubs[url];
   goApp.RemoveHub(url).then(function () {
     selectedHubURL = null;
     selectedMachineId = null;
     persistSelections();
     refreshAll();
+    refreshHubsTab();
     document.getElementById('detail-pane').innerHTML = '<div class="empty-state"><p>Hub removed.</p></div>';
   });
 }
@@ -725,6 +817,7 @@ function submitAddHub(event) {
     btn.disabled = false;
     btn.textContent = 'Connect';
     refreshAll();
+    refreshHubsTab();
   }).catch(function (err) {
     errEl.textContent = err;
     errEl.classList.remove('hidden');
@@ -786,6 +879,7 @@ function dockerAddHub() {
   goApp.AddHub(url, token).then(function () {
     closeAddHubModal();
     refreshAll();
+    refreshHubsTab();
   });
 }
 
@@ -951,6 +1045,7 @@ function clearCredentialStore() {
   if (!confirm('This will delete all stored hub tokens. You will need to re-authenticate with each hub. Continue?')) return;
   goApp.ClearCredentialStore().then(function () {
     refreshAll();
+    refreshHubsTab();
   }).catch(function (err) {
     alert('Failed to clear credential store: ' + err);
   });

@@ -23,9 +23,10 @@
 
     <!-- Tab bar -->
     <div class="main-tab-bar">
-      <button class="main-tab active" onclick="switchTab('profile', this)">Profile</button>
+      <button class="main-tab active" onclick="switchTab('profile', this)">Profiles</button>
       <button class="main-tab" onclick="switchTab('terminal', this)">Terminal</button>
       <button class="main-tab" onclick="switchTab('log', this)">Command Log</button>
+      <button class="main-tab" onclick="switchTab('hubs', this)">Hubs</button>
       <button class="main-tab" onclick="switchTab('settings', this)">Settings</button>
       <button class="main-tab" onclick="switchTab('about', this)">About</button>
     </div>
@@ -41,7 +42,6 @@
               <button class="profile-new-btn" onclick="newProfile()" title="New profile">+</button>
             </div>
             <div class="sidebar-actions">
-              <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
               <button class="btn-secondary btn-sm" onclick="doRefresh()">Refresh</button>
               <button class="btn-secondary btn-sm" onclick="importProfile()" title="Import">Import</button>
               <button class="btn-secondary btn-sm" onclick="exportProfile()" title="Export">Export</button>
@@ -81,6 +81,20 @@
     <div class="tab-pane hidden" id="tab-log">
       <div class="log-pane" id="log-content">
         <p class="empty-hint">Actions you take will appear here with their CLI equivalents.</p>
+      </div>
+    </div>
+
+    <!-- Hubs tab -->
+    <div class="tab-pane hidden" id="tab-hubs">
+      <div class="hubs-pane">
+        <h1>Hubs</h1>
+        <p class="hubs-desc">Manage hub credentials. Add new hubs or remove existing ones.</p>
+        <div class="hubs-actions-bar">
+          <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
+        </div>
+        <div id="hubs-list">
+          <p class="loading">Loading hubs...</p>
+        </div>
       </div>
     </div>
 
