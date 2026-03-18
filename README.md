@@ -1,4 +1,4 @@
-![TelaLogo](https://raw.githubusercontent.com/paulmooreparks/tela/main/logo-sm.png)
+![Tela](https://raw.githubusercontent.com/paulmooreparks/tela/main/logo.png)
 
 # Tela
 
@@ -39,9 +39,10 @@ The hub never sees plaintext. It relays opaque WireGuard ciphertext.
 
 | Component | Language | Description |
 |-----------|----------|-------------|
-| **tela** | Go | Client. Connects to hub, establishes WG tunnel, binds localhost listeners |
+| **tela** | Go | Client CLI. Connects to hub, establishes WG tunnel, binds localhost listeners |
 | **telad** | Go | Daemon. Registers with hub, exposes local services through WG tunnel |
 | **telahubd** | Go | Hub server. Pairs daemons with clients, relays WS/UDP, serves hub console |
+| **telagui** | Go + JS | Desktop client. Graphical interface for tela with profile management and real-time status. See [TelaGUI.md](TelaGUI.md) |
 
 ## Networking & port requirements
 
@@ -248,10 +249,11 @@ The `portal add` command discovers the portal's hub directory endpoint via `/.we
 ## Project structure
 
 ```
-cmd/tela/          Client binary (subcommands: connect, machines, services, status, remote, admin, service)
+cmd/tela/          Client CLI (subcommands: connect, machines, services, status, remote, admin, service)
 cmd/telad/         Daemon binary
 cmd/telahubd/      Hub server binary
-internal/service/   Cross-platform OS service management (Windows SCM, systemd, launchd)
+cmd/telagui/       Desktop client (Wails v2 app)
+internal/service/  Cross-platform OS service management (Windows SCM, systemd, launchd)
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
 howto/             Guides (hub setup, services, networking, use cases)
 www/               Hub console (web UI)
@@ -266,7 +268,8 @@ docker/            Caddyfile, docker-compose, cloudflared config
 | **Hub** | Central relay (`telahubd`) that pairs daemons with clients. Serves the hub console. |
 | **Hub Console** | Web interface for a hub (e.g., `https://hub.example.com/`). |
 | **Daemon / telad** | Long-lived daemon on a managed machine that registers with the hub. |
-| **Client / tela** | Binary on the user's machine that tunnels through the hub to an agent. |
+| **Client / tela** | CLI on the user's machine that tunnels through the hub to an agent. |
+| **TelaGUI** | Desktop client. Graphical interface for tela with profile management and real-time status. |
 | **Machine** | A named resource registered by an agent (e.g., `barn`). |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
 | **Session** | An active encrypted tunnel between a client and an agent. |
@@ -275,6 +278,7 @@ docker/            Caddyfile, docker-compose, cloudflared config
 
 ## Documentation
 
+- [TelaGUI.md](TelaGUI.md) - Desktop client documentation
 - [REFERENCE.md](REFERENCE.md) - Comprehensive documentation for Tela and its command-line tools
 - [CONFIGURATION.md](CONFIGURATION.md) - Configuration file schemas (`hubs.yaml`, `telad.yaml`, `telahubd.yaml`, portal `config.json`)
 - [DESIGN.md](DESIGN.md) - Architecture specification (includes full glossary)
