@@ -60,18 +60,18 @@ function loadSavedSelections() {
 // --- Sidebar ---
 
 function refreshAll() {
-  var sidebar = document.getElementById('sidebar');
-  sidebar.innerHTML = '<p class="loading">Loading hubs...</p>';
+  var content = document.getElementById('sidebar-content');
+  content.innerHTML = '<p class="loading">Loading hubs...</p>';
 
   goApp.GetKnownHubs().then(function (hubs) {
     if (!hubs || hubs.length === 0) {
-      sidebar.innerHTML = '<div class="sidebar-empty">'
+      content.innerHTML = '<div class="sidebar-empty">'
         + '<p>No hubs configured.</p>'
         + '<p class="hint">Click <strong>Add Hub</strong> to get started.</p></div>';
       return;
     }
 
-    sidebar.innerHTML = '';
+    content.innerHTML = '';
     hubs.forEach(function (hub) {
       var hubContainer = document.createElement('div');
       hubContainer.className = 'hub-group';
@@ -85,7 +85,7 @@ function refreshAll() {
       hubEl.onclick = function () { selectHub(hub, hubEl); };
       hubContainer.appendChild(hubEl);
 
-      sidebar.appendChild(hubContainer);
+      content.appendChild(hubContainer);
 
       if (hub.hasToken) {
         goApp.GetHubStatus(hub.url).then(function (status) {
