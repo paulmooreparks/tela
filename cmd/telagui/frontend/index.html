@@ -56,7 +56,8 @@
               <button class="profile-new-btn" onclick="newProfile()" title="New profile">+</button>
             </div>
             <div class="sidebar-actions">
-              <button class="btn-primary btn-sm" onclick="doRefresh()">Refresh</button>
+              <button id="undo-btn" class="btn-icon btn-sm" onclick="undoSelections()" title="Undo changes" disabled>&#x21B6;</button>
+              <button id="save-btn" class="btn-primary btn-sm" onclick="saveSelections()" disabled>Save</button>
               <button class="btn-primary btn-sm" onclick="importProfile()" title="Import">Import</button>
               <button class="btn-primary btn-sm" onclick="exportProfile()" title="Export">Export</button>
               <button class="btn-primary btn-sm" onclick="showProfileOverview()">Show YAML</button>
@@ -136,28 +137,11 @@
 
         <div class="settings-section">
           <h2>Appearance</h2>
-          <div class="settings-item settings-item-static">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Minimize to</span>
-              <span class="settings-item-desc">Where TelaGUI goes when minimized.</span>
-              <div class="settings-radio-group">
-                <label class="settings-radio"><input type="radio" name="minimizeTo" value="taskbar" onchange="saveSetting()"> Taskbar</label>
-                <label class="settings-radio"><input type="radio" name="minimizeTo" value="tray" onchange="saveSetting()"> System tray</label>
-              </div>
-            </div>
-          </div>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-startMinimized" onchange="saveSetting()">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Start minimized</span>
-              <span class="settings-item-desc">Launch minimized to the selected destination above.</span>
-            </div>
-          </label>
           <label class="settings-item">
             <input type="checkbox" id="setting-minimizeOnClose" onchange="saveSetting()">
             <div class="settings-item-text">
-              <span class="settings-item-label">Minimize on window close</span>
-              <span class="settings-item-desc">Minimize instead of exiting when you click the X button.</span>
+              <span class="settings-item-label">Minimize to tray on window close</span>
+              <span class="settings-item-desc">Hide to the system tray instead of exiting when you click the X button.</span>
             </div>
           </label>
         </div>

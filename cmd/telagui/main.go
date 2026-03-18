@@ -17,14 +17,10 @@ var assets embed.FS
 func main() {
 	app := NewApp()
 
-	// Read settings before window creation for StartHidden
-	settings := app.GetSettings()
-
 	err := wails.Run(&options.App{
 		Title:       "TelaGUI",
 		Width:       1024,
 		Height:      700,
-		StartHidden: settings.StartMinimized && settings.MinimizeTo == "tray",
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -37,12 +33,8 @@ func main() {
 			}
 			s := app.GetSettings()
 			if s.MinimizeOnClose {
-				if s.MinimizeTo == "tray" {
-					wailsRuntime.WindowHide(app.ctx)
-				} else {
-					wailsRuntime.WindowMinimise(app.ctx)
-				}
-				return true // prevent close, minimize instead
+				wailsRuntime.WindowHide(app.ctx)
+				return true // prevent close, hide to tray instead
 			}
 			return false // allow close
 		},

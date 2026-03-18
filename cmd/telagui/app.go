@@ -146,18 +146,6 @@ func (a *App) startup(ctx context.Context) {
 	// Apply startup settings
 	settings := a.GetSettings()
 
-	// Apply start minimized
-	if settings.StartMinimized {
-		go func() {
-			time.Sleep(500 * time.Millisecond)
-			if settings.MinimizeTo == "tray" {
-				wailsRuntime.WindowHide(a.ctx)
-			} else {
-				wailsRuntime.WindowMinimise(a.ctx)
-			}
-		}()
-	}
-
 	// Check for updates
 	if settings.AutoCheckUpdates {
 		go a.checkForUpdates()

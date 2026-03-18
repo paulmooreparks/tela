@@ -588,6 +588,17 @@ body {
 }
 .btn-secondary:hover { background: var(--surface-alt); }
 .btn-sm { padding: 4px 12px; font-size: 12px; }
+.btn-icon {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.btn-icon:hover { background: var(--surface-alt); }
+.btn-icon:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-link {
   background: none;
   border: none;

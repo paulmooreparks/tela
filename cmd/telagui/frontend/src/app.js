@@ -9,6 +9,10 @@ var selectedHubURL = null;
 var selectedMachineId = null;
 var activeTunnels = {}; // "machine:localPort" -> connection count
 var verboseMode = false;
+var savedFingerprint = ''; // fingerprint of selections at last save/load
+var savedServicesJSON = '{}'; // full selectedServices JSON for Undo restore
+var savedIncludedHubsJSON = '{}'; // full includedHubs JSON for Undo restore
+var profileDirty = false;
 
 // --- Tabs ---
 
@@ -18,6 +22,7 @@ function switchTab(name, btn) {
   document.getElementById('tab-' + name).classList.remove('hidden');
   btn.classList.add('active');
   if (name === 'status') refreshStatus();
+  if (name === 'profile') showProfileOverview();
   if (name === 'terminal') refreshTerminal();
   if (name === 'log') refreshLog();
   if (name === 'about') refreshAbout();
@@ -304,6 +309,8 @@ function loadSavedSelections() {
         }
       });
     }
+  }).then(function () {
+    takeSnapshot();
   }).catch(function () {});
 }
 
@@ -323,12 +330,68 @@ function refreshProfileList() {
   });
 }
 
-function switchProfile(name) {
-  // Cancel any pending persist so old selections don't write to the new profile
-  if (persistTimer) {
-    clearTimeout(persistTimer);
-    persistTimer = null;
+function refreshProfilePath() {
+  goApp.GetProfilePath().then(function (path) {
+    var el = document.getElementById('profile-path');
+    if (el) el.textContent = path;
+  });
+}
+
+function copyProfilePath() {
+  goApp.GetProfilePath().then(function (path) {
+    if (navigator.clipboard) navigator.clipboard.writeText(path);
+  });
+}
+
+function showProfileOverview() {
+  selectedHubURL = null;
+  selectedMachineId = null;
+  clearSelection();
+  showProfileYaml();
+}
+
+function showProfileYaml() {
+  var pane = document.getElementById('detail-pane');
+  if (selectedHubURL || selectedMachineId) return;
+
+  var keys = Object.keys(selectedServices);
+  if (keys.length === 0) {
+    pane.innerHTML = '<div class="empty-state"><p>Select hubs, machines, and services from the sidebar to build your connection profile.</p></div>';
+    return;
   }
+
+  var groups = {};
+  keys.forEach(function (key) {
+    var sel = selectedServices[key];
+    var gk = sel.hub + '||' + sel.machine;
+    if (!groups[gk]) groups[gk] = { hub: sel.hub, machine: sel.machine, services: [] };
+    groups[gk].services.push({ name: sel.service, local: sel.localPort });
+  });
+
+  var yaml = 'connections:\n';
+  Object.keys(groups).forEach(function (k) {
+    var g = groups[k];
+    yaml += '  - hub: ' + toWSURL(g.hub) + '\n';
+    yaml += '    machine: ' + g.machine + '\n';
+    yaml += '    services:\n';
+    g.services.forEach(function (s) {
+      yaml += '      - name: ' + s.name + '\n';
+      yaml += '        local: ' + s.local + '\n';
+    });
+  });
+
+  goApp.GetProfilePath().then(function (path) {
+    pane.innerHTML = '<div class="profile-yaml-preview">'
+      + '<div class="profile-yaml-header">'
+      + '<h3>Profile Preview</h3>'
+      + '<span class="profile-path" title="Click to copy" onclick="copyProfilePath()">' + escHtml(path) + '</span>'
+      + '</div>'
+      + '<pre class="connect-output">' + escHtml(yaml) + '</pre>'
+      + '</div>';
+  });
+}
+
+function switchProfile(name) {
   goApp.SwitchProfile(name).then(function () {
     selectedServices = {};
     hubStatusCache = {};
@@ -357,14 +420,6 @@ function newProfile() {
   });
 }
 
-function doRefresh() {
-  refreshAll();
-  goApp.CheckForUpdatesNow().then(function () {
-    refreshVersionDisplay();
-    checkForUpdate();
-  });
-}
-
 // --- Sidebar ---
 
 // Track which hubs are included in the current profile
@@ -387,9 +442,15 @@ function toggleHubInclusion(hubURL, included) {
     Object.keys(selectedServices).forEach(function (key) {
       if (key.indexOf(hubURL + '||') === 0) delete selectedServices[key];
     });
-    persistSelections();
+    // Clear detail pane if showing a machine from this hub
+    if (selectedHubURL === hubURL) {
+      selectedHubURL = null;
+      selectedMachineId = null;
+      document.getElementById('detail-pane').innerHTML = '';
+    }
     updateConnectButton();
   }
+  checkDirty();
   refreshAll();
 }
 
@@ -397,7 +458,15 @@ function refreshAll() {
   var content = document.getElementById('sidebar-content');
   content.innerHTML = '<p class="loading">Loading hubs...</p>';
 
-  goApp.GetKnownHubs().then(function (hubs) {
+  // Fetch connection state first (flat, not nested) then hubs
+  var _refreshIsConnected = false;
+  goApp.GetConnectionState().then(function (connState) {
+    _refreshIsConnected = connState.connected;
+  }).then(function () {
+    return goApp.GetKnownHubs();
+  }).then(function (hubs) {
+    var isConnected = _refreshIsConnected;
+
     if (!hubs || hubs.length === 0) {
       content.innerHTML = '<div class="sidebar-empty">'
         + '<p>No hubs configured.</p>'
@@ -415,7 +484,8 @@ function refreshAll() {
       var hubHeader = document.createElement('div');
       hubHeader.className = 'profile-hub-header';
       if (selectedHubURL === hub.url && !selectedMachineId) hubHeader.classList.add('selected');
-      hubHeader.innerHTML = '<input type="checkbox"' + (included ? ' checked' : '')
+      var hubDisabled = isConnected ? ' disabled' : '';
+      hubHeader.innerHTML = '<input type="checkbox"' + (included ? ' checked' : '') + hubDisabled
         + ' onclick="event.stopPropagation(); toggleHubInclusion(\'' + escAttr(hub.url) + '\', this.checked)">'
         + '<span class="hub-dot"></span>'
         + '<span class="hub-name">' + escHtml(hub.name) + '</span>'
@@ -561,16 +631,6 @@ function renderMachineDetail(hub, machine) {
       html += '</div>';
     }
 
-    // Show connected badge (output is in the Terminal overlay)
-    if (isConnected) {
-      html += '<div class="connected-panel">'
-        + '<div class="connected-header">'
-        + '<span class="connected-badge">Connected</span>'
-        + '<span class="connected-pid">PID ' + connState.pid + '</span>'
-        + '<button class="btn-link" onclick="toggleTerminal()">View Terminal</button>'
-        + '</div></div>';
-    }
-
     pane.innerHTML = html;
   });
 }
@@ -605,7 +665,7 @@ function resolveAllPortsAndUpdate() {
 
   if (requests.length === 0) {
     updateConnectButton();
-    persistSelections();
+    checkDirty();
     refreshCurrentPane();
     return;
   }
@@ -619,20 +679,44 @@ function resolveAllPortsAndUpdate() {
       });
     }
     updateConnectButton();
-    persistSelections();
+    checkDirty();
     refreshCurrentPane();
   });
 }
 
-var persistTimer = null;
-
-function persistSelections() {
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(doPersistSelections, 500);
+// Build a stable fingerprint of user intent (which services are selected,
+// which hubs are included). Excludes localPort since port assignments are
+// unstable across resolve calls and are not user-controlled state.
+function selectionFingerprint() {
+  var keys = Object.keys(selectedServices).sort();
+  var svcPorts = {};
+  keys.forEach(function (k) { svcPorts[k] = selectedServices[k].servicePort; });
+  var hubs = {};
+  Object.keys(includedHubs).forEach(function (k) { hubs[k] = !!includedHubs[k]; });
+  return JSON.stringify({ keys: keys, ports: svcPorts, hubs: hubs });
 }
 
-function doPersistSelections() {
-  // Build profile and save immediately
+function checkDirty() {
+  profileDirty = selectionFingerprint() !== savedFingerprint;
+  updateSaveButton();
+}
+
+function takeSnapshot() {
+  savedFingerprint = selectionFingerprint();
+  savedServicesJSON = JSON.stringify(selectedServices);
+  savedIncludedHubsJSON = JSON.stringify(includedHubs);
+  profileDirty = false;
+  updateSaveButton();
+}
+
+function updateSaveButton() {
+  var saveBtn = document.getElementById('save-btn');
+  var undoBtn = document.getElementById('undo-btn');
+  if (saveBtn) saveBtn.disabled = !profileDirty;
+  if (undoBtn) undoBtn.disabled = !profileDirty;
+}
+
+function saveSelections() {
   var groups = {};
   Object.keys(selectedServices).forEach(function (key) {
     var sel = selectedServices[key];
@@ -653,9 +737,19 @@ function doPersistSelections() {
     });
   });
 
-  if (connections.length > 0) {
-    goApp.SaveProfile(JSON.stringify(connections));
-  }
+  goApp.SaveProfile(JSON.stringify(connections)).then(function () {
+    takeSnapshot();
+  });
+}
+
+function undoSelections() {
+  selectedServices = JSON.parse(savedServicesJSON);
+  includedHubs = JSON.parse(savedIncludedHubsJSON);
+  profileDirty = false;
+  updateSaveButton();
+  updateConnectButton();
+  refreshAll();
+  refreshStatus();
 }
 
 function refreshCurrentPane() {
@@ -728,9 +822,11 @@ function doConnect() {
   if (connections.length === 0) return;
 
   goApp.Connect(JSON.stringify(connections)).then(function () {
+    // Connect auto-saves the profile; update snapshot
+    takeSnapshot();
     startConnectionPoll();
     updateConnectButton();
-    refreshCurrentPane();
+    refreshAll();
     refreshStatus();
     // Connect WebSocket for real-time events
     setTimeout(function () { goApp.ConnectControlWS(); }, 2000);
@@ -776,7 +872,7 @@ function doDisconnect() {
     stopConnectionPoll();
     btn.disabled = false;
     updateConnectButton();
-    refreshCurrentPane();
+    refreshAll();
     refreshTerminal();
     refreshStatus();
   }).catch(function (err) {
@@ -784,7 +880,7 @@ function doDisconnect() {
     stopConnectionPoll();
     btn.disabled = false;
     updateConnectButton();
-    refreshCurrentPane();
+    refreshAll();
     refreshStatus();
   });
 }
@@ -800,7 +896,7 @@ function startConnectionPoll() {
       if (!state.connected) {
         stopConnectionPoll();
         updateConnectButton();
-        refreshCurrentPane();
+        refreshAll();
         // Auto-reconnect if enabled
         goApp.GetSettings().then(function (s) {
           if (s.reconnectOnDrop && Object.keys(selectedServices).length > 0) {
@@ -893,7 +989,7 @@ function removeHub(url) {
   goApp.RemoveHub(url).then(function () {
     selectedHubURL = null;
     selectedMachineId = null;
-    persistSelections();
+    checkDirty();
     refreshAll();
     refreshHubsTab();
     document.getElementById('detail-pane').innerHTML = '<div class="empty-state"><p>Hub removed.</p></div>';
@@ -1176,9 +1272,6 @@ function refreshSettings() {
   goApp.GetSettings().then(function (s) {
     document.getElementById('setting-autoConnect').checked = s.autoConnect;
     document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;
-    var radios = document.querySelectorAll('input[name="minimizeTo"]');
-    radios.forEach(function (r) { r.checked = (r.value === (s.minimizeTo || 'taskbar')); });
-    document.getElementById('setting-startMinimized').checked = s.startMinimized;
     document.getElementById('setting-minimizeOnClose').checked = s.minimizeOnClose;
     document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
@@ -1192,8 +1285,8 @@ function saveSetting() {
   var s = {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
-    minimizeTo: document.querySelector('input[name="minimizeTo"]:checked').value,
-    startMinimized: document.getElementById('setting-startMinimized').checked,
+    minimizeTo: 'tray',
+    startMinimized: false,
     minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
     autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
     verboseDefault: document.getElementById('setting-verboseDefault').checked

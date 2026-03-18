@@ -5,7 +5,6 @@ import (
 	"runtime"
 
 	"github.com/energye/systray"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed build/windows/icon.ico
@@ -31,15 +30,20 @@ func (a *App) setupTray() {
 
 		// Left-click tray icon to show window
 		systray.SetOnClick(func(menu systray.IMenu) {
-			wailsRuntime.WindowShow(a.ctx)
+			a.ShowWindow()
 		})
 		// Double-click also shows window
 		systray.SetOnDClick(func(menu systray.IMenu) {
-			wailsRuntime.WindowShow(a.ctx)
+			a.ShowWindow()
+		})
+
+		// Right-click shows the context menu
+		systray.SetOnRClick(func(menu systray.IMenu) {
+			menu.ShowMenu()
 		})
 
 		mShow.Click(func() {
-			wailsRuntime.WindowShow(a.ctx)
+			a.ShowWindow()
 		})
 
 		mQuit.Click(func() {
