@@ -48,4 +48,6 @@ export function RestartToUpdate():Promise<void>;
 
 export function SaveProfile(arg1:string):Promise<string>;
 
+export function SaveTerminalOutput(arg1:string):Promise<string>;
+
 export function SetVerbose(arg1:boolean):Promise<void>;

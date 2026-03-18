@@ -594,8 +594,58 @@ function dockerAddHub() {
 // --- Terminal ---
 
 var terminalAutoScroll = true;
+var terminalFrozen = false;
+
+function freezeTerminal() {
+  terminalFrozen = true;
+  document.getElementById('terminal-output').classList.add('frozen');
+}
+
+function unfreezeTerminal() {
+  terminalFrozen = false;
+  document.getElementById('terminal-output').classList.remove('frozen');
+  refreshTerminal();
+}
+
+function copyTerminal() {
+  freezeTerminal();
+  var text = document.getElementById('terminal-output').textContent;
+  navigator.clipboard.writeText(text).then(function () {
+    setTimeout(unfreezeTerminal, 200);
+  });
+}
+
+function saveTerminal() {
+  freezeTerminal();
+  var text = document.getElementById('terminal-output').textContent;
+  goApp.SaveTerminalOutput(text).then(function () {
+    setTimeout(unfreezeTerminal, 200);
+  }).catch(function () {
+    unfreezeTerminal();
+  });
+}
+
+function toggleVerbose() {
+  verboseMode = !verboseMode;
+  var btn = document.getElementById('verbose-btn');
+  var icon = document.getElementById('verbose-icon');
+  if (verboseMode) {
+    btn.classList.add('active');
+    icon.innerHTML = '&#x2611;';
+  } else {
+    btn.classList.remove('active');
+    icon.innerHTML = '&#x2610;';
+  }
+  goApp.GetConnectionState().then(function (state) {
+    if (state.connected) {
+      goApp.SetVerbose(verboseMode);
+    }
+  });
+}
 
 function refreshTerminal() {
+  if (terminalFrozen) return;
+
   goApp.GetConnectionState().then(function (state) {
     var output = document.getElementById('terminal-output');
     var status = document.getElementById('terminal-status');
@@ -624,29 +674,36 @@ function refreshTerminal() {
   });
 }
 
-// Set up scroll detection on the terminal output
+// Set up scroll detection and mouse freeze on the terminal output
 (function () {
-  // Use a short delay to ensure the DOM is ready
   setTimeout(function () {
     var el = document.getElementById('terminal-output');
-    if (el) {
-      el.addEventListener('scroll', function () {
-        var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 30;
-        terminalAutoScroll = atBottom;
-      });
-    }
+    if (!el) return;
+
+    el.addEventListener('scroll', function () {
+      var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 30;
+      terminalAutoScroll = atBottom;
+    });
+
+    // Freeze updates on mouse down to allow text selection
+    el.addEventListener('mousedown', function () {
+      freezeTerminal();
+    });
+
+    // On mouse up, auto-copy selection and unfreeze after a short delay
+    el.addEventListener('mouseup', function () {
+      var sel = window.getSelection();
+      if (sel && sel.toString().length > 0) {
+        navigator.clipboard.writeText(sel.toString()).catch(function () {});
+        // Keep frozen briefly so the selection is visible
+        setTimeout(unfreezeTerminal, 1500);
+      } else {
+        unfreezeTerminal();
+      }
+    });
   }, 100);
 })();
 
-function setVerbose(on) {
-  verboseMode = on;
-  // Only send to control API if connected; otherwise just save the preference
-  goApp.GetConnectionState().then(function (state) {
-    if (state.connected) {
-      goApp.SetVerbose(on);
-    }
-  });
-}
 
 // --- Command Log ---
 

@@ -347,13 +347,12 @@ func (a *App) RestartToUpdate() error {
 		return fmt.Errorf("cannot determine executable path")
 	}
 
-	// On Unix, apply the self-update now (can replace while running)
-	if runtime.GOOS != "windows" {
-		a.applyPendingSelfUpdate()
-	}
-	// On Windows, applyPendingSelfUpdate runs on next startup
+	// Apply the update now before relaunching.
+	// On Windows, we can rename a running exe (just can't delete it).
+	// applyPendingSelfUpdate renames current -> .old, update -> current.
+	a.applyPendingSelfUpdate()
 
-	// Relaunch from the same path
+	// Relaunch from the same path (which is now the new binary)
 	cmd := exec.Command(exe)
 	cmd.Start()
 
@@ -1048,6 +1047,19 @@ func (a *App) SetVerbose(on bool) error {
 	}
 	a.logCommand("Set verbose "+state, "# toggled via control API PUT /verbose")
 	return nil
+}
+
+// SaveTerminalOutput saves the terminal output to a timestamped file.
+func (a *App) SaveTerminalOutput(content string) (string, error) {
+	dir := filepath.Join(telaConfigDir(), "logs")
+	os.MkdirAll(dir, 0700)
+	filename := fmt.Sprintf("tela-%s.log", time.Now().Format("2006-01-02-150405"))
+	path := filepath.Join(dir, filename)
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		return "", fmt.Errorf("save failed: %w", err)
+	}
+	a.logCommand("Save terminal output", "# saved to "+path)
+	return path, nil
 }
 
 // GetControlStatus reads live status from the tela control API.

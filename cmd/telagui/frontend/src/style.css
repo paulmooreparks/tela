@@ -571,16 +571,27 @@ body {
 }
 .terminal-status.connected { color: var(--accent); }
 .terminal-status.disconnected { color: var(--danger); }
-.verbose-toggle {
+.terminal-actions {
   margin-left: auto;
-  font-size: 12px;
-  color: #94a3b8;
-  cursor: pointer;
   display: flex;
+  gap: 6px;
   align-items: center;
-  gap: 4px;
 }
-.verbose-toggle input { accent-color: var(--accent); cursor: pointer; }
+.term-btn {
+  background: #334155;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.term-btn:hover { background: #475569; }
+.term-btn.verbose-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.verbose-check-icon { font-size: 13px; }
+.terminal-output.frozen { opacity: 0.95; }
+.terminal-output::selection { background: #3b82f680; color: #fff; }
 .terminal-output {
   flex: 1;
   overflow-y: auto;

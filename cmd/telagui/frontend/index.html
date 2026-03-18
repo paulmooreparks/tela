@@ -33,7 +33,7 @@
         <div class="sidebar" id="sidebar">
           <div class="sidebar-header">
             <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
-            <button class="btn-secondary btn-sm" onclick="refreshAll()">Refresh</button>
+            <button class="btn-secondary btn-sm" onclick="refreshAll(); refreshVersionDisplay(); checkForUpdate();">Refresh</button>
           </div>
           <div id="sidebar-content">
             <p class="loading">Loading hubs...</p>
@@ -52,7 +52,13 @@
       <div class="terminal-pane">
         <div class="terminal-header">
           <span class="terminal-status" id="terminal-status">Disconnected</span>
-          <label class="verbose-toggle"><input type="checkbox" id="verbose-check" onchange="setVerbose(this.checked)"> Verbose</label>
+          <div class="terminal-actions">
+            <button class="term-btn" onclick="copyTerminal()">Copy All</button>
+            <button class="term-btn" onclick="saveTerminal()">Save to File</button>
+            <button class="term-btn verbose-btn" id="verbose-btn" onclick="toggleVerbose()">
+              <span class="verbose-check-icon" id="verbose-icon">&#x2610;</span> Verbose
+            </button>
+          </div>
         </div>
         <pre class="terminal-output" id="terminal-output">Not connected.</pre>
       </div>
