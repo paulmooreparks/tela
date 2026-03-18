@@ -1,4 +1,18 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
+.error-toast {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--danger);
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  z-index: 9999;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.error-toast.hidden { display: none; }
 
 :root {
   --bg: #f5f6f8;
@@ -310,8 +324,8 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 312px;
-  min-width: 312px;
+  width: 338px;
+  min-width: 338px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   overflow-y: auto;

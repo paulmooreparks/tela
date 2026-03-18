@@ -376,17 +376,27 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 	}
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		// Auth via query param.
+		// Auth via query param (legacy) or first-message.
 		qToken := r.URL.Query().Get("token")
-		if subtle.ConstantTimeCompare([]byte(qToken), []byte(token)) != 1 {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
-			return
-		}
+		authed := subtle.ConstantTimeCompare([]byte(qToken), []byte(token)) == 1
 
 		conn, err := controlUpgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Printf("[control] WebSocket upgrade failed: %v", err)
 			return
+		}
+
+		// If not authed via query param, expect token as first message.
+		if !authed {
+			conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			_, msg, err := conn.ReadMessage()
+			conn.SetReadDeadline(time.Time{})
+			if err != nil || subtle.ConstantTimeCompare(msg, []byte(token)) != 1 {
+				conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid token"))
+				conn.Close()
+				return
+			}
 		}
 
 		client := &wsClient{

@@ -122,6 +122,13 @@ type ConnectionState struct {
 	Connections []ProfileConnection `json:"connections"`
 }
 
+// doRequest executes an HTTP request with the given timeout using the shared client.
+func (a *App) doRequest(req *http.Request, timeout time.Duration) (*http.Response, error) {
+	ctx, cancel := context.WithTimeout(req.Context(), timeout)
+	defer cancel()
+	return a.httpClient.Do(req.WithContext(ctx))
+}
+
 // NewApp creates a new App instance.
 func NewApp() *App {
 	jar, _ := cookiejar.New(nil)
@@ -491,6 +498,8 @@ func (a *App) downloadSelfUpdate(ver string) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.DisconnectControlWS()
+
 	a.mu.Lock()
 	if a.telaProcess != nil {
 		killProcessTree(a.telaProcess.Pid)
@@ -499,9 +508,12 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	a.mu.Unlock()
 
-	// Force exit after 2 seconds if goroutines are stuck
+	// Force exit after timeout if goroutines are stuck.
+	// Wails expects OnShutdown to return promptly. If the WebSocket
+	// reader or output pipe goroutine is still blocking, this ensures
+	// the process doesn't hang indefinitely.
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 		os.Exit(0)
 	}()
 }
@@ -1092,8 +1104,7 @@ func (a *App) disconnectViaControlAPI() bool {
 	}
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := a.doRequest(req, 5*time.Second)
 	if err != nil {
 		return false
 	}
@@ -1167,8 +1178,7 @@ func (a *App) SetVerbose(on bool) error {
 	req, _ := http.NewRequest("PUT", fmt.Sprintf("http://127.0.0.1:%d/verbose", info.Port), nil)
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := a.doRequest(req, 3*time.Second)
 	if err != nil {
 		return fmt.Errorf("control API unreachable: %w", err)
 	}
@@ -1275,11 +1285,17 @@ func (a *App) ConnectControlWS() error {
 		return fmt.Errorf("invalid control file")
 	}
 
-	url := fmt.Sprintf("ws://127.0.0.1:%d/ws?token=%s", info.Port, info.Token)
+	wsURL := fmt.Sprintf("ws://127.0.0.1:%d/ws", info.Port)
 
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("ws connect failed: %w", err)
+	}
+
+	// Authenticate via first message (avoids token in URL).
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(info.Token)); err != nil {
+		conn.Close()
+		return fmt.Errorf("ws auth failed: %w", err)
 	}
 
 	a.mu.Lock()
@@ -1353,8 +1369,7 @@ func (a *App) GetControlServices() []map[string]interface{} {
 
 	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/services", info.Port), nil)
 	req.Header.Set("Authorization", "Bearer "+info.Token)
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := a.doRequest(req, 2*time.Second)
 	if err != nil {
 		return nil
 	}
@@ -1382,8 +1397,7 @@ func (a *App) GetControlConnections() []map[string]interface{} {
 
 	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/connections", info.Port), nil)
 	req.Header.Set("Authorization", "Bearer "+info.Token)
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := a.doRequest(req, 2*time.Second)
 	if err != nil {
 		return nil
 	}
@@ -1413,8 +1427,7 @@ func (a *App) GetControlStatus() map[string]interface{} {
 	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", info.Port), nil)
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := a.doRequest(req, 3*time.Second)
 	if err != nil {
 		return nil
 	}

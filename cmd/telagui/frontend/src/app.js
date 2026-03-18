@@ -181,7 +181,7 @@ if (window.runtime) {
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
       var newWidth = e.clientX;
-      if (newWidth < 298) newWidth = 298;
+      if (newWidth < 338) newWidth = 338;
       if (newWidth > 600) newWidth = 600;
       sidebar.style.width = newWidth + 'px';
     });
@@ -301,7 +301,9 @@ function loadSavedSelections() {
     }
   }).then(function () {
     takeSnapshot();
-  }).catch(function () {});
+  }).catch(function (err) {
+    if (err) console.warn('Failed to load profile:', err);
+  });
 }
 
 function refreshProfileList() {
@@ -406,7 +408,7 @@ function newProfile() {
       updateConnectButton();
     });
   }).catch(function (err) {
-    alert('Failed: ' + err);
+    showError(err);
   });
 }
 
@@ -800,7 +802,7 @@ function doConnect() {
       }
     }, 2000);
   }).catch(function (err) {
-    alert('Connection failed: ' + err);
+    showError('Connection failed: ' + err);
   });
 }
 
@@ -1260,7 +1262,7 @@ function clearCredentialStore() {
     refreshAll();
     refreshHubsTab();
   }).catch(function (err) {
-    alert('Failed to clear credential store: ' + err);
+    showError('Failed to clear credential store: ' + err);
   });
 }
 
@@ -1270,13 +1272,13 @@ function importProfile() {
       refreshAll();
     });
   }).catch(function (err) {
-    if (err) alert('Import failed: ' + err);
+    if (err) showError('Import failed: ' + err);
   });
 }
 
 function exportProfile() {
   goApp.ExportProfile().catch(function (err) {
-    if (err) alert('Export failed: ' + err);
+    if (err) showError('Export failed: ' + err);
   });
 }
 
@@ -1360,6 +1362,19 @@ function escAttr(s) {
 
 function hubNameFromURL(url) {
   return url.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+function showError(msg) {
+  // Strip Go error prefixes and stack traces for user-facing messages
+  var text = String(msg).replace(/^Error:\s*/i, '');
+  var el = document.getElementById('error-toast');
+  if (el) {
+    el.textContent = text;
+    el.classList.remove('hidden');
+    setTimeout(function () { el.classList.add('hidden'); }, 5000);
+  } else {
+    alert(text);
+  }
 }
 
 function toWSURL(url) {
