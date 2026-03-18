@@ -216,13 +216,15 @@ jobs:
 
       - name: Build Windows installer
         if: matrix.goos == 'windows'
-        shell: bash
+        shell: powershell
         run: |
+          choco install nsis -y --no-progress
           cd cmd/telagui
-          wails build -nsis -ldflags="-X main.version=${{ steps.version.outputs.tag }}" || true
-          if [ -f build/bin/telagui-amd64-installer.exe ]; then
-            cp build/bin/telagui-amd64-installer.exe ../../dist/telagui-windows-amd64-setup.exe
-          fi
+          wails build -nsis -ldflags="-X main.version=${{ steps.version.outputs.tag }}"
+          $installer = Get-ChildItem -Path build/bin -Filter "*installer*" -Recurse | Select-Object -First 1
+          if ($installer) {
+            Copy-Item $installer.FullName -Destination "../../dist/telagui-windows-amd64-setup.exe"
+          }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
