@@ -202,8 +202,8 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 310px;
-  min-width: 200px;
+  width: 298px;
+  min-width: 298px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   overflow-y: auto;

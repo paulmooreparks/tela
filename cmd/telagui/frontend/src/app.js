@@ -48,7 +48,7 @@ function switchTab(name, btn) {
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
       var newWidth = e.clientX;
-      if (newWidth < 200) newWidth = 200;
+      if (newWidth < 298) newWidth = 298;
       if (newWidth > 600) newWidth = 600;
       sidebar.style.width = newWidth + 'px';
     });
