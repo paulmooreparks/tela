@@ -280,6 +280,26 @@ export namespace main {
 	        this.cliBehind = source["cliBehind"];
 	    }
 	}
+	export class UpdateInfo {
+	    pending: boolean;
+	    version: string;
+	    guiBehind: boolean;
+	    cliBehind: boolean;
+	    packageManaged: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pending = source["pending"];
+	        this.version = source["version"];
+	        this.guiBehind = source["guiBehind"];
+	        this.cliBehind = source["cliBehind"];
+	        this.packageManaged = source["packageManaged"];
+	    }
+	}
 
 }
 

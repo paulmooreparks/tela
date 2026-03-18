@@ -237,27 +237,17 @@ function refreshVersionDisplay() {
 }
 
 function checkForUpdate() {
-  goApp.HasUpdate().then(function (pending) {
+  goApp.GetUpdateInfo().then(function (info) {
     var btn = document.getElementById('update-btn');
-    if (pending) {
-      goApp.GetUpdateVersion().then(function (ver) {
-        goApp.GetToolVersions().then(function (tv) {
-          if (!tv.guiBehind && !tv.cliBehind) return;
-
-          goApp.IsPackageManaged().then(function (managed) {
-            if (managed) {
-              if (tv.cliBehind) {
-                btn.textContent = 'Update CLI (' + ver + ')';
-                btn.classList.remove('hidden');
-              }
-              // Don't offer GUI update for package-managed installs
-            } else {
-              btn.textContent = 'Restart to Update (' + ver + ')';
-              btn.classList.remove('hidden');
-            }
-          });
-        });
-      });
+    if (!info.pending || (!info.guiBehind && !info.cliBehind)) return;
+    if (info.packageManaged) {
+      if (info.cliBehind) {
+        btn.textContent = 'Update CLI (' + info.version + ')';
+        btn.classList.remove('hidden');
+      }
+    } else {
+      btn.textContent = 'Restart to Update (' + info.version + ')';
+      btn.classList.remove('hidden');
     }
   });
 }
@@ -286,7 +276,7 @@ function loadSavedSelections() {
       var hubURL = conn.hub;
       var machineId = conn.machine;
       (conn.services || []).forEach(function (svc) {
-        var key = hubURL + '||' + machineId + '||' + svc.name;
+        var key = makeServiceKey(hubURL, machineId, svc.name);
         selectedServices[key] = {
           hub: hubURL,
           machine: machineId,
@@ -508,7 +498,7 @@ function refreshAll() {
             status.machines.forEach(function (m) {
               var mId = m.id || m.hostname;
               (m.services || []).forEach(function (svc) {
-                var key = hub.url + '||' + mId + '||' + svc.name;
+                var key = makeServiceKey(hub.url, mId, svc.name);
                 if (selectedServices[key] && svc.port) {
                   selectedServices[key].servicePort = svc.port;
                 }
@@ -612,7 +602,7 @@ function renderMachineDetail(hub, machine) {
     } else {
       html += '<div class="service-checklist">';
       services.forEach(function (svc) {
-        var key = hub.url + '||' + machineId + '||' + svc.name;
+        var key = makeServiceKey(hub.url, machineId, svc.name);
         var checked = selectedServices[key] ? ' checked' : '';
         var disabled = isConnected ? ' disabled' : '';
         var localPort = selectedServices[key] ? selectedServices[key].localPort : svc.port;
@@ -638,7 +628,7 @@ function renderMachineDetail(hub, machine) {
 // --- Service Selection ---
 
 function toggleService(hubURL, machineId, serviceName, servicePort, checked) {
-  var key = hubURL + '||' + machineId + '||' + serviceName;
+  var key = makeServiceKey(hubURL, machineId, serviceName);
   if (checked) {
     selectedServices[key] = {
       hub: hubURL,
@@ -717,26 +707,7 @@ function updateSaveButton() {
 }
 
 function saveSelections() {
-  var groups = {};
-  Object.keys(selectedServices).forEach(function (key) {
-    var sel = selectedServices[key];
-    var groupKey = sel.hub + '||' + sel.machine;
-    if (!groups[groupKey]) {
-      groups[groupKey] = { hub: sel.hub, machine: sel.machine, services: [] };
-    }
-    groups[groupKey].services.push({ name: sel.service, local: sel.localPort, remote: sel.servicePort });
-  });
-
-  var connections = [];
-  Object.keys(groups).forEach(function (k) {
-    var g = groups[k];
-    connections.push({
-      hub: toWSURL(g.hub),
-      machine: g.machine,
-      services: g.services
-    });
-  });
-
+  var connections = buildConnections();
   goApp.SaveProfile(JSON.stringify(connections)).then(function () {
     takeSnapshot();
   });
@@ -799,26 +770,7 @@ function toggleConnection() {
 }
 
 function doConnect() {
-  var groups = {};
-  Object.keys(selectedServices).forEach(function (key) {
-    var sel = selectedServices[key];
-    var groupKey = sel.hub + '||' + sel.machine;
-    if (!groups[groupKey]) {
-      groups[groupKey] = { hub: sel.hub, machine: sel.machine, services: [] };
-    }
-    groups[groupKey].services.push({ name: sel.service, local: sel.localPort, remote: sel.servicePort });
-  });
-
-  var connections = [];
-  Object.keys(groups).forEach(function (k) {
-    var g = groups[k];
-    connections.push({
-      hub: toWSURL(g.hub),
-      machine: g.machine,
-      services: g.services
-    });
-  });
-
+  var connections = buildConnections();
   if (connections.length === 0) return;
 
   goApp.Connect(JSON.stringify(connections)).then(function () {
@@ -885,10 +837,16 @@ function doDisconnect() {
   });
 }
 
+var pollInFlight = false;
+
 function startConnectionPoll() {
   stopConnectionPoll();
+  pollInFlight = false;
   pollIntervalId = setInterval(function () {
+    if (pollInFlight) return;
+    pollInFlight = true;
     goApp.GetConnectionState().then(function (state) {
+      pollInFlight = false;
       // Refresh terminal if visible
       if (!document.getElementById('tab-terminal').classList.contains('hidden')) {
         refreshTerminal();
@@ -906,6 +864,8 @@ function startConnectionPoll() {
           }
         });
       }
+    }).catch(function () {
+      pollInFlight = false;
     });
   }, 1000);
 }
@@ -1362,6 +1322,33 @@ function copyText(btn, text) {
 }
 
 // --- Utilities ---
+
+function makeServiceKey(hub, machine, service) {
+  return hub + '||' + machine + '||' + service;
+}
+
+function buildConnections() {
+  var groups = {};
+  Object.keys(selectedServices).forEach(function (key) {
+    var sel = selectedServices[key];
+    var groupKey = sel.hub + '||' + sel.machine;
+    if (!groups[groupKey]) {
+      groups[groupKey] = { hub: sel.hub, machine: sel.machine, services: [] };
+    }
+    groups[groupKey].services.push({ name: sel.service, local: sel.localPort, remote: sel.servicePort });
+  });
+
+  var connections = [];
+  Object.keys(groups).forEach(function (k) {
+    var g = groups[k];
+    connections.push({
+      hub: toWSURL(g.hub),
+      machine: g.machine,
+      services: g.services
+    });
+  });
+  return connections;
+}
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

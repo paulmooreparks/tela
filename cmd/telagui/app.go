@@ -376,6 +376,34 @@ func (a *App) GetUpdateVersion() string {
 	return a.updateVersion
 }
 
+// UpdateInfo bundles all update-related state for a single frontend call.
+type UpdateInfo struct {
+	Pending        bool   `json:"pending"`
+	Version        string `json:"version"`
+	GUIBehind      bool   `json:"guiBehind"`
+	CLIBehind      bool   `json:"cliBehind"`
+	PackageManaged bool   `json:"packageManaged"`
+}
+
+// GetUpdateInfo returns all update state in one call, avoiding nested
+// async calls on the frontend.
+func (a *App) GetUpdateInfo() UpdateInfo {
+	a.mu.Lock()
+	pending := a.updatePending
+	ver := a.updateVersion
+	a.mu.Unlock()
+
+	tv := a.GetToolVersions()
+
+	return UpdateInfo{
+		Pending:        pending,
+		Version:        ver,
+		GUIBehind:      tv.GUIBehind,
+		CLIBehind:      tv.CLIBehind,
+		PackageManaged: isPackageManaged(),
+	}
+}
+
 // RestartToUpdate downloads updates for all binaries and relaunches.
 func (a *App) RestartToUpdate() error {
 	a.mu.Lock()
@@ -558,7 +586,10 @@ func profilesDir() string {
 }
 
 func profilePath() string {
-	return filepath.Join(profilesDir(), currentProfileName+".yaml")
+	profileMu.RLock()
+	name := currentProfileName
+	profileMu.RUnlock()
+	return filepath.Join(profilesDir(), name+".yaml")
 }
 
 // GetKnownHubs returns all hubs the user has configured locally.
@@ -1252,15 +1283,24 @@ func (a *App) ConnectControlWS() error {
 	}
 
 	a.mu.Lock()
+	// Close any existing connection before replacing.
+	if a.controlWS != nil {
+		a.controlWS.Close()
+	}
 	a.controlWS = conn
 	a.mu.Unlock()
 
-	// Read events and forward to frontend
+	// Read events and forward to frontend. When the connection is
+	// closed (by DisconnectControlWS or the remote side), ReadMessage
+	// returns an error and the goroutine exits. We nil controlWS only
+	// if it still points to this connection (avoids clearing a
+	// replacement connection opened by a subsequent ConnectControlWS).
 	go func() {
 		defer func() {
-			conn.Close()
 			a.mu.Lock()
-			a.controlWS = nil
+			if a.controlWS == conn {
+				a.controlWS = nil
+			}
 			a.mu.Unlock()
 		}()
 
@@ -1269,7 +1309,6 @@ func (a *App) ConnectControlWS() error {
 			if err != nil {
 				return
 			}
-			// Forward raw JSON event to frontend
 			wailsRuntime.EventsEmit(a.ctx, "tela:event", string(message))
 		}
 	}()
@@ -1290,12 +1329,11 @@ func (a *App) DisconnectControlWS() {
 // SendControlCommand sends a command to tela via the WebSocket.
 func (a *App) SendControlCommand(cmdJSON string) error {
 	a.mu.Lock()
-	ws := a.controlWS
-	a.mu.Unlock()
-	if ws == nil {
+	defer a.mu.Unlock()
+	if a.controlWS == nil {
 		return fmt.Errorf("not connected to control API")
 	}
-	return ws.WriteMessage(websocket.TextMessage, []byte(cmdJSON))
+	return a.controlWS.WriteMessage(websocket.TextMessage, []byte(cmdJSON))
 }
 
 // GetControlServices returns services from the tela control API.
@@ -1493,14 +1531,21 @@ func (a *App) installTool(name, version string) (string, error) {
 // --- Profile Management ---
 
 // currentProfileName tracks which profile is active.
-var currentProfileName = "telagui"
+// Protected by profileMu for concurrent access.
+var (
+	currentProfileName = "telagui"
+	profileMu          sync.RWMutex
+)
 
 // ListProfiles returns all available profile names.
 func (a *App) ListProfiles() []string {
 	dir := profilesDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return []string{currentProfileName}
+		profileMu.RLock()
+		fallback := currentProfileName
+		profileMu.RUnlock()
+		return []string{fallback}
 	}
 	var names []string
 	for _, e := range entries {
@@ -1515,7 +1560,10 @@ func (a *App) ListProfiles() []string {
 		}
 	}
 	if len(names) == 0 {
-		return []string{currentProfileName}
+		profileMu.RLock()
+		fallback := currentProfileName
+		profileMu.RUnlock()
+		return []string{fallback}
 	}
 	return names
 }
@@ -1527,12 +1575,17 @@ func (a *App) GetProfilePath() string {
 
 // GetCurrentProfile returns the active profile name.
 func (a *App) GetCurrentProfile() string {
+	profileMu.RLock()
+	defer profileMu.RUnlock()
 	return currentProfileName
 }
 
 // SwitchProfile changes the active profile. Disconnects first if connected.
 func (a *App) SwitchProfile(name string) error {
-	if name == currentProfileName {
+	profileMu.RLock()
+	same := name == currentProfileName
+	profileMu.RUnlock()
+	if same {
 		return nil
 	}
 
@@ -1540,7 +1593,9 @@ func (a *App) SwitchProfile(name string) error {
 	a.Disconnect()
 	time.Sleep(500 * time.Millisecond)
 
+	profileMu.Lock()
 	currentProfileName = name
+	profileMu.Unlock()
 	a.logCommand("Switch profile to "+name, "tela connect -profile "+name)
 	return nil
 }
@@ -1591,16 +1646,21 @@ func (a *App) RenameProfile(oldName, newName string) error {
 		return fmt.Errorf("rename profile: %w", err)
 	}
 
+	profileMu.Lock()
 	if currentProfileName == oldName {
 		currentProfileName = newName
 	}
+	profileMu.Unlock()
 
 	return nil
 }
 
 // DeleteProfile deletes a profile file.
 func (a *App) DeleteProfile(name string) error {
-	if name == currentProfileName {
+	profileMu.RLock()
+	active := currentProfileName
+	profileMu.RUnlock()
+	if name == active {
 		return fmt.Errorf("cannot delete the active profile")
 	}
 	path := filepath.Join(profilesDir(), name+".yaml")

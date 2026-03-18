@@ -114,6 +114,10 @@ export function GetToolVersions() {
   return window['go']['main']['App']['GetToolVersions']();
 }
 
+export function GetUpdateInfo() {
+  return window['go']['main']['App']['GetUpdateInfo']();
+}
+
 export function GetUpdateVersion() {
   return window['go']['main']['App']['GetUpdateVersion']();
 }
