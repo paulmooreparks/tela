@@ -110,6 +110,10 @@ export function PairWithCode(arg1, arg2) {
   return window['go']['main']['App']['PairWithCode'](arg1, arg2);
 }
 
+export function QuitApp() {
+  return window['go']['main']['App']['QuitApp']();
+}
+
 export function ReleaseLocalPort(arg1) {
   return window['go']['main']['App']['ReleaseLocalPort'](arg1);
 }
@@ -140,4 +144,8 @@ export function SaveTerminalOutput(arg1) {
 
 export function SetVerbose(arg1) {
   return window['go']['main']['App']['SetVerbose'](arg1);
+}
+
+export function ShowWindow() {
+  return window['go']['main']['App']['ShowWindow']();
 }

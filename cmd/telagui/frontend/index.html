@@ -25,8 +25,8 @@
       <button class="main-tab active" onclick="switchTab('profile', this)">Profile</button>
       <button class="main-tab" onclick="switchTab('terminal', this)">Terminal</button>
       <button class="main-tab" onclick="switchTab('log', this)">Command Log</button>
-      <button class="main-tab" onclick="switchTab('about', this)">About</button>
       <button class="main-tab" onclick="switchTab('settings', this)">Settings</button>
+      <button class="main-tab" onclick="switchTab('about', this)">About</button>
     </div>
 
     <!-- Profile tab -->
@@ -36,6 +36,8 @@
           <div class="sidebar-header">
             <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
             <button class="btn-secondary btn-sm" onclick="doRefresh()">Refresh</button>
+            <button class="btn-secondary btn-sm" onclick="importProfile()" title="Import profile">Import</button>
+            <button class="btn-secondary btn-sm" onclick="exportProfile()" title="Export profile">Export</button>
           </div>
           <div id="sidebar-content">
             <p class="loading">Loading hubs...</p>
@@ -143,8 +145,6 @@
           </label>
           <div class="settings-actions">
             <button class="btn-danger btn-sm" onclick="clearCredentialStore()">Clear Credential Store</button>
-            <button class="btn-secondary btn-sm" onclick="importProfile()">Import Profile</button>
-            <button class="btn-secondary btn-sm" onclick="exportProfile()">Export Profile</button>
           </div>
         </div>
       </div>

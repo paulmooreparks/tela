@@ -132,6 +132,9 @@ func (a *App) startup(ctx context.Context) {
 	// Apply any pending self-update from a previous run
 	a.applyPendingSelfUpdate()
 
+	// Set up system tray icon
+	a.setupTray()
+
 	// Check for updates to all binaries (GUI and CLI) in background
 	go a.checkForUpdates()
 }
@@ -464,6 +467,21 @@ func (a *App) shutdown(ctx context.Context) {
 		time.Sleep(2 * time.Second)
 		os.Exit(0)
 	}()
+}
+
+// --- Window Management ---
+
+// ShowWindow brings the window back from the system tray.
+func (a *App) ShowWindow() {
+	wailsRuntime.WindowShow(a.ctx)
+	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, true)
+	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, false)
+}
+
+// QuitApp exits the application (used from tray menu).
+func (a *App) QuitApp() {
+	a.Disconnect()
+	wailsRuntime.Quit(a.ctx)
 }
 
 // --- Command Log ---

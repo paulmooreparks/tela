@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"embed"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend
@@ -25,6 +27,14 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
+		OnBeforeClose: func(ctx context.Context) bool {
+			settings := app.GetSettings()
+			if settings.MinimizeToTray {
+				wailsRuntime.WindowHide(app.ctx)
+				return true // prevent close, hide instead
+			}
+			return false // allow close
+		},
 		Bind: []interface{}{
 			app,
 		},

@@ -56,6 +56,8 @@ export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;
 
+export function QuitApp():Promise<void>;
+
 export function ReleaseLocalPort(arg1:number):Promise<void>;
 
 export function RemoveHub(arg1:string):Promise<void>;
@@ -71,3 +73,5 @@ export function SaveSettings(arg1:string):Promise<void>;
 export function SaveTerminalOutput(arg1:string):Promise<string>;
 
 export function SetVerbose(arg1:boolean):Promise<void>;
+
+export function ShowWindow():Promise<void>;
