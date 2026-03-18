@@ -186,6 +186,22 @@ body {
   outline: none;
   border-color: var(--accent);
 }
+.profile-path-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.profile-path {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.profile-path:hover { color: var(--accent); }
 .sidebar-actions {
   display: flex;
   gap: 4px;

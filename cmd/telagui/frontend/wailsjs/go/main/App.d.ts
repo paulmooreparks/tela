@@ -42,6 +42,8 @@ export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
+export function GetProfilePath():Promise<string>;
+
 export function GetSettings():Promise<main.Settings>;
 
 export function GetStoredToken(arg1:string):Promise<string>;

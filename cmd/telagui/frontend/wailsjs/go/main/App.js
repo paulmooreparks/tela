@@ -82,6 +82,10 @@ export function GetKnownHubs() {
   return window['go']['main']['App']['GetKnownHubs']();
 }
 
+export function GetProfilePath() {
+  return window['go']['main']['App']['GetProfilePath']();
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }

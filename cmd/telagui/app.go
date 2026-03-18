@@ -1408,6 +1408,11 @@ func (a *App) ListProfiles() []string {
 	return names
 }
 
+// GetProfilePath returns the file path of the active profile.
+func (a *App) GetProfilePath() string {
+	return profilePath()
+}
+
 // GetCurrentProfile returns the active profile name.
 func (a *App) GetCurrentProfile() string {
 	return currentProfileName

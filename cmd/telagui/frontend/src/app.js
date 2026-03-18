@@ -70,6 +70,7 @@ function switchTab(name, btn) {
 // --- Startup ---
 refreshVersionDisplay();
 refreshProfileList();
+refreshProfilePath();
 loadSavedSelections().then(function () {
   refreshAll();
   // Auto-connect if enabled and there are saved selections
@@ -179,6 +180,20 @@ function loadSavedSelections() {
   }).catch(function () {});
 }
 
+function refreshProfilePath() {
+  goApp.GetProfilePath().then(function (path) {
+    var el = document.getElementById('profile-path');
+    if (el) el.textContent = path;
+  });
+}
+
+function copyProfilePath() {
+  var el = document.getElementById('profile-path');
+  if (el && navigator.clipboard) {
+    navigator.clipboard.writeText(el.textContent);
+  }
+}
+
 function refreshProfileList() {
   goApp.ListProfiles().then(function (profiles) {
     var select = document.getElementById('profile-select');
@@ -195,6 +210,13 @@ function refreshProfileList() {
   });
 }
 
+function showProfileOverview() {
+  selectedHubURL = null;
+  selectedMachineId = null;
+  clearSelection();
+  showProfileYaml();
+}
+
 function switchProfile(name) {
   // Cancel any pending persist so old selections don't write to the new profile
   if (persistTimer) {
@@ -206,7 +228,8 @@ function switchProfile(name) {
     hubStatusCache = {};
     selectedHubURL = null;
     selectedMachineId = null;
-    document.getElementById('detail-pane').innerHTML = '<div class="empty-state"><p>Profile switched to ' + escHtml(name) + '. Select a hub or machine.</p></div>';
+    document.getElementById('detail-pane').innerHTML = '';
+    refreshProfilePath();
     loadSavedSelections().then(function () {
       refreshAll();
       updateConnectButton();
@@ -221,6 +244,7 @@ function newProfile() {
     goApp.SwitchProfile(name).then(function () {
       selectedServices = {};
       refreshProfileList();
+      refreshProfilePath();
       refreshAll();
       updateConnectButton();
     });

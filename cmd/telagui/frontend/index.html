@@ -41,6 +41,10 @@
               <select id="profile-select" class="profile-dropdown" onchange="switchProfile(this.value)"></select>
               <button class="profile-new-btn" onclick="newProfile()" title="New profile">+</button>
             </div>
+            <div class="profile-path-row">
+              <span class="profile-path" id="profile-path" title="Click to copy" onclick="copyProfilePath()"></span>
+              <button class="btn-link btn-sm" onclick="showProfileOverview()">YAML</button>
+            </div>
             <div class="sidebar-actions">
               <button class="btn-primary btn-sm" onclick="doRefresh()">Refresh</button>
               <button class="btn-primary btn-sm" onclick="importProfile()" title="Import">Import</button>
