@@ -54,6 +54,10 @@ export function GetStoredToken(arg1) {
   return window['go']['main']['App']['GetStoredToken'](arg1);
 }
 
+export function GetToolVersions() {
+  return window['go']['main']['App']['GetToolVersions']();
+}
+
 export function GetUpdateVersion() {
   return window['go']['main']['App']['GetUpdateVersion']();
 }

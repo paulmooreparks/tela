@@ -16,7 +16,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:  "Tela",
+		Title:  "TelaGUI",
 		Width:  1024,
 		Height: 700,
 		AssetServer: &assetserver.Options{

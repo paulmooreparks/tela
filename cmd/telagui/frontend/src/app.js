@@ -21,21 +21,42 @@ function switchTab(name, btn) {
 }
 
 // --- Startup ---
-goApp.GetVersion().then(function (v) {
-  document.getElementById('app-version').textContent = v || 'dev';
-});
+refreshVersionDisplay();
 loadSavedSelections().then(refreshAll);
 
-// Check for updates after a short delay
-setTimeout(checkForUpdate, 3000);
+// Check for updates after a short delay (versions need time to fetch)
+setTimeout(function () {
+  refreshVersionDisplay();
+  checkForUpdate();
+}, 4000);
+
+function refreshVersionDisplay() {
+  goApp.GetToolVersions().then(function (tv) {
+    var el = document.getElementById('app-versions');
+    var guiClass = tv.guiBehind ? 'ver-behind' : 'ver-current';
+    var cliClass = tv.cliBehind ? 'ver-behind' : 'ver-current';
+    var guiTitle = tv.guiBehind ? 'Update available: ' + tv.latest : '';
+    var cliTitle = tv.cliBehind ? 'Update available: ' + tv.latest : '';
+
+    el.innerHTML = '<span><span class="ver-label">telagui:</span> '
+      + '<span class="' + guiClass + '" title="' + escHtml(guiTitle) + '">' + escHtml(tv.gui || 'dev') + '</span></span>'
+      + '<span><span class="ver-label">tela:</span> '
+      + '<span class="' + cliClass + '" title="' + escHtml(cliTitle) + '">' + escHtml(tv.cli || '?') + '</span></span>';
+  });
+}
 
 function checkForUpdate() {
   goApp.HasUpdate().then(function (pending) {
     var btn = document.getElementById('update-btn');
     if (pending) {
       goApp.GetUpdateVersion().then(function (ver) {
-        btn.textContent = 'Restart to Update (' + ver + ')';
-        btn.classList.remove('hidden');
+        // Only show if something is actually behind
+        goApp.GetToolVersions().then(function (tv) {
+          if (tv.guiBehind || tv.cliBehind) {
+            btn.textContent = 'Restart to Update (' + ver + ')';
+            btn.classList.remove('hidden');
+          }
+        });
       });
     }
   });

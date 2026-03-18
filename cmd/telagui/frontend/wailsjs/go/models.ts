@@ -231,6 +231,27 @@ export namespace main {
 	}
 	
 	
+	
+	export class ToolVersions {
+	    gui: string;
+	    cli: string;
+	    latest: string;
+	    guiBehind: boolean;
+	    cliBehind: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolVersions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.gui = source["gui"];
+	        this.cli = source["cli"];
+	        this.latest = source["latest"];
+	        this.guiBehind = source["guiBehind"];
+	        this.cliBehind = source["cliBehind"];
+	    }
+	}
 
 }
 

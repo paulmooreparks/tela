@@ -28,6 +28,8 @@ export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
 export function GetStoredToken(arg1:string):Promise<string>;
 
+export function GetToolVersions():Promise<main.ToolVersions>;
+
 export function GetUpdateVersion():Promise<string>;
 
 export function GetVersion():Promise<string>;

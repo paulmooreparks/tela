@@ -254,6 +254,59 @@ func (a *App) GetVersion() string {
 	return version
 }
 
+// ToolVersions contains version info for all managed binaries.
+type ToolVersions struct {
+	GUI       string `json:"gui"`
+	CLI       string `json:"cli"`
+	Latest    string `json:"latest"`
+	GUIBehind bool   `json:"guiBehind"`
+	CLIBehind bool   `json:"cliBehind"`
+}
+
+// GetToolVersions returns versions of all binaries and whether they're behind.
+func (a *App) GetToolVersions() ToolVersions {
+	tv := ToolVersions{GUI: version}
+
+	// Get CLI version
+	bin := "tela"
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	localPath := filepath.Join(telaInstallDir(), bin)
+	if _, err := os.Stat(localPath); err == nil {
+		cmd := exec.Command(localPath, "version")
+		hideConsoleWindow(cmd)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			parts := strings.Fields(strings.TrimSpace(string(out)))
+			if len(parts) >= 2 {
+				tv.CLI = parts[1]
+			}
+		}
+	} else {
+		tv.CLI = "not installed"
+	}
+
+	// Get latest from cache
+	a.mu.Lock()
+	tv.Latest = a.updateVersion
+	a.mu.Unlock()
+
+	if tv.Latest == "" {
+		// Try fetching (may already be cached from checkForUpdates)
+		if latest, err := a.latestRelease(); err == nil {
+			tv.Latest = latest
+		}
+	}
+
+	if tv.Latest != "" {
+		tv.GUIBehind = tv.GUI != tv.Latest
+		tv.CLIBehind = tv.CLI != tv.Latest && tv.CLI != "not installed"
+	}
+
+	return tv
+}
+
 // HasUpdate returns true if a self-update is pending.
 func (a *App) HasUpdate() bool {
 	a.mu.Lock()
