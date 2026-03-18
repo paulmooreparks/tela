@@ -18,6 +18,10 @@ export function Connect(arg1) {
   return window['go']['main']['App']['Connect'](arg1);
 }
 
+export function DetectCredentialType(arg1) {
+  return window['go']['main']['App']['DetectCredentialType'](arg1);
+}
+
 export function Disconnect() {
   return window['go']['main']['App']['Disconnect']();
 }
@@ -80,6 +84,10 @@ export function IsPackageManaged() {
 
 export function LoadProfile() {
   return window['go']['main']['App']['LoadProfile']();
+}
+
+export function PairWithCode(arg1, arg2) {
+  return window['go']['main']['App']['PairWithCode'](arg1, arg2);
 }
 
 export function ReleaseLocalPort(arg1) {

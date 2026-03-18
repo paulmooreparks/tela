@@ -484,6 +484,8 @@ body {
   box-shadow: 0 0 0 3px rgba(46,204,113,0.15);
 }
 .error-msg { color: var(--danger); font-size: 13px; margin: 8px 0; }
+.field-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.field-hint.detected { color: var(--accent); font-weight: 500; }
 
 /* Tabs */
 .tab-bar {

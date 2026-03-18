@@ -143,6 +143,8 @@ func main() {
 		cmdLogin(os.Args[2:])
 	case "logout":
 		cmdLogout(os.Args[2:])
+	case "pair":
+		cmdPair(os.Args[2:])
 	case "admin":
 		cmdAdmin(os.Args[2:])
 	case "service":
@@ -173,6 +175,7 @@ Commands:
   remote    Manage hub directory remotes (add, remove, list)
   login     Store hub credentials in the credential store
   logout    Remove hub credentials from the credential store
+  pair      Exchange a pairing code for a hub connect token
   admin     Remote hub auth management (tokens, ACLs)
   service   Manage tela as an OS service (install, start, stop, etc.)
   version   Print version and exit
@@ -2343,6 +2346,82 @@ func cmdLogout(args []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Credentials removed for %s\n", hubURL)
+}
+
+// ── tela pair ──────────────────────────────────────────────────────
+
+func cmdPair(args []string) {
+	fs := flag.NewFlagSet("pair", flag.ExitOnError)
+	hubFlag := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	code := fs.String("code", "", "Pairing code")
+	fs.Parse(args)
+
+	hubURL := *hubFlag
+	if hubURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub is required (or set TELA_HUB)")
+		os.Exit(1)
+	}
+	hubURL = ensureWSScheme(hubURL)
+
+	if *code == "" {
+		fmt.Fprintln(os.Stderr, "Usage: tela pair -hub <url> -code <code>")
+		os.Exit(1)
+	}
+
+	httpURL := wsToHTTP(hubURL)
+	body := map[string]string{"code": *code}
+	data, err := json.Marshal(body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	resp, err := http.Post(httpURL+"/api/pair", "application/json", strings.NewReader(string(data)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not reach hub: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	var result map[string]any
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid response from hub\n")
+		os.Exit(1)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		errMsg := "unknown error"
+		if e, ok := result["error"].(string); ok {
+			errMsg = e
+		}
+		fmt.Fprintf(os.Stderr, "Error (HTTP %d): %s\n", resp.StatusCode, errMsg)
+		os.Exit(1)
+	}
+
+	token, _ := result["token"].(string)
+	identity, _ := result["identity"].(string)
+
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "Error: no token returned by hub")
+		os.Exit(1)
+	}
+
+	// Store in credential store
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading credentials: %v\n", err)
+		os.Exit(1)
+	}
+	store.Set(hubURL, credstore.Credential{Token: token, Identity: identity})
+	if err := store.Save(credstore.UserPath()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving credentials: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Paired successfully. Token stored for %s.\n", hubURL)
+	fmt.Printf("\nEquivalent manual login:\n")
+	fmt.Printf("  tela login %s\n", hubURL)
 }
 
 // ensureWSScheme adds a ws:// or wss:// scheme to a URL if missing.

@@ -146,13 +146,14 @@
               <input type="text" id="hub-url" placeholder="wss://myhub.example.com" required>
             </div>
             <div class="form-group">
-              <label for="hub-token">Token</label>
-              <input type="password" id="hub-token" placeholder="Paste hub token" required>
+              <label for="hub-credential">Pairing Code or Token</label>
+              <input type="text" id="hub-credential" placeholder="ABCD-1234 or paste a hub token" required autocomplete="off">
+              <p class="field-hint" id="credential-hint"></p>
             </div>
             <div id="add-hub-error" class="error-msg hidden"></div>
             <div class="modal-actions">
               <button type="button" class="btn-secondary" onclick="closeAddHubModal()">Cancel</button>
-              <button type="submit" class="btn-primary">Add Hub</button>
+              <button type="submit" class="btn-primary" id="add-hub-submit">Connect</button>
             </div>
           </form>
         </div>

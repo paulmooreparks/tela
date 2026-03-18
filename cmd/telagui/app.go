@@ -1125,6 +1125,60 @@ func (a *App) SaveTerminalOutput(content string) (string, error) {
 	return dialog, nil
 }
 
+// PairWithCode exchanges a pairing code for a connect token via the tela CLI.
+func (a *App) PairWithCode(hubURL, code string) error {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		// Try to download
+		var err error
+		telaPath, err = a.EnsureTool("tela")
+		if err != nil {
+			return fmt.Errorf("tela not available: %w", err)
+		}
+	}
+
+	wsURL := toWSURL(hubURL)
+	cmdStr := "tela pair -hub " + wsURL + " -code " + code
+	a.logCommand("Pair with hub "+wsURL, cmdStr)
+
+	cmd := exec.Command(telaPath, "pair", "-hub", wsURL, "-code", code)
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		output := strings.TrimSpace(string(out))
+		if output != "" {
+			return fmt.Errorf("%s", output)
+		}
+		return fmt.Errorf("pairing failed: %w", err)
+	}
+
+	return nil
+}
+
+// DetectCredentialType returns "code" if the input looks like a pairing code,
+// "token" if it looks like a hex token, or "unknown".
+func (a *App) DetectCredentialType(input string) string {
+	input = strings.TrimSpace(input)
+	// Pairing code: 4-4 alphanumeric with dash (e.g., ABCD-1234)
+	if len(input) == 9 && input[4] == '-' {
+		return "code"
+	}
+	// Hex token: 64 hex characters
+	if len(input) == 64 {
+		allHex := true
+		for _, c := range input {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				allHex = false
+				break
+			}
+		}
+		if allHex {
+			return "token"
+		}
+	}
+	return "unknown"
+}
+
 // GetControlStatus reads live status from the tela control API.
 func (a *App) GetControlStatus() map[string]interface{} {
 	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")

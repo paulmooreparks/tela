@@ -546,19 +546,63 @@ function showAddHubTab(tab, btn) {
   if (tab === 'docker') refreshDockerContainers();
 }
 
+// Auto-detect credential type as user types
+(function () {
+  setTimeout(function () {
+    var input = document.getElementById('hub-credential');
+    if (!input) return;
+    input.addEventListener('input', function () {
+      var val = this.value.trim();
+      var hint = document.getElementById('credential-hint');
+      if (!val) {
+        hint.textContent = '';
+        hint.className = 'field-hint';
+        return;
+      }
+      goApp.DetectCredentialType(val).then(function (type) {
+        if (type === 'code') {
+          hint.textContent = 'Detected: pairing code';
+          hint.className = 'field-hint detected';
+        } else if (type === 'token') {
+          hint.textContent = 'Detected: hub token';
+          hint.className = 'field-hint detected';
+        } else {
+          hint.textContent = '';
+          hint.className = 'field-hint';
+        }
+      });
+    });
+  }, 200);
+})();
+
 function submitAddHub(event) {
   event.preventDefault();
   var url = document.getElementById('hub-url').value.trim();
-  var token = document.getElementById('hub-token').value.trim();
+  var credential = document.getElementById('hub-credential').value.trim();
   var errEl = document.getElementById('add-hub-error');
+  var btn = document.getElementById('add-hub-submit');
   errEl.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
 
-  goApp.AddHub(url, token).then(function () {
+  goApp.DetectCredentialType(credential).then(function (type) {
+    if (type === 'code') {
+      // Pairing code: exchange via tela pair
+      return goApp.PairWithCode(url, credential);
+    } else {
+      // Raw token: store directly
+      return goApp.AddHub(url, credential);
+    }
+  }).then(function () {
     closeAddHubModal();
+    btn.disabled = false;
+    btn.textContent = 'Connect';
     refreshAll();
   }).catch(function (err) {
     errEl.textContent = err;
     errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Connect';
   });
 }
 

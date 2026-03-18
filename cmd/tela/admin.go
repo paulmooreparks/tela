@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -583,9 +584,10 @@ func cmdAdminAddPortal(args []string) {
 // ── tela admin pair-code ────────────────────────────────────────
 
 type pairCodeRequest struct {
-	MachineID string `json:"machineId"`
-	Role      string `json:"role,omitempty"`
-	ExpiresIn int    `json:"expiresIn"`
+	MachineID string   `json:"machineId"`
+	Type      string   `json:"type,omitempty"`
+	Machines  []string `json:"machines,omitempty"`
+	ExpiresIn int      `json:"expiresIn"`
 }
 
 type pairCodeResponse struct {
@@ -593,27 +595,57 @@ type pairCodeResponse struct {
 	ExpiresAt string `json:"expiresAt"`
 }
 
+// parseDuration parses a duration string like "10m", "1h", "24h", "7d".
+// Standard Go durations (s, m, h) are handled by time.ParseDuration.
+// The "d" suffix is handled by converting days to hours first.
+func parseDuration(s string) (time.Duration, error) {
+	if strings.HasSuffix(s, "d") {
+		numStr := strings.TrimSuffix(s, "d")
+		// Parse as a float to handle fractional days
+		var days float64
+		if _, err := fmt.Sscanf(numStr, "%f", &days); err != nil {
+			return 0, fmt.Errorf("invalid duration: %s", s)
+		}
+		return time.Duration(days * 24 * float64(time.Hour)), nil
+	}
+	return time.ParseDuration(s)
+}
+
 func cmdAdminPairCode(args []string) {
 	fs := flag.NewFlagSet("admin pair-code", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	role := fs.String("role", "user", "Token role (user, admin, viewer, owner)")
-	expiresIn := fs.Int("expires-in", 600, "Code expiration in seconds (default: 600 / 10 minutes)")
+	expires := fs.String("expires", "10m", "Code expiration duration (e.g. 10m, 1h, 24h, 7d)")
+	codeType := fs.String("type", "connect", "Code type: connect or register")
+	machines := fs.String("machines", "*", "Comma-separated machine IDs (default: *)")
 	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin pair-code <machineId> -hub <hub> -token <token>")
+		fmt.Fprintln(os.Stderr, "Usage: tela admin pair-code <machineId> -hub <hub> -token <token> [-expires 10m] [-type connect] [-machines *]")
 		os.Exit(1)
 	}
 	machineID := fs.Arg(0)
 	hub, tok := adminParseHubAndToken(fs)
 
+	dur, err := parseDuration(*expires)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid -expires value: %v\n", err)
+		os.Exit(1)
+	}
+	expiresInSec := int(dur.Seconds())
+
+	machineList := strings.Split(*machines, ",")
+	for i := range machineList {
+		machineList[i] = strings.TrimSpace(machineList[i])
+	}
+
 	body := pairCodeRequest{
 		MachineID: machineID,
-		Role:      *role,
-		ExpiresIn: *expiresIn,
+		Type:      *codeType,
+		Machines:  machineList,
+		ExpiresIn: expiresInSec,
 	}
 
 	status, result, err := adminHTTP("POST", hub, "/api/admin/pair-code", tok, body)
@@ -628,8 +660,14 @@ func cmdAdminPairCode(args []string) {
 
 	fmt.Printf("Generated pairing code: %s\n", code)
 	fmt.Printf("Expires: %s\n", expiresAt)
-	fmt.Printf("\nAgent onboarding command:\n")
-	fmt.Printf("  telad pair -hub %s -code %s\n", hub, code)
+
+	if *codeType == "connect" {
+		fmt.Printf("\nClient pairing command:\n")
+		fmt.Printf("  tela pair -hub %s -code %s\n", hub, code)
+	} else {
+		fmt.Printf("\nAgent onboarding command:\n")
+		fmt.Printf("  telad pair -hub %s -code %s\n", hub, code)
+	}
 }
 
 // ── tela admin remove-portal ─────────────────────────────────────

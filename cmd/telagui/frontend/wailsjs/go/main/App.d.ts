@@ -10,6 +10,8 @@ export function CheckForUpdatesNow():Promise<void>;
 
 export function Connect(arg1:string):Promise<string>;
 
+export function DetectCredentialType(arg1:string):Promise<string>;
+
 export function Disconnect():Promise<void>;
 
 export function DockerGetToken(arg1:string,arg2:string):Promise<string>;
@@ -41,6 +43,8 @@ export function HasUpdate():Promise<boolean>;
 export function IsPackageManaged():Promise<boolean>;
 
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
+
+export function PairWithCode(arg1:string,arg2:string):Promise<void>;
 
 export function ReleaseLocalPort(arg1:number):Promise<void>;
 
