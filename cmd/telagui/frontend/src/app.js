@@ -22,6 +22,40 @@ function switchTab(name, btn) {
   if (name === 'settings') refreshSettings();
 }
 
+// --- Sidebar Resize ---
+(function () {
+  setTimeout(function () {
+    var handle = document.getElementById('sidebar-resize');
+    var sidebar = document.getElementById('sidebar');
+    if (!handle || !sidebar) return;
+
+    var dragging = false;
+
+    handle.addEventListener('mousedown', function (e) {
+      dragging = true;
+      e.preventDefault();
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      var newWidth = e.clientX;
+      if (newWidth < 340) newWidth = 340;
+      if (newWidth > 600) newWidth = 600;
+      sidebar.style.width = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', function () {
+      if (dragging) {
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+  }, 200);
+})();
+
 // --- Startup ---
 refreshVersionDisplay();
 refreshProfileList();

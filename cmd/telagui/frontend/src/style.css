@@ -184,16 +184,27 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 280px;
-  min-width: 280px;
-  max-width: 500px;
+  width: 340px;
+  min-width: 340px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   overflow-y: auto;
   padding: 8px 0;
   flex-shrink: 0;
-  resize: horizontal;
-  overflow-x: hidden;
+  position: relative;
+}
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+.sidebar-resize-handle:hover {
+  background: var(--accent);
+  opacity: 0.4;
 }
 .sidebar .loading { padding: 16px; color: var(--text-muted); }
 .sidebar-empty {
