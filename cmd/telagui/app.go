@@ -538,19 +538,24 @@ func (a *App) ShowWindow() {
 	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, false)
 }
 
-// QuitApp exits the application (used from tray menu).
+// QuitApp initiates application exit. The actual confirmation and
+// cleanup happen in OnBeforeClose.
 func (a *App) QuitApp() {
+	wailsRuntime.Quit(a.ctx)
+}
+
+// confirmQuit is called by OnBeforeClose after the user confirms exit.
+// It sets the quitting flag and cleans up.
+func (a *App) confirmQuit() {
 	a.mu.Lock()
 	a.quitting = true
 	a.mu.Unlock()
 	a.Disconnect()
-	// Force exit after a short delay -- Wails Quit may not work
-	// if called from a systray goroutine
+	// Force exit after a short delay in case goroutines are stuck.
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		os.Exit(0)
 	}()
-	wailsRuntime.Quit(a.ctx)
 }
 
 // IsQuitting returns true if the app is in the process of quitting.
@@ -558,6 +563,13 @@ func (a *App) IsQuitting() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.quitting
+}
+
+// IsConnected returns true if tela is currently connected.
+func (a *App) IsConnected() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.connected
 }
 
 // --- Command Log ---
@@ -955,15 +967,11 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 		return "", fmt.Errorf("invalid connections: %w", err)
 	}
 
-	// Resolve tokens from credential store for each connection.
-	// Tokens are written directly into the profile (file is 0600).
+	// Do not embed tokens in the profile. tela connect -profile
+	// resolves tokens from the credential store at connect time.
+	// This avoids duplicating credentials across files.
 	for i := range connections {
-		if connections[i].Token == "" || connections[i].Token == "${TELA_TOKEN}" {
-			token := credstore.LookupToken(connections[i].Hub)
-			if token != "" {
-				connections[i].Token = token
-			}
-		}
+		connections[i].Token = ""
 	}
 
 	profile := Profile{Connections: connections}
@@ -1805,10 +1813,26 @@ func (a *App) ImportProfile() error {
 		return fmt.Errorf("read profile: %w", err)
 	}
 
-	// Validate that it parses as a profile
+	// Validate that it parses as a profile with valid content.
 	var profile Profile
 	if err := yaml.Unmarshal(data, &profile); err != nil {
 		return fmt.Errorf("invalid profile YAML: %w", err)
+	}
+	for i, conn := range profile.Connections {
+		if conn.Hub == "" {
+			return fmt.Errorf("connection %d: hub is required", i+1)
+		}
+		if conn.Machine == "" {
+			return fmt.Errorf("connection %d: machine is required", i+1)
+		}
+		for j, svc := range conn.Services {
+			if svc.Local < 0 || svc.Local > 65535 {
+				return fmt.Errorf("connection %d service %d: invalid local port %d", i+1, j+1, svc.Local)
+			}
+			if svc.Remote < 0 || svc.Remote > 65535 {
+				return fmt.Errorf("connection %d service %d: invalid remote port %d", i+1, j+1, svc.Remote)
+			}
+		}
 	}
 
 	dir := profilesDir()

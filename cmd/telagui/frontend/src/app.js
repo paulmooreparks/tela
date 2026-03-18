@@ -18,9 +18,13 @@ var profileDirty = false;
 
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-pane').forEach(function (el) { el.classList.add('hidden'); });
-  document.querySelectorAll('.main-tab').forEach(function (el) { el.classList.remove('active'); });
+  document.querySelectorAll('.main-tab').forEach(function (el) {
+    el.classList.remove('active');
+    el.setAttribute('aria-selected', 'false');
+  });
   document.getElementById('tab-' + name).classList.remove('hidden');
   btn.classList.add('active');
+  btn.setAttribute('aria-selected', 'true');
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
   if (name === 'terminal') refreshTerminal();
@@ -451,14 +455,12 @@ function refreshAll() {
   content.innerHTML = '<p class="loading">Loading hubs...</p>';
 
   // Fetch connection state first (flat, not nested) then hubs
-  var _refreshIsConnected = false;
+  var connectedAtRefresh = false;
   goApp.GetConnectionState().then(function (connState) {
-    _refreshIsConnected = connState.connected;
+    connectedAtRefresh = connState.connected;
   }).then(function () {
     return goApp.GetKnownHubs();
   }).then(function (hubs) {
-    var isConnected = _refreshIsConnected;
-
     if (!hubs || hubs.length === 0) {
       content.innerHTML = '<div class="sidebar-empty">'
         + '<p>No hubs configured.</p>'
@@ -468,71 +470,78 @@ function refreshAll() {
 
     content.innerHTML = '';
     hubs.forEach(function (hub) {
-      var hubContainer = document.createElement('div');
-      var included = isHubIncluded(hub.url);
-      hubContainer.className = 'profile-hub-group' + (included ? '' : ' profile-hub-excluded');
-
-      // Hub header with checkbox
-      var hubHeader = document.createElement('div');
-      hubHeader.className = 'profile-hub-header';
-      if (selectedHubURL === hub.url && !selectedMachineId) hubHeader.classList.add('selected');
-      var hubDisabled = isConnected ? ' disabled' : '';
-      hubHeader.innerHTML = '<input type="checkbox"' + (included ? ' checked' : '') + hubDisabled
-        + ' onclick="event.stopPropagation(); toggleHubInclusion(\'' + escAttr(hub.url) + '\', this.checked)">'
-        + '<span class="hub-dot"></span>'
-        + '<span class="hub-name">' + escHtml(hub.name) + '</span>'
-        + (!hub.hasToken ? '<span class="no-token-badge">no token</span>' : '');
-      hubHeader.onclick = function (e) {
-        if (e.target.tagName === 'INPUT') return;
-        selectHub(hub, hubHeader);
-      };
-      hubContainer.appendChild(hubHeader);
-
-      content.appendChild(hubContainer);
-
-      if (hub.hasToken) {
-        goApp.GetHubStatus(hub.url).then(function (status) {
-          hubStatusCache[hub.url] = status;
-          hubHeader.querySelector('.hub-dot').className = 'hub-dot ' + (status.online ? 'online' : 'offline');
-
-          // Reconcile remote ports: update selectedServices with hub-reported ports
-          if (status.machines) {
-            status.machines.forEach(function (m) {
-              var mId = m.id || m.hostname;
-              (m.services || []).forEach(function (svc) {
-                var key = makeServiceKey(hub.url, mId, svc.name);
-                if (selectedServices[key] && svc.port) {
-                  selectedServices[key].servicePort = svc.port;
-                }
-              });
-            });
-            refreshStatus();
-          }
-
-          if (status.machines && included) {
-            status.machines.forEach(function (m) {
-              var mId = m.id || m.hostname;
-              var mEl = document.createElement('div');
-              mEl.className = 'machine-item';
-              if (selectedHubURL === hub.url && selectedMachineId === mId) mEl.classList.add('selected');
-              var dotClass = m.agentConnected ? 'online' : 'offline';
-              mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
-                + escHtml(mId);
-              mEl.onclick = function (e) {
-                e.stopPropagation();
-                selectMachine(hub, m, mEl);
-              };
-              hubContainer.appendChild(mEl);
-            });
-          }
-        }).catch(function () {
-          hubHeader.querySelector('.hub-dot').className = 'hub-dot offline';
-        });
-      }
+      renderHubInSidebar(content, hub, connectedAtRefresh);
     });
 
     updateConnectButton();
   });
+}
+
+function reconcileServicePorts(hubURL, machines) {
+  var changed = false;
+  machines.forEach(function (m) {
+    var mId = m.id || m.hostname;
+    (m.services || []).forEach(function (svc) {
+      var key = makeServiceKey(hubURL, mId, svc.name);
+      if (selectedServices[key] && svc.port) {
+        selectedServices[key].servicePort = svc.port;
+        changed = true;
+      }
+    });
+  });
+  if (changed) refreshStatus();
+}
+
+function renderHubInSidebar(content, hub, isConnected) {
+  var hubContainer = document.createElement('div');
+  var included = isHubIncluded(hub.url);
+  hubContainer.className = 'profile-hub-group' + (included ? '' : ' profile-hub-excluded');
+
+  var hubHeader = document.createElement('div');
+  hubHeader.className = 'profile-hub-header';
+  if (selectedHubURL === hub.url && !selectedMachineId) hubHeader.classList.add('selected');
+  var hubDisabled = isConnected ? ' disabled' : '';
+  hubHeader.innerHTML = '<input type="checkbox"' + (included ? ' checked' : '') + hubDisabled
+    + ' onclick="event.stopPropagation(); toggleHubInclusion(\'' + escAttr(hub.url) + '\', this.checked)">'
+    + '<span class="hub-dot"></span>'
+    + '<span class="hub-name">' + escHtml(hub.name) + '</span>'
+    + (!hub.hasToken ? '<span class="no-token-badge">no token</span>' : '');
+  hubHeader.onclick = function (e) {
+    if (e.target.tagName === 'INPUT') return;
+    selectHub(hub, hubHeader);
+  };
+  hubContainer.appendChild(hubHeader);
+  content.appendChild(hubContainer);
+
+  if (hub.hasToken) {
+    goApp.GetHubStatus(hub.url).then(function (status) {
+      hubStatusCache[hub.url] = status;
+      hubHeader.querySelector('.hub-dot').className = 'hub-dot ' + (status.online ? 'online' : 'offline');
+
+      if (status.machines) {
+        reconcileServicePorts(hub.url, status.machines);
+      }
+
+      if (status.machines && included) {
+        status.machines.forEach(function (m) {
+          var mId = m.id || m.hostname;
+          var mEl = document.createElement('div');
+          mEl.className = 'machine-item';
+          if (selectedHubURL === hub.url && selectedMachineId === mId) mEl.classList.add('selected');
+          var dotClass = m.agentConnected ? 'online' : 'offline';
+          mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
+            + escHtml(mId);
+          mEl.onclick = function (e) {
+            e.stopPropagation();
+            selectMachine(hub, m, mEl);
+          };
+          hubContainer.appendChild(mEl);
+        });
+      }
+    }).catch(function () {
+      hubHeader.querySelector('.hub-dot').className = 'hub-dot offline';
+    });
+  }
 }
 
 // --- Detail Pane: Hub View ---
@@ -756,6 +765,7 @@ function updateConnectButton() {
       var hasSelections = Object.keys(selectedServices).length > 0;
       btn.textContent = 'Connect';
       btn.className = 'topbar-btn connect-btn' + (hasSelections ? '' : ' disabled');
+      btn.title = hasSelections ? '' : 'Select services in Profiles first';
       if (quitBtn) { quitBtn.className = 'topbar-btn'; quitBtn.textContent = 'Quit'; }
     }
   });
@@ -1037,7 +1047,7 @@ function submitAddHub(event) {
     refreshAll();
     refreshHubsTab();
   }).catch(function (err) {
-    errEl.textContent = err;
+    errEl.textContent = String(err).replace(/^Error:\s*/i, '');
     errEl.classList.remove('hidden');
     btn.disabled = false;
     btn.textContent = 'Connect';
@@ -1081,7 +1091,7 @@ function dockerGetToken(role) {
     document.getElementById('docker-token-value').textContent = token;
     resultEl.classList.remove('hidden');
   }).catch(function (err) {
-    errEl.textContent = err;
+    errEl.textContent = String(err).replace(/^Error:\s*/i, '');
     errEl.classList.remove('hidden');
   });
 }

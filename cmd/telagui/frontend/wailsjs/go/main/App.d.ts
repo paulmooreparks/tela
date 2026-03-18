@@ -68,6 +68,8 @@ export function HasUpdate():Promise<boolean>;
 
 export function ImportProfile():Promise<void>;
 
+export function IsConnected():Promise<boolean>;
+
 export function IsPackageManaged():Promise<boolean>;
 
 export function IsQuitting():Promise<boolean>;

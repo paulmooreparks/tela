@@ -134,6 +134,10 @@ export function ImportProfile() {
   return window['go']['main']['App']['ImportProfile']();
 }
 
+export function IsConnected() {
+  return window['go']['main']['App']['IsConnected']();
+}
+
 export function IsPackageManaged() {
   return window['go']['main']['App']['IsPackageManaged']();
 }

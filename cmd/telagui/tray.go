@@ -47,7 +47,7 @@ func (a *App) setupTray() {
 		})
 
 		mQuit.Click(func() {
-			a.QuitApp()
+			a.confirmQuit()
 			systray.Quit()
 		})
 	}, func() {

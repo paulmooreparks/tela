@@ -14,6 +14,11 @@
 }
 .error-toast.hidden { display: none; }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 :root {
   --bg: #f5f6f8;
   --surface: #ffffff;
@@ -90,7 +95,7 @@ body {
   cursor: pointer;
   font-family: var(--font);
 }
-.topbar-btn:hover { background: rgba(255,255,255,0.1); }
+.topbar-btn:hover { background: rgba(255,255,255,0.18); }
 .topbar-btn.update-btn {
   background: #f39c12;
   color: #fff;
@@ -152,7 +157,7 @@ body {
   border-bottom-color: var(--accent);
   font-weight: 600;
 }
-.main-tab:hover { color: var(--text); }
+.main-tab:hover { color: var(--text); background: rgba(0,0,0,0.04); }
 .tab-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
 /* --- Status Pane --- */

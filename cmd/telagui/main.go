@@ -31,13 +31,26 @@ func main() {
 		OnShutdown:       app.shutdown,
 		OnBeforeClose: func(ctx context.Context) bool {
 			if app.IsQuitting() {
-				return false // allow quit
+				return false // already confirmed, allow close
 			}
 			s := app.GetSettings()
 			if s.MinimizeOnClose {
 				wailsRuntime.WindowHide(app.ctx)
-				return true // prevent close, hide to tray instead
+				return true // hide to tray instead of closing
 			}
+			if app.IsConnected() {
+				result, _ := wailsRuntime.MessageDialog(app.ctx, wailsRuntime.MessageDialogOptions{
+					Type:          wailsRuntime.QuestionDialog,
+					Title:         "Quit TelaGUI",
+					Message:       "You are connected. Quit and disconnect all tunnels?",
+					DefaultButton: "No",
+					Buttons:       []string{"Yes", "No"},
+				})
+				if result != "Yes" {
+					return true // user cancelled
+				}
+			}
+			app.confirmQuit()
 			return false // allow close
 		},
 		Bind: []interface{}{
