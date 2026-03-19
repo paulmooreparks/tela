@@ -76,9 +76,8 @@ function tvLog(msg) {
   var el = document.getElementById('log-tv');
   if (!el) return;
   var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  el.textContent += '<span class="log-ts">' + now + '</span> ' + msg + '\n';
-  // Use innerHTML to render the span
-  el.innerHTML = el.innerHTML; // force re-render
+  var line = document.createTextNode(now + ' ' + msg + '\n');
+  el.appendChild(line);
   el.scrollTop = el.scrollHeight;
 }
 
@@ -347,6 +346,15 @@ if (window.runtime) {
   window.runtime.EventsOn('app:quit-stuck', function () {
     document.getElementById('quit-stuck-overlay').style.display = 'flex';
   });
+
+  window.runtime.EventsOn('app:command', function (entry) {
+    if (!entry) return;
+    var method = 'CLI';
+    if (entry.description.indexOf('GET ') === 0) method = 'GET';
+    else if (entry.description.indexOf('POST ') === 0) method = 'POST';
+    else if (entry.description.indexOf('DELETE ') === 0) method = 'DELETE';
+    addCommandEntry(method, entry.command, entry.command);
+  });
 }
 
 // --- Sidebar Resize ---
@@ -401,10 +409,12 @@ initSidebarResize('sidebar-resize', 'sidebar', 220, 600, 'sidebarWidth');
 initSidebarResize('hubs-sidebar-resize', 'hubs-sidebar', 220, 400, 'hubsSidebarWidth');
 
 // --- Startup ---
+tvLog('TelaVisor started');
 refreshVersionDisplay();
 refreshProfileList();
 refreshLog();
 loadSavedSelections().then(function () {
+  tvLog('Profile loaded');
   refreshStatus();
   refreshAll();
   // Auto-connect if enabled and there are saved selections
@@ -1039,8 +1049,10 @@ function doConnect() {
   var connections = buildConnections();
   if (connections.length === 0) return;
 
+  tvLog('Connecting...');
   updateConnIcon('connecting');
   goApp.Connect(JSON.stringify(connections)).then(function () {
+    tvLog('Connected');
     // Connect auto-saves the profile; update snapshot
     takeSnapshot();
     startConnectionPoll();
@@ -1124,9 +1136,11 @@ function performDisconnect() {
   btn.textContent = 'Disconnecting...';
   btn.className = 'topbar-btn disconnecting-btn';
   btn.disabled = true;
+  tvLog('Disconnecting...');
   updateConnIcon('disconnecting');
 
   goApp.Disconnect().then(function () {
+    tvLog('Disconnected');
     goApp.DisconnectControlWS();
     stopConnectionPoll();
     btn.disabled = false;

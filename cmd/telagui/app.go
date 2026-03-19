@@ -658,13 +658,23 @@ func (a *App) GetCommandLog() []CommandLogEntry {
 }
 
 func (a *App) logCommand(description, command string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.cmdLog = append(a.cmdLog, CommandLogEntry{
-		Time:        time.Now().Format("2006-01-02 15:04:05"),
+	entry := CommandLogEntry{
+		Time:        time.Now().UTC().Format(time.RFC3339),
 		Description: description,
 		Command:     command,
-	})
+	}
+	a.mu.Lock()
+	a.cmdLog = append(a.cmdLog, entry)
+	a.mu.Unlock()
+
+	// Emit to frontend for real-time command log
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "app:command", map[string]string{
+			"time":        entry.Time,
+			"description": entry.Description,
+			"command":     entry.Command,
+		})
+	}
 }
 
 // --- Local Registry ---
