@@ -2,13 +2,13 @@
 # Built by: nfpm pkg --packager deb --target dist/
 # Docs: https://nfpm.goreleaser.com/
 
-name: telagui
+name: telavisor
 arch: "${GOARCH}"
 platform: linux
 version: "${VERSION}"
 maintainer: "Paul Parks <info@parkscomputing.com>"
 description: |
-  TelaGUI - Desktop client for Tela encrypted remote access.
+  TelaVisor - Desktop client for Tela encrypted remote access.
   Select hubs, machines, and services. One click to connect.
   Manages CLI tools automatically.
 vendor: "Paul Parks"
@@ -20,16 +20,16 @@ depends:
   - libwebkit2gtk-4.1-0
 
 contents:
-  - src: ./build/bin/telagui
-    dst: /usr/bin/telagui
+  - src: ./build/bin/telavisor
+    dst: /usr/bin/telavisor
     file_info:
       mode: 0755
 
   - src: ../../logo.png
-    dst: /usr/share/icons/hicolor/256x256/apps/telagui.png
+    dst: /usr/share/icons/hicolor/256x256/apps/telavisor.png
 
   - src: ./telagui.desktop
-    dst: /usr/share/applications/telagui.desktop
+    dst: /usr/share/applications/telavisor.desktop
 
 overrides:
   deb:

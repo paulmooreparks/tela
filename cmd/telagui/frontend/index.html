@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TelaGUI</title>
+  <title>TelaVisor</title>
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
@@ -11,9 +11,9 @@
   <div id="app">
     <div class="topbar">
       <div class="topbar-left">
-        <a class="app-brand" onclick="toggleAboutOverlay()" title="About TelaGUI">
+        <a class="app-brand" onclick="toggleAboutOverlay()" title="About TelaVisor">
           <img src="/src/logo.png" class="app-logo" alt="Tela">
-          <span class="app-title">Tela<span class="app-title-gui">GUI</span></span>
+          <span class="app-title">Tela<span class="app-title-visor">Visor</span></span>
         </a>
       </div>
       <div class="topbar-center">
@@ -35,7 +35,7 @@
             <line x1="5.5" y1="10.5" x2="10.5" y2="5.5"/>
           </svg>
         </button>
-        <button class="topbar-icon-btn" onclick="toggleAboutOverlay()" title="About TelaGUI">i</button>
+        <button class="topbar-icon-btn" onclick="toggleAboutOverlay()" title="About TelaVisor">i</button>
         <button class="topbar-icon-btn" onclick="toggleSettingsOverlay()" title="Settings">&#x2699;</button>
         <button class="topbar-icon-btn topbar-quit-btn" id="quit-btn" onclick="doQuit()" title="Quit">&#x2715;</button>
       </div>
@@ -60,7 +60,7 @@
     <div class="tab-pane" role="tabpanel" id="tab-status">
       <div class="status-pane">
         <div class="status-header">
-          <h1 id="status-profile-name">telagui</h1>
+          <h1 id="status-profile-name">telavisor</h1>
           <span class="status-connection-state" id="status-conn-state">Disconnected</span>
         </div>
         <div id="status-services">
@@ -198,8 +198,8 @@
         <div class="modal-body-padded">
           <div class="settings-group">
             <div class="settings-group-header">Versions</div>
-            <div class="settings-row"><div class="settings-label">TelaGUI current</div><div class="settings-value" id="update-gui-current"></div></div>
-            <div class="settings-row"><div class="settings-label">TelaGUI latest</div><div class="settings-value update-latest" id="update-gui-latest"></div></div>
+            <div class="settings-row"><div class="settings-label">TelaVisor current</div><div class="settings-value" id="update-gui-current"></div></div>
+            <div class="settings-row"><div class="settings-label">TelaVisor latest</div><div class="settings-value update-latest" id="update-gui-latest"></div></div>
             <div class="settings-row"><div class="settings-label">tela CLI current</div><div class="settings-value" id="update-cli-current"></div></div>
             <div class="settings-row"><div class="settings-label">tela CLI latest</div><div class="settings-value update-latest" id="update-cli-latest"></div></div>
           </div>
@@ -253,7 +253,7 @@
         <div class="about-header-inner">
           <img src="/src/logo.png" class="about-overlay-logo" alt="Tela">
           <div>
-            <h3 class="about-overlay-title">Tela<span class="app-title-gui">GUI</span></h3>
+            <h3 class="about-overlay-title">Tela<span class="app-title-visor">Visor</span></h3>
             <p class="about-overlay-version" id="about-version"></p>
           </div>
         </div>
@@ -261,7 +261,7 @@
       </div>
       <div class="modal-body">
         <div class="modal-body-padded">
-          <p class="about-desc">Tela is a free and open-source (FOSS) encrypted remote-access fabric using WireGuard tunnels. TelaGUI is the desktop client for managing connections to hubs, machines, and services.</p>
+          <p class="about-desc">Tela is a free and open-source (FOSS) encrypted remote-access fabric using WireGuard tunnels. TelaVisor is the desktop client for managing connections to hubs, machines, and services.</p>
 
           <div class="about-links-grid">
             <div class="about-link-row"><span class="about-link-label">GitHub</span><a href="https://github.com/paulmooreparks/tela" target="_blank" rel="noopener noreferrer">paulmooreparks/tela</a></div>

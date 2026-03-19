@@ -162,7 +162,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 }
 
-// checkForUpdates checks if any managed binary (telagui or tela CLI) is
+// checkForUpdates checks if any managed binary (telavisor or tela CLI) is
 // behind the latest GitHub release. If so, sets updatePending but does NOT
 // auto-download. The user clicks "Restart to Update" to trigger the update.
 // Exception: if tela CLI is not installed at all, it is downloaded immediately.
@@ -174,7 +174,7 @@ func (a *App) checkForUpdates() {
 
 	needsUpdate := false
 
-	// Check telagui version
+	// Check telavisor version
 	if version != latest {
 		needsUpdate = true
 	}
@@ -208,7 +208,7 @@ func (a *App) checkForUpdates() {
 	}
 }
 
-// isPackageManaged returns true if telagui was installed via a package manager
+// isPackageManaged returns true if telavisor was installed via a package manager
 // (deb, rpm, msi, dmg). In that case, self-update is disabled and the user
 // should update via their package manager.
 func isPackageManaged() bool {
@@ -236,7 +236,7 @@ func isPackageManaged() bool {
 	return false
 }
 
-// selfExePath returns the absolute path of the currently running telagui binary.
+// selfExePath returns the absolute path of the currently running telavisor binary.
 func selfExePath() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -304,7 +304,7 @@ func (a *App) applyPendingSelfUpdate() {
 }
 
 
-// GetVersion returns the current telagui version.
+// GetVersion returns the current telavisor version.
 func (a *App) GetVersion() string {
 	return version
 }
@@ -440,7 +440,7 @@ func (a *App) RestartToUpdate() error {
 		return nil
 	}
 
-	// Download telagui update to staging path (next to running binary)
+	// Download telavisor update to staging path (next to running binary)
 	a.downloadSelfUpdate(ver)
 
 	exe := selfExePath()
@@ -459,13 +459,13 @@ func (a *App) RestartToUpdate() error {
 	return nil // unreachable
 }
 
-// downloadSelfUpdate downloads the telagui binary for the current platform.
+// downloadSelfUpdate downloads the telavisor binary for the current platform.
 func (a *App) downloadSelfUpdate(ver string) {
 	ext := ""
 	if runtime.GOOS == "windows" {
 		ext = ".exe"
 	}
-	binaryName := fmt.Sprintf("telagui-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
+	binaryName := fmt.Sprintf("telavisor-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
 	url := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", ver, binaryName)
 
 	os.MkdirAll(telaInstallDir(), 0755)
@@ -1301,7 +1301,7 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 	return path, nil
 }
 
-// Connect starts tela connect -profile telagui in the background.
+// Connect starts tela connect -profile telavisor in the background.
 func (a *App) Connect(connectionsJSON string) (string, error) {
 	a.mu.Lock()
 	if a.connected {
@@ -1861,7 +1861,7 @@ func (a *App) installTool(name, version string) (string, error) {
 // currentProfileName tracks which profile is active.
 // Protected by profileMu for concurrent access.
 var (
-	currentProfileName = "telagui"
+	currentProfileName = "telavisor"
 	profileMu          sync.RWMutex
 )
 
@@ -2028,7 +2028,7 @@ func defaultSettings() Settings {
 }
 
 func settingsPath() string {
-	return filepath.Join(telaConfigDir(), "telagui-settings.yaml")
+	return filepath.Join(telaConfigDir(), "telavisor-settings.yaml")
 }
 
 // GetSettings loads settings from disk, returning defaults if not found.
@@ -2173,7 +2173,7 @@ func (a *App) ExportProfile() error {
 	}
 
 	dialog, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
-		DefaultFilename: "telagui-profile.yaml",
+		DefaultFilename: "telavisor-profile.yaml",
 		Title:           "Export Profile",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "YAML Files", Pattern: "*.yaml;*.yml"},

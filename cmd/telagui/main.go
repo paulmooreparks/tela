@@ -20,7 +20,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:       "TelaGUI",
+		Title:       "TelaVisor",
 		Width:       1024,
 		Height:      700,
 		AssetServer: &assetserver.Options{
@@ -56,7 +56,7 @@ func main() {
 	})
 
 	if err != nil {
-		log.Printf("[telagui] fatal: %v", err)
+		log.Printf("[telavisor] fatal: %v", err)
 		os.Exit(1)
 	}
 }

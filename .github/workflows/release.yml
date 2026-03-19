@@ -178,7 +178,7 @@ jobs:
         shell: bash
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Build telagui
+      - name: Build telavisor
         shell: bash
         run: |
           cd cmd/telagui
@@ -202,11 +202,11 @@ jobs:
               ls -la
               exit 1
             fi
-            tar czf telagui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz "$APP_BUNDLE"
-            mv telagui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ../../../../dist/
+            tar czf telavisor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz "$APP_BUNDLE"
+            mv telavisor-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ../../../../dist/
           else
-            cp cmd/telagui/build/bin/telagui${{ matrix.ext }} \
-              dist/telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}${{ matrix.ext }}
+            cp cmd/telagui/build/bin/telavisor${{ matrix.ext }} \
+              dist/telavisor-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}${{ matrix.ext }}
           fi
 
       - name: Build Linux packages
@@ -218,8 +218,8 @@ jobs:
           export VERSION="${{ steps.version.outputs.tag }}"
           VERSION="${VERSION#v}"  # strip leading v for nfpm
           export GOARCH="${{ matrix.goarch }}"
-          nfpm pkg --packager deb --target ../../dist/telagui-${{ matrix.goarch }}${{ matrix.suffix || '' }}.deb
-          nfpm pkg --packager rpm --target ../../dist/telagui-${{ matrix.goarch }}${{ matrix.suffix || '' }}.rpm
+          nfpm pkg --packager deb --target ../../dist/telavisor-${{ matrix.goarch }}${{ matrix.suffix || '' }}.deb
+          nfpm pkg --packager rpm --target ../../dist/telavisor-${{ matrix.goarch }}${{ matrix.suffix || '' }}.rpm
 
       - name: Build Windows installer
         if: matrix.goos == 'windows'
@@ -242,7 +242,7 @@ jobs:
           $installer = Get-ChildItem -Path build/bin -Filter "*installer*" -Recurse | Select-Object -First 1
           if ($installer) {
             Write-Host "Found installer: $($installer.FullName)"
-            Copy-Item $installer.FullName -Destination "../../dist/telagui-windows-amd64-setup.exe"
+            Copy-Item $installer.FullName -Destination "../../dist/telavisor-windows-amd64-setup.exe"
           } else {
             Write-Host "WARNING: No installer file found in build/bin"
           }
@@ -250,7 +250,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-telagui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}
+          name: binaries-telavisor-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix || '' }}
           path: dist/
 
   release:
@@ -283,7 +283,7 @@ jobs:
           VERSION="${{ steps.version.outputs.tag }}"
           echo "{\"version\":\"${VERSION}\",\"binaries\":{" > release.json
           first=true
-          for f in tela-* telad-* telahubd-* telagui-*; do
+          for f in tela-* telad-* telahubd-* telavisor-*; do
             hash=$(sha256sum "$f" | cut -d' ' -f1)
             size=$(stat -c%s "$f")
             if [ "$first" = true ]; then

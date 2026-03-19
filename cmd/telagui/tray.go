@@ -21,12 +21,12 @@ func (a *App) setupTray() {
 		} else {
 			systray.SetIcon(trayIconPNG)
 		}
-		systray.SetTitle("TelaGUI")
-		systray.SetTooltip("TelaGUI - Tela connection manager")
+		systray.SetTitle("TelaVisor")
+		systray.SetTooltip("TelaVisor - Tela connection manager")
 
-		mShow := systray.AddMenuItem("Show TelaGUI", "Show the main window")
+		mShow := systray.AddMenuItem("Show TelaVisor", "Show the main window")
 		systray.AddSeparator()
-		mQuit := systray.AddMenuItem("Quit", "Quit TelaGUI")
+		mQuit := systray.AddMenuItem("Quit", "Quit TelaVisor")
 
 		// Left-click tray icon to show window
 		systray.SetOnClick(func(menu systray.IMenu) {

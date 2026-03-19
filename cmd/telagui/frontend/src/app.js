@@ -90,8 +90,8 @@ function refreshStatus() {
   if (!profileNameEl || !badge || !container) return;
 
   profileNameEl.textContent = document.getElementById('profile-select')
-    ? document.getElementById('profile-select').value || 'telagui'
-    : 'telagui';
+    ? document.getElementById('profile-select').value || 'telavisor'
+    : 'telavisor';
 
   // Build groups from selectedServices (already in memory, no Go call needed)
   var groups = {};
@@ -298,7 +298,7 @@ function refreshVersionDisplay() {
     // Update About overlay version
     var aboutEl = document.getElementById('about-version');
     if (aboutEl) {
-      aboutEl.textContent = 'telagui: ' + (tv.gui || 'dev') + '  |  tela: ' + (tv.cli || 'not installed');
+      aboutEl.textContent = 'telavisor: ' + (tv.gui || 'dev') + '  |  tela: ' + (tv.cli || 'not installed');
     }
   });
 }
@@ -327,9 +327,9 @@ function toggleUpdateOverlay() {
     document.getElementById('update-cli-latest').textContent = updateInfo.version || '?';
 
     var notes = [];
-    if (updateInfo.guiBehind) notes.push('TelaGUI is out of date.');
+    if (updateInfo.guiBehind) notes.push('TelaVisor is out of date.');
     if (updateInfo.cliBehind) notes.push('tela CLI is out of date.');
-    if (updateInfo.packageManaged) notes.push('TelaGUI was installed via a package manager. Only the CLI will be updated.');
+    if (updateInfo.packageManaged) notes.push('TelaVisor was installed via a package manager. Only the CLI will be updated.');
     document.getElementById('update-note').textContent = notes.join(' ');
   }
 }
@@ -1190,7 +1190,7 @@ function renderHubSettings(pane) {
     html += '<div class="settings-group danger-zone"><div class="settings-group-header">Danger Zone</div>'
       + '<div class="settings-row"><div class="settings-label">Remove hub</div>'
       + '<div class="settings-value danger-value">'
-      + '<span class="danger-desc">Remove this hub from TelaGUI. Does not affect the hub itself.</span>'
+      + '<span class="danger-desc">Remove this hub from TelaVisor. Does not affect the hub itself.</span>'
       + '<button class="btn-danger btn-sm" onclick="removeHub(\'' + escAttr(hub) + '\')">Remove Hub</button>'
       + '</div></div>'
       + '<div class="settings-row"><div class="settings-label">Clear credentials</div>'
@@ -1968,7 +1968,7 @@ function exportProfile() {
 function refreshAbout() {
   goApp.GetToolVersions().then(function (tv) {
     var el = document.getElementById('about-version');
-    if (el) el.textContent = 'telagui: ' + (tv.gui || 'dev') + '  |  tela: ' + (tv.cli || 'not installed');
+    if (el) el.textContent = 'telavisor: ' + (tv.gui || 'dev') + '  |  tela: ' + (tv.cli || 'not installed');
   });
   goApp.GetCLIPath().then(function (path) {
     var el = document.getElementById('settings-cli-path');

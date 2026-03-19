@@ -23,11 +23,11 @@ func killProcessTree(pid int) {
 	// Send CTRL_BREAK_EVENT for graceful shutdown.
 	dll, err := syscall.LoadDLL("kernel32.dll")
 	if err != nil {
-		log.Printf("[telagui] LoadDLL kernel32: %v", err)
+		log.Printf("[telavisor] LoadDLL kernel32: %v", err)
 	} else {
 		proc, err := dll.FindProc("GenerateConsoleCtrlEvent")
 		if err != nil {
-			log.Printf("[telagui] FindProc GenerateConsoleCtrlEvent: %v", err)
+			log.Printf("[telavisor] FindProc GenerateConsoleCtrlEvent: %v", err)
 		} else {
 			proc.Call(syscall.CTRL_BREAK_EVENT, uintptr(pid))
 		}
@@ -40,6 +40,6 @@ func killProcessTree(pid int) {
 		CreationFlags: createNoWindow,
 	}
 	if err := cmd.Run(); err != nil {
-		log.Printf("[telagui] taskkill PID %d: %v", pid, err)
+		log.Printf("[telavisor] taskkill PID %d: %v", pid, err)
 	}
 }

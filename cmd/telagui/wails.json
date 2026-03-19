@@ -1,13 +1,13 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "TelaGUI",
-  "outputfilename": "telagui",
+  "name": "TelaVisor",
+  "outputfilename": "telavisor",
   "nsisType": "multiple",
   "info": {
     "productVersion": "0.0.0",
     "companyName": "Parks Computing",
-    "productName": "TelaGUI",
-    "copyright": "Copyright 2025-2026 Paul Parks",
+    "productName": "TelaVisor",
+    "copyright": "Copyright 2026 Paul Parks",
     "comments": "Desktop client for Tela remote access"
   },
   "frontend:install": "",

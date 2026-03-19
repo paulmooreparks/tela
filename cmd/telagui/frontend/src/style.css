@@ -80,7 +80,7 @@ body {
 }
 .app-logo { height: 22px; width: auto; filter: brightness(1.2); }
 .app-title { font-weight: 700; font-size: 15px; color: #fff; }
-.app-title-gui { color: var(--accent); }
+.app-title-visor { color: var(--accent); }
 
 /* Mode toggle */
 .mode-toggle { display: flex; gap: 0; -webkit-app-region: no-drag; }
