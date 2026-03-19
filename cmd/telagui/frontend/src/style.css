@@ -70,20 +70,42 @@ body {
   height: 44px;
   flex-shrink: 0;
   -webkit-app-region: drag;
+  position: relative;
 }
 .topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; }
-.app-logo { height: 22px; width: auto; margin-right: 4px; filter: brightness(1.2); }
-.app-title { font-weight: 700; font-size: 15px; }
-.app-versions { font-size: 11px; color: #94a3b8; font-family: var(--mono); display: flex; gap: 10px; }
-.app-versions .ver-label { color: #64748b; }
-.app-versions .ver-current { color: #94a3b8; }
-.app-versions .ver-behind {
-  color: #f39c12;
-  font-weight: 700;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 2px;
+.topbar-center { position: absolute; left: 50%; transform: translateX(-50%); }
+.app-brand {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none;
+  -webkit-app-region: no-drag;
 }
+.app-logo { height: 22px; width: auto; filter: brightness(1.2); }
+.app-title { font-weight: 700; font-size: 15px; color: #fff; }
+.app-title-gui { color: var(--accent); }
+
+/* Mode toggle */
+.mode-toggle { display: flex; gap: 0; -webkit-app-region: no-drag; }
+.mode-btn {
+  padding: 4px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.2); background: none; color: #94a3b8;
+  font-family: var(--font); transition: all 0.15s;
+}
+.mode-btn:first-child { border-radius: 4px 0 0 4px; }
+.mode-btn:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+.mode-btn.active { background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3); }
+.mode-btn:hover:not(.active) { color: #e0e0e0; }
+
+/* Topbar icon buttons */
+.topbar-icon-btn {
+  -webkit-app-region: no-drag;
+  background: none; border: 1px solid rgba(255,255,255,0.2); color: #94a3b8;
+  width: 28px; height: 28px; border-radius: 50%; font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font); line-height: 1; transition: all 0.15s;
+}
+.topbar-icon-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); }
+.topbar-quit-btn { color: var(--danger); border-color: var(--danger); }
+.topbar-quit-btn:hover { background: var(--danger); color: #fff; }
+.topbar-quit-btn.quitting { opacity: 0.4; cursor: wait; }
 .topbar-btn {
   -webkit-app-region: no-drag;
   background: none;
@@ -158,6 +180,16 @@ body {
   font-weight: 600;
 }
 .main-tab:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+.tab-bar-spacer { flex: 1; }
+.main-tab-bar .topbar-btn { padding: 2px 12px; font-size: 11px; margin-right: 4px; line-height: 1.4; }
+.tab-bar-icons { display: flex; align-items: center; gap: 6px; }
+.tab-icon-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  width: 26px; height: 26px; border-radius: 50%; font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font); line-height: 1; transition: all 0.15s;
+}
+.tab-icon-btn:hover { color: var(--text); border-color: var(--text-muted); background: rgba(0,0,0,0.04); }
 .tab-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
 /* --- Status Pane --- */
@@ -666,7 +698,7 @@ body {
 .modal-dialog {
   background: var(--surface);
   border-radius: var(--radius);
-  width: 420px;
+  width: 600px;
   max-width: 90vw;
   box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
@@ -1181,7 +1213,9 @@ body {
   border-bottom: 1px solid var(--surface-alt); font-size: 13px;
 }
 .settings-row:last-child { border-bottom: none; }
+.settings-check { width: 30px; flex-shrink: 0; display: flex; align-items: center; }
 .settings-label { width: 140px; color: var(--text-muted); font-weight: 500; flex-shrink: 0; }
+.modal-settings .settings-label { width: auto; flex: 1; }
 .settings-value { flex: 1; font-family: var(--mono); font-size: 12px; }
 .settings-value a { color: var(--accent); text-decoration: none; }
 .settings-value a:hover { text-decoration: underline; }
@@ -1234,6 +1268,39 @@ body {
 .danger-zone .settings-group-header {
   background: #fef2f2; color: var(--danger); border-bottom-color: #fecaca;
 }
+.danger-value {
+  font-family: var(--font) !important; display: flex; align-items: center; gap: 12px;
+}
+.danger-desc { color: var(--text-muted); font-size: 12px; }
+.about-cli-path { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+/* Settings/About overlay specifics */
+.modal-settings { width: 650px; }
+.about-header-inner { display: flex; align-items: center; gap: 12px; }
+.about-overlay-logo { height: 36px; width: auto; }
+.about-overlay-title { font-size: 18px; font-weight: 700; }
+.about-overlay-version { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+.about-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+.about-links-grid { margin-bottom: 16px; }
+.about-link-row {
+  display: flex; align-items: center; padding: 6px 0; font-size: 13px;
+  border-bottom: 1px solid var(--surface-alt);
+}
+.about-link-row:last-child { border-bottom: none; }
+.about-link-label { width: 110px; color: var(--text-muted); font-weight: 500; flex-shrink: 0; }
+.about-link-row a { color: var(--accent); text-decoration: none; }
+.about-link-row a:hover { text-decoration: underline; }
+.about-deps-box {
+  background: var(--surface-alt); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px;
+}
+.about-deps-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
+.about-deps-table { width: 100%; font-size: 12px; color: var(--text-muted); }
+.about-deps-table td { padding: 2px 8px 2px 0; }
+.about-deps-table a { color: var(--accent); text-decoration: none; }
+.about-deps-table a:hover { text-decoration: underline; }
+.about-deps-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.about-deps-note a { color: var(--accent); text-decoration: none; }
+.about-copyright { font-size: 11px; color: var(--text-muted); }
+
 .modal-body-padded { padding: 20px; }
 .result-message { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
 .result-value-input {

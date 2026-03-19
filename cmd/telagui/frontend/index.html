@@ -11,26 +11,38 @@
   <div id="app">
     <div class="topbar">
       <div class="topbar-left">
-        <img src="/src/logo.png" class="app-logo" alt="Tela">
-        <span class="app-title">TelaGUI</span>
-        <span class="app-versions" id="app-versions"></span>
+        <a class="app-brand" onclick="toggleAboutOverlay()" title="About TelaGUI">
+          <img src="/src/logo.png" class="app-logo" alt="Tela">
+          <span class="app-title">Tela<span class="app-title-gui">GUI</span></span>
+        </a>
+        <button class="topbar-btn update-btn hidden" id="update-btn" onclick="restartToUpdate()">Restart to Update</button>
+      </div>
+      <div class="topbar-center">
+        <div class="mode-toggle">
+          <button class="mode-btn active" id="mode-connect-btn" onclick="switchMode('connect')">Connections</button>
+          <button class="mode-btn" id="mode-manage-btn" onclick="switchMode('manage')">Management</button>
+        </div>
       </div>
       <div class="topbar-right">
-        <button class="topbar-btn update-btn hidden" id="update-btn" onclick="restartToUpdate()">Restart to Update</button>
-        <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
-        <button class="topbar-btn connect-btn" id="quit-btn" onclick="doQuit()">Quit</button>
+        <button class="topbar-icon-btn" onclick="toggleAboutOverlay()" title="About TelaGUI">i</button>
+        <button class="topbar-icon-btn" onclick="toggleSettingsOverlay()" title="Settings">&#x2699;</button>
+        <button class="topbar-icon-btn topbar-quit-btn" id="quit-btn" onclick="doQuit()" title="Quit">&#x2715;</button>
       </div>
     </div>
 
-    <!-- Tab bar -->
-    <div class="main-tab-bar" role="tablist">
-      <button class="main-tab active" role="tab" aria-selected="true" aria-controls="tab-status" onclick="switchTab('status', this)">Status</button>
-      <button class="main-tab" role="tab" aria-selected="false" aria-controls="tab-profile" onclick="switchTab('profile', this)">Profiles</button>
-      <button class="main-tab" role="tab" aria-selected="false" aria-controls="tab-terminal" onclick="switchTab('terminal', this)">Terminal</button>
-      <button class="main-tab" role="tab" aria-selected="false" aria-controls="tab-log" onclick="switchTab('log', this)">Command Log</button>
-      <button class="main-tab" role="tab" aria-selected="false" aria-controls="tab-hubs" onclick="switchTab('hubs', this)">Hubs</button>
-      <button class="main-tab" role="tab" aria-selected="false" aria-controls="tab-settings" onclick="switchTab('settings', this)">Settings</button>
-      <button class="main-tab" role="tab" aria-selected="false" aria-controls="tab-about" onclick="switchTab('about', this)">About</button>
+    <!-- Connect mode tab bar -->
+    <div class="main-tab-bar" role="tablist" id="tabbar-connect">
+      <button class="main-tab active" role="tab" onclick="switchTab('status', this)">Status</button>
+      <button class="main-tab" role="tab" onclick="switchTab('profile', this)">Profiles</button>
+      <button class="main-tab" role="tab" onclick="switchTab('terminal', this)">Terminal</button>
+      <div class="tab-bar-spacer"></div>
+      <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
+    </div>
+
+    <!-- Manage mode tab bar -->
+    <div class="main-tab-bar hidden" role="tablist" id="tabbar-manage">
+      <button class="main-tab active" role="tab" onclick="switchTab('hubs', this)">Hubs</button>
+      <button class="main-tab" role="tab" onclick="switchTab('log', this)">Command Log</button>
     </div>
 
     <!-- Status tab -->
@@ -126,131 +138,86 @@
       </div>
     </div>
 
-    <!-- Settings tab -->
-    <div class="tab-pane hidden" role="tabpanel" id="tab-settings">
-      <div class="settings-pane">
-        <h1>Settings</h1>
 
-        <div class="settings-section">
-          <h2>Connection</h2>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-autoConnect" onchange="saveSetting()">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Auto-connect on launch</span>
-              <span class="settings-item-desc">Automatically connect using the saved profile when TelaGUI starts.</span>
-            </div>
-          </label>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-reconnectOnDrop" onchange="saveSetting()">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Reconnect on disconnect</span>
-              <span class="settings-item-desc">Attempt to reconnect if the connection drops unexpectedly.</span>
-            </div>
-          </label>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-confirmDisconnect" onchange="saveSetting()">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Confirm before disconnecting</span>
-              <span class="settings-item-desc">Show a confirmation prompt before disconnecting or quitting while connected.</span>
-            </div>
-          </label>
-        </div>
+  </div>
 
-        <div class="settings-section">
-          <h2>Appearance</h2>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-minimizeOnClose" onchange="saveSetting()">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Minimize to tray on window close</span>
-              <span class="settings-item-desc">Hide to the system tray instead of exiting when you click the X button.</span>
-            </div>
-          </label>
-        </div>
-
-        <div class="settings-section">
-          <h2>Updates</h2>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-autoCheckUpdates" onchange="saveSetting()">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Auto-check for updates on launch</span>
-              <span class="settings-item-desc">Check for new versions of TelaGUI and the tela CLI at startup.</span>
-            </div>
-          </label>
-        </div>
-
-        <div class="settings-section">
-          <h2>Advanced</h2>
-          <div class="settings-item settings-item-static">
-            <div class="settings-item-text">
-              <span class="settings-item-label">CLI binary location</span>
-              <span class="settings-item-desc settings-cli-path" id="settings-cli-path">Detecting...</span>
-            </div>
+  <!-- Settings Overlay -->
+  <div class="modal-overlay hidden" id="settings-overlay" onclick="if(event.target===this)toggleSettingsOverlay()">
+    <div class="modal-dialog modal-settings">
+      <div class="modal-header">
+        <h3>Settings</h3>
+        <button class="modal-close" onclick="toggleSettingsOverlay()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <div class="settings-group">
+            <div class="settings-group-header">Connection</div>
+            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-autoConnect" title="Auto-connect" onchange="saveSetting()"></div><div class="settings-label">Auto-connect</div></div>
+            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-reconnectOnDrop" title="Reconnect on drop" onchange="saveSetting()"></div><div class="settings-label">Reconnect on drop</div></div>
+            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-confirmDisconnect" title="Confirm disconnect" onchange="saveSetting()"></div><div class="settings-label">Confirm disconnect</div></div>
           </div>
-          <label class="settings-item">
-            <input type="checkbox" id="setting-verboseDefault" onchange="saveSetting()">
-            <div class="settings-item-text">
-              <span class="settings-item-label">Verbose logging by default</span>
-              <span class="settings-item-desc">Enable verbose logging automatically when connecting.</span>
-            </div>
-          </label>
-          <div class="settings-actions">
-            <button class="btn-danger btn-sm" onclick="clearCredentialStore()">Clear Credential Store</button>
+          <div class="settings-group">
+            <div class="settings-group-header">Window</div>
+            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-minimizeOnClose" title="Minimize to tray on close" onchange="saveSetting()"></div><div class="settings-label">Minimize to tray on close</div></div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-header">Updates</div>
+            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="saveSetting()"></div><div class="settings-label">Check for updates</div></div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-header">Logging</div>
+            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-verboseDefault" title="Verbose by default" onchange="saveSetting()"></div><div class="settings-label">Verbose by default</div></div>
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- About tab -->
-    <div class="tab-pane hidden" role="tabpanel" id="tab-about">
-      <div class="about-pane">
-        <div class="about-header">
-          <img src="/src/logo.png" class="about-logo" alt="Tela">
+  <!-- About Overlay -->
+  <div class="modal-overlay hidden" id="about-overlay" onclick="if(event.target===this)toggleAboutOverlay()">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="about-header-inner">
+          <img src="/src/logo.png" class="about-overlay-logo" alt="Tela">
           <div>
-            <h1>TelaGUI</h1>
-            <p class="about-version" id="about-version"></p>
+            <h3 class="about-overlay-title">Tela<span class="app-title-gui">GUI</span></h3>
+            <p class="about-overlay-version" id="about-version"></p>
           </div>
         </div>
+        <button class="modal-close" onclick="toggleAboutOverlay()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <p class="about-desc">Tela is a free and open-source (FOSS) encrypted remote-access fabric using WireGuard tunnels. TelaGUI is the desktop client for managing connections to hubs, machines, and services.</p>
 
-        <div class="about-section">
-          <h2>About Tela</h2>
-          <p>Tela is a free and open-source (FOSS) encrypted remote-access fabric using WireGuard tunnels. It provides secure, zero-configuration connectivity between machines across any network topology.</p>
-          <p>TelaGUI is the desktop client for Tela. It manages connections to hubs, selects machines and services, and handles CLI tools automatically.</p>
-        </div>
+          <div class="about-links-grid">
+            <div class="about-link-row"><span class="about-link-label">GitHub</span><a href="https://github.com/paulmooreparks/tela" target="_blank" rel="noopener noreferrer">paulmooreparks/tela</a></div>
+            <div class="about-link-row"><span class="about-link-label">Portal</span><a href="https://awansaya.net/" target="_blank" rel="noopener noreferrer">awansaya.net</a></div>
+            <div class="about-link-row"><span class="about-link-label">Releases</span><a href="https://github.com/paulmooreparks/tela/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a></div>
+            <div class="about-link-row"><span class="about-link-label">Report issue</span><a href="https://github.com/paulmooreparks/tela/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a></div>
+            <div class="about-link-row"><span class="about-link-label">License</span><span><a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener noreferrer">Apache License 2.0</a></span></div>
+            <div class="about-link-row"><span class="about-link-label">CLI path</span><span class="about-cli-path" id="settings-cli-path">Detecting...</span></div>
+          </div>
 
-        <div class="about-section">
-          <h2>Links</h2>
-          <ul class="about-links">
-            <li><a href="https://github.com/paulmooreparks/tela" target="_blank" rel="noopener noreferrer">Tela on GitHub</a></li>
-            <li><a href="https://awansaya.net/" target="_blank" rel="noopener noreferrer">Awan Saya Portal</a></li>
-            <li><a href="https://github.com/paulmooreparks/tela/releases" target="_blank" rel="noopener noreferrer">Releases</a></li>
-            <li><a href="https://github.com/paulmooreparks/tela/issues" target="_blank" rel="noopener noreferrer">Report an Issue</a></li>
-          </ul>
-        </div>
+          <div class="about-deps-box">
+            <p class="about-deps-label">Key Dependencies</p>
+            <table class="about-deps-table">
+              <tbody>
+                <tr><td><a href="https://github.com/wailsapp/wails" target="_blank" rel="noopener noreferrer">Wails</a></td><td>MIT</td></tr>
+                <tr><td><a href="https://git.zx2c4.com/wireguard-go" target="_blank" rel="noopener noreferrer">wireguard-go</a></td><td>MIT</td></tr>
+                <tr><td><a href="https://gvisor.dev/" target="_blank" rel="noopener noreferrer">gVisor netstack</a></td><td>Apache 2.0</td></tr>
+                <tr><td><a href="https://github.com/gorilla/websocket" target="_blank" rel="noopener noreferrer">gorilla/websocket</a></td><td>BSD-2-Clause</td></tr>
+                <tr><td><a href="https://github.com/go-yaml/yaml" target="_blank" rel="noopener noreferrer">yaml.v3</a></td><td>MIT / Apache 2.0</td></tr>
+                <tr><td><a href="https://golang.org/" target="_blank" rel="noopener noreferrer">Go standard library</a></td><td>BSD-3-Clause</td></tr>
+              </tbody>
+            </table>
+            <p class="about-deps-note">Full list: <a href="https://github.com/paulmooreparks/tela/blob/main/go.mod" target="_blank" rel="noopener noreferrer">go.mod</a></p>
+          </div>
 
-        <div class="about-section">
-          <h2>License</h2>
-          <p>Tela is licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener noreferrer">Apache License 2.0</a>.</p>
-          <p>Copyright 2024-2026 Paul Parks.</p>
-        </div>
-
-        <div class="about-section">
-          <h2>Key Dependencies</h2>
-          <table class="about-deps">
-            <thead><tr><th>Library</th><th>License</th></tr></thead>
-            <tbody>
-              <tr><td><a href="https://github.com/wailsapp/wails" target="_blank" rel="noopener noreferrer">Wails</a></td><td>MIT</td></tr>
-              <tr><td><a href="https://git.zx2c4.com/wireguard-go" target="_blank" rel="noopener noreferrer">wireguard-go</a></td><td>MIT</td></tr>
-              <tr><td><a href="https://gvisor.dev/" target="_blank" rel="noopener noreferrer">gVisor netstack</a></td><td>Apache 2.0</td></tr>
-              <tr><td><a href="https://github.com/gorilla/websocket" target="_blank" rel="noopener noreferrer">gorilla/websocket</a></td><td>BSD-2-Clause</td></tr>
-              <tr><td><a href="https://github.com/go-yaml/yaml" target="_blank" rel="noopener noreferrer">yaml.v3</a></td><td>MIT / Apache 2.0</td></tr>
-              <tr><td><a href="https://golang.org/" target="_blank" rel="noopener noreferrer">Go standard library</a></td><td>BSD-3-Clause</td></tr>
-            </tbody>
-          </table>
-          <p class="about-note">Full dependency list: <a href="https://github.com/paulmooreparks/tela/blob/main/go.mod" target="_blank" rel="noopener noreferrer">go.mod</a></p>
+          <p class="about-copyright">Copyright 2026 Paul Parks.</p>
         </div>
       </div>
     </div>
-
   </div>
 
   <!-- Add Hub Modal -->

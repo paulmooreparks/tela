@@ -14,24 +14,71 @@ var savedServicesJSON = '{}'; // full selectedServices JSON for Undo restore
 var savedIncludedHubsJSON = '{}'; // full includedHubs JSON for Undo restore
 var profileDirty = false;
 
-// --- Tabs ---
+// --- Modes & Tabs ---
+
+var currentMode = 'connect';
+var connectTabs = ['status', 'profile', 'terminal'];
+var manageTabs = ['hubs', 'log'];
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-connect-btn').classList.toggle('active', mode === 'connect');
+  document.getElementById('mode-manage-btn').classList.toggle('active', mode === 'manage');
+  document.getElementById('tabbar-connect').classList.toggle('hidden', mode !== 'connect');
+  document.getElementById('tabbar-manage').classList.toggle('hidden', mode !== 'manage');
+
+  // Hide all tab panes
+  document.querySelectorAll('.tab-pane').forEach(function (el) { el.classList.add('hidden'); });
+
+  // Show the first tab of the active mode
+  if (mode === 'connect') {
+    var activeBtn = document.querySelector('#tabbar-connect .main-tab.active');
+    if (activeBtn) activeBtn.click();
+    else switchTab('status', document.querySelector('#tabbar-connect .main-tab'));
+  } else {
+    var activeBtn = document.querySelector('#tabbar-manage .main-tab.active');
+    if (activeBtn) activeBtn.click();
+    else switchTab('hubs', document.querySelector('#tabbar-manage .main-tab'));
+  }
+}
 
 function switchTab(name, btn) {
+  // Only deactivate tabs in the current tab bar
+  var tabbar = btn ? btn.parentElement : null;
+  if (tabbar) {
+    tabbar.querySelectorAll('.main-tab').forEach(function (el) {
+      el.classList.remove('active');
+    });
+  }
+
+  // Hide all tab panes
   document.querySelectorAll('.tab-pane').forEach(function (el) { el.classList.add('hidden'); });
-  document.querySelectorAll('.main-tab').forEach(function (el) {
-    el.classList.remove('active');
-    el.setAttribute('aria-selected', 'false');
-  });
-  document.getElementById('tab-' + name).classList.remove('hidden');
-  btn.classList.add('active');
-  btn.setAttribute('aria-selected', 'true');
+
+  // Show the selected pane
+  var pane = document.getElementById('tab-' + name);
+  if (pane) pane.classList.remove('hidden');
+  if (btn) btn.classList.add('active');
+
+  // Refresh content
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
   if (name === 'terminal') refreshTerminal();
   if (name === 'log') refreshLog();
-  if (name === 'about') refreshAbout();
-  if (name === 'settings') refreshSettings();
   if (name === 'hubs') refreshHubsTab();
+}
+
+// --- Overlay Panels ---
+
+function toggleAboutOverlay() {
+  var el = document.getElementById('about-overlay');
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden')) refreshAbout();
+}
+
+function toggleSettingsOverlay() {
+  var el = document.getElementById('settings-overlay');
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden')) refreshSettings();
 }
 
 // --- Status Tab ---
@@ -161,7 +208,7 @@ if (window.runtime) {
   window.runtime.EventsOn('app:quitting', function () {
     var quitBtn = document.getElementById('quit-btn');
     var connectBtn = document.getElementById('connect-btn');
-    if (quitBtn) { quitBtn.textContent = 'Quitting...'; quitBtn.className = 'topbar-btn disconnecting-btn'; quitBtn.disabled = true; }
+    if (quitBtn) { quitBtn.classList.add('quitting'); quitBtn.disabled = true; }
     if (connectBtn) { connectBtn.textContent = 'Disconnecting...'; connectBtn.className = 'topbar-btn disconnecting-btn'; connectBtn.disabled = true; }
   });
 }
@@ -241,16 +288,11 @@ setTimeout(function () {
 
 function refreshVersionDisplay() {
   goApp.GetToolVersions().then(function (tv) {
-    var el = document.getElementById('app-versions');
-    var guiClass = tv.guiBehind ? 'ver-behind' : 'ver-current';
-    var cliClass = tv.cliBehind ? 'ver-behind' : 'ver-current';
-    var guiTitle = tv.guiBehind ? 'Update available: ' + tv.latest : '';
-    var cliTitle = tv.cliBehind ? 'Update available: ' + tv.latest : '';
-
-    el.innerHTML = '<span><span class="ver-label">telagui:</span> '
-      + '<span class="' + guiClass + '" title="' + escHtml(guiTitle) + '">' + escHtml(tv.gui || 'dev') + '</span></span>'
-      + '<span><span class="ver-label">tela:</span> '
-      + '<span class="' + cliClass + '" title="' + escHtml(cliTitle) + '">' + escHtml(tv.cli || '?') + '</span></span>';
+    // Update About overlay version
+    var aboutEl = document.getElementById('about-version');
+    if (aboutEl) {
+      aboutEl.textContent = 'telagui: ' + (tv.gui || 'dev') + '  |  tela: ' + (tv.cli || 'not installed');
+    }
   });
 }
 
@@ -769,18 +811,15 @@ function refreshCurrentPane() {
 
 function updateConnectButton() {
   var btn = document.getElementById('connect-btn');
-  var quitBtn = document.getElementById('quit-btn');
   goApp.GetConnectionState().then(function (state) {
     if (state.connected) {
       btn.textContent = 'Disconnect';
       btn.className = 'topbar-btn disconnect-btn';
-      if (quitBtn) { quitBtn.className = 'topbar-btn disconnect-btn'; }
     } else {
       var hasSelections = Object.keys(selectedServices).length > 0;
       btn.textContent = 'Connect';
       btn.className = 'topbar-btn connect-btn' + (hasSelections ? '' : ' disabled');
       btn.title = hasSelections ? '' : 'Select services in Profiles first';
-      if (quitBtn) { quitBtn.className = 'topbar-btn connect-btn'; quitBtn.textContent = 'Quit'; }
     }
   });
 }
@@ -1043,9 +1082,14 @@ function renderHubSettings(pane) {
     // Danger zone
     html += '<div class="settings-group danger-zone"><div class="settings-group-header">Danger Zone</div>'
       + '<div class="settings-row"><div class="settings-label">Remove hub</div>'
-      + '<div class="settings-value" style="font-family:var(--font);display:flex;align-items:center;gap:12px;">'
-      + '<span style="color:var(--text-muted);font-size:12px;">Remove this hub from TelaGUI. Does not affect the hub itself.</span>'
+      + '<div class="settings-value danger-value">'
+      + '<span class="danger-desc">Remove this hub from TelaGUI. Does not affect the hub itself.</span>'
       + '<button class="btn-danger btn-sm" onclick="removeHub(\'' + escAttr(hub) + '\')">Remove Hub</button>'
+      + '</div></div>'
+      + '<div class="settings-row"><div class="settings-label">Clear credentials</div>'
+      + '<div class="settings-value danger-value">'
+      + '<span class="danger-desc">Delete all stored hub tokens. You will need to re-add hubs.</span>'
+      + '<button class="btn-danger btn-sm" onclick="clearCredentialStore()">Clear All</button>'
       + '</div></div></div>';
 
     pane.innerHTML = html;
@@ -1770,9 +1814,6 @@ function refreshSettings() {
     document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
   });
-  goApp.GetCLIPath().then(function (path) {
-    document.getElementById('settings-cli-path').textContent = path;
-  });
 }
 
 function saveSetting() {
@@ -1820,7 +1861,11 @@ function exportProfile() {
 function refreshAbout() {
   goApp.GetToolVersions().then(function (tv) {
     var el = document.getElementById('about-version');
-    el.textContent = 'telagui ' + (tv.gui || 'dev') + '  |  tela ' + (tv.cli || 'not installed');
+    if (el) el.textContent = 'telagui: ' + (tv.gui || 'dev') + '  |  tela: ' + (tv.cli || 'not installed');
+  });
+  goApp.GetCLIPath().then(function (path) {
+    var el = document.getElementById('settings-cli-path');
+    if (el) el.textContent = path;
   });
 }
 
