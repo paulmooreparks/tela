@@ -15,7 +15,6 @@
           <img src="/src/logo.png" class="app-logo" alt="Tela">
           <span class="app-title">Tela<span class="app-title-gui">GUI</span></span>
         </a>
-        <button class="topbar-btn update-btn hidden" id="update-btn" onclick="restartToUpdate()">Restart to Update</button>
       </div>
       <div class="topbar-center">
         <div class="mode-toggle">
@@ -24,6 +23,7 @@
         </div>
       </div>
       <div class="topbar-right">
+        <button class="topbar-icon-btn topbar-update-btn hidden" id="update-btn" onclick="toggleUpdateOverlay()" title="Update available">&#x26A0;</button>
         <button class="topbar-icon-btn" onclick="toggleAboutOverlay()" title="About TelaGUI">i</button>
         <button class="topbar-icon-btn" onclick="toggleSettingsOverlay()" title="Settings">&#x2699;</button>
         <button class="topbar-icon-btn topbar-quit-btn" id="quit-btn" onclick="doQuit()" title="Quit">&#x2715;</button>
@@ -139,6 +139,33 @@
     </div>
 
 
+  </div>
+
+  <!-- Update Overlay -->
+  <div class="modal-overlay hidden" id="update-overlay" onclick="if(event.target===this)toggleUpdateOverlay()">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Update Available</h3>
+        <button class="modal-close" onclick="toggleUpdateOverlay()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <div class="settings-group">
+            <div class="settings-group-header">Versions</div>
+            <div class="settings-row"><div class="settings-label">TelaGUI current</div><div class="settings-value" id="update-gui-current"></div></div>
+            <div class="settings-row"><div class="settings-label">TelaGUI latest</div><div class="settings-value update-latest" id="update-gui-latest"></div></div>
+            <div class="settings-row"><div class="settings-label">tela CLI current</div><div class="settings-value" id="update-cli-current"></div></div>
+            <div class="settings-row"><div class="settings-label">tela CLI latest</div><div class="settings-value update-latest" id="update-cli-latest"></div></div>
+          </div>
+          <p class="update-note" id="update-note"></p>
+          <div class="modal-actions update-actions">
+            <button type="button" class="btn-secondary" onclick="ignoreUpdateForever()">Skip This Version</button>
+            <button type="button" class="btn-secondary" onclick="ignoreUpdateSession()">Remind Later</button>
+            <button type="button" class="btn-primary" id="update-apply-btn" onclick="applyUpdate()">Update Now</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Settings Overlay -->

@@ -121,20 +121,15 @@ function refreshStatus() {
       badge.className = 'status-connection-state disconnected';
     }
 
-    var html = '<table class="status-service-table"><thead><tr>'
-      + '<th style="width:30px"></th>'
-      + '<th style="width:22%">Service</th>'
-      + '<th style="width:15%">Remote</th>'
-      + '<th style="width:22%">Local</th>'
-      + '<th style="width:18%">Status</th>'
-      + '</tr></thead><tbody>';
+    var html = '';
 
     Object.keys(groups).forEach(function (gk) {
       var g = groups[gk];
-      html += '<tr class="status-machine-row"><td colspan="5">'
-        + '<strong>' + escHtml(g.machine) + '</strong>'
+      html += '<div class="settings-group">'
+        + '<div class="settings-group-header">'
+        + escHtml(g.machine.toUpperCase())
         + '<span class="status-hub-label">on ' + escHtml(g.hubName) + '</span>'
-        + '</td></tr>';
+        + '</div>';
 
       g.services.forEach(function (svc) {
         var indicatorClass = 'unavailable';
@@ -161,17 +156,18 @@ function refreshStatus() {
           }
         }
 
-        html += '<tr>'
-          + '<td><span class="status-svc-indicator ' + indicatorClass + '"></span></td>'
-          + '<td>' + escHtml(svc.service) + '</td>'
-          + '<td><span class="status-remote-port">' + (svc.servicePort ? ':' + svc.servicePort : '') + '</span></td>'
-          + '<td><span class="status-local-port ' + localClass + '">localhost:' + svc.localPort + '</span></td>'
-          + '<td>' + statusText + '</td>'
-          + '</tr>';
+        html += '<div class="settings-row status-svc-row">'
+          + '<span class="status-svc-indicator ' + indicatorClass + '"></span>'
+          + '<div class="status-svc-name">' + escHtml(svc.service) + '</div>'
+          + '<div class="status-svc-remote">' + (svc.servicePort ? ':' + svc.servicePort : '') + '</div>'
+          + '<div class="status-svc-local ' + localClass + '">localhost:' + svc.localPort + '</div>'
+          + '<div class="status-svc-status">' + statusText + '</div>'
+          + '</div>';
       });
+
+      html += '</div>';
     });
 
-    html += '</tbody></table>';
     container.innerHTML = html;
   });
 }
@@ -296,36 +292,67 @@ function refreshVersionDisplay() {
   });
 }
 
+var updateInfo = null;
+var updateDismissedForSession = false;
+var updateSkippedVersion = '';
+
 function checkForUpdate() {
   goApp.GetUpdateInfo().then(function (info) {
-    var btn = document.getElementById('update-btn');
+    updateInfo = info;
     if (!info.pending || (!info.guiBehind && !info.cliBehind)) return;
-    if (info.packageManaged) {
-      if (info.cliBehind) {
-        btn.textContent = 'Update CLI (' + info.version + ')';
-        btn.classList.remove('hidden');
-      }
-    } else {
-      btn.textContent = 'Restart to Update (' + info.version + ')';
-      btn.classList.remove('hidden');
-    }
+    if (updateDismissedForSession) return;
+    if (updateSkippedVersion && updateSkippedVersion === info.version) return;
+    document.getElementById('update-btn').classList.remove('hidden');
   });
 }
 
-function restartToUpdate() {
-  var btn = document.getElementById('update-btn');
-  btn.textContent = 'Updating...';
-  btn.disabled = true;
+function toggleUpdateOverlay() {
+  var el = document.getElementById('update-overlay');
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden') && updateInfo) {
+    document.getElementById('update-gui-current').textContent = updateInfo.gui || 'dev';
+    document.getElementById('update-cli-current').textContent = updateInfo.cli || 'not installed';
+    document.getElementById('update-gui-latest').textContent = updateInfo.version || '?';
+    document.getElementById('update-cli-latest').textContent = updateInfo.version || '?';
+
+    var notes = [];
+    if (updateInfo.guiBehind) notes.push('TelaGUI is out of date.');
+    if (updateInfo.cliBehind) notes.push('tela CLI is out of date.');
+    if (updateInfo.packageManaged) notes.push('TelaGUI was installed via a package manager. Only the CLI will be updated.');
+    document.getElementById('update-note').textContent = notes.join(' ');
+  }
+}
+
+function applyUpdate() {
+  var applyBtn = document.getElementById('update-apply-btn');
+  applyBtn.textContent = 'Updating...';
+  applyBtn.disabled = true;
   goApp.RestartToUpdate().then(function () {
-    // If we're still here, it was a package-managed install (CLI-only update)
-    btn.classList.add('hidden');
-    btn.disabled = false;
+    // If we're still here, it was a CLI-only update
+    document.getElementById('update-btn').classList.add('hidden');
+    toggleUpdateOverlay();
+    applyBtn.textContent = 'Update Now';
+    applyBtn.disabled = false;
     refreshVersionDisplay();
-  }).catch(function (err) {
-    btn.textContent = 'Update failed';
-    btn.disabled = false;
-    setTimeout(function () { btn.classList.add('hidden'); }, 3000);
+  }).catch(function () {
+    applyBtn.textContent = 'Update Failed';
+    applyBtn.disabled = false;
+    setTimeout(function () {
+      applyBtn.textContent = 'Update Now';
+    }, 3000);
   });
+}
+
+function ignoreUpdateSession() {
+  updateDismissedForSession = true;
+  document.getElementById('update-btn').classList.add('hidden');
+  toggleUpdateOverlay();
+}
+
+function ignoreUpdateForever() {
+  if (updateInfo) updateSkippedVersion = updateInfo.version;
+  document.getElementById('update-btn').classList.add('hidden');
+  toggleUpdateOverlay();
 }
 
 function loadSavedSelections() {
@@ -1880,9 +1907,11 @@ function refreshLog() {
     }
     var html = '';
     entries.slice().reverse().forEach(function (entry) {
-      html += '<div class="log-entry">'
-        + '<div class="log-time">' + escHtml(entry.time) + '</div>'
-        + '<div class="log-desc">' + escHtml(entry.description) + '</div>'
+      html += '<div class="settings-group log-entry-card">'
+        + '<div class="settings-group-header log-entry-header">'
+        + '<span class="log-desc">' + escHtml(entry.description) + '</span>'
+        + '<span class="log-time">' + escHtml(entry.time) + '</span>'
+        + '</div>'
         + '<div class="log-cmd-wrap">'
         + '<code class="log-cmd">' + escHtml(entry.command) + '</code>'
         + '<button class="log-copy" onclick="copyText(this, \'' + escAttr(entry.command) + '\')">Copy</button>'

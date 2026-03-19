@@ -103,6 +103,8 @@ body {
   font-family: var(--font); line-height: 1; transition: all 0.15s;
 }
 .topbar-icon-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); }
+.topbar-update-btn { color: #f39c12; border-color: #f39c12; font-size: 16px; font-weight: 400; }
+.topbar-update-btn:hover { background: #f39c12; color: #fff; }
 .topbar-quit-btn { color: var(--danger); border-color: var(--danger); }
 .topbar-quit-btn:hover { background: var(--danger); color: #fff; }
 .topbar-quit-btn.quitting { opacity: 0.4; cursor: wait; }
@@ -181,7 +183,7 @@ body {
 }
 .main-tab:hover { color: var(--text); background: rgba(0,0,0,0.04); }
 .tab-bar-spacer { flex: 1; }
-.main-tab-bar .topbar-btn { padding: 2px 12px; font-size: 11px; margin-right: 4px; line-height: 1.4; }
+.main-tab-bar .topbar-btn { padding: 2px 14px; font-size: 13px; margin: 4px 4px 4px 0; }
 .tab-bar-icons { display: flex; align-items: center; gap: 6px; }
 .tab-icon-btn {
   background: none; border: 1px solid var(--border); color: var(--text-muted);
@@ -222,65 +224,25 @@ body {
   background: var(--surface-alt);
   color: var(--text-muted);
 }
-.status-service-table {
-  width: 100%;
-  border-collapse: collapse;
+/* Status service cards */
+.status-svc-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
 }
-.status-service-table th {
-  text-align: left;
-  padding: 8px 12px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  border-bottom: 2px solid var(--border);
-}
-.status-service-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--surface-alt);
-  font-size: 14px;
-}
-.status-service-table tr:last-child td { border-bottom: none; }
 .status-svc-indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
 }
 .status-svc-indicator.available { background: var(--accent); }
 .status-svc-indicator.unavailable { background: #ccc; }
 .status-svc-indicator.error { background: var(--danger); }
 .status-svc-indicator.warning { background: #f39c12; }
-.status-local-port {
-  font-family: var(--mono);
-  font-size: 13px;
-}
-.status-local-port.active { color: var(--accent); font-weight: 600; }
-.status-local-port.inactive { color: var(--text-muted); }
-.status-remote-port {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.status-machine-row td {
-  padding-top: 16px !important;
-  padding-bottom: 6px !important;
-  border-bottom: 1px solid var(--border) !important;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text);
-}
-.status-machine-row:first-child td {
-  padding-top: 0 !important;
-}
+.status-svc-name { width: 120px; font-weight: 500; font-size: 13px; flex-shrink: 0; }
+.status-svc-remote { width: 80px; font-family: var(--mono); font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+.status-svc-local { flex: 1; font-family: var(--mono); font-size: 13px; }
+.status-svc-local.active { color: var(--accent); font-weight: 600; }
+.status-svc-local.inactive { color: var(--text-muted); }
+.status-svc-status { width: 120px; font-size: 13px; color: var(--text-muted); text-align: right; flex-shrink: 0; }
 .status-hub-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 11px; color: var(--text-muted); font-weight: 400;
   margin-left: 8px;
 }
 
@@ -965,11 +927,13 @@ body {
   padding: 8px 16px;
 }
 .empty-hint { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
-.log-entry { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-.log-entry:last-child { border-bottom: none; }
-.log-time { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
-.log-desc { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-.log-cmd-wrap { display: flex; align-items: flex-start; gap: 6px; }
+.log-entry-card { margin-bottom: 12px; }
+.log-entry-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.log-time { font-size: 11px; color: var(--text-muted); font-weight: 400; font-family: var(--mono); }
+.log-desc { font-weight: 600; font-size: 13px; }
+.log-cmd-wrap { display: flex; align-items: flex-start; gap: 6px; padding: 12px 16px; }
 .log-cmd {
   flex: 1;
   background: #1e293b;
@@ -1271,7 +1235,8 @@ body {
 .danger-value {
   font-family: var(--font) !important; display: flex; align-items: center; gap: 12px;
 }
-.danger-desc { color: var(--text-muted); font-size: 12px; }
+.danger-desc { color: var(--text-muted); font-size: 12px; flex: 1; }
+.danger-value .btn-danger { flex-shrink: 0; }
 .about-cli-path { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
 /* Settings/About overlay specifics */
 .modal-settings { width: 650px; }
@@ -1300,6 +1265,9 @@ body {
 .about-deps-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
 .about-deps-note a { color: var(--accent); text-decoration: none; }
 .about-copyright { font-size: 11px; color: var(--text-muted); }
+.update-latest { color: var(--accent); font-weight: 600; }
+.update-note { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.update-actions { justify-content: flex-end; gap: 8px; }
 
 .modal-body-padded { padding: 20px; }
 .result-message { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }

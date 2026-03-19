@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TelaGUI Mockup - Profiles Tab Redesign</title>
+<style>
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-alt: #f0f1f4;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --accent: #2ecc71;
+  --accent-hover: #27ae60;
+  --topbar-bg: #1b2636;
+  --topbar-text: #e0e0e0;
+  --border: #e2e5ea;
+  --danger: #e74c3c;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+
+/* Topbar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--topbar-bg); color: var(--topbar-text);
+  padding: 0 16px; height: 44px; flex-shrink: 0; position: relative;
+}
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 8px; }
+.topbar-center { position: absolute; left: 50%; transform: translateX(-50%); }
+.app-brand { display: flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none; }
+.app-logo { height: 22px; width: auto; filter: brightness(1.2); }
+.app-title { font-weight: 700; font-size: 15px; color: #fff; }
+.app-title-gui { color: var(--accent); }
+.mode-toggle { display: flex; gap: 0; }
+.mode-btn {
+  padding: 4px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.2); background: none; color: #94a3b8; font-family: var(--font);
+}
+.mode-btn:first-child { border-radius: 4px 0 0 4px; }
+.mode-btn:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+.mode-btn.active { background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3); }
+.topbar-icon-btn {
+  background: none; border: 1px solid rgba(255,255,255,0.2); color: #94a3b8;
+  width: 28px; height: 28px; border-radius: 50%; font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: var(--font);
+}
+.topbar-icon-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); }
+.topbar-quit-btn { color: var(--danger); border-color: var(--danger); }
+
+/* Tab bar */
+.main-tab-bar { display: flex; align-items: center; background: #f0f1f4; border-bottom: 1px solid var(--border); padding: 0 16px; flex-shrink: 0; }
+.main-tab {
+  background: none; border: none; padding: 8px 16px; font-size: 13px; font-weight: 500;
+  cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; font-family: var(--font);
+}
+.main-tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-bar-spacer { flex: 1; }
+.tab-connect-btn {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: 2px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: var(--font); margin: 4px 4px 4px 0;
+}
+
+/* Layout */
+.main-content { flex: 1; display: flex; min-height: 0; }
+
+/* Sidebar */
+.sidebar {
+  width: 300px; min-width: 300px; background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+}
+.sidebar-header { padding: 12px 12px 8px; flex-shrink: 0; }
+.sidebar-header select {
+  width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-family: var(--font); background: var(--surface); margin-bottom: 8px;
+}
+.sidebar-toolbar {
+  display: flex; gap: 6px; align-items: center;
+}
+.sidebar-toolbar .icon-btn {
+  background: none; border: 1px solid var(--border); padding: 4px 8px;
+  border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--text-muted); font-family: var(--font);
+}
+.sidebar-toolbar .icon-btn:hover { background: var(--surface-alt); color: var(--text); }
+.sidebar-toolbar .icon-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.sidebar-toolbar .spacer { flex: 1; }
+
+/* Hub tree */
+.sidebar-tree { flex: 1; overflow-y: auto; padding: 4px 0; }
+.hub-group { margin-bottom: 2px; }
+.hub-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer;
+  font-size: 13px; font-weight: 600;
+}
+.hub-row:hover { background: var(--surface-alt); }
+.hub-row input[type="checkbox"] { accent-color: var(--accent); }
+.hub-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.hub-dot.online { background: var(--accent); }
+.hub-dot.offline { background: #ccc; }
+.machine-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 36px;
+  cursor: pointer; font-size: 13px; color: var(--accent);
+}
+.machine-row:hover { background: var(--surface-alt); }
+.machine-row.active { background: var(--surface-alt); font-weight: 600; color: var(--text); }
+.machine-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+.sidebar-footer {
+  margin-top: auto; padding: 8px 12px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.sidebar-footer-btn {
+  width: 100%; background: var(--accent); color: #fff; border: none; padding: 6px;
+  border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font);
+}
+
+/* Detail pane */
+.detail-pane { flex: 1; overflow-y: auto; padding: 24px 32px; }
+
+/* Settings groups (shared) */
+.settings-group {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 16px; overflow: hidden;
+}
+.settings-group-header {
+  padding: 12px 16px; background: var(--surface-alt); border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: space-between;
+}
+.settings-row {
+  display: flex; align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid var(--surface-alt); font-size: 13px;
+}
+.settings-row:last-child { border-bottom: none; }
+
+/* Service checkboxes in detail */
+.svc-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--surface-alt); font-size: 13px;
+}
+.svc-row:last-child { border-bottom: none; }
+.svc-row input[type="checkbox"] { accent-color: var(--accent); flex-shrink: 0; }
+.svc-name { font-weight: 500; width: 120px; }
+.svc-port { font-family: var(--mono); font-size: 12px; color: var(--text-muted); width: 80px; }
+.svc-proto { font-size: 11px; color: var(--text-muted); width: 40px; }
+.svc-local { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-left: auto; }
+
+/* YAML preview */
+.yaml-preview {
+  background: #1e293b; color: #e2e8f0; font-family: var(--mono); font-size: 12px;
+  padding: 16px; border-radius: 0 0 var(--radius) var(--radius);
+  white-space: pre; overflow-x: auto; line-height: 1.6;
+}
+.yaml-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.yaml-path { font-size: 11px; font-family: var(--mono); color: var(--text-muted); font-weight: 400; }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-gui">GUI</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle">
+      <button class="mode-btn active">Connections</button>
+      <button class="mode-btn">Management</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn topbar-quit-btn">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="main-tab-bar">
+  <button class="main-tab">Status</button>
+  <button class="main-tab active">Profiles</button>
+  <button class="main-tab">Terminal</button>
+  <div class="tab-bar-spacer"></div>
+  <button class="tab-connect-btn">Connect</button>
+</div>
+
+<!-- Main content -->
+<div class="main-content">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <select title="Profile">
+        <option>telagui</option>
+        <option>work</option>
+      </select>
+      <div class="sidebar-toolbar">
+        <button class="icon-btn disabled" title="Undo">&#x21B6;</button>
+        <button class="icon-btn disabled" title="Save">Save</button>
+        <div class="spacer"></div>
+        <button class="icon-btn" title="Import">Import</button>
+        <button class="icon-btn" title="Export">Export</button>
+      </div>
+    </div>
+
+    <div class="sidebar-tree">
+      <div class="hub-group">
+        <label class="hub-row">
+          <input type="checkbox">
+          <span class="hub-dot online"></span>
+          devhub.awansaya.net
+        </label>
+      </div>
+
+      <div class="hub-group">
+        <label class="hub-row">
+          <input type="checkbox" checked>
+          <span class="hub-dot online"></span>
+          gohub.parkscomputing.com
+        </label>
+        <div class="machine-row" onclick="showMachine('telaboard')">
+          <span class="machine-dot"></span> telaboard
+        </div>
+        <div class="machine-row active" onclick="showMachine('barn')">
+          <span class="machine-dot"></span> barn
+        </div>
+        <div class="machine-row" onclick="showMachine('gohub')">
+          <span class="machine-dot"></span> gohub
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="sidebar-footer-btn">Add Profile</button>
+    </div>
+  </div>
+
+  <!-- Detail pane: Machine services view -->
+  <div class="detail-pane" id="detail-machine" style="display:block;">
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:4px;">barn</h2>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Online on gohub.parkscomputing.com</p>
+
+    <div class="settings-group">
+      <div class="settings-group-header">Services</div>
+      <div class="svc-row">
+        <input type="checkbox" checked>
+        <div class="svc-name">SSH</div>
+        <div class="svc-port">:22</div>
+        <div class="svc-proto">tcp</div>
+        <div class="svc-local">localhost:50022</div>
+      </div>
+      <div class="svc-row">
+        <input type="checkbox" checked>
+        <div class="svc-name">RDP</div>
+        <div class="svc-port">:3389</div>
+        <div class="svc-proto">tcp</div>
+        <div class="svc-local">localhost:23389</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail pane: YAML preview (default when no machine selected) -->
+  <div class="detail-pane" id="detail-yaml" style="display:none;">
+    <div class="settings-group">
+      <div class="settings-group-header">
+        <div class="yaml-header">
+          <span>Profile Preview</span>
+          <span class="yaml-path">C:\Users\paul\AppData\Roaming\tela\profiles\telagui.yaml</span>
+        </div>
+      </div>
+      <div class="yaml-preview">connections:
+  - hub: wss://gohub.parkscomputing.com
+    machine: telaboard
+    services:
+      - name: Web
+        local: 48000
+      - name: DBAdmin
+        local: 48082
+      - name: PostgreSQL
+        local: 25432
+      - name: API
+        local: 28080
+  - hub: wss://gohub.parkscomputing.com
+    machine: barn
+    services:
+      - name: SSH
+        local: 50022
+      - name: RDP
+        local: 23389
+  - hub: wss://gohub.parkscomputing.com
+    machine: gohub
+    services:
+      - name: SSH
+        local: 40023</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showMachine(name) {
+  document.getElementById('detail-machine').style.display = 'block';
+  document.getElementById('detail-yaml').style.display = 'none';
+  document.querySelectorAll('.machine-row').forEach(function(r) { r.classList.remove('active'); });
+  event.currentTarget.classList.add('active');
+}
+</script>
+
+</body>
+</html>
