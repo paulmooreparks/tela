@@ -39,16 +39,9 @@ func main() {
 				return true // hide to tray instead of closing
 			}
 			if app.IsConnected() && s.ConfirmDisconnect {
-				result, _ := wailsRuntime.MessageDialog(app.ctx, wailsRuntime.MessageDialogOptions{
-					Type:          wailsRuntime.QuestionDialog,
-					Title:         "Disconnect",
-					Message:       "Are you sure you want to disconnect?",
-					DefaultButton: "No",
-					Buttons:       []string{"Yes", "No"},
-				})
-				if result != "Yes" {
-					return true // user cancelled
-				}
+				// Ask JS to show the disconnect overlay
+				wailsRuntime.EventsEmit(app.ctx, "app:confirm-quit")
+				return true // prevent close, JS will call QuitApp if confirmed
 			}
 			app.confirmQuit()
 			return false // allow close

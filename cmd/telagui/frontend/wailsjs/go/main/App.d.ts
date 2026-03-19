@@ -58,6 +58,8 @@ export function EnsureTool(arg1:string):Promise<string>;
 
 export function ExportProfile():Promise<void>;
 
+export function ForceQuit():Promise<void>;
+
 export function GetCLIPath():Promise<string>;
 
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;

@@ -114,6 +114,10 @@ export function ExportProfile() {
   return window['go']['main']['App']['ExportProfile']();
 }
 
+export function ForceQuit() {
+  return window['go']['main']['App']['ForceQuit']();
+}
+
 export function GetCLIPath() {
   return window['go']['main']['App']['GetCLIPath']();
 }

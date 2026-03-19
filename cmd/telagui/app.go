@@ -544,24 +544,58 @@ func (a *App) ShowWindow() {
 // QuitApp initiates application exit. The actual confirmation and
 // cleanup happen in OnBeforeClose.
 func (a *App) QuitApp() {
-	wailsRuntime.Quit(a.ctx)
+	a.mu.Lock()
+	a.quitting = true
+	a.mu.Unlock()
+
+	wailsRuntime.EventsEmit(a.ctx, "app:quitting")
+
+	go func() {
+		done := make(chan struct{})
+		go func() {
+			a.Disconnect()
+			a.DisconnectControlWS()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			// Clean disconnect succeeded
+			wailsRuntime.Quit(a.ctx)
+		case <-time.After(10 * time.Second):
+			// Disconnect is stuck -- ask user
+			wailsRuntime.EventsEmit(a.ctx, "app:quit-stuck")
+			<-done // wait for user to force-kill or for it to finally finish
+			wailsRuntime.Quit(a.ctx)
+		}
+	}()
 }
 
-// confirmQuit is called by OnBeforeClose after the user confirms exit.
-// It sets the quitting flag, notifies the frontend, and cleans up.
+// ForceQuit kills the tela process tree and exits immediately.
+func (a *App) ForceQuit() {
+	a.mu.Lock()
+	if a.telaProcess != nil {
+		killProcessTree(a.telaProcess.Pid)
+		a.telaProcess.Kill()
+		a.telaProcess = nil
+	}
+	a.connected = false
+	a.mu.Unlock()
+	os.Exit(0)
+}
+
+// confirmQuit is called by OnBeforeClose when no confirmation is needed.
 func (a *App) confirmQuit() {
 	a.mu.Lock()
 	a.quitting = true
 	a.mu.Unlock()
 
-	// Notify frontend so it can update button states.
 	wailsRuntime.EventsEmit(a.ctx, "app:quitting")
 
-	a.Disconnect()
-	// Force exit after a short delay in case goroutines are stuck.
 	go func() {
-		time.Sleep(1 * time.Second)
-		os.Exit(0)
+		a.Disconnect()
+		a.DisconnectControlWS()
+		wailsRuntime.Quit(a.ctx)
 	}()
 }
 

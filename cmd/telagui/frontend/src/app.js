@@ -206,6 +206,17 @@ if (window.runtime) {
     var connectBtn = document.getElementById('connect-btn');
     if (quitBtn) { quitBtn.classList.add('quitting'); quitBtn.disabled = true; }
     if (connectBtn) { connectBtn.textContent = 'Disconnecting...'; connectBtn.className = 'topbar-btn disconnecting-btn'; connectBtn.disabled = true; }
+    updateConnIcon('disconnecting');
+  });
+
+  window.runtime.EventsOn('app:confirm-quit', function () {
+    showDisconnectOverlay(function () {
+      goApp.QuitApp();
+    });
+  });
+
+  window.runtime.EventsOn('app:quit-stuck', function () {
+    document.getElementById('quit-stuck-overlay').style.display = 'flex';
   });
 }
 
@@ -460,11 +471,12 @@ function showProfileYaml() {
   });
 
   goApp.GetProfilePath().then(function (path) {
-    pane.innerHTML = '<div class="profile-yaml-preview">'
-      + '<div class="profile-yaml-header">'
-      + '<h3>Profile Preview</h3>'
-      + '<span class="profile-path" title="Click to copy" onclick="copyProfilePath()">' + escHtml(path) + '</span>'
-      + '</div>'
+    pane.innerHTML = '<div class="settings-group yaml-card">'
+      + '<div class="settings-group-header">'
+      + '<div class="yaml-card-header">'
+      + '<span>Profile Preview</span>'
+      + '<span class="yaml-card-path" title="Click to copy" onclick="copyProfilePath()" style="cursor:pointer;">' + escHtml(path) + '</span>'
+      + '</div></div>'
       + '<pre class="connect-output">' + escHtml(yaml) + '</pre>'
       + '</div>';
   });
@@ -684,33 +696,33 @@ function renderMachineDetail(hub, machine) {
 
   goApp.GetConnectionState().then(function (connState) {
     var isConnected = connState.connected;
+    var hubName = hub.name || hubNameFromURL(hub.url);
 
-    var html = '<div class="detail-header">'
-      + '<h2>' + escHtml(machineId) + '</h2>'
-      + '<div class="meta">' + (machine.agentConnected ? 'Online' : 'Offline')
-      + ' on ' + escHtml(hub.name || hubNameFromURL(hub.url)) + '</div>'
-      + '</div>';
+    var html = '<h2 style="font-size:18px;font-weight:700;margin-bottom:4px;">' + escHtml(machineId) + '</h2>'
+      + '<p class="section-desc">' + (machine.agentConnected ? 'Online' : 'Offline')
+      + ' on ' + escHtml(hubName) + '</p>';
 
     if (services.length === 0) {
-      html += '<p class="no-services">No services advertised.</p>';
+      html += '<p class="empty-hint">No services advertised.</p>';
     } else {
-      html += '<div class="service-checklist">';
+      html += '<div class="settings-group"><div class="settings-group-header">Services</div>';
       services.forEach(function (svc) {
         var key = makeServiceKey(hub.url, machineId, svc.name);
         var checked = selectedServices[key] ? ' checked' : '';
         var disabled = isConnected ? ' disabled' : '';
-        var localPort = selectedServices[key] ? selectedServices[key].localPort : svc.port;
+        var localPort = selectedServices[key] ? selectedServices[key].localPort : '';
 
-        html += '<label class="service-check-item">'
+        html += '<div class="profile-svc-row">'
           + '<input type="checkbox"' + checked + disabled
           + ' onchange="toggleService(\'' + escAttr(hub.url) + '\', \'' + escAttr(machineId) + '\', \'' + escAttr(svc.name) + '\', ' + svc.port + ', this.checked)">'
-          + '<span class="service-check-name">' + escHtml(svc.name) + '</span>'
-          + '<span class="service-check-port">:' + svc.port + ' ' + escHtml(svc.proto || 'tcp') + '</span>';
+          + '<div class="profile-svc-name">' + escHtml(svc.name) + '</div>'
+          + '<div class="profile-svc-port">:' + svc.port + '</div>'
+          + '<div class="profile-svc-proto">' + escHtml(svc.proto || 'tcp') + '</div>';
 
-        if (selectedServices[key]) {
-          html += '<span class="local-port-label">localhost:' + localPort + '</span>';
+        if (localPort) {
+          html += '<div class="profile-svc-local">localhost:' + localPort + '</div>';
         }
-        html += '</label>';
+        html += '</div>';
       });
       html += '</div>';
     }
@@ -842,13 +854,45 @@ function updateConnectButton() {
     if (state.connected) {
       btn.textContent = 'Disconnect';
       btn.className = 'topbar-btn disconnect-btn';
+      updateConnIcon('connected');
     } else {
       var hasSelections = Object.keys(selectedServices).length > 0;
       btn.textContent = 'Connect';
       btn.className = 'topbar-btn connect-btn' + (hasSelections ? '' : ' disabled');
       btn.title = hasSelections ? '' : 'Select services in Profiles first';
+      updateConnIcon('disconnected');
     }
   });
+}
+
+function updateConnIcon(state) {
+  var iconBtn = document.getElementById('conn-status-btn');
+  var broken = document.getElementById('conn-icon-broken');
+  var linked = document.getElementById('conn-icon-linked');
+  if (!iconBtn || !broken || !linked) return;
+
+  iconBtn.className = 'topbar-icon-btn topbar-conn-btn ' + state;
+  if (state === 'connected' || state === 'connecting') {
+    broken.classList.add('hidden');
+    linked.classList.remove('hidden');
+  } else {
+    broken.classList.remove('hidden');
+    linked.classList.add('hidden');
+  }
+
+  var titles = {
+    disconnected: 'Disconnected',
+    connecting: 'Connecting...',
+    connected: 'Connected',
+    disconnecting: 'Disconnecting...'
+  };
+  iconBtn.title = titles[state] || 'Connection status';
+}
+
+function goToStatus() {
+  switchMode('connect');
+  var statusBtn = document.querySelector('#tabbar-connect .main-tab');
+  if (statusBtn) switchTab('status', statusBtn);
 }
 
 function toggleConnection() {
@@ -865,6 +909,7 @@ function doConnect() {
   var connections = buildConnections();
   if (connections.length === 0) return;
 
+  updateConnIcon('connecting');
   goApp.Connect(JSON.stringify(connections)).then(function () {
     // Connect auto-saves the profile; update snapshot
     takeSnapshot();
@@ -897,17 +942,51 @@ function doConnect() {
 }
 
 function doQuit() {
-  // Don't change button state here -- OnBeforeClose shows a
-  // confirmation dialog when connected. If cancelled, buttons
-  // must stay unchanged. The app exits immediately on confirm.
-  goApp.QuitApp();
+  goApp.GetConnectionState().then(function (state) {
+    if (state.connected) {
+      goApp.GetSettings().then(function (s) {
+        if (s.confirmDisconnect) {
+          showDisconnectOverlay(function () {
+            goApp.QuitApp();
+          });
+        } else {
+          goApp.QuitApp();
+        }
+      });
+    } else {
+      goApp.QuitApp();
+    }
+  });
 }
 
+var disconnectCallback = null;
+
 function doDisconnect() {
-  goApp.ConfirmDisconnect().then(function (confirmed) {
-    if (!confirmed) return;
-    performDisconnect();
+  goApp.GetSettings().then(function (s) {
+    if (!s.confirmDisconnect) {
+      performDisconnect();
+      return;
+    }
+    showDisconnectOverlay(performDisconnect);
   });
+}
+
+function showDisconnectOverlay(callback) {
+  disconnectCallback = callback;
+  document.getElementById('disconnect-overlay').classList.remove('hidden');
+}
+
+function confirmDisconnect() {
+  document.getElementById('disconnect-overlay').classList.add('hidden');
+  if (disconnectCallback) {
+    disconnectCallback();
+    disconnectCallback = null;
+  }
+}
+
+function cancelDisconnect() {
+  document.getElementById('disconnect-overlay').classList.add('hidden');
+  disconnectCallback = null;
 }
 
 function performDisconnect() {
@@ -915,6 +994,7 @@ function performDisconnect() {
   btn.textContent = 'Disconnecting...';
   btn.className = 'topbar-btn disconnecting-btn';
   btn.disabled = true;
+  updateConnIcon('disconnecting');
 
   goApp.Disconnect().then(function () {
     goApp.DisconnectControlWS();

@@ -24,6 +24,17 @@
       </div>
       <div class="topbar-right">
         <button class="topbar-icon-btn topbar-update-btn hidden" id="update-btn" onclick="toggleUpdateOverlay()" title="Update available">&#x26A0;</button>
+        <button class="topbar-icon-btn topbar-conn-btn" id="conn-status-btn" onclick="goToStatus()" title="Connection status">
+          <svg class="conn-icon conn-icon-broken" id="conn-icon-broken" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M6.5 9.5L4.5 11.5C3.4 12.6 1.6 12.6 0.5 11.5C-0.6 10.4 -0.6 8.6 0.5 7.5L3.5 4.5"/>
+            <path d="M9.5 6.5L11.5 4.5C12.6 3.4 14.4 3.4 15.5 4.5C16.6 5.6 16.6 7.4 15.5 8.5L12.5 11.5"/>
+          </svg>
+          <svg class="conn-icon conn-icon-linked hidden" id="conn-icon-linked" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M6 10L4.5 11.5C3.4 12.6 1.6 12.6 0.5 11.5C-0.6 10.4 -0.6 8.6 0.5 7.5L3.5 4.5C4.6 3.4 6.4 3.4 7.5 4.5"/>
+            <path d="M10 6L11.5 4.5C12.6 3.4 14.4 3.4 15.5 4.5C16.6 5.6 16.6 7.4 15.5 8.5L12.5 11.5C11.4 12.6 9.6 12.6 8.5 11.5"/>
+            <line x1="5.5" y1="10.5" x2="10.5" y2="5.5"/>
+          </svg>
+        </button>
         <button class="topbar-icon-btn" onclick="toggleAboutOverlay()" title="About TelaGUI">i</button>
         <button class="topbar-icon-btn" onclick="toggleSettingsOverlay()" title="Settings">&#x2699;</button>
         <button class="topbar-icon-btn topbar-quit-btn" id="quit-btn" onclick="doQuit()" title="Quit">&#x2715;</button>
@@ -64,15 +75,13 @@
         <div class="sidebar" id="sidebar">
           <div class="sidebar-resize-handle" id="sidebar-resize"></div>
           <div class="sidebar-header">
-            <div class="profile-switcher">
-              <select id="profile-select" class="profile-dropdown" onchange="switchProfile(this.value)"></select>
-            </div>
-            <div class="sidebar-actions">
-              <button id="undo-btn" class="btn-icon btn-sm" onclick="undoSelections()" title="Undo changes" disabled>&#x21B6;</button>
-              <button id="save-btn" class="btn-primary btn-sm" onclick="saveSelections()" disabled>Save</button>
-              <button class="btn-primary btn-sm" onclick="importProfile()" title="Import">Import</button>
-              <button class="btn-primary btn-sm" onclick="exportProfile()" title="Export">Export</button>
-              <button class="btn-primary btn-sm" onclick="showProfileOverview()">Show YAML</button>
+            <select id="profile-select" class="profile-dropdown" onchange="switchProfile(this.value)" title="Profile"></select>
+            <div class="sidebar-toolbar">
+              <button id="undo-btn" class="icon-btn" onclick="undoSelections()" title="Undo changes" disabled>&#x21B6;</button>
+              <button id="save-btn" class="icon-btn" onclick="saveSelections()" title="Save" disabled>Save</button>
+              <div class="sidebar-toolbar-spacer"></div>
+              <button class="icon-btn" onclick="importProfile()" title="Import">Import</button>
+              <button class="icon-btn" onclick="exportProfile()" title="Export">Export</button>
             </div>
           </div>
           <div id="sidebar-content">
@@ -139,6 +148,43 @@
     </div>
 
 
+  </div>
+
+  <!-- Disconnect Confirmation Overlay -->
+  <div class="modal-overlay hidden" id="disconnect-overlay">
+    <div class="modal-dialog modal-confirm">
+      <div class="modal-header">
+        <h3>Disconnect</h3>
+        <button class="modal-close" onclick="cancelDisconnect()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <p class="confirm-message">Are you sure you want to disconnect?</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="cancelDisconnect()">No</button>
+            <button type="button" class="btn-danger" onclick="confirmDisconnect()">Yes, Disconnect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quit Stuck Overlay -->
+  <div class="modal-overlay" id="quit-stuck-overlay" style="display:none;">
+    <div class="modal-dialog modal-confirm">
+      <div class="modal-header">
+        <h3>Waiting for Disconnect</h3>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <p class="confirm-message">The tela process is taking longer than expected to disconnect. You can continue waiting or force it to stop.</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="document.getElementById('quit-stuck-overlay').style.display='none'">Keep Waiting</button>
+            <button type="button" class="btn-danger" onclick="goApp.ForceQuit()">Force Quit</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Update Overlay -->
