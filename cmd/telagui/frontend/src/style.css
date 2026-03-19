@@ -91,6 +91,7 @@ body {
 }
 .mode-btn:first-child { border-radius: 4px 0 0 4px; }
 .mode-btn:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+.mode-btn-middle { border-left: none; border-radius: 0; }
 .mode-btn.active { background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3); }
 .mode-btn:hover:not(.active) { color: #e0e0e0; }
 
@@ -1365,4 +1366,102 @@ body {
 }
 .profile-hub-excluded .machine-item {
   pointer-events: none;
+}
+
+/* --- Log Panel (bottom dock) --- */
+.log-panel {
+  border-top: 2px solid var(--border);
+  background: #1e293b;
+  display: flex;
+  flex-direction: column;
+  height: 220px;
+  flex-shrink: 0;
+  transition: height 0.15s;
+}
+.log-panel.collapsed { height: 32px; overflow: hidden; }
+.log-panel-header {
+  display: flex; align-items: center; padding: 0 12px;
+  background: #0f172a; border-bottom: 1px solid #334155;
+  flex-shrink: 0; height: 32px;
+}
+.log-panel-tabs { display: flex; gap: 0; height: 100%; align-items: stretch; overflow-x: auto; }
+.log-panel-tab {
+  background: none; border: none; color: #94a3b8; font-size: 11px; font-family: var(--font);
+  padding: 0 12px; cursor: pointer; border-bottom: 2px solid transparent;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.log-panel-tab:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
+.log-panel-tab.active { color: #e2e8f0; border-bottom-color: var(--accent); }
+.log-panel-tab-add { color: #64748b !important; border: none !important; padding: 0 10px; font-size: 16px; }
+.log-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.log-dot-live { background: var(--accent); }
+.log-dot-idle { background: #94a3b8; }
+.log-dot-cmd { background: #3498db; }
+.log-panel-tab .close-tab {
+  color: #64748b; font-size: 13px; cursor: pointer;
+  background: none; border: none; padding: 0 0 0 2px; font-family: var(--font); line-height: 1;
+}
+.log-panel-tab .close-tab:hover { color: #e2e8f0; }
+.log-panel-actions {
+  margin-left: auto; display: flex; gap: 6px; align-items: center; flex-shrink: 0;
+}
+.log-panel-actions .term-btn { font-size: 10px; padding: 2px 8px; }
+.log-panel-toggle {
+  background: none; border: none; color: #94a3b8; font-size: 14px;
+  cursor: pointer; padding: 0 6px; font-family: var(--font); line-height: 1;
+}
+.log-panel-toggle:hover { color: #e2e8f0; }
+.log-panel-output {
+  flex: 1; overflow-y: auto; padding: 4px 12px;
+  color: #e2e8f0; font-family: var(--mono); font-size: 12px;
+  line-height: 1.3; white-space: pre-wrap; margin: 0;
+}
+.log-panel-output .log-ts { color: #94a3b8; }
+
+/* Command log in panel */
+.cmd-filter-bar {
+  display: flex; align-items: center; gap: 6px; padding: 4px 12px;
+  background: #0f172a; border-bottom: 1px solid #334155; flex-shrink: 0;
+}
+.cmd-filter-input {
+  background: #1e293b; border: 1px solid #334155; color: #e2e8f0;
+  padding: 2px 8px; border-radius: 3px; font-size: 11px; font-family: var(--mono);
+  width: 180px; outline: none;
+}
+.cmd-filter-input:focus { border-color: #3498db; }
+.cmd-filter-input::placeholder { color: #475569; }
+.cmd-filter-chips { display: flex; gap: 4px; }
+.cmd-filter-chip {
+  background: none; border: 1px solid #334155; color: #64748b; padding: 1px 8px;
+  border-radius: 10px; font-size: 10px; cursor: pointer; font-family: var(--font);
+}
+.cmd-filter-chip:hover { color: #94a3b8; border-color: #475569; }
+.cmd-filter-chip.active { background: #334155; color: #e2e8f0; border-color: #475569; }
+#log-commands {
+  display: flex; flex-direction: column; padding: 0 !important; overflow: hidden;
+}
+.cmd-list {
+  overflow-y: auto; flex: 1;
+  font-family: var(--mono) !important; font-size: 12px !important; color: #cbd5e1;
+  line-height: 14px !important; padding: 2px 12px; white-space: pre; margin: 0;
+}
+.cmd-line { cursor: pointer; display: block; line-height: 14px !important; }
+.cmd-line:hover { background: #273549; }
+.cmd-line.cmd-active { background: #1e3a5f; }
+.cmd-cp {
+  color: #94a3b8; cursor: pointer; margin-right: 4px;
+  background: #334155; border: 1px solid #475569; border-radius: 3px;
+  padding: 1px 5px; font-size: 11px; display: inline-block;
+  line-height: 14px !important; vertical-align: middle;
+}
+.cmd-cp:hover { color: #e2e8f0; background: #475569; }
+.cmd-ts { color: #94a3b8; }
+.cmd-m-get { color: #6ee7b7; font-weight: 700; }
+.cmd-m-post { color: #93c5fd; font-weight: 700; }
+.cmd-m-del { color: #fca5a5; font-weight: 700; }
+.cmd-m-cli { color: #d8b4fe; font-weight: 700; }
+.cmd-expanded {
+  background: #0f172a; padding: 2px 12px 4px 24px; display: block;
+  border-left: 3px solid #3498db; line-height: 16px !important;
+  color: #e2e8f0; white-space: pre-wrap; word-break: break-all;
 }

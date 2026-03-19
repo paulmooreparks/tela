@@ -18,8 +18,9 @@
       </div>
       <div class="topbar-center">
         <div class="mode-toggle">
-          <button class="mode-btn active" id="mode-connect-btn" onclick="switchMode('connect')">Connections</button>
-          <button class="mode-btn" id="mode-manage-btn" onclick="switchMode('manage')">Management</button>
+          <button class="mode-btn active" id="mode-clients-btn" onclick="switchMode('clients')">Clients</button>
+          <button class="mode-btn mode-btn-middle" id="mode-agents-btn" onclick="switchMode('agents')">Agents</button>
+          <button class="mode-btn" id="mode-hubs-btn" onclick="switchMode('hubs')">Hubs</button>
         </div>
       </div>
       <div class="topbar-right">
@@ -41,19 +42,22 @@
       </div>
     </div>
 
-    <!-- Connect mode tab bar -->
-    <div class="main-tab-bar" role="tablist" id="tabbar-connect">
+    <!-- Clients mode tab bar -->
+    <div class="main-tab-bar" role="tablist" id="tabbar-clients">
       <button class="main-tab active" role="tab" onclick="switchTab('status', this)">Status</button>
       <button class="main-tab" role="tab" onclick="switchTab('profile', this)">Profiles</button>
-      <button class="main-tab" role="tab" onclick="switchTab('terminal', this)">Terminal</button>
       <div class="tab-bar-spacer"></div>
       <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
     </div>
 
-    <!-- Manage mode tab bar -->
-    <div class="main-tab-bar hidden" role="tablist" id="tabbar-manage">
+    <!-- Agents mode tab bar -->
+    <div class="main-tab-bar hidden" role="tablist" id="tabbar-agents">
+      <button class="main-tab active" role="tab" onclick="switchTab('agents', this)">Agents</button>
+    </div>
+
+    <!-- Hubs mode tab bar -->
+    <div class="main-tab-bar hidden" role="tablist" id="tabbar-hubs">
       <button class="main-tab active" role="tab" onclick="switchTab('hubs', this)">Hubs</button>
-      <button class="main-tab" role="tab" onclick="switchTab('log', this)">Command Log</button>
     </div>
 
     <!-- Status tab -->
@@ -97,28 +101,13 @@
       </div>
     </div>
 
-    <!-- Terminal tab -->
-    <div class="tab-pane hidden" role="tabpanel" id="tab-terminal">
-      <div class="terminal-pane">
-        <div class="terminal-header">
-          <span class="terminal-status" id="terminal-status">Disconnected</span>
-          <div class="terminal-actions">
-            <span class="copy-toast" id="copy-toast"></span>
-            <button class="term-btn term-btn-green" onclick="copyTerminal()">Copy All</button>
-            <button class="term-btn term-btn-green" onclick="saveTerminal()">Save to File</button>
-            <button class="term-btn term-btn-green verbose-btn" id="verbose-btn" onclick="toggleVerbose()">
-              <span class="verbose-check-icon" id="verbose-icon">&#x2610;</span> Verbose
-            </button>
-          </div>
+    <!-- Agents tab (placeholder) -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-agents">
+      <div class="status-pane">
+        <div class="status-header">
+          <h1>Agents</h1>
         </div>
-        <pre class="terminal-output" id="terminal-output">Not connected.</pre>
-      </div>
-    </div>
-
-    <!-- Command Log tab -->
-    <div class="tab-pane hidden" role="tabpanel" id="tab-log">
-      <div class="log-pane" id="log-content">
-        <p class="empty-hint">Actions you take will appear here with their CLI equivalents.</p>
+        <p class="empty-hint">Agent management is coming soon. You will be able to deploy, configure, and monitor telad instances from here.</p>
       </div>
     </div>
 
@@ -147,6 +136,44 @@
       </div>
     </div>
 
+    <!-- Log Panel -->
+    <div class="log-panel" id="log-panel">
+      <div class="log-panel-header">
+        <div class="log-panel-tabs">
+          <button class="log-panel-tab active" onclick="switchLogTab(this, 'log-tv')">
+            <span class="log-dot log-dot-live"></span>TelaVisor
+          </button>
+          <button class="log-panel-tab" onclick="switchLogTab(this, 'log-tela')">
+            <span class="log-dot log-dot-idle" id="log-tela-dot"></span>tela
+          </button>
+          <button class="log-panel-tab" onclick="switchLogTab(this, 'log-commands')">
+            <span class="log-dot log-dot-cmd"></span>Commands
+          </button>
+          <button class="log-panel-tab log-panel-tab-add" onclick="openAttachDialog()" title="Attach log source">+</button>
+        </div>
+        <div class="log-panel-actions">
+          <button class="term-btn" onclick="copyLogPanel()">Copy</button>
+          <button class="term-btn" onclick="saveLogPanel()">Save</button>
+          <button class="term-btn term-btn-green" onclick="clearLogPanel()">Clear</button>
+          <button class="log-panel-toggle" onclick="toggleLogPanel()" title="Toggle panel">&#x25BC;</button>
+        </div>
+      </div>
+      <pre class="log-panel-output" id="log-tv"></pre>
+      <pre class="log-panel-output hidden" id="log-tela">Not connected.</pre>
+      <div class="log-panel-output hidden" id="log-commands">
+        <div class="cmd-filter-bar">
+          <input class="cmd-filter-input" placeholder="Filter..." oninput="filterCommands(this.value)" title="Filter commands">
+          <div class="cmd-filter-chips">
+            <button class="cmd-filter-chip active" onclick="toggleChip(this,'all')">All</button>
+            <button class="cmd-filter-chip" onclick="toggleChip(this,'get')">GET</button>
+            <button class="cmd-filter-chip" onclick="toggleChip(this,'post')">POST</button>
+            <button class="cmd-filter-chip" onclick="toggleChip(this,'del')">DEL</button>
+            <button class="cmd-filter-chip" onclick="toggleChip(this,'cli')">CLI</button>
+          </div>
+        </div>
+        <pre class="cmd-list" id="cmd-list"></pre>
+      </div>
+    </div>
 
   </div>
 

@@ -16,34 +16,27 @@ var profileDirty = false;
 
 // --- Modes & Tabs ---
 
-var currentMode = 'connect';
-var connectTabs = ['status', 'profile', 'terminal'];
-var manageTabs = ['hubs', 'log'];
+var currentMode = 'clients';
+var tabBars = { clients: 'tabbar-clients', agents: 'tabbar-agents', hubs: 'tabbar-hubs' };
 
 function switchMode(mode) {
   currentMode = mode;
-  document.getElementById('mode-connect-btn').classList.toggle('active', mode === 'connect');
-  document.getElementById('mode-manage-btn').classList.toggle('active', mode === 'manage');
-  document.getElementById('tabbar-connect').classList.toggle('hidden', mode !== 'connect');
-  document.getElementById('tabbar-manage').classList.toggle('hidden', mode !== 'manage');
+  document.querySelectorAll('.mode-btn').forEach(function (b) { b.classList.remove('active'); });
+  var btn = document.getElementById('mode-' + mode + '-btn');
+  if (btn) btn.classList.add('active');
 
-  // Hide all tab panes
+  Object.keys(tabBars).forEach(function (m) {
+    document.getElementById(tabBars[m]).classList.toggle('hidden', m !== mode);
+  });
+
   document.querySelectorAll('.tab-pane').forEach(function (el) { el.classList.add('hidden'); });
 
-  // Show the first tab of the active mode
-  if (mode === 'connect') {
-    var activeBtn = document.querySelector('#tabbar-connect .main-tab.active');
-    if (activeBtn) activeBtn.click();
-    else switchTab('status', document.querySelector('#tabbar-connect .main-tab'));
-  } else {
-    var activeBtn = document.querySelector('#tabbar-manage .main-tab.active');
-    if (activeBtn) activeBtn.click();
-    else switchTab('hubs', document.querySelector('#tabbar-manage .main-tab'));
-  }
+  var bar = document.getElementById(tabBars[mode]);
+  var activeBtn = bar.querySelector('.main-tab.active');
+  if (activeBtn) activeBtn.click();
 }
 
 function switchTab(name, btn) {
-  // Only deactivate tabs in the current tab bar
   var tabbar = btn ? btn.parentElement : null;
   if (tabbar) {
     tabbar.querySelectorAll('.main-tab').forEach(function (el) {
@@ -51,20 +44,156 @@ function switchTab(name, btn) {
     });
   }
 
-  // Hide all tab panes
   document.querySelectorAll('.tab-pane').forEach(function (el) { el.classList.add('hidden'); });
 
-  // Show the selected pane
   var pane = document.getElementById('tab-' + name);
   if (pane) pane.classList.remove('hidden');
   if (btn) btn.classList.add('active');
 
-  // Refresh content
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
-  if (name === 'terminal') refreshTerminal();
-  if (name === 'log') refreshLog();
   if (name === 'hubs') refreshHubsTab();
+}
+
+// --- Log Panel ---
+
+function switchLogTab(btn, id) {
+  document.querySelectorAll('.log-panel-tab').forEach(function (t) { t.classList.remove('active'); });
+  btn.classList.add('active');
+  document.querySelectorAll('.log-panel-output').forEach(function (o) { o.classList.add('hidden'); });
+  var el = document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
+
+function toggleLogPanel() {
+  var panel = document.getElementById('log-panel');
+  panel.classList.toggle('collapsed');
+  var toggle = panel.querySelector('.log-panel-toggle');
+  toggle.innerHTML = panel.classList.contains('collapsed') ? '&#x25B2;' : '&#x25BC;';
+}
+
+function tvLog(msg) {
+  var el = document.getElementById('log-tv');
+  if (!el) return;
+  var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  el.textContent += '<span class="log-ts">' + now + '</span> ' + msg + '\n';
+  // Use innerHTML to render the span
+  el.innerHTML = el.innerHTML; // force re-render
+  el.scrollTop = el.scrollHeight;
+}
+
+function appendTelaLog(text) {
+  var el = document.getElementById('log-tela');
+  if (!el) return;
+  el.textContent += text;
+  el.scrollTop = el.scrollHeight;
+}
+
+function copyLogPanel() {
+  var active = document.querySelector('.log-panel-output:not(.hidden)');
+  if (active && navigator.clipboard) {
+    navigator.clipboard.writeText(active.textContent);
+  }
+}
+
+function saveLogPanel() {
+  var active = document.querySelector('.log-panel-output:not(.hidden)');
+  if (active) {
+    goApp.SaveTextToFile(active.textContent, 'log');
+  }
+}
+
+function clearLogPanel() {
+  var active = document.querySelector('.log-panel-output:not(.hidden)');
+  if (active) {
+    if (active.id === 'log-commands') {
+      var list = document.getElementById('cmd-list');
+      if (list) list.innerHTML = '';
+    } else {
+      active.textContent = '';
+    }
+  }
+}
+
+function openAttachDialog() {
+  // Placeholder for attach log source dialog
+}
+
+// --- Command Log in Panel ---
+
+var activeFilter = 'all';
+
+function addCommandEntry(method, desc, fullCmd) {
+  var list = document.getElementById('cmd-list');
+  if (!list) return;
+  var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z').substring(11, 19);
+  var methodClass = 'cmd-m-' + method.toLowerCase().replace('delete', 'del');
+  var methodLabel = method === 'DELETE' ? 'DEL' : method;
+
+  var line = document.createElement('span');
+  line.className = 'cmd-line';
+  line.setAttribute('data-cmd', fullCmd);
+  line.setAttribute('data-method', method.toLowerCase().replace('delete', 'del'));
+  line.onclick = function () { expandCmd(this); };
+  line.innerHTML = '<span class="cmd-cp" onclick="event.stopPropagation();cpCmd(this)">&#x2398;</span>'
+    + '<span class="cmd-ts">' + now + '</span> '
+    + '<span class="' + methodClass + '">' + methodLabel + '</span> '
+    + escHtml(desc);
+  list.appendChild(line);
+  list.scrollTop = list.scrollHeight;
+  applyFilters();
+}
+
+function expandCmd(el) {
+  var prev = document.querySelector('.cmd-expanded');
+  if (prev) prev.remove();
+  if (el.classList.contains('cmd-active')) {
+    el.classList.remove('cmd-active');
+    return;
+  }
+  document.querySelectorAll('.cmd-active').forEach(function (e) { e.classList.remove('cmd-active'); });
+  el.classList.add('cmd-active');
+  var cmd = el.getAttribute('data-cmd');
+  var formatted = cmd
+    .replace(/ -H /g, ' \\\n  -H ')
+    .replace(/ -d /g, ' \\\n  -d ');
+  var div = document.createElement('span');
+  div.className = 'cmd-expanded';
+  div.textContent = formatted;
+  el.after(div);
+}
+
+function cpCmd(span) {
+  var line = span.parentElement;
+  var cmd = line.getAttribute('data-cmd');
+  if (cmd && navigator.clipboard) {
+    navigator.clipboard.writeText(cmd);
+    span.textContent = '\u2713';
+    setTimeout(function () { span.textContent = '\u2398'; }, 1000);
+  }
+}
+
+function toggleChip(btn, method) {
+  document.querySelectorAll('.cmd-filter-chip').forEach(function (c) { c.classList.remove('active'); });
+  btn.classList.add('active');
+  activeFilter = method;
+  applyFilters();
+}
+
+function filterCommands(text) {
+  applyFilters(text);
+}
+
+function applyFilters(text) {
+  var input = document.querySelector('.cmd-filter-input');
+  var search = (text !== undefined ? text : (input ? input.value : '')).toLowerCase();
+  document.querySelectorAll('.cmd-line').forEach(function (entry) {
+    var method = entry.getAttribute('data-method') || '';
+    var content = entry.textContent.toLowerCase();
+    var methodMatch = activeFilter === 'all' || method === activeFilter;
+    var textMatch = !search || content.indexOf(search) !== -1;
+    entry.style.display = (methodMatch && textMatch) ? '' : 'none';
+  });
 }
 
 // --- Overlay Panels ---
@@ -274,6 +403,7 @@ initSidebarResize('hubs-sidebar-resize', 'hubs-sidebar', 220, 400, 'hubsSidebarW
 // --- Startup ---
 refreshVersionDisplay();
 refreshProfileList();
+refreshLog();
 loadSavedSelections().then(function () {
   refreshStatus();
   refreshAll();
@@ -890,8 +1020,8 @@ function updateConnIcon(state) {
 }
 
 function goToStatus() {
-  switchMode('connect');
-  var statusBtn = document.querySelector('#tabbar-connect .main-tab');
+  switchMode('clients');
+  var statusBtn = document.querySelector('#tabbar-clients .main-tab');
   if (statusBtn) switchTab('status', statusBtn);
 }
 
@@ -1810,22 +1940,13 @@ function showCopyToast() {
 }
 
 function copyTerminal() {
-  freezeTerminal();
-  var text = document.getElementById('terminal-output').textContent;
-  navigator.clipboard.writeText(text).then(function () {
-    showCopyToast();
-    setTimeout(unfreezeTerminal, 200);
-  });
+  var text = document.getElementById('log-tela').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(text);
 }
 
 function saveTerminal() {
-  freezeTerminal();
-  var text = document.getElementById('terminal-output').textContent;
-  goApp.SaveTerminalOutput(text).then(function () {
-    setTimeout(unfreezeTerminal, 200);
-  }).catch(function () {
-    unfreezeTerminal();
-  });
+  var text = document.getElementById('log-tela').textContent;
+  goApp.SaveTerminalOutput(text);
 }
 
 function toggleVerbose() {
@@ -1847,18 +1968,13 @@ function toggleVerbose() {
 }
 
 function refreshTerminal() {
-  if (terminalFrozen) return;
-
   goApp.GetConnectionState().then(function (state) {
-    var output = document.getElementById('terminal-output');
-    var status = document.getElementById('terminal-status');
+    var output = document.getElementById('log-tela');
+    if (!output) return;
 
-    if (state.connected) {
-      status.textContent = 'Connected (PID ' + state.pid + ')';
-      status.className = 'terminal-status connected';
-    } else {
-      status.textContent = 'Disconnected';
-      status.className = 'terminal-status disconnected';
+    var dot = document.getElementById('log-tela-dot');
+    if (dot) {
+      dot.className = state.connected ? 'log-dot log-dot-live' : 'log-dot log-dot-idle';
     }
 
     var prevLength = output.textContent.length;
@@ -1868,11 +1984,8 @@ function refreshTerminal() {
       output.textContent = 'Not connected.';
     }
 
-    // Auto-scroll to bottom if content changed and user hasn't scrolled up
-    if (terminalAutoScroll && output.textContent.length !== prevLength) {
-      requestAnimationFrame(function () {
-        output.scrollTop = output.scrollHeight;
-      });
+    if (output.textContent.length !== prevLength) {
+      output.scrollTop = output.scrollHeight;
     }
   });
 }
@@ -1980,24 +2093,17 @@ function refreshAbout() {
 
 function refreshLog() {
   goApp.GetCommandLog().then(function (entries) {
-    var el = document.getElementById('log-content');
-    if (!entries || entries.length === 0) {
-      el.innerHTML = '<p class="empty-hint">Actions you take will appear here with their CLI equivalents.</p>';
-      return;
-    }
-    var html = '';
-    entries.slice().reverse().forEach(function (entry) {
-      html += '<div class="settings-group log-entry-card">'
-        + '<div class="settings-group-header log-entry-header">'
-        + '<span class="log-desc">' + escHtml(entry.description) + '</span>'
-        + '<span class="log-time">' + escHtml(entry.time) + '</span>'
-        + '</div>'
-        + '<div class="log-cmd-wrap">'
-        + '<code class="log-cmd">' + escHtml(entry.command) + '</code>'
-        + '<button class="log-copy" onclick="copyText(this, \'' + escAttr(entry.command) + '\')">Copy</button>'
-        + '</div></div>';
+    var list = document.getElementById('cmd-list');
+    if (!list || !entries) return;
+    list.innerHTML = '';
+    entries.forEach(function (entry) {
+      var method = 'CLI';
+      var desc = entry.command;
+      if (entry.description.indexOf('GET ') === 0) { method = 'GET'; desc = entry.command; }
+      else if (entry.description.indexOf('POST ') === 0) { method = 'POST'; desc = entry.command; }
+      else if (entry.description.indexOf('DELETE ') === 0) { method = 'DELETE'; desc = entry.command; }
+      addCommandEntry(method, entry.description + '  ' + desc.substring(0, 80), entry.command);
     });
-    el.innerHTML = html;
   });
 }
 
