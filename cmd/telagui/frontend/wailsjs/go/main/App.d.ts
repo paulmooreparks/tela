@@ -4,11 +4,35 @@ import {main} from '../models';
 
 export function AddHub(arg1:string,arg2:string):Promise<void>;
 
+export function AdminCreateToken(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AdminDeleteToken(arg1:string,arg2:string):Promise<string>;
+
+export function AdminGeneratePairCode(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
+
+export function AdminGrantConnect(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AdminGrantRegister(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AdminListACLs(arg1:string):Promise<string>;
+
+export function AdminListPortals(arg1:string):Promise<string>;
+
+export function AdminListTokens(arg1:string):Promise<string>;
+
+export function AdminRevokeConnect(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AdminRevokeRegister(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AdminRotateToken(arg1:string,arg2:string):Promise<string>;
+
 export function AssignLocalPort(arg1:number):Promise<number>;
 
 export function CheckForUpdatesNow():Promise<void>;
 
 export function ClearCredentialStore():Promise<void>;
+
+export function ConfirmDialog(arg1:string,arg2:string):Promise<boolean>;
 
 export function ConfirmDisconnect():Promise<boolean>;
 
@@ -48,6 +72,8 @@ export function GetControlStatus():Promise<Record<string, any>>;
 
 export function GetCurrentProfile():Promise<string>;
 
+export function GetHubInfo(arg1:string):Promise<string>;
+
 export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
@@ -57,6 +83,8 @@ export function GetProfilePath():Promise<string>;
 export function GetSettings():Promise<main.Settings>;
 
 export function GetStoredToken(arg1:string):Promise<string>;
+
+export function GetTokenRole(arg1:string):Promise<string>;
 
 export function GetToolVersions():Promise<main.ToolVersions>;
 
@@ -80,6 +108,8 @@ export function ListProfiles():Promise<Array<string>>;
 
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
+export function LogAdminGET(arg1:string,arg2:string):Promise<void>;
+
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;
 
 export function QuitApp():Promise<void>;
@@ -93,6 +123,8 @@ export function RenameProfile(arg1:string,arg2:string):Promise<void>;
 export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>;
 
 export function RestartToUpdate():Promise<void>;
+
+export function SaveHubsSidebarWidth(arg1:number):Promise<void>;
 
 export function SaveProfile(arg1:string):Promise<string>;
 

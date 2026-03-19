@@ -333,11 +333,24 @@ body {
   min-width: 338px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
-  overflow-y: auto;
-  padding: 8px 0;
+  padding: 8px 0 0 0;
   flex-shrink: 0;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
+#sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+}
+.sidebar-footer {
+  margin-top: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sidebar-footer-btn { width: 100%; }
 .sidebar-resize-handle {
   position: absolute;
   top: 0;
@@ -1083,6 +1096,154 @@ body {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+}
+
+/* --- Hubs Admin Layout --- */
+.hubs-admin-layout {
+  flex: 1; display: flex; min-height: 0;
+}
+.hubs-admin-sidebar {
+  width: 220px; min-width: 220px; border-right: 1px solid var(--border);
+  background: var(--surface); display: flex; flex-direction: column;
+  position: relative; flex-shrink: 0; overflow: hidden;
+}
+.hubs-admin-section {
+  padding: 12px 16px 4px; font-size: 11px; text-transform: uppercase;
+  color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px;
+}
+.hubs-hub-selector { padding: 4px 12px 8px; }
+.hubs-hub-selector select {
+  width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-family: var(--font); background: var(--surface);
+}
+.hubs-admin-nav { border-top: 1px solid var(--border); padding-top: 4px; }
+.hubs-admin-nav-item {
+  padding: 8px 16px; font-size: 13px; cursor: pointer; color: var(--text-muted);
+  border-left: 3px solid transparent;
+}
+.hubs-admin-nav-item:hover { background: var(--surface-alt); color: var(--text); }
+.hubs-admin-nav-item.active {
+  background: var(--surface-alt); font-weight: 600; color: var(--text);
+  border-left-color: var(--accent);
+}
+.hubs-admin-sidebar-footer {
+  margin-top: auto; padding: 8px 12px; border-top: 1px solid var(--border);
+}
+.hubs-admin-detail {
+  flex: 1; overflow-y: auto; padding: 24px 32px;
+}
+.hubs-admin-detail h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.hubs-admin-detail .section-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+.hubs-admin-detail .toolbar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+
+/* Admin tables */
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th {
+  text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase;
+  color: var(--text-muted); border-bottom: 2px solid var(--border); font-weight: 600;
+}
+.admin-table td {
+  padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+.admin-table tr:hover td { background: var(--surface-alt); }
+.token-preview {
+  font-family: var(--mono); font-size: 12px; color: var(--text-muted);
+  background: var(--surface-alt); padding: 2px 6px; border-radius: 3px;
+}
+.role-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+}
+.role-owner { background: #fef3c7; color: #92400e; }
+.role-admin { background: #dbeafe; color: #1e40af; }
+.role-user { background: #d1fae5; color: #065f46; }
+.role-viewer { background: #f3f4f6; color: #4b5563; }
+.action-btns { display: flex; gap: 4px; }
+.icon-btn {
+  background: none; border: 1px solid var(--border); padding: 4px 8px;
+  border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--text-muted);
+  font-family: var(--font);
+}
+.icon-btn:hover { background: var(--surface-alt); color: var(--text); }
+.icon-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Settings groups (used in Hub Settings view) */
+.settings-group {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 16px; overflow: hidden;
+}
+.settings-group-header {
+  padding: 12px 16px; background: var(--surface-alt); border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 13px;
+}
+.settings-row {
+  display: flex; align-items: center; padding: 12px 16px;
+  border-bottom: 1px solid var(--surface-alt); font-size: 13px;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-label { width: 140px; color: var(--text-muted); font-weight: 500; flex-shrink: 0; }
+.settings-value { flex: 1; font-family: var(--mono); font-size: 12px; }
+.settings-value a { color: var(--accent); text-decoration: none; }
+.settings-value a:hover { text-decoration: underline; }
+
+/* Machine cards */
+.machine-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 12px; padding: 16px; display: flex; align-items: flex-start; gap: 16px;
+}
+.machine-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0;
+}
+.machine-status-dot.online { background: var(--accent); }
+.machine-status-dot.offline { background: #95a5a6; }
+.machine-info { flex: 1; }
+.machine-name { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.machine-detail { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.machine-services { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.service-tag {
+  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px;
+  padding: 2px 8px; font-size: 11px; font-family: var(--mono); color: var(--text-muted);
+}
+
+/* ACL cards */
+.acl-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 12px; overflow: hidden;
+}
+.acl-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; background: var(--surface-alt); border-bottom: 1px solid var(--border);
+}
+.acl-machine-name { font-weight: 700; font-size: 14px; }
+.acl-machine-meta { font-size: 12px; color: var(--text-muted); }
+.acl-card-body { padding: 12px 16px; }
+.acl-perm-row {
+  display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
+  font-size: 13px;
+}
+.acl-perm-row:last-child { border-bottom: none; }
+.acl-identity { flex: 1; font-weight: 500; }
+.acl-checks { display: flex; gap: 24px; }
+.wildcard-note {
+  background: #fffbeb; border: 1px solid #fcd34d; border-radius: var(--radius);
+  padding: 10px 14px; font-size: 12px; color: #92400e; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.wildcard-note strong { font-weight: 700; }
+.danger-zone { border-color: var(--danger); }
+.danger-zone .settings-group-header {
+  background: #fef2f2; color: var(--danger); border-bottom-color: #fecaca;
+}
+.modal-body-padded { padding: 20px; }
+.result-message { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
+.result-value-input {
+  width: 100%;
+  font-family: var(--mono); font-size: 13px;
+  background: var(--surface-alt);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
 }
 
 /* --- Profile Hub Checkbox --- */

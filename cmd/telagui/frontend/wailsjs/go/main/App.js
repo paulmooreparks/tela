@@ -6,6 +6,50 @@ export function AddHub(arg1, arg2) {
   return window['go']['main']['App']['AddHub'](arg1, arg2);
 }
 
+export function AdminCreateToken(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AdminCreateToken'](arg1, arg2, arg3);
+}
+
+export function AdminDeleteToken(arg1, arg2) {
+  return window['go']['main']['App']['AdminDeleteToken'](arg1, arg2);
+}
+
+export function AdminGeneratePairCode(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['AdminGeneratePairCode'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function AdminGrantConnect(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AdminGrantConnect'](arg1, arg2, arg3);
+}
+
+export function AdminGrantRegister(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AdminGrantRegister'](arg1, arg2, arg3);
+}
+
+export function AdminListACLs(arg1) {
+  return window['go']['main']['App']['AdminListACLs'](arg1);
+}
+
+export function AdminListPortals(arg1) {
+  return window['go']['main']['App']['AdminListPortals'](arg1);
+}
+
+export function AdminListTokens(arg1) {
+  return window['go']['main']['App']['AdminListTokens'](arg1);
+}
+
+export function AdminRevokeConnect(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AdminRevokeConnect'](arg1, arg2, arg3);
+}
+
+export function AdminRevokeRegister(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AdminRevokeRegister'](arg1, arg2, arg3);
+}
+
+export function AdminRotateToken(arg1, arg2) {
+  return window['go']['main']['App']['AdminRotateToken'](arg1, arg2);
+}
+
 export function AssignLocalPort(arg1) {
   return window['go']['main']['App']['AssignLocalPort'](arg1);
 }
@@ -16,6 +60,10 @@ export function CheckForUpdatesNow() {
 
 export function ClearCredentialStore() {
   return window['go']['main']['App']['ClearCredentialStore']();
+}
+
+export function ConfirmDialog(arg1, arg2) {
+  return window['go']['main']['App']['ConfirmDialog'](arg1, arg2);
 }
 
 export function ConfirmDisconnect() {
@@ -94,6 +142,10 @@ export function GetCurrentProfile() {
   return window['go']['main']['App']['GetCurrentProfile']();
 }
 
+export function GetHubInfo(arg1) {
+  return window['go']['main']['App']['GetHubInfo'](arg1);
+}
+
 export function GetHubStatus(arg1) {
   return window['go']['main']['App']['GetHubStatus'](arg1);
 }
@@ -112,6 +164,10 @@ export function GetSettings() {
 
 export function GetStoredToken(arg1) {
   return window['go']['main']['App']['GetStoredToken'](arg1);
+}
+
+export function GetTokenRole(arg1) {
+  return window['go']['main']['App']['GetTokenRole'](arg1);
 }
 
 export function GetToolVersions() {
@@ -158,6 +214,10 @@ export function LoadProfile() {
   return window['go']['main']['App']['LoadProfile']();
 }
 
+export function LogAdminGET(arg1, arg2) {
+  return window['go']['main']['App']['LogAdminGET'](arg1, arg2);
+}
+
 export function PairWithCode(arg1, arg2) {
   return window['go']['main']['App']['PairWithCode'](arg1, arg2);
 }
@@ -184,6 +244,10 @@ export function ResolveAllPorts(arg1) {
 
 export function RestartToUpdate() {
   return window['go']['main']['App']['RestartToUpdate']();
+}
+
+export function SaveHubsSidebarWidth(arg1) {
+  return window['go']['main']['App']['SaveHubsSidebarWidth'](arg1);
 }
 
 export function SaveProfile(arg1) {

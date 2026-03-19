@@ -54,7 +54,6 @@
           <div class="sidebar-header">
             <div class="profile-switcher">
               <select id="profile-select" class="profile-dropdown" onchange="switchProfile(this.value)"></select>
-              <button class="profile-new-btn" onclick="newProfile()" title="New profile">+</button>
             </div>
             <div class="sidebar-actions">
               <button id="undo-btn" class="btn-icon btn-sm" onclick="undoSelections()" title="Undo changes" disabled>&#x21B6;</button>
@@ -66,6 +65,9 @@
           </div>
           <div id="sidebar-content">
             <p class="loading">Loading hubs...</p>
+          </div>
+          <div class="sidebar-footer">
+            <button class="btn-primary btn-sm sidebar-footer-btn" onclick="newProfile()">Add Profile</button>
           </div>
         </div>
         <div class="detail-pane" id="detail-pane">
@@ -101,14 +103,25 @@
 
     <!-- Hubs tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-hubs">
-      <div class="hubs-pane">
-        <h1>Hubs</h1>
-        <p class="hubs-desc">Manage hub credentials. Add new hubs or remove existing ones.</p>
-        <div class="hubs-actions-bar">
-          <button class="btn-primary btn-sm" onclick="openAddHubModal()">Add Hub</button>
+      <div class="hubs-admin-layout">
+        <div class="hubs-admin-sidebar" id="hubs-sidebar">
+          <div class="sidebar-resize-handle" id="hubs-sidebar-resize"></div>
+          <div class="hubs-admin-section">Hub</div>
+          <div class="hubs-hub-selector">
+            <select id="hub-admin-select" title="Select hub" onchange="onHubAdminSelect()"></select>
+          </div>
+          <div class="hubs-admin-nav" id="hubs-admin-nav">
+            <div class="hubs-admin-nav-item active" data-view="hub-settings" onclick="showHubAdminView('hub-settings')">Hub Settings</div>
+            <div class="hubs-admin-nav-item" data-view="machines" onclick="showHubAdminView('machines')">Machines</div>
+            <div class="hubs-admin-nav-item" data-view="tokens" onclick="showHubAdminView('tokens')">Tokens</div>
+            <div class="hubs-admin-nav-item" data-view="acls" onclick="showHubAdminView('acls')">ACLs</div>
+          </div>
+          <div class="hubs-admin-sidebar-footer">
+            <button class="btn-primary btn-sm sidebar-footer-btn" onclick="openAddHubModal()">Add Hub</button>
+          </div>
         </div>
-        <div id="hubs-list">
-          <p class="loading">Loading hubs...</p>
+        <div class="hubs-admin-detail" id="hubs-admin-detail">
+          <p class="empty-hint">Select a hub to view details.</p>
         </div>
       </div>
     </div>
@@ -295,6 +308,132 @@
             <button type="button" class="btn-primary" onclick="dockerAddHub()">Add This Hub</button>
           </div>
           <div id="docker-error" class="error-msg hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Token Modal -->
+  <div class="modal-overlay hidden" id="create-token-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Add Token</h3>
+        <button class="modal-close" onclick="closeModal('create-token-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitCreateToken(event)">
+          <div class="form-group">
+            <label for="new-token-id">Identity</label>
+            <input type="text" id="new-token-id" placeholder="e.g., alice, ci-bot, monitoring" required>
+          </div>
+          <div class="form-group">
+            <label for="new-token-role">Role</label>
+            <select id="new-token-role" title="Token role">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+          <div id="create-token-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal('create-token-modal')">Cancel</button>
+            <button type="submit" class="btn-primary">Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pairing Code Modal -->
+  <div class="modal-overlay hidden" id="pair-code-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Generate Pairing Code</h3>
+        <button class="modal-close" onclick="closeModal('pair-code-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitPairCode(event)">
+          <div class="form-group">
+            <label for="pair-role">Role for paired user</label>
+            <select id="pair-role" title="Paired user role">
+              <option value="user">User</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pair-expires">Expiration</label>
+            <select id="pair-expires" title="Code expiration">
+              <option value="15m">15 minutes</option>
+              <option value="1h" selected>1 hour</option>
+              <option value="24h">24 hours</option>
+              <option value="7d">7 days</option>
+            </select>
+          </div>
+          <div id="pair-code-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal('pair-code-modal')">Cancel</button>
+            <button type="submit" class="btn-primary">Generate</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grant Access Modal -->
+  <div class="modal-overlay hidden" id="grant-access-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Grant Access</h3>
+        <button class="modal-close" onclick="closeModal('grant-access-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitGrantAccess(event)">
+          <div class="form-group">
+            <label for="grant-identity">Identity</label>
+            <select id="grant-identity" title="Identity to grant access to">
+              <option value="">Loading identities...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="grant-machine">Machine</label>
+            <select id="grant-machine" title="Target machine">
+              <option value="*">* (all machines)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="grant-type">Permission</label>
+            <select id="grant-type" title="Permission type">
+              <option value="connect">Connect</option>
+              <option value="register">Register</option>
+            </select>
+          </div>
+          <div id="grant-access-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal('grant-access-modal')">Cancel</button>
+            <button type="submit" class="btn-primary">Grant</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result Modal (for showing tokens, pairing codes) -->
+  <div class="modal-overlay hidden" id="result-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="result-modal-title">Result</h3>
+        <button class="modal-close" onclick="closeModal('result-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <p id="result-modal-message" class="result-message"></p>
+          <div class="form-group">
+            <input type="text" id="result-modal-value" title="Result value" readonly class="result-value-input">
+          </div>
+          <p class="field-hint" id="result-modal-hint"></p>
+          <div class="modal-actions">
+            <button type="button" class="btn-primary" onclick="copyResultAndClose()">Copy &amp; Close</button>
+          </div>
         </div>
       </div>
     </div>

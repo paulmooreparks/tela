@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TelaGUI Mockup - Token Management</title>
+<style>
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-alt: #f0f1f4;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --accent: #2ecc71;
+  --accent-hover: #27ae60;
+  --topbar-bg: #1b2636;
+  --topbar-text: #e0e0e0;
+  --border: #e2e5ea;
+  --danger: #e74c3c;
+  --danger-hover: #c0392b;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+
+/* Topbar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--topbar-bg); color: var(--topbar-text);
+  padding: 0 16px; height: 44px; flex-shrink: 0;
+}
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; }
+.app-title { font-weight: 700; font-size: 15px; }
+.app-versions { font-size: 11px; color: #94a3b8; font-family: var(--mono); display: flex; gap: 10px; }
+.topbar-btn {
+  background: none; border: 1px solid rgba(255,255,255,0.2); color: var(--topbar-text);
+  padding: 4px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; font-family: var(--font);
+}
+.topbar-btn.connect-btn { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.topbar-btn.quit-btn { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+
+/* Tab bar */
+.main-tab-bar { display: flex; background: #f0f1f4; border-bottom: 1px solid var(--border); padding: 0 16px; flex-shrink: 0; }
+.main-tab {
+  background: none; border: none; padding: 8px 16px; font-size: 13px; font-weight: 500;
+  cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; font-family: var(--font);
+}
+.main-tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* Main content */
+.tab-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.admin-layout { flex: 1; display: flex; min-height: 0; }
+.admin-sidebar {
+  width: 220px; min-width: 220px; border-right: 1px solid var(--border);
+  background: var(--surface); overflow-y: auto; padding: 12px 0;
+}
+.admin-sidebar-item {
+  padding: 8px 16px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+}
+.admin-sidebar-item:hover { background: var(--surface-alt); }
+.admin-sidebar-item.active { background: var(--surface-alt); font-weight: 600; color: var(--text); border-left: 3px solid var(--accent); }
+.admin-sidebar-section { padding: 12px 16px 4px; font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+.admin-detail { flex: 1; overflow-y: auto; padding: 24px 32px; }
+
+/* Hub selector */
+.hub-selector { margin-bottom: 16px; }
+.hub-selector select {
+  padding: 6px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font); background: var(--surface); min-width: 280px;
+}
+
+/* Token table */
+.token-toolbar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+.cmd-btn {
+  background: var(--accent); color: #fff; border: none; padding: 5px 14px;
+  border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font);
+}
+.cmd-btn:hover { background: var(--accent-hover); }
+.cmd-btn.danger { background: var(--danger); }
+.cmd-btn.danger:hover { background: var(--danger-hover); }
+
+.token-table { width: 100%; border-collapse: collapse; }
+.token-table th {
+  text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase;
+  color: var(--text-muted); border-bottom: 2px solid var(--border); font-weight: 600;
+}
+.token-table td {
+  padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+.token-table tr:hover td { background: var(--surface-alt); }
+.token-value {
+  font-family: var(--mono); font-size: 12px; color: var(--text-muted);
+  background: var(--surface-alt); padding: 2px 6px; border-radius: 3px;
+  cursor: pointer; user-select: none;
+}
+.token-value:hover { color: var(--text); }
+.role-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+}
+.role-owner { background: #fef3c7; color: #92400e; }
+.role-admin { background: #dbeafe; color: #1e40af; }
+.role-user { background: #d1fae5; color: #065f46; }
+.role-viewer { background: #f3f4f6; color: #4b5563; }
+
+.action-btns { display: flex; gap: 4px; }
+.icon-btn {
+  background: none; border: 1px solid var(--border); padding: 4px 8px;
+  border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--text-muted);
+}
+.icon-btn:hover { background: var(--surface-alt); color: var(--text); }
+.icon-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Add token dialog */
+.dialog-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.dialog {
+  background: var(--surface); border-radius: var(--radius); padding: 24px;
+  min-width: 420px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.dialog h3 { font-size: 16px; margin-bottom: 16px; }
+.dialog-field { margin-bottom: 12px; }
+.dialog-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+.dialog-field input, .dialog-field select {
+  width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 13px; font-family: var(--font);
+}
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+.status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px;
+}
+.status-dot.online { background: var(--accent); }
+h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.section-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="app-title">TelaGUI</span>
+    <div class="app-versions">
+      <span>telagui: <span class="ver-current">v0.2.171</span></span>
+      <span>tela: <span class="ver-current">v0.2.171</span></span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-btn connect-btn">Connect</button>
+    <button class="topbar-btn quit-btn">Quit</button>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="main-tab-bar">
+  <button class="main-tab">Status</button>
+  <button class="main-tab">Profiles</button>
+  <button class="main-tab">Terminal</button>
+  <button class="main-tab">Command Log</button>
+  <button class="main-tab active">Hubs</button>
+  <button class="main-tab">Settings</button>
+  <button class="main-tab">About</button>
+</div>
+
+<!-- Admin layout with sidebar -->
+<div class="tab-pane">
+  <div class="admin-layout">
+    <!-- Sidebar: hub list + admin sections -->
+    <div class="admin-sidebar">
+      <div class="admin-sidebar-section">Hub</div>
+      <div class="hub-selector" style="padding: 4px 12px;">
+        <select>
+          <option>gohub.parkscomputing.com</option>
+          <option>devhub.awansaya.net</option>
+        </select>
+      </div>
+      <div class="admin-sidebar-item active">
+        <span>Tokens</span>
+      </div>
+      <div class="admin-sidebar-item">
+        <span>ACLs</span>
+      </div>
+      <div class="admin-sidebar-item">
+        <span>Machines</span>
+      </div>
+      <div class="admin-sidebar-item">
+        <span>Hub Settings</span>
+      </div>
+    </div>
+
+    <!-- Detail pane: Token list -->
+    <div class="admin-detail">
+      <h2>Tokens</h2>
+      <p class="section-desc">Manage authentication tokens for gohub.parkscomputing.com</p>
+
+      <div class="token-toolbar">
+        <button class="cmd-btn" onclick="document.getElementById('add-dialog').style.display='flex'">Add Token</button>
+        <button class="cmd-btn" style="background: #3498db;">Generate Pairing Code</button>
+      </div>
+
+      <table class="token-table">
+        <thead>
+          <tr>
+            <th>Identity</th>
+            <th>Role</th>
+            <th>Token</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>paul</strong></td>
+            <td><span class="role-badge role-owner">owner</span></td>
+            <td><span class="token-value" title="Click to copy">a1b2c3d4...f5e6</span></td>
+            <td>
+              <div class="action-btns">
+                <button class="icon-btn" title="Copy token">Copy</button>
+                <button class="icon-btn" title="Rotate token">Rotate</button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>ops-team</strong></td>
+            <td><span class="role-badge role-admin">admin</span></td>
+            <td><span class="token-value" title="Click to copy">7f8e9d0c...b1a2</span></td>
+            <td>
+              <div class="action-btns">
+                <button class="icon-btn" title="Copy token">Copy</button>
+                <button class="icon-btn" title="Rotate token">Rotate</button>
+                <button class="icon-btn" title="Edit role">Edit</button>
+                <button class="icon-btn danger" title="Revoke token">Revoke</button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>alice</strong></td>
+            <td><span class="role-badge role-user">user</span></td>
+            <td><span class="token-value" title="Click to copy">3c4d5e6f...9a8b</span></td>
+            <td>
+              <div class="action-btns">
+                <button class="icon-btn" title="Copy token">Copy</button>
+                <button class="icon-btn" title="Rotate token">Rotate</button>
+                <button class="icon-btn" title="Edit role">Edit</button>
+                <button class="icon-btn danger" title="Revoke token">Revoke</button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>dashboard</strong></td>
+            <td><span class="role-badge role-viewer">viewer</span></td>
+            <td><span class="token-value" title="Click to copy">e1f2a3b4...d5c6</span></td>
+            <td>
+              <div class="action-btns">
+                <button class="icon-btn" title="Copy token">Copy</button>
+                <button class="icon-btn" title="Rotate token">Rotate</button>
+                <button class="icon-btn" title="Edit role">Edit</button>
+                <button class="icon-btn danger" title="Revoke token">Revoke</button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>bob</strong></td>
+            <td><span class="role-badge role-user">user</span></td>
+            <td><span class="token-value" title="Click to copy">5a6b7c8d...1e2f</span></td>
+            <td>
+              <div class="action-btns">
+                <button class="icon-btn" title="Copy token">Copy</button>
+                <button class="icon-btn" title="Rotate token">Rotate</button>
+                <button class="icon-btn" title="Edit role">Edit</button>
+                <button class="icon-btn danger" title="Revoke token">Revoke</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Token Dialog -->
+<div id="add-dialog" class="dialog-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+  <div class="dialog">
+    <h3>Add Token</h3>
+    <div class="dialog-field">
+      <label>Identity</label>
+      <input type="text" placeholder="e.g., charlie, ci-bot, monitoring">
+    </div>
+    <div class="dialog-field">
+      <label>Role</label>
+      <select>
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+        <option value="viewer">Viewer</option>
+      </select>
+    </div>
+    <div class="dialog-field">
+      <label>Token (leave blank to auto-generate)</label>
+      <input type="text" placeholder="Auto-generated if empty" style="font-family: var(--mono); font-size: 12px;">
+    </div>
+    <div class="dialog-actions">
+      <button class="cmd-btn" style="background: #95a5a6;" onclick="document.getElementById('add-dialog').style.display='none'">Cancel</button>
+      <button class="cmd-btn">Create</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

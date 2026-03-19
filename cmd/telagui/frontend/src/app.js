@@ -167,18 +167,22 @@ if (window.runtime) {
 }
 
 // --- Sidebar Resize ---
-(function () {
+function initSidebarResize(handleId, sidebarId, minWidth, maxWidth, saveKey) {
   setTimeout(function () {
-    var handle = document.getElementById('sidebar-resize');
-    var sidebar = document.getElementById('sidebar');
+    var handle = document.getElementById(handleId);
+    var sidebar = document.getElementById(sidebarId);
     if (!handle || !sidebar) return;
 
     // Restore saved width
-    goApp.GetSettings().then(function (s) {
-      if (s.sidebarWidth > 0) {
-        sidebar.style.width = s.sidebarWidth + 'px';
-      }
-    });
+    if (saveKey) {
+      goApp.GetSettings().then(function (s) {
+        if (saveKey === 'sidebarWidth' && s.sidebarWidth > 0) {
+          sidebar.style.width = s.sidebarWidth + 'px';
+        } else if (saveKey === 'hubsSidebarWidth' && s.hubsSidebarWidth > 0) {
+          sidebar.style.width = s.hubsSidebarWidth + 'px';
+        }
+      });
+    }
 
     var dragging = false;
 
@@ -191,9 +195,10 @@ if (window.runtime) {
 
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
-      var newWidth = e.clientX;
-      if (newWidth < 338) newWidth = 338;
-      if (newWidth > 600) newWidth = 600;
+      var rect = sidebar.parentElement.getBoundingClientRect();
+      var newWidth = e.clientX - rect.left;
+      if (newWidth < minWidth) newWidth = minWidth;
+      if (newWidth > maxWidth) newWidth = maxWidth;
       sidebar.style.width = newWidth + 'px';
     });
 
@@ -202,13 +207,15 @@ if (window.runtime) {
         dragging = false;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-        // Save width to settings
         var width = parseInt(sidebar.style.width);
-        if (width) goApp.SaveSidebarWidth(width);
+        if (width && saveKey === 'sidebarWidth') goApp.SaveSidebarWidth(width);
+        if (width && saveKey === 'hubsSidebarWidth') goApp.SaveHubsSidebarWidth(width);
       }
     });
   }, 200);
-})();
+}
+initSidebarResize('sidebar-resize', 'sidebar', 220, 600, 'sidebarWidth');
+initSidebarResize('hubs-sidebar-resize', 'hubs-sidebar', 220, 400, 'hubsSidebarWidth');
 
 // --- Startup ---
 refreshVersionDisplay();
@@ -901,62 +908,558 @@ function stopConnectionPoll() {
   }
 }
 
-// --- Hubs Tab ---
+// --- Hubs Tab (Admin Layout) ---
+
+var currentAdminHub = '';
+var currentAdminView = 'hub-settings';
 
 function refreshHubsTab() {
-  var list = document.getElementById('hubs-list');
-  if (!list) return;
-  list.innerHTML = '<p class="loading">Loading hubs...</p>';
+  var select = document.getElementById('hub-admin-select');
+  if (!select) return;
 
   goApp.GetKnownHubs().then(function (hubs) {
+    var prev = select.value;
+    select.innerHTML = '';
     if (!hubs || hubs.length === 0) {
-      list.innerHTML = '<div class="sidebar-empty">'
-        + '<p>No hubs configured.</p>'
-        + '<p class="hint">Click <strong>Add Hub</strong> to get started.</p></div>';
+      select.innerHTML = '<option value="">No hubs configured</option>';
+      currentAdminHub = '';
+      renderHubAdminDetail();
       return;
     }
-
-    list.innerHTML = '';
     hubs.forEach(function (hub) {
-      var card = document.createElement('div');
-      card.className = 'hub-card';
+      var opt = document.createElement('option');
+      opt.value = hub.url;
+      opt.textContent = hub.name;
+      select.appendChild(opt);
+    });
+    // Restore previous selection or use first
+    if (prev && hubs.some(function (h) { return h.url === prev; })) {
+      select.value = prev;
+    }
+    currentAdminHub = select.value;
+    renderHubAdminDetail();
+  });
+}
 
-      var dotClass = 'unknown';
-      var status = hubStatusCache[hub.url];
-      if (status) {
-        dotClass = status.online ? 'online' : 'offline';
+function onHubAdminSelect() {
+  currentAdminHub = document.getElementById('hub-admin-select').value;
+  renderHubAdminDetail();
+}
+
+function showHubAdminView(view) {
+  currentAdminView = view;
+  var items = document.querySelectorAll('.hubs-admin-nav-item');
+  items.forEach(function (el) {
+    el.classList.toggle('active', el.getAttribute('data-view') === view);
+  });
+  renderHubAdminDetail();
+}
+
+function renderHubAdminDetail() {
+  var pane = document.getElementById('hubs-admin-detail');
+  if (!pane) return;
+  if (!currentAdminHub) {
+    pane.innerHTML = '<p class="empty-hint">Add a hub to get started.</p>';
+    return;
+  }
+  switch (currentAdminView) {
+    case 'hub-settings': renderHubSettings(pane); break;
+    case 'machines': renderHubMachines(pane); break;
+    case 'tokens': renderHubTokens(pane); break;
+    case 'acls': renderHubACLs(pane); break;
+    default: pane.innerHTML = '';
+  }
+}
+
+// --- Hub Settings View ---
+
+function renderHubSettings(pane) {
+  var hub = currentAdminHub;
+  var hubName = hubNameFromUrl(hub);
+  pane.innerHTML = '<h2>Hub Settings</h2>'
+    + '<p class="section-desc">Connection and configuration for <strong>' + escHtml(hubName) + '</strong></p>'
+    + '<p class="loading">Loading...</p>';
+
+  goApp.LogAdminGET(hub, '/api/status');
+  goApp.LogAdminGET(hub, '/api/admin/portals');
+
+  // Fetch hub info and portals in parallel (flat, no nesting)
+  var hubInfoData = null;
+  var portalsData = null;
+  var tokenRole = 'unknown';
+  var done = 0;
+
+  function tryRender() {
+    done++;
+    if (done < 3) return;
+    var consoleUrl = hub.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '') + '/';
+
+    var html = '<h2>Hub Settings</h2>'
+      + '<p class="section-desc">Connection and configuration for <strong>' + escHtml(hubName) + '</strong></p>';
+
+    // Connection group
+    html += '<div class="settings-group"><div class="settings-group-header">Connection</div>';
+    html += '<div class="settings-row"><div class="settings-label">URL</div><div class="settings-value">' + escHtml(hub) + '</div></div>';
+
+    var statusDot = hubInfoData ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;"></span>Online'
+      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#95a5a6;margin-right:6px;vertical-align:middle;"></span>Offline';
+    html += '<div class="settings-row"><div class="settings-label">Status</div><div class="settings-value" style="font-family:var(--font)">' + statusDot + '</div></div>';
+
+    html += '<div class="settings-row"><div class="settings-label">Your role</div><div class="settings-value" style="font-family:var(--font)"><span class="role-badge role-' + tokenRole + '">' + tokenRole + '</span></div></div>';
+    html += '<div class="settings-row"><div class="settings-label">Console</div><div class="settings-value"><a href="' + escAttr(consoleUrl) + '" target="_blank">' + escHtml(consoleUrl) + '</a></div></div>';
+    html += '</div>';
+
+    // Hub info group
+    if (hubInfoData) {
+      var hi = hubInfoData.hub || {};
+      html += '<div class="settings-group"><div class="settings-group-header">Hub Info</div>';
+      if (hubInfoData.hubName) html += '<div class="settings-row"><div class="settings-label">Hub name</div><div class="settings-value">' + escHtml(hubInfoData.hubName) + '</div></div>';
+      if (hi.hostname) html += '<div class="settings-row"><div class="settings-label">Hostname</div><div class="settings-value">' + escHtml(hi.hostname) + '</div></div>';
+      if (hi.os && hi.arch) html += '<div class="settings-row"><div class="settings-label">Platform</div><div class="settings-value">' + escHtml(hi.os + '/' + hi.arch) + '</div></div>';
+      if (hi.goVersion) html += '<div class="settings-row"><div class="settings-label">Go version</div><div class="settings-value">' + escHtml(hi.goVersion) + '</div></div>';
+      if (hi.uptime) {
+        var secs = parseInt(hi.uptime, 10);
+        var uptimeStr = formatUptime(secs);
+        html += '<div class="settings-row"><div class="settings-label">Uptime</div><div class="settings-value">' + escHtml(uptimeStr) + '</div></div>';
       }
+      html += '</div>';
+    }
 
-      var tokenHtml;
-      if (hub.hasToken) {
-        tokenHtml = '<span class="token-status-yes">token stored</span>';
-      } else {
-        tokenHtml = '<span class="token-status-no">no token</span>';
+    // Portals group
+    html += '<div class="settings-group"><div class="settings-group-header">Portals</div>';
+    if (portalsData && portalsData.portals && portalsData.portals.length > 0) {
+      portalsData.portals.forEach(function (p) {
+        var syncLabel = p.hasSyncToken ? '<span style="color:var(--accent);font-family:var(--font);font-size:11px;">sync token set</span>' : '';
+        html += '<div class="settings-row"><div class="settings-label">' + escHtml(p.name) + '</div>'
+          + '<div class="settings-value" style="display:flex;align-items:center;gap:12px;">'
+          + '<a href="' + escAttr(p.url) + '" target="_blank">' + escHtml(p.url) + '</a>'
+          + syncLabel + '</div></div>';
+      });
+    } else {
+      html += '<div class="settings-row"><div class="settings-label">None</div><div class="settings-value" style="font-family:var(--font);color:var(--text-muted)">No portal registrations</div></div>';
+    }
+    html += '</div>';
+
+    // Danger zone
+    html += '<div class="settings-group danger-zone"><div class="settings-group-header">Danger Zone</div>'
+      + '<div class="settings-row"><div class="settings-label">Remove hub</div>'
+      + '<div class="settings-value" style="font-family:var(--font);display:flex;align-items:center;gap:12px;">'
+      + '<span style="color:var(--text-muted);font-size:12px;">Remove this hub from TelaGUI. Does not affect the hub itself.</span>'
+      + '<button class="btn-danger btn-sm" onclick="removeHub(\'' + escAttr(hub) + '\')">Remove Hub</button>'
+      + '</div></div></div>';
+
+    pane.innerHTML = html;
+  }
+
+  goApp.GetHubInfo(hub).then(function (raw) {
+    try { hubInfoData = JSON.parse(raw); } catch (e) { hubInfoData = null; }
+    tryRender();
+  }).catch(function () { tryRender(); });
+
+  goApp.AdminListPortals(hub).then(function (raw) {
+    try { portalsData = JSON.parse(raw); } catch (e) { portalsData = null; }
+    tryRender();
+  }).catch(function () { tryRender(); });
+
+  goApp.GetTokenRole(hub).then(function (role) {
+    tokenRole = role || 'unknown';
+    tryRender();
+  }).catch(function () { tryRender(); });
+}
+
+function formatUptime(secs) {
+  if (isNaN(secs) || secs < 0) return 'unknown';
+  var d = Math.floor(secs / 86400);
+  var h = Math.floor((secs % 86400) / 3600);
+  var m = Math.floor((secs % 3600) / 60);
+  var parts = [];
+  if (d > 0) parts.push(d + 'd');
+  if (h > 0) parts.push(h + 'h');
+  parts.push(m + 'm');
+  return parts.join(' ');
+}
+
+// --- Machines View ---
+
+function renderHubMachines(pane) {
+  var hub = currentAdminHub;
+  pane.innerHTML = '<h2>Machines</h2>'
+    + '<p class="section-desc">Registered machines on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="loading">Loading...</p>';
+
+  goApp.LogAdminGET(hub, '/api/status');
+  goApp.GetHubStatus(hub).then(function (status) {
+    if (!status.online) {
+      pane.innerHTML = '<h2>Machines</h2><p class="section-desc">Hub is offline or unreachable.</p>';
+      return;
+    }
+    var html = '<h2>Machines</h2>'
+      + '<p class="section-desc">Registered machines on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>';
+
+    if (!status.machines || status.machines.length === 0) {
+      html += '<p class="empty-hint">No machines registered.</p>';
+    } else {
+      status.machines.forEach(function (m) {
+        var dotClass = m.agentConnected ? 'online' : 'offline';
+        var sessionsHtml = m.sessionCount > 0
+          ? '<span style="font-size:12px;color:var(--accent);font-weight:600;">' + m.sessionCount + ' active session' + (m.sessionCount > 1 ? 's' : '') + '</span>'
+          : '<span style="font-size:12px;color:var(--text-muted);">No active sessions</span>';
+        var servicesHtml = '';
+        if (m.services && m.services.length > 0) {
+          m.services.forEach(function (s) {
+            servicesHtml += '<span class="service-tag">' + escHtml(s.name) + ' :' + s.port + '</span>';
+          });
+        }
+        html += '<div class="machine-card">'
+          + '<div class="machine-status-dot ' + dotClass + '"></div>'
+          + '<div class="machine-info">'
+          + '<div class="machine-name">' + escHtml(m.id) + '</div>'
+          + '<div class="machine-detail">' + (m.agentConnected ? 'Online' : 'Offline') + (m.lastSeen ? ' &middot; Last seen: ' + escHtml(m.lastSeen) : '') + '</div>'
+          + '<div class="machine-services">' + servicesHtml + '</div>'
+          + '</div>'
+          + '<div style="text-align:right;">' + sessionsHtml + '</div>'
+          + '</div>';
+      });
+    }
+    pane.innerHTML = html;
+  });
+}
+
+// --- Tokens View ---
+
+function renderHubTokens(pane) {
+  var hub = currentAdminHub;
+  pane.innerHTML = '<h2>Tokens</h2>'
+    + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="loading">Loading...</p>';
+
+  goApp.LogAdminGET(hub, '/api/admin/tokens');
+  goApp.AdminListTokens(hub).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      pane.innerHTML = '<h2>Tokens</h2><p class="section-desc">' + escHtml(data.error) + '</p>';
+      return;
+    }
+    var tokens = data.tokens || [];
+
+    var html = '<h2>Tokens</h2>'
+      + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>';
+
+    html += '<div class="toolbar">'
+      + '<button class="btn-primary btn-sm" onclick="promptCreateToken()">Add Token</button>'
+      + '<button class="btn-primary btn-sm" style="background:#3498db;border-color:#3498db;" onclick="promptPairCode()">Generate Pairing Code</button>'
+      + '</div>';
+
+    html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Full tokens are only shown at creation or after rotation.</p>';
+
+    html += '<table class="admin-table"><thead><tr>'
+      + '<th>Identity</th><th>Role</th><th>Token Preview</th><th>Actions</th>'
+      + '</tr></thead><tbody>';
+
+    tokens.forEach(function (t) {
+      var isOwner = t.role === 'owner';
+      html += '<tr><td><strong>' + escHtml(t.id) + '</strong></td>'
+        + '<td><span class="role-badge role-' + t.role + '">' + t.role + '</span></td>'
+        + '<td><span class="token-preview">' + escHtml(t.tokenPreview) + '</span></td>'
+        + '<td><div class="action-btns">'
+        + '<button class="icon-btn" onclick="rotateToken(\'' + escAttr(t.id) + '\')">Rotate</button>';
+      if (!isOwner) {
+        html += '<button class="icon-btn danger" onclick="deleteToken(\'' + escAttr(t.id) + '\')">Delete</button>';
       }
+      html += '</div></td></tr>';
+    });
 
-      card.innerHTML = '<span class="hub-card-dot ' + dotClass + '"></span>'
-        + '<div class="hub-card-info">'
-        + '<div class="hub-card-name">' + escHtml(hub.name) + '</div>'
-        + '<div class="hub-card-url">' + escHtml(hub.url) + '</div>'
-        + '<div class="hub-card-token">' + tokenHtml + '</div>'
-        + '</div>'
-        + '<div class="hub-card-actions">'
-        + '<button class="btn-danger btn-sm" onclick="removeHub(\'' + escAttr(hub.url) + '\')">Remove</button>'
-        + '</div>';
+    html += '</tbody></table>';
+    html += '<p style="font-size:11px;color:var(--text-muted);margin-top:8px;">To change a token\'s role, delete it and create a new one with the desired role.</p>';
 
-      list.appendChild(card);
+    pane.innerHTML = html;
+  });
+}
 
-      // Fetch status if not cached
-      if (!status && hub.hasToken) {
-        goApp.GetHubStatus(hub.url).then(function (s) {
-          hubStatusCache[hub.url] = s;
-          var dot = card.querySelector('.hub-card-dot');
-          if (dot) dot.className = 'hub-card-dot ' + (s.online ? 'online' : 'offline');
-        }).catch(function () {
-          var dot = card.querySelector('.hub-card-dot');
-          if (dot) dot.className = 'hub-card-dot offline';
+// --- Modal Helpers ---
+
+function closeModal(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
+
+function showResultModal(title, message, value, hint) {
+  document.getElementById('result-modal-title').textContent = title;
+  document.getElementById('result-modal-message').textContent = message;
+  document.getElementById('result-modal-value').value = value;
+  document.getElementById('result-modal-hint').textContent = hint || '';
+  document.getElementById('result-modal').classList.remove('hidden');
+  // Auto-select for easy copy
+  document.getElementById('result-modal-value').select();
+}
+
+function copyResultAndClose() {
+  var input = document.getElementById('result-modal-value');
+  input.select();
+  document.execCommand('copy');
+  closeModal('result-modal');
+}
+
+// --- Token Actions ---
+
+function promptCreateToken() {
+  document.getElementById('new-token-id').value = '';
+  document.getElementById('new-token-role').value = 'user';
+  var errEl = document.getElementById('create-token-error');
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+  document.getElementById('create-token-modal').classList.remove('hidden');
+  document.getElementById('new-token-id').focus();
+}
+
+function submitCreateToken(event) {
+  event.preventDefault();
+  var id = document.getElementById('new-token-id').value.trim();
+  var role = document.getElementById('new-token-role').value;
+  if (!id) return;
+
+  goApp.AdminCreateToken(currentAdminHub, id, role).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      var errEl = document.getElementById('create-token-error');
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('create-token-modal');
+    if (data.token) {
+      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + role);
+    }
+    renderHubTokens(document.getElementById('hubs-admin-detail'));
+  });
+}
+
+function deleteToken(id) {
+  goApp.ConfirmDialog('Delete Token', 'Delete identity "' + id + '"? This removes the token and all its ACL entries.').then(function (yes) {
+    if (!yes) return;
+    goApp.AdminDeleteToken(currentAdminHub, id).then(function () {
+      renderHubTokens(document.getElementById('hubs-admin-detail'));
+    });
+  });
+}
+
+function rotateToken(id) {
+  goApp.ConfirmDialog('Rotate Token', 'Rotate token for "' + id + '"? The old token will stop working immediately.').then(function (yes) {
+    if (!yes) return;
+    goApp.AdminRotateToken(currentAdminHub, id).then(function (raw) {
+      var data;
+      try { data = JSON.parse(raw); } catch (e) { data = {}; }
+      if (data.error) {
+        showError(data.error);
+        return;
+      }
+      if (data.token) {
+        showResultModal('Token Rotated', 'New token for "' + id + '". Copy now, it will not be shown again.', data.token);
+      }
+      renderHubTokens(document.getElementById('hubs-admin-detail'));
+    });
+  });
+}
+
+function promptPairCode() {
+  document.getElementById('pair-role').value = 'user';
+  document.getElementById('pair-expires').value = '1h';
+  var errEl = document.getElementById('pair-code-error');
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+  document.getElementById('pair-code-modal').classList.remove('hidden');
+}
+
+function submitPairCode(event) {
+  event.preventDefault();
+  var role = document.getElementById('pair-role').value;
+  var expires = document.getElementById('pair-expires').value;
+
+  goApp.AdminGeneratePairCode(currentAdminHub, 'connect', role, '', expires).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      var errEl = document.getElementById('pair-code-error');
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('pair-code-modal');
+    showResultModal('Pairing Code', 'Share this code with the user. It can only be used once.', data.code, 'Expires: ' + (data.expiresAt || 'soon'));
+  });
+}
+
+// --- ACLs View ---
+
+function renderHubACLs(pane) {
+  var hub = currentAdminHub;
+  pane.innerHTML = '<h2>Access Control</h2>'
+    + '<p class="section-desc">Manage per-machine permissions for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="loading">Loading...</p>';
+
+  goApp.LogAdminGET(hub, '/api/admin/acls');
+  goApp.AdminListACLs(hub).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      pane.innerHTML = '<h2>Access Control</h2><p class="section-desc">' + escHtml(data.error) + '</p>';
+      return;
+    }
+    var acls = data.acls || [];
+
+    var html = '<h2>Access Control</h2>'
+      + '<p class="section-desc">Manage per-machine permissions for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>';
+
+    html += '<div class="toolbar">'
+      + '<button class="btn-primary btn-sm" onclick="promptGrantAccess()">Grant Access</button>'
+      + '</div>';
+
+    // Check for wildcard
+    var hasWildcard = acls.some(function (a) { return a.machineId === '*'; });
+    if (hasWildcard) {
+      html += '<div class="wildcard-note"><strong>*</strong> Wildcard ACL is active: identities listed under <strong>*</strong> can connect to all machines.</div>';
+    }
+
+    if (acls.length === 0) {
+      html += '<p class="empty-hint">No explicit ACL rules configured.</p>';
+    } else {
+      acls.forEach(function (acl) {
+        var ruleCount = (acl.registerId ? 1 : 0) + (acl.connectIds ? acl.connectIds.length : 0);
+        var metaLabel = acl.machineId === '*' ? 'applies to all machines' : ruleCount + ' rule' + (ruleCount !== 1 ? 's' : '');
+
+        html += '<div class="acl-card"><div class="acl-card-header"><div>'
+          + '<span class="acl-machine-name">' + escHtml(acl.machineId) + '</span>'
+          + '<span class="acl-machine-meta">&nbsp;&nbsp;' + metaLabel + '</span>'
+          + '</div></div><div class="acl-card-body">';
+
+        // Header row
+        html += '<div class="acl-perm-row" style="padding-bottom:8px;border-bottom:1px solid var(--border);">'
+          + '<div style="flex:1"></div>'
+          + '<div class="acl-checks">'
+          + '<span style="width:70px;text-align:center;font-weight:600;font-size:12px;color:var(--text-muted);">Register</span>'
+          + '<span style="width:70px;text-align:center;font-weight:600;font-size:12px;color:var(--text-muted);">Connect</span>'
+          + '</div>'
+          + '<div style="width:70px"></div></div>';
+
+        // Register identity
+        if (acl.registerId) {
+          html += '<div class="acl-perm-row">'
+            + '<div class="acl-identity">' + escHtml(acl.registerId) + '</div>'
+            + '<div class="acl-checks">'
+            + '<div style="width:70px;text-align:center;">&#x2705;</div>'
+            + '<div style="width:70px;text-align:center;"></div>'
+            + '</div>'
+            + '<div style="width:70px;text-align:right;"><button class="icon-btn danger" onclick="revokeRegister(\'' + escAttr(acl.registerId) + '\',\'' + escAttr(acl.machineId) + '\')">Revoke</button></div>'
+            + '</div>';
+        }
+
+        // Connect identities
+        var connectIds = acl.connectIds || [];
+        connectIds.forEach(function (id) {
+          html += '<div class="acl-perm-row">'
+            + '<div class="acl-identity">' + escHtml(id) + '</div>'
+            + '<div class="acl-checks">'
+            + '<div style="width:70px;text-align:center;"></div>'
+            + '<div style="width:70px;text-align:center;">&#x2705;</div>'
+            + '</div>'
+            + '<div style="width:70px;text-align:right;"><button class="icon-btn danger" onclick="revokeConnect(\'' + escAttr(id) + '\',\'' + escAttr(acl.machineId) + '\')">Revoke</button></div>'
+            + '</div>';
         });
-      }
+
+        if (!acl.registerId && connectIds.length === 0) {
+          html += '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">No explicit rules.</p>';
+        }
+
+        html += '</div></div>';
+      });
+    }
+
+    html += '<p style="font-size:11px;color:var(--text-muted);margin-top:12px;">Register is single-assignment: only one identity can register a given machine.</p>';
+    pane.innerHTML = html;
+  });
+}
+
+function promptGrantAccess() {
+  // Populate identity dropdown from token list
+  var identitySelect = document.getElementById('grant-identity');
+  identitySelect.innerHTML = '<option value="">Loading...</option>';
+
+  // Populate machine dropdown from hub status
+  var machineSelect = document.getElementById('grant-machine');
+  machineSelect.innerHTML = '<option value="*">* (all machines)</option>';
+
+  goApp.AdminListTokens(currentAdminHub).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    identitySelect.innerHTML = '<option value="">Select identity...</option>';
+    var tokens = data.tokens || [];
+    tokens.forEach(function (t) {
+      var opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.id + ' (' + t.role + ')';
+      identitySelect.appendChild(opt);
+    });
+  });
+
+  goApp.GetHubStatus(currentAdminHub).then(function (status) {
+    if (status.machines) {
+      status.machines.forEach(function (m) {
+        var opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.id;
+        machineSelect.appendChild(opt);
+      });
+    }
+  });
+
+  document.getElementById('grant-type').value = 'connect';
+  var errEl = document.getElementById('grant-access-error');
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+  document.getElementById('grant-access-modal').classList.remove('hidden');
+}
+
+function submitGrantAccess(event) {
+  event.preventDefault();
+  var id = document.getElementById('grant-identity').value;
+  var machine = document.getElementById('grant-machine').value;
+  var type = document.getElementById('grant-type').value;
+  if (!id) return;
+
+  var call = type === 'register'
+    ? goApp.AdminGrantRegister(currentAdminHub, id, machine)
+    : goApp.AdminGrantConnect(currentAdminHub, id, machine);
+
+  call.then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      var errEl = document.getElementById('grant-access-error');
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('grant-access-modal');
+    renderHubACLs(document.getElementById('hubs-admin-detail'));
+  });
+}
+
+function revokeConnect(id, machineId) {
+  goApp.ConfirmDialog('Revoke Access', 'Revoke connect access for "' + id + '" on "' + machineId + '"?').then(function (yes) {
+    if (!yes) return;
+    goApp.AdminRevokeConnect(currentAdminHub, id, machineId).then(function () {
+      renderHubACLs(document.getElementById('hubs-admin-detail'));
+    });
+  });
+}
+
+function revokeRegister(id, machineId) {
+  goApp.ConfirmDialog('Revoke Access', 'Revoke register access for "' + id + '" on "' + machineId + '"?').then(function (yes) {
+    if (!yes) return;
+    goApp.AdminRevokeRegister(currentAdminHub, id, machineId).then(function () {
+      renderHubACLs(document.getElementById('hubs-admin-detail'));
     });
   });
 }
@@ -964,20 +1467,26 @@ function refreshHubsTab() {
 // --- Hub Management ---
 
 function removeHub(url) {
-  if (!confirm('Remove this hub and all its saved selections?')) return;
-  // Remove selections for this hub
-  Object.keys(selectedServices).forEach(function (key) {
-    if (key.indexOf(url + '||') === 0) delete selectedServices[key];
+  goApp.ConfirmDialog('Remove Hub', 'Remove this hub and all its saved selections?').then(function (yes) {
+    if (!yes) return;
+    Object.keys(selectedServices).forEach(function (key) {
+      if (key.indexOf(url + '||') === 0) delete selectedServices[key];
+    });
+    delete includedHubs[url];
+    goApp.RemoveHub(url).then(function () {
+      selectedHubURL = null;
+      selectedMachineId = null;
+      currentAdminHub = '';
+      checkDirty();
+      refreshAll();
+      refreshHubsTab();
+      document.getElementById('detail-pane').innerHTML = '<div class="empty-state"><p>Hub removed.</p></div>';
+    });
   });
-  delete includedHubs[url];
-  goApp.RemoveHub(url).then(function () {
-    selectedHubURL = null;
-    selectedMachineId = null;
-    checkDirty();
-    refreshAll();
-    refreshHubsTab();
-    document.getElementById('detail-pane').innerHTML = '<div class="empty-state"><p>Hub removed.</p></div>';
-  });
+}
+
+function hubNameFromUrl(url) {
+  return (url || '').replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
 function clearSelection() {

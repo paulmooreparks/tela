@@ -244,6 +244,7 @@ export namespace main {
 	    verboseDefault: boolean;
 	    confirmDisconnect: boolean;
 	    sidebarWidth: number;
+	    hubsSidebarWidth: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -260,6 +261,7 @@ export namespace main {
 	        this.verboseDefault = source["verboseDefault"];
 	        this.confirmDisconnect = source["confirmDisconnect"];
 	        this.sidebarWidth = source["sidebarWidth"];
+	        this.hubsSidebarWidth = source["hubsSidebarWidth"];
 	    }
 	}
 	export class ToolVersions {
