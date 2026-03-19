@@ -99,6 +99,103 @@ These belong in Awan Saya, not TelaGUI:
 
 TelaGUI is a personal tool. It manages one user's connections and gives that user visibility into the infrastructure they touch. Awan Saya is the multi-tenant platform for organizations.
 
+## CLI-to-GUI mapping
+
+This section maps every `tela` CLI command to its TelaGUI equivalent. Gaps are ranked by user value.
+
+### Connection commands
+
+| CLI command | Flags | TelaGUI equivalent | Status |
+|---|---|---|---|
+| `tela connect` | `-hub`, `-machine`, `-token`, `-ports`, `-services`, `-profile`, `-v` | Connect button (profile-based) | Implemented |
+| `tela machines` | `-hub`, `-token`, `-json` | Profiles sidebar (hub tree) | Implemented |
+| `tela services` | `-hub`, `-machine`, `-token`, `-json` | Profiles detail pane (service checkboxes) | Implemented |
+| `tela status` | `-hub`, `-token`, `-json` | Hubs tab (online indicators) | Partial -- shows online/offline but not machine counts or session details |
+
+### Profile management
+
+| CLI command | TelaGUI equivalent | Status |
+|---|---|---|
+| `tela profile list` | Profile dropdown | Implemented |
+| `tela profile show <name>` | Show YAML button | Implemented |
+| `tela profile create <name>` | + button | Implemented |
+| `tela profile delete <name>` | Right-click menu on profile | Implemented |
+
+### Credential management
+
+| CLI command | TelaGUI equivalent | Status |
+|---|---|---|
+| `tela login <hub-url>` | Hubs tab, Add Hub | Implemented (manual entry) |
+| `tela logout <hub-url>` | Hubs tab, Remove button | Implemented |
+| `tela pair -hub <url> -code <code>` | Hubs tab, pairing code paste | Implemented |
+
+### Remote management (hub directory)
+
+| CLI command | TelaGUI equivalent | Status |
+|---|---|---|
+| `tela remote add <name> <url>` | Not implemented | Gap |
+| `tela remote remove <name>` | Not implemented | Gap |
+| `tela remote list` | Not implemented | Gap |
+
+### Admin commands
+
+| CLI command | Flags | TelaGUI equivalent | Status |
+|---|---|---|---|
+| `tela admin list-tokens` | `-hub`, `-token`, `-json` | Not implemented | Gap (Phase 2) |
+| `tela admin add-token <id>` | `-hub`, `-token`, `-role` | Not implemented | Gap (Phase 2) |
+| `tela admin remove-token <id>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
+| `tela admin rotate <id>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
+| `tela admin grant <id> <machine>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
+| `tela admin revoke <id> <machine>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
+| `tela admin pair-code <machine>` | `-hub`, `-token`, `-expires`, `-type`, `-machines` | Not implemented | Gap (Phase 2) |
+| `tela admin list-portals` | `-hub`, `-token`, `-json` | Not implemented | Gap |
+| `tela admin add-portal <name>` | `-hub`, `-token`, `-portal-url`, `-portal-token`, `-hub-url` | Not implemented | Gap |
+| `tela admin remove-portal <name>` | `-hub`, `-token` | Not implemented | Gap |
+
+### OS service management
+
+| CLI command | TelaGUI equivalent | Status |
+|---|---|---|
+| `tela service install` | Not implemented | Out of scope |
+| `tela service uninstall` | Not implemented | Out of scope |
+| `tela service start/stop/restart/status` | Not implemented | Out of scope |
+
+OS service management requires elevated privileges and system-level configuration. This stays in the CLI.
+
+### Other
+
+| CLI command | TelaGUI equivalent | Status |
+|---|---|---|
+| `tela version` | Header bar (version display) | Implemented |
+
+### Gap summary
+
+**12 commands fully implemented** (connect, machines, services, profile CRUD, login, logout, pair, version).
+
+**1 command partially implemented** (status -- online indicators but no detailed hub info).
+
+**13 commands not implemented:**
+- 10 admin subcommands (Phase 2 roadmap)
+- 3 remote subcommands (low priority)
+
+**7 commands intentionally out of scope** (OS service management).
+
+### Highest-value targets
+
+These gaps would deliver the most value to TelaGUI users, ranked by impact and effort.
+
+**1. Token management** (list, add, remove, rotate). The most common admin task. Every hub operator creates tokens and hands them out. Today this requires a terminal. A "Tokens" panel in the Hubs tab, visible only when the stored token has admin/owner role, would cover four CLI commands at once. The admin API endpoints already exist.
+
+**2. ACL management** (grant, revoke). The second most common admin task. "Give this person access to this machine" is something admins do weekly. A machine/token matrix view makes this faster than CLI commands.
+
+**3. Pairing code generation** (pair-code). One button, one dialog. The code is already time-limited and single-use. An admin clicks "Generate Code," copies it, and sends it to a colleague. Covers the most common onboarding action.
+
+**4. Hub status detail**. The hub status API already returns machine counts, session counts, agent versions, and uptime. TelaGUI fetches this data but only uses the machine list and online indicators. Showing the full status in a hub detail panel requires no new API calls.
+
+**5. Portal management** (list, add, remove). Lower priority because most users don't manage portal registrations. Useful for hub operators who register with Awan Saya or other portals.
+
+**6. Remote management** (add, remove, list). Lowest priority. Most TelaGUI users add hubs directly by URL. Remotes are a CLI convenience for short hub names. The workaround is editing `~/.tela/remotes.yaml`.
+
 ## Technical notes
 
 - TelaGUI is a Wails v2 app (Go backend, vanilla JS frontend)
