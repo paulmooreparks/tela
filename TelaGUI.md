@@ -18,45 +18,106 @@ TelaGUI manages the full lifecycle of connecting to remote services through Tela
 
 ### Status
 
+![Status tab](screens/telagui01.png)
+
 Displays the current connection state and a table of all selected services grouped by machine. Each row shows:
 
 - **Service** -- the service name (e.g., SSH, RDP, Web)
 - **Remote** -- the port on the remote machine (e.g., :22)
-- **Local** -- the localhost address bound by tela (e.g., localhost:50022)
+- **Local** -- the localhost address bound by tela (e.g., localhost:22)
 - **Status** -- Not connected, Listening (port bound, no active tunnels), or Active (with a count of open connections)
 
-Status indicators update in real time. When you connect to a service (e.g., `ssh localhost -p 50022`), the status changes from Listening to Active. When you disconnect, it returns to Listening.
+Status indicators update in real time via tela's WebSocket control API. When you connect to a service (e.g., `ssh localhost -p 50022`), the status changes from Listening to Active. When you disconnect, it returns to Listening.
+
+The top bar shows the profile name, connection state (Disconnected or Connected with PID), and action buttons (Connect/Disconnect, Quit). Version numbers for both TelaGUI and the tela CLI are displayed in the header.
 
 ### Profiles
 
-The Profiles tab is where you configure what to connect to. The left sidebar lists hubs and their machines. Selecting a machine shows its available services with checkboxes.
+![Profiles tab](screens/telagui02.png)
 
-Check the services you want, and TelaGUI assigns conflict-free local ports. Your selections persist automatically. The profile is a standard YAML file that you can also use directly with `tela connect -profile`.
+The Profiles tab is where you configure what to connect to.
 
-Hub-level checkboxes let you include or exclude an entire hub's services from the profile.
+The left sidebar lists hubs and their machines. Hub-level checkboxes control whether a hub's machines are included in the profile. When a hub is unchecked, its machines are hidden and excluded from the profile. Selecting a machine in the sidebar shows its available services in the detail pane with checkboxes.
+
+When no machine is selected, the detail pane shows a live YAML preview of the profile that will be saved. The preview includes the profile's file path and updates as you make changes.
+
+**Toolbar buttons:**
+
+- **Undo** (arrow icon) -- reverts all unsaved changes back to the last saved state
+- **Save** -- saves the current selections to the profile YAML file. Disabled when there are no unsaved changes. Enables when you check or uncheck a service or hub.
+- **Import** -- import a profile YAML file
+- **Export** -- export the current profile to a file
+- **Show YAML** -- toggle the YAML preview in the detail pane
+
+**Profile management:**
+
+- The dropdown at top selects the active profile
+- The **+** button creates a new profile
+- Right-click a profile in the dropdown to rename or delete it
+
+When tela is connected, hub and machine checkboxes are disabled to prevent profile changes during an active session.
 
 ### Terminal
 
-Live output from the `tela` process. This is the same output you would see running `tela connect -profile` in a terminal. You can toggle verbose mode, freeze scrolling, copy the output, or save it to a file.
+![Terminal tab](screens/telagui03.png)
+
+Live output from the `tela` process. This is the same output you would see running `tela connect -profile` in a terminal.
+
+**Toolbar buttons:**
+
+- **Copy All** -- copy the entire terminal output to the clipboard
+- **Save to File** -- save the terminal output to a text file
+- **Verbose** -- toggle verbose logging. When enabled, tela outputs additional detail about tunnel negotiation, transport upgrades, and WebSocket activity.
+
+The terminal header shows the connection state (Disconnected or Connected with PID).
 
 ### Command Log
 
-Records the CLI commands that TelaGUI generates. Each entry shows a timestamp, a description, and the exact command. Use the Copy button to reproduce any operation in a terminal.
+![Command Log tab](screens/telagui04.png)
+
+Records the CLI commands that TelaGUI executes. Each entry shows a timestamp, a description, and the exact command. Use the Copy button to reproduce any operation in a terminal.
 
 ### Hubs
 
-Add and remove hub credentials. You can enter a hub URL and token manually, paste a one-time pairing code, or extract a token from a local Docker container running telahubd.
+![Hubs tab](screens/telagui05.png)
+
+Add and remove hub credentials. Each hub card shows:
+
+- Hub display name (derived from the URL)
+- Full WebSocket URL (e.g., `wss://gohub.parkscomputing.com`)
+- Online status (green dot when reachable)
+- Whether a token is stored
+
+Click **Add Hub** to enter a hub URL and token manually, paste a one-time pairing code, or extract a token from a local Docker container running telahubd.
+
+Click **Remove** to delete a hub's stored credentials. This does not affect the hub itself, only the local credential store.
 
 ### Settings
 
-- **Auto-connect** -- connect automatically when TelaGUI starts
-- **Reconnect on drop** -- reconnect if the connection drops
-- **Minimize behavior** -- minimize to system tray or taskbar
-- **Start minimized** -- launch hidden in the system tray
-- **Minimize on close** -- close button minimizes instead of quitting
-- **Auto-check updates** -- check for new releases on startup
-- **Verbose logging** -- enable verbose output by default
-- **CLI path** -- shows where the tela binary is installed
+![Settings tab](screens/telagui06.png)
+
+Settings are organized into sections:
+
+**Connection:**
+
+- **Auto-connect on launch** -- automatically connect using the saved profile when TelaGUI starts
+- **Reconnect on disconnect** -- attempt to reconnect if the connection drops unexpectedly
+- **Confirm before disconnecting** -- show a confirmation prompt before disconnecting or quitting while connected
+
+**Appearance:**
+
+- **Minimize to tray on window close** -- hide to the system tray instead of exiting when you click the X button
+
+**Updates:**
+
+- **Auto-check for updates on launch** -- check for new versions of TelaGUI and the tela CLI at startup
+
+**Advanced:**
+
+- **Verbose logging by default** -- enable verbose output whenever tela connects
+- **CLI path** -- shows where the tela binary is located
+
+Settings take effect immediately and persist across restarts.
 
 ### About
 
@@ -64,11 +125,11 @@ Version information, project links, license, and dependency credits.
 
 ## System tray
 
-When configured to minimize to the system tray, TelaGUI places an icon in the notification area. Left-click or double-click the icon to show the window. Right-click for a menu with Show and Quit options.
+When minimizing to the system tray is enabled, closing the window hides TelaGUI to the notification area instead of quitting. Left-click or double-click the tray icon to show the window. Right-click for a menu with Show and Quit options.
 
 ## Automatic updates
 
-TelaGUI checks GitHub releases for new versions. If an update is available, a button appears in the top bar. Clicking it downloads the update and restages the binary. The tela CLI binary is updated independently and stored in the platform's local application directory.
+TelaGUI checks GitHub releases for new versions. If an update is available, a button appears in the top bar (e.g., "Restart to Update (v0.2.174)"). Clicking it downloads the update and restarts TelaGUI with the new version. The tela CLI binary is updated independently and stored in the platform's local application directory.
 
 If TelaGUI was installed via a package manager (winget, Chocolatey, apt, brew), the self-update button is hidden. Use the package manager to update instead.
 

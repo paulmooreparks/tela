@@ -44,6 +44,14 @@ The hub never sees plaintext. It relays opaque WireGuard ciphertext.
 | **telahubd** | Go | Hub server. Pairs daemons with clients, relays WS/UDP, serves hub console |
 | **telagui** | Go + JS | Desktop client. Graphical interface for tela with profile management and real-time status. See [TelaGUI.md](TelaGUI.md) |
 
+### TelaGUI
+
+![TelaGUI Status tab](screens/telagui01.png)
+
+TelaGUI wraps the `tela` CLI in a desktop application. It manages hub credentials, connection profiles, and real-time tunnel status without requiring terminal access. Select which services to connect to, click Connect, and monitor tunnel state as it updates live.
+
+See [TelaGUI.md](TelaGUI.md) for full documentation.
+
 ## Networking & port requirements
 
 Tela is outbound-only for daemons and clients, but the **Hub must be reachable**.
