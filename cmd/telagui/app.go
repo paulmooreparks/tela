@@ -156,6 +156,25 @@ func (a *App) startup(ctx context.Context) {
 	// Apply startup settings
 	settings := a.GetSettings()
 
+	// Set default profile: use setting, or find first available profile
+	profileMu.Lock()
+	if settings.DefaultProfile != "" {
+		currentProfileName = settings.DefaultProfile
+	} else {
+		// Check if default profile exists, otherwise use first available
+		defaultPath := filepath.Join(profilesDir(), currentProfileName+".yaml")
+		if _, err := os.Stat(defaultPath); os.IsNotExist(err) {
+			entries, _ := os.ReadDir(profilesDir())
+			for _, e := range entries {
+				if !e.IsDir() && filepath.Ext(e.Name()) == ".yaml" {
+					currentProfileName = strings.TrimSuffix(e.Name(), ".yaml")
+					break
+				}
+			}
+		}
+	}
+	profileMu.Unlock()
+
 	// Check for updates
 	if settings.AutoCheckUpdates {
 		go a.checkForUpdates()
@@ -322,12 +341,12 @@ type ToolVersions struct {
 func (a *App) GetToolVersions() ToolVersions {
 	tv := ToolVersions{GUI: version}
 
-	// Get CLI version
+	// Get CLI version from configured binary path
 	bin := "tela"
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	localPath := filepath.Join(telaInstallDir(), bin)
+	localPath := filepath.Join(a.effectiveBinPath(), bin)
 	if _, err := os.Stat(localPath); err == nil {
 		cmd := exec.Command(localPath, "version")
 		hideConsoleWindow(cmd)
@@ -355,7 +374,8 @@ func (a *App) GetToolVersions() ToolVersions {
 	}
 
 	if tv.Latest != "" {
-		tv.GUIBehind = tv.GUI != tv.Latest
+		// Don't flag dev builds as behind -- there's nothing to update to
+		tv.GUIBehind = tv.GUI != tv.Latest && tv.GUI != "dev" && tv.GUI != ""
 		tv.CLIBehind = tv.CLI != tv.Latest && tv.CLI != "not installed"
 	}
 
@@ -1361,9 +1381,14 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 		for {
 			n, err := outPipe.Read(buf)
 			if n > 0 {
+				chunk := string(buf[:n])
 				a.mu.Lock()
-				a.telaOutput += string(buf[:n])
+				a.telaOutput += chunk
 				a.mu.Unlock()
+				// Push to frontend in real time
+				if a.ctx != nil {
+					wailsRuntime.EventsEmit(a.ctx, "tela:output", chunk)
+				}
 			}
 			if err != nil {
 				break
@@ -1770,10 +1795,9 @@ func (a *App) findTool(name string) string {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	// Always use the GUI's own managed copy
-	local := filepath.Join(telaInstallDir(), bin)
-	if _, err := os.Stat(local); err == nil {
-		return local
+	path := filepath.Join(a.effectiveBinPath(), bin)
+	if _, err := os.Stat(path); err == nil {
+		return path
 	}
 	return ""
 }
@@ -1784,6 +1808,144 @@ func telaInstallDir() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".tela", "bin")
+}
+
+// effectiveBinPath returns the configured binary path, or the default if not set.
+func (a *App) effectiveBinPath() string {
+	s := a.GetSettings()
+	if s.BinPath != "" {
+		return s.BinPath
+	}
+	return telaInstallDir()
+}
+
+// GetDefaultBinPath returns the platform default binary install directory.
+func (a *App) GetDefaultBinPath() string {
+	return telaInstallDir()
+}
+
+// BinaryInfo describes the status of a managed binary.
+type BinaryInfo struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	Found     bool   `json:"found"`
+	Version   string `json:"version"`
+	Latest    string `json:"latest"`
+	UpToDate  bool   `json:"upToDate"`
+}
+
+// ValidateBinPath checks if a path is a valid, accessible directory.
+func (a *App) ValidateBinPath(path string) string {
+	if path == "" {
+		return "" // empty = use default, always valid
+	}
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return "Directory does not exist. It will be created when you install a binary."
+	}
+	if err != nil {
+		return "Cannot access path: " + err.Error()
+	}
+	if !info.IsDir() {
+		return "Path is not a directory."
+	}
+	return "" // valid
+}
+
+// GetBinStatus checks the status of all managed binaries in the configured path.
+func (a *App) GetBinStatus() []BinaryInfo {
+	binDir := a.effectiveBinPath()
+	latest, _ := a.latestRelease()
+
+	var results []BinaryInfo
+	for _, name := range []string{"tela", "telad", "telahubd"} {
+		bin := name
+		if runtime.GOOS == "windows" {
+			bin += ".exe"
+		}
+		path := filepath.Join(binDir, bin)
+
+		info := BinaryInfo{
+			Name:   name,
+			Path:   path,
+			Latest: latest,
+		}
+
+		if _, err := os.Stat(path); err == nil {
+			info.Found = true
+			// Get version by running binary
+			cmd := exec.Command(path, "version")
+			hideConsoleWindow(cmd)
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				parts := strings.Fields(strings.TrimSpace(string(out)))
+				if len(parts) >= 2 {
+					info.Version = parts[1]
+				} else if len(parts) == 1 {
+					info.Version = parts[0]
+				}
+			}
+			info.UpToDate = info.Version == latest
+		}
+
+		results = append(results, info)
+	}
+	return results
+}
+
+// InstallBinary downloads a specific binary to the configured bin path.
+func (a *App) InstallBinary(name string) error {
+	binDir := a.effectiveBinPath()
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("create bin dir: %w", err)
+	}
+
+	latest, err := a.latestRelease()
+	if err != nil {
+		return fmt.Errorf("cannot determine latest version: %w", err)
+	}
+
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	binaryName := fmt.Sprintf("%s-%s-%s%s", name, runtime.GOOS, runtime.GOARCH, ext)
+	dlURL := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", latest, binaryName)
+
+	resp, err := http.Get(dlURL)
+	if err != nil || resp.StatusCode != 200 {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return fmt.Errorf("download %s failed: HTTP %d", name, resp.StatusCode)
+	}
+	defer resp.Body.Close()
+
+	destPath := filepath.Join(binDir, name+ext)
+	f, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", destPath, err)
+	}
+	_, err = io.Copy(f, resp.Body)
+	f.Close()
+	if err != nil {
+		return fmt.Errorf("write %s: %w", destPath, err)
+	}
+	os.Chmod(destPath, 0755)
+
+	a.logCommand("Install "+name+" "+latest, "# Downloaded "+binaryName+" to "+destPath)
+	return nil
+}
+
+// BrowseBinPath opens a directory picker and returns the selected path.
+func (a *App) BrowseBinPath() string {
+	dir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Select Binary Folder",
+	})
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 // EnsureTool checks if a tool is installed, downloads it if not.
@@ -2022,6 +2184,8 @@ type Settings struct {
 	ConfirmDisconnect   bool   `yaml:"confirmDisconnect" json:"confirmDisconnect"`
 	SidebarWidth        int    `yaml:"sidebarWidth" json:"sidebarWidth"`
 	HubsSidebarWidth    int    `yaml:"hubsSidebarWidth" json:"hubsSidebarWidth"`
+	DefaultProfile      string `yaml:"defaultProfile" json:"defaultProfile"`
+	BinPath             string `yaml:"binPath" json:"binPath"`
 }
 
 func defaultSettings() Settings {
@@ -2042,10 +2206,19 @@ func settingsPath() string {
 }
 
 // GetSettings loads settings from disk, returning defaults if not found.
+// Migrates from old telagui-settings.yaml if the new file doesn't exist.
 func (a *App) GetSettings() Settings {
 	data, err := os.ReadFile(settingsPath())
 	if err != nil {
-		return defaultSettings()
+		// Try migrating from old settings file
+		oldPath := filepath.Join(telaConfigDir(), "telagui-settings.yaml")
+		data, err = os.ReadFile(oldPath)
+		if err != nil {
+			return defaultSettings()
+		}
+		// Migrate: write to new path and delete old
+		os.WriteFile(settingsPath(), data, 0600)
+		os.Remove(oldPath)
 	}
 	s := defaultSettings()
 	if err := yaml.Unmarshal(data, &s); err != nil {
@@ -2060,7 +2233,8 @@ func (a *App) GetSettings() Settings {
 
 // SaveSettings persists settings to disk.
 func (a *App) SaveSettings(jsonStr string) error {
-	var s Settings
+	// Start with existing settings to preserve fields not in the JSON (sidebar widths, etc.)
+	s := a.GetSettings()
 	if err := json.Unmarshal([]byte(jsonStr), &s); err != nil {
 		return fmt.Errorf("invalid settings: %w", err)
 	}

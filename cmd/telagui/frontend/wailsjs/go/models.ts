@@ -1,5 +1,27 @@
 export namespace main {
 	
+	export class BinaryInfo {
+	    name: string;
+	    path: string;
+	    found: boolean;
+	    version: string;
+	    latest: string;
+	    upToDate: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new BinaryInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.found = source["found"];
+	        this.version = source["version"];
+	        this.latest = source["latest"];
+	        this.upToDate = source["upToDate"];
+	    }
+	}
 	export class CommandLogEntry {
 	    time: string;
 	    description: string;
@@ -245,6 +267,8 @@ export namespace main {
 	    confirmDisconnect: boolean;
 	    sidebarWidth: number;
 	    hubsSidebarWidth: number;
+	    defaultProfile: string;
+	    binPath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -262,6 +286,8 @@ export namespace main {
 	        this.confirmDisconnect = source["confirmDisconnect"];
 	        this.sidebarWidth = source["sidebarWidth"];
 	        this.hubsSidebarWidth = source["hubsSidebarWidth"];
+	        this.defaultProfile = source["defaultProfile"];
+	        this.binPath = source["binPath"];
 	    }
 	}
 	export class ToolVersions {

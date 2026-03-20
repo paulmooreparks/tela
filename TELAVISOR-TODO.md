@@ -1,4 +1,4 @@
-# TelaGUI Code Review TODO
+# TelaVisor Code Review TODO
 
 Issues identified during comprehensive code review (2026-03-19).
 Ordered by fix priority.

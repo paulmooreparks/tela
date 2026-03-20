@@ -50,6 +50,10 @@ function switchTab(name, btn) {
   if (pane) pane.classList.remove('hidden');
   if (btn) btn.classList.add('active');
 
+  // Show/hide profile toolbar
+  var profToolbar = document.getElementById('profile-toolbar');
+  if (profToolbar) profToolbar.classList.toggle('hidden', name !== 'profile');
+
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
   if (name === 'hubs') refreshHubsTab();
@@ -78,7 +82,7 @@ function tvLog(msg) {
   var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   var line = document.createTextNode(now + ' ' + msg + '\n');
   el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
+  if (!logPanelFrozen) el.scrollTop = el.scrollHeight;
 }
 
 function appendTelaLog(text) {
@@ -129,6 +133,9 @@ function addCommandEntry(method, desc, fullCmd) {
   var methodClass = 'cmd-m-' + method.toLowerCase().replace('delete', 'del');
   var methodLabel = method === 'DELETE' ? 'DEL' : method;
 
+  // One-line version for display: strip backslash-newline continuations
+  var oneLine = fullCmd.replace(/ \\\n\s*/g, ' ');
+
   var line = document.createElement('span');
   line.className = 'cmd-line';
   line.setAttribute('data-cmd', fullCmd);
@@ -137,7 +144,7 @@ function addCommandEntry(method, desc, fullCmd) {
   line.innerHTML = '<span class="cmd-cp" onclick="event.stopPropagation();cpCmd(this)">&#x2398;</span>'
     + '<span class="cmd-ts">' + now + '</span> '
     + '<span class="' + methodClass + '">' + methodLabel + '</span> '
-    + escHtml(desc);
+    + escHtml(oneLine);
   list.appendChild(line);
   list.scrollTop = list.scrollHeight;
   applyFilters();
@@ -153,12 +160,9 @@ function expandCmd(el) {
   document.querySelectorAll('.cmd-active').forEach(function (e) { e.classList.remove('cmd-active'); });
   el.classList.add('cmd-active');
   var cmd = el.getAttribute('data-cmd');
-  var formatted = cmd
-    .replace(/ -H /g, ' \\\n  -H ')
-    .replace(/ -d /g, ' \\\n  -d ');
   var div = document.createElement('span');
   div.className = 'cmd-expanded';
-  div.textContent = formatted;
+  div.textContent = cmd;
   el.after(div);
 }
 
@@ -206,7 +210,10 @@ function toggleAboutOverlay() {
 function toggleSettingsOverlay() {
   var el = document.getElementById('settings-overlay');
   el.classList.toggle('hidden');
-  if (!el.classList.contains('hidden')) refreshSettings();
+  if (!el.classList.contains('hidden')) {
+    refreshSettings();
+    refreshBinStatus();
+  }
 }
 
 // --- Status Tab ---
@@ -347,6 +354,19 @@ if (window.runtime) {
     document.getElementById('quit-stuck-overlay').style.display = 'flex';
   });
 
+  window.runtime.EventsOn('tela:output', function (chunk) {
+    if (!chunk) return;
+    var el = document.getElementById('log-tela');
+    if (!el) return;
+    // Clear the "Not connected." placeholder on first output
+    if (el.textContent === 'Not connected.') el.textContent = '';
+    el.textContent += chunk;
+    if (!logPanelFrozen) el.scrollTop = el.scrollHeight;
+    // Update tela dot to live
+    var dot = document.getElementById('log-tela-dot');
+    if (dot) dot.className = 'log-dot log-dot-live';
+  });
+
   window.runtime.EventsOn('app:command', function (entry) {
     if (!entry) return;
     var method = 'CLI';
@@ -408,6 +428,35 @@ function initSidebarResize(handleId, sidebarId, minWidth, maxWidth, saveKey) {
 initSidebarResize('sidebar-resize', 'sidebar', 220, 600, 'sidebarWidth');
 initSidebarResize('hubs-sidebar-resize', 'hubs-sidebar', 220, 400, 'hubsSidebarWidth');
 
+// --- Log Panel Resize ---
+(function () {
+  var handle = document.getElementById('log-panel-resize');
+  var panel = document.getElementById('log-panel');
+  if (!handle || !panel) return;
+  var dragging = false;
+  handle.addEventListener('mousedown', function (e) {
+    dragging = true;
+    e.preventDefault();
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (!dragging) return;
+    var newHeight = window.innerHeight - e.clientY;
+    if (newHeight < 80) newHeight = 80;
+    if (newHeight > window.innerHeight * 0.6) newHeight = window.innerHeight * 0.6;
+    panel.style.height = newHeight + 'px';
+    panel.classList.remove('collapsed');
+  });
+  document.addEventListener('mouseup', function () {
+    if (dragging) {
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+})();
+
 // --- Startup ---
 tvLog('TelaVisor started');
 refreshVersionDisplay();
@@ -417,6 +466,8 @@ loadSavedSelections().then(function () {
   tvLog('Profile loaded');
   refreshStatus();
   refreshAll();
+  // Re-take snapshot after refreshAll to account for hub status reconciliation
+  setTimeout(function () { takeSnapshot(); }, 1000);
   // Auto-connect if enabled and there are saved selections
   goApp.ShouldAutoConnect().then(function (should) {
     if (should && Object.keys(selectedServices).length > 0) {
@@ -648,6 +699,37 @@ function newProfile() {
     });
   }).catch(function (err) {
     showError(err);
+  });
+}
+
+function renameCurrentProfile() {
+  var sel = document.getElementById('profile-select');
+  if (!sel || !sel.value) return;
+  var oldName = sel.value;
+  var newName = prompt('Rename profile "' + oldName + '" to:', oldName);
+  if (!newName || newName === oldName) return;
+  goApp.RenameProfile(oldName, newName).then(function () {
+    tvLog('Renamed profile "' + oldName + '" to "' + newName + '"');
+    refreshProfileList();
+    refreshAll();
+  }).catch(function (err) {
+    showError(err);
+  });
+}
+
+function deleteCurrentProfile() {
+  var sel = document.getElementById('profile-select');
+  if (!sel || !sel.value) return;
+  var name = sel.value;
+  goApp.ConfirmDialog('Delete Profile', 'Delete profile "' + name + '"? This cannot be undone.').then(function (yes) {
+    if (!yes) return;
+    goApp.DeleteProfile(name).then(function () {
+      tvLog('Deleted profile "' + name + '"');
+      refreshProfileList();
+      refreshAll();
+    }).catch(function (err) {
+      showError(err);
+    });
   });
 }
 
@@ -1168,10 +1250,8 @@ function startConnectionPoll() {
     pollInFlight = true;
     goApp.GetConnectionState().then(function (state) {
       pollInFlight = false;
-      // Refresh terminal if visible
-      if (!document.getElementById('tab-terminal').classList.contains('hidden')) {
-        refreshTerminal();
-      }
+      // Always refresh tela log (it's in the persistent panel)
+      refreshTerminal();
       if (!state.connected) {
         stopConnectionPoll();
         updateConnectButton();
@@ -1929,28 +2009,14 @@ function dockerAddHub() {
 
 // --- Terminal ---
 
-var terminalAutoScroll = true;
-var terminalFrozen = false;
+var logPanelFrozen = false;
 
-function freezeTerminal() {
-  terminalFrozen = true;
-  document.getElementById('terminal-output').classList.add('frozen');
+function freezeLogPanel() {
+  logPanelFrozen = true;
 }
 
-function unfreezeTerminal() {
-  terminalFrozen = false;
-  document.getElementById('terminal-output').classList.remove('frozen');
-  refreshTerminal();
-}
-
-function showCopyToast() {
-  var toast = document.getElementById('copy-toast');
-  toast.textContent = 'Copied to clipboard';
-  toast.classList.add('visible');
-  clearTimeout(toast._fadeTimer);
-  toast._fadeTimer = setTimeout(function () {
-    toast.classList.remove('visible');
-  }, 3000);
+function unfreezeLogPanel() {
+  logPanelFrozen = false;
 }
 
 function copyTerminal() {
@@ -1983,57 +2049,40 @@ function toggleVerbose() {
 
 function refreshTerminal() {
   goApp.GetConnectionState().then(function (state) {
-    var output = document.getElementById('log-tela');
-    if (!output) return;
-
     var dot = document.getElementById('log-tela-dot');
     if (dot) {
       dot.className = state.connected ? 'log-dot log-dot-live' : 'log-dot log-dot-idle';
     }
-
-    var prevLength = output.textContent.length;
-    if (state.output) {
-      output.textContent = state.output;
-    } else if (!state.connected) {
-      output.textContent = 'Not connected.';
-    }
-
-    if (output.textContent.length !== prevLength) {
-      output.scrollTop = output.scrollHeight;
+    if (!state.connected) {
+      var el = document.getElementById('log-tela');
+      if (el && el.textContent !== 'Not connected.' && !el.textContent.trim()) {
+        el.textContent = 'Not connected.';
+      }
     }
   });
 }
 
-// Set up scroll detection and mouse freeze on the terminal output
+// Set up scroll freeze and auto-copy on all log panel outputs
 (function () {
   setTimeout(function () {
-    var el = document.getElementById('terminal-output');
-    if (!el) return;
+    var outputs = document.querySelectorAll('.log-panel-output, .cmd-list');
+    outputs.forEach(function (el) {
+      el.addEventListener('mousedown', function () {
+        freezeLogPanel();
+      });
 
-    el.addEventListener('scroll', function () {
-      var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 30;
-      terminalAutoScroll = atBottom;
+      el.addEventListener('mouseup', function () {
+        var sel = window.getSelection();
+        if (sel && sel.toString().length > 0) {
+          navigator.clipboard.writeText(sel.toString()).catch(function () {});
+          // Keep frozen briefly so the selection remains visible
+          setTimeout(unfreezeLogPanel, 1500);
+        } else {
+          unfreezeLogPanel();
+        }
+      });
     });
-
-    // Freeze updates on mouse down to allow text selection
-    el.addEventListener('mousedown', function () {
-      freezeTerminal();
-    });
-
-    // On mouse up, auto-copy selection and unfreeze after a short delay
-    el.addEventListener('mouseup', function () {
-      var sel = window.getSelection();
-      if (sel && sel.toString().length > 0) {
-        navigator.clipboard.writeText(sel.toString()).then(function () {
-          showCopyToast();
-        }).catch(function () {});
-        // Keep frozen briefly so the selection is visible
-        setTimeout(unfreezeTerminal, 1500);
-      } else {
-        unfreezeTerminal();
-      }
-    });
-  }, 100);
+  }, 200);
 })();
 
 
@@ -2047,11 +2096,39 @@ function refreshSettings() {
     document.getElementById('setting-minimizeOnClose').checked = s.minimizeOnClose;
     document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
+
+    // Populate binary path (show default if empty)
+    var binPathInput = document.getElementById('setting-binPath');
+    if (binPathInput) {
+      if (s.binPath) {
+        binPathInput.value = s.binPath;
+      } else {
+        goApp.GetDefaultBinPath().then(function (p) {
+          binPathInput.value = p;
+          binPathInput.setAttribute('data-default', p);
+        });
+      }
+    }
+
+    // Populate default profile dropdown
+    var sel = document.getElementById('setting-defaultProfile');
+    if (sel) {
+      goApp.ListProfiles().then(function (profiles) {
+        sel.innerHTML = '';
+        (profiles || []).forEach(function (p) {
+          var opt = document.createElement('option');
+          opt.value = p;
+          opt.textContent = p;
+          if (p === (s.defaultProfile || '')) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      });
+    }
   });
 }
 
-function saveSetting() {
-  var s = {
+function gatherSettings() {
+  return {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
     confirmDisconnect: document.getElementById('setting-confirmDisconnect').checked,
@@ -2059,9 +2136,172 @@ function saveSetting() {
     startMinimized: false,
     minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
     autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
-    verboseDefault: document.getElementById('setting-verboseDefault').checked
+    verboseDefault: document.getElementById('setting-verboseDefault').checked,
+    defaultProfile: document.getElementById('setting-defaultProfile') ? document.getElementById('setting-defaultProfile').value : '',
+    binPath: getBinPathValue()
   };
-  goApp.SaveSettings(JSON.stringify(s));
+}
+
+function saveSettingsWithValidation() {
+  var s = gatherSettings();
+  var errEl = document.getElementById('settings-error');
+  var pathInput = document.getElementById('setting-binPath');
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+  if (pathInput) pathInput.classList.remove('invalid');
+
+  // Validate bin path
+  goApp.ValidateBinPath(s.binPath).then(function (warning) {
+    if (warning && warning.indexOf('does not exist') === -1) {
+      // Hard errors (not a directory, cannot access)
+      errEl.textContent = warning;
+      errEl.classList.remove('hidden');
+      if (pathInput) pathInput.classList.add('invalid');
+      return;
+    }
+    // Valid (or just a "will be created" warning, which is OK)
+    goApp.SaveSettings(JSON.stringify(s)).then(function () {
+      settingsDirty = false;
+      var btn = document.getElementById('settings-save-btn');
+      if (btn) btn.disabled = true;
+      if (pathInput) pathInput.classList.remove('invalid');
+      // Clear update warning and re-check with new settings
+      document.getElementById('update-btn').classList.add('hidden');
+      updateDismissedForSession = false;
+      updateSkippedVersion = '';
+      checkForUpdate();
+      refreshVersionDisplay();
+    });
+  });
+}
+
+var settingsDirty = false;
+
+function markSettingsDirty() {
+  settingsDirty = true;
+  var btn = document.getElementById('settings-save-btn');
+  if (btn) btn.disabled = false;
+}
+
+function closeSettings() {
+  if (settingsDirty) {
+    goApp.ConfirmDialog('Unsaved Changes', 'You have unsaved settings changes. Discard them?').then(function (yes) {
+      if (!yes) return;
+      discardAndClose();
+    });
+  } else {
+    toggleSettingsOverlay();
+  }
+}
+
+function discardAndClose() {
+  refreshSettings();
+  settingsDirty = false;
+  var btn = document.getElementById('settings-save-btn');
+  if (btn) btn.disabled = true;
+  var errEl = document.getElementById('settings-error');
+  if (errEl) { errEl.classList.add('hidden'); errEl.textContent = ''; }
+  var pathInput = document.getElementById('setting-binPath');
+  if (pathInput) pathInput.classList.remove('invalid');
+  toggleSettingsOverlay();
+}
+
+// Keep saveSetting for backward compat (browse/restore call it)
+function saveSetting() {
+  saveSettingsWithValidation();
+}
+
+function getBinPathValue() {
+  var input = document.getElementById('setting-binPath');
+  if (!input) return '';
+  var val = input.value.trim();
+  var def = input.getAttribute('data-default') || '';
+  // If the value equals the default, save as empty (use default)
+  return val === def ? '' : val;
+}
+
+function refreshBinStatus() {
+  var container = document.getElementById('bin-status');
+  if (!container) return;
+
+  container.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">Checking...</span>';
+
+  goApp.GetBinStatus().then(function (bins) {
+    // Get path validation warning
+    var pathInput = document.getElementById('setting-binPath');
+    var pathVal = pathInput ? pathInput.value.trim() : '';
+    var defVal = pathInput ? (pathInput.getAttribute('data-default') || '') : '';
+    var checkPath = (pathVal === defVal) ? '' : pathVal;
+
+    goApp.ValidateBinPath(checkPath).then(function (warning) {
+      var warningHtml = warning ? '<div style="font-size:11px;color:#f39c12;margin-bottom:4px;">' + escHtml(warning) + '</div>' : '';
+      renderBinStatus(container, bins, warningHtml);
+    });
+  });
+}
+
+function renderBinStatus(container, bins, warningHtml) {
+    if (!bins || bins.length === 0) {
+      container.innerHTML = warningHtml;
+      return;
+    }
+    var html = warningHtml;
+    bins.forEach(function (b) {
+      var dotClass = 'missing';
+      var verText = 'not found';
+      var action = '';
+
+      if (b.found && b.upToDate) {
+        dotClass = 'found';
+        verText = b.version;
+      } else if (b.found && !b.upToDate) {
+        dotClass = 'outdated';
+        verText = b.version + ' (latest: ' + (b.latest || '?') + ')';
+        action = '<button class="bin-status-action" onclick="installBinary(\'' + escAttr(b.name) + '\')">Update</button>';
+      } else {
+        dotClass = 'missing';
+        verText = 'not found';
+        action = '<button class="bin-status-action" onclick="installBinary(\'' + escAttr(b.name) + '\')">Install</button>';
+      }
+
+      html += '<div class="bin-status-item">'
+        + '<span class="bin-status-dot ' + dotClass + '"></span>'
+        + '<span class="bin-status-name">' + escHtml(b.name) + '</span>'
+        + '<span class="bin-status-ver">' + escHtml(verText) + '</span>'
+        + action
+        + '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function installBinary(name) {
+  var container = document.getElementById('bin-status');
+  goApp.InstallBinary(name).then(function () {
+    tvLog('Installed ' + name);
+    refreshBinStatus();
+  }).catch(function (err) {
+    tvLog('Failed to install ' + name + ': ' + err);
+  });
+}
+
+function browseBinPath() {
+  goApp.BrowseBinPath().then(function (dir) {
+    if (dir) {
+      document.getElementById('setting-binPath').value = dir;
+      saveSetting();
+      refreshBinStatus();
+    }
+  });
+}
+
+function restoreDefaultBinPath() {
+  goApp.GetDefaultBinPath().then(function (p) {
+    var input = document.getElementById('setting-binPath');
+    input.value = p;
+    input.setAttribute('data-default', p);
+    saveSetting();
+    refreshBinStatus();
+  });
 }
 
 function clearCredentialStore() {

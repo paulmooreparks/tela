@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TelaVisor Mockup - Profiles Rethink</title>
+<link rel="stylesheet" href="../cmd/telagui/frontend/src/style.css">
+<style>
+.topbar, .app-brand, .mode-toggle, .topbar-icon-btn, .topbar-btn, .mode-btn { -webkit-app-region: unset !important; }
+.app-title-visor { color: var(--accent); }
+.section-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+.mode-btn.mode-btn-middle { border-left: none; border-radius: 0; }
+
+/* Profiles sidebar redesign */
+.profiles-sidebar {
+  width: 280px; min-width: 280px; border-right: 1px solid var(--border);
+  background: var(--surface); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+}
+.profiles-sidebar-header {
+  padding: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.profiles-selector {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+}
+.profiles-selector select {
+  flex: 1; padding: 5px 8px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font); background: var(--surface);
+}
+.profiles-selector .icon-btn { padding: 3px 6px; font-size: 12px; }
+.profiles-actions {
+  display: flex; gap: 4px; flex-wrap: wrap;
+}
+.profiles-actions .icon-btn { font-size: 11px; padding: 2px 8px; }
+.profiles-actions .save-btn { background: var(--accent); color: #fff; border-color: var(--accent); }
+.profiles-actions .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Hub tree */
+.profiles-tree { flex: 1; overflow-y: auto; padding: 4px 0; }
+.prof-hub-group { margin-bottom: 2px; }
+.prof-hub-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  cursor: pointer; font-size: 13px; font-weight: 600;
+}
+.prof-hub-row:hover { background: var(--surface-alt); }
+.prof-hub-row input[type="checkbox"] { accent-color: var(--accent); }
+.prof-hub-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.prof-hub-dot.online { background: var(--accent); }
+.prof-hub-dot.offline { background: #ccc; }
+.prof-machine-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 36px;
+  cursor: pointer; font-size: 13px; color: var(--accent); border-left: 3px solid transparent;
+}
+.prof-machine-row:hover { background: var(--surface-alt); }
+.prof-machine-row.active {
+  background: var(--surface-alt); font-weight: 600; color: var(--text);
+  border-left-color: var(--accent);
+}
+.prof-machine-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+.profiles-sidebar-footer {
+  margin-top: auto; padding: 8px 12px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.profiles-sidebar-footer .sidebar-footer-btn { width: 100%; }
+
+/* Detail pane */
+.profiles-detail { flex: 1; overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+<div id="app" style="height:100%;display:flex;flex-direction:column;">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <a class="app-brand">
+        <img src="../cmd/telagui/frontend/src/logo.png" class="app-logo" alt="Tela" onerror="this.style.display='none'">
+        <span class="app-title">Tela<span class="app-title-visor">Visor</span></span>
+      </a>
+    </div>
+    <div class="topbar-center">
+      <div class="mode-toggle">
+        <button class="mode-btn active">Clients</button>
+        <button class="mode-btn mode-btn-middle">Agents</button>
+        <button class="mode-btn">Hubs</button>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="topbar-icon-btn topbar-conn-btn disconnected">
+        <svg class="conn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M6.5 9.5L4.5 11.5C3.4 12.6 1.6 12.6 0.5 11.5C-0.6 10.4 -0.6 8.6 0.5 7.5L3.5 4.5"/>
+          <path d="M9.5 6.5L11.5 4.5C12.6 3.4 14.4 3.4 15.5 4.5C16.6 5.6 16.6 7.4 15.5 8.5L12.5 11.5"/>
+        </svg>
+      </button>
+      <button class="topbar-icon-btn">i</button>
+      <button class="topbar-icon-btn">&#x2699;</button>
+      <button class="topbar-icon-btn topbar-quit-btn">&#x2715;</button>
+    </div>
+  </div>
+
+  <!-- TAB BAR -->
+  <div class="main-tab-bar">
+    <button class="main-tab">Status</button>
+    <button class="main-tab active">Profiles</button>
+    <div class="tab-bar-spacer"></div>
+    <button class="topbar-btn connect-btn" style="padding:2px 14px;font-size:13px;margin:4px 4px 4px 0;">Connect</button>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">
+    <div style="flex:1;display:flex;min-height:0;">
+
+      <!-- SIDEBAR -->
+      <div class="profiles-sidebar">
+        <div class="profiles-sidebar-header">
+          <div class="profiles-selector">
+            <select title="Profile">
+              <option selected>telagui</option>
+              <option>work</option>
+              <option>staging</option>
+            </select>
+            <button class="icon-btn" title="Rename">&#x270E;</button>
+            <button class="icon-btn" title="Delete" style="color:var(--danger);">&#x2715;</button>
+          </div>
+          <div class="profiles-actions">
+            <button class="icon-btn" title="Undo" disabled>&#x21B6;</button>
+            <button class="icon-btn save-btn" title="Save" disabled>Save</button>
+            <button class="icon-btn" title="Show YAML">YAML</button>
+            <button class="icon-btn" title="Import">Import</button>
+            <button class="icon-btn" title="Export">Export</button>
+          </div>
+        </div>
+
+        <div class="profiles-tree">
+          <div class="prof-hub-group">
+            <label class="prof-hub-row">
+              <input type="checkbox">
+              <span class="prof-hub-dot online"></span>
+              devhub.awansaya.net
+            </label>
+          </div>
+          <div class="prof-hub-group">
+            <label class="prof-hub-row">
+              <input type="checkbox" checked>
+              <span class="prof-hub-dot online"></span>
+              gohub.parkscomputing.com
+            </label>
+            <div class="prof-machine-row" onclick="showDetail('telaboard')">
+              <span class="prof-machine-dot"></span> telaboard
+            </div>
+            <div class="prof-machine-row active" onclick="showDetail('barn')">
+              <span class="prof-machine-dot"></span> barn
+            </div>
+            <div class="prof-machine-row" onclick="showDetail('gohub')">
+              <span class="prof-machine-dot"></span> gohub
+            </div>
+          </div>
+        </div>
+
+        <div class="profiles-sidebar-footer">
+          <button class="btn-primary btn-sm sidebar-footer-btn">Add Profile</button>
+        </div>
+      </div>
+
+      <!-- DETAIL: Machine services -->
+      <div class="profiles-detail" id="detail-machine">
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:4px;">barn</h2>
+        <p class="section-desc">Online on gohub.parkscomputing.com</p>
+
+        <div class="settings-group">
+          <div class="settings-group-header">Services</div>
+          <div class="profile-svc-row">
+            <input type="checkbox" checked>
+            <div class="profile-svc-name">SSH</div>
+            <div class="profile-svc-port">:22</div>
+            <div class="profile-svc-proto">tcp</div>
+            <div class="profile-svc-local">localhost:50022</div>
+          </div>
+          <div class="profile-svc-row">
+            <input type="checkbox" checked>
+            <div class="profile-svc-name">RDP</div>
+            <div class="profile-svc-port">:3389</div>
+            <div class="profile-svc-proto">tcp</div>
+            <div class="profile-svc-local">localhost:23389</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DETAIL: YAML preview (toggle with machine view) -->
+      <div class="profiles-detail" id="detail-yaml" style="display:none;">
+        <div class="settings-group yaml-card" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">
+          <div class="settings-group-header">
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+              <span>Profile Preview</span>
+              <span style="font-size:11px;font-family:var(--mono);color:var(--text-muted);font-weight:400;">C:\Users\paul\AppData\Roaming\tela\profiles\telagui.yaml</span>
+            </div>
+          </div>
+          <pre class="connect-output" style="flex:1;min-height:0;max-height:none;overflow-y:auto;border-radius:0 0 var(--radius) var(--radius);">connections:
+  - hub: wss://gohub.parkscomputing.com
+    machine: telaboard
+    services:
+      - name: Web
+        local: 48000
+      - name: DBAdmin
+        local: 48082
+      - name: PostgreSQL
+        local: 25432
+      - name: API
+        local: 28080
+  - hub: wss://gohub.parkscomputing.com
+    machine: gohub
+    services:
+      - name: SSH
+        local: 40023
+  - hub: wss://gohub.parkscomputing.com
+    machine: barn
+    services:
+      - name: SSH
+        local: 50022
+      - name: RDP
+        local: 23389</pre>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- LOG PANEL -->
+    <div class="log-panel" style="height:180px;">
+      <div class="log-panel-header" style="height:36px;">
+        <div class="log-panel-tabs">
+          <button class="log-panel-tab active"><span class="log-dot log-dot-live"></span>TelaVisor</button>
+          <button class="log-panel-tab"><span class="log-dot log-dot-idle"></span>tela</button>
+          <button class="log-panel-tab"><span class="log-dot log-dot-cmd"></span>Commands</button>
+          <button class="log-panel-tab log-panel-tab-add">+</button>
+        </div>
+        <div class="log-panel-actions">
+          <button class="term-btn term-btn-green" style="font-size:11px;padding:3px 8px;height:22px;">&#x2611; Verbose</button>
+          <button class="term-btn" style="font-size:11px;padding:3px 8px;height:22px;">Copy</button>
+          <button class="term-btn" style="font-size:11px;padding:3px 8px;height:22px;">Save</button>
+          <button class="term-btn term-btn-green" style="font-size:11px;padding:3px 8px;height:22px;">Clear</button>
+          <button class="log-panel-toggle">&#x25BC;</button>
+        </div>
+      </div>
+      <pre class="log-panel-output" style="padding:4px 12px;line-height:1.3;">2026-03-20T01:45:41Z TelaVisor started
+2026-03-20T01:45:41Z Profile loaded: telagui
+2026-03-20T01:45:42Z Hub status: gohub.parkscomputing.com online (3 machines)
+2026-03-20T01:45:42Z Hub status: devhub.awansaya.net online (1 machine)</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+function showDetail(name) {
+  document.querySelectorAll('.prof-machine-row').forEach(function(r) { r.classList.remove('active'); });
+  event.currentTarget.classList.add('active');
+  document.getElementById('detail-machine').style.display = '';
+  document.getElementById('detail-yaml').style.display = 'none';
+}
+</script>
+</body>
+</html>

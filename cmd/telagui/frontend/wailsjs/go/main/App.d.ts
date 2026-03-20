@@ -28,6 +28,8 @@ export function AdminRotateToken(arg1:string,arg2:string):Promise<string>;
 
 export function AssignLocalPort(arg1:number):Promise<number>;
 
+export function BrowseBinPath():Promise<string>;
+
 export function CheckForUpdatesNow():Promise<void>;
 
 export function ClearCredentialStore():Promise<void>;
@@ -60,6 +62,8 @@ export function ExportProfile():Promise<void>;
 
 export function ForceQuit():Promise<void>;
 
+export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
+
 export function GetCLIPath():Promise<string>;
 
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
@@ -73,6 +77,8 @@ export function GetControlServices():Promise<Array<Record<string, any>>>;
 export function GetControlStatus():Promise<Record<string, any>>;
 
 export function GetCurrentProfile():Promise<string>;
+
+export function GetDefaultBinPath():Promise<string>;
 
 export function GetHubInfo(arg1:string):Promise<string>;
 
@@ -99,6 +105,8 @@ export function GetVersion():Promise<string>;
 export function HasUpdate():Promise<boolean>;
 
 export function ImportProfile():Promise<void>;
+
+export function InstallBinary(arg1:string):Promise<void>;
 
 export function IsConnected():Promise<boolean>;
 
@@ -145,3 +153,5 @@ export function ShouldAutoConnect():Promise<boolean>;
 export function ShowWindow():Promise<void>;
 
 export function SwitchProfile(arg1:string):Promise<void>;
+
+export function ValidateBinPath(arg1:string):Promise<string>;

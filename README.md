@@ -42,15 +42,23 @@ The hub never sees plaintext. It relays opaque WireGuard ciphertext.
 | **tela** | Go | Client CLI. Connects to hub, establishes WG tunnel, binds localhost listeners |
 | **telad** | Go | Daemon. Registers with hub, exposes local services through WG tunnel |
 | **telahubd** | Go | Hub server. Pairs daemons with clients, relays WS/UDP, serves hub console |
-| **telagui** | Go + JS | Desktop client. Graphical interface for tela with profile management and real-time status. See [TelaGUI.md](TelaGUI.md) |
+| **TelaVisor** | Go + JS | Desktop client. Graphical interface for managing connections, hubs, and agents. See [TelaVisor.md](TelaVisor.md) |
 
-### TelaGUI
+### TelaVisor
 
-![TelaGUI Status tab](screens/telagui01.png)
+TelaVisor is a desktop client that wraps the `tela` CLI in a graphical interface. It manages hub credentials, connection profiles, and real-time tunnel status without requiring terminal access. You can select which services to connect to, click Connect, and monitor tunnel state as it updates live.
 
-TelaGUI wraps the `tela` CLI in a desktop application. It manages hub credentials, connection profiles, and real-time tunnel status without requiring terminal access. Select which services to connect to, click Connect, and monitor tunnel state as it updates live.
+![TelaVisor Status tab, connected](screens/telavisor04.png)
 
-See [TelaGUI.md](TelaGUI.md) for full documentation.
+TelaVisor uses a three-mode layout that mirrors the Tela binaries: Clients (for connections), Agents (for managing telad instances, coming soon), and Hubs (for hub administration including tokens, ACLs, and machine management).
+
+![TelaVisor Hubs, Tokens](screens/telavisor10.png)
+
+A persistent log panel at the bottom of the window shows application events, live tela output, and a filterable command log that displays every API call and CLI command with copy-to-clipboard support.
+
+![TelaVisor log panel](screens/telavisor13.png)
+
+See [TelaVisor.md](TelaVisor.md) for full documentation.
 
 ## Networking & port requirements
 
@@ -201,7 +209,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admi
 - **Token-based auth**: Named token identities with role-based access control (owner/admin/user/viewer). Per-machine ACLs control who can register and connect. On first startup, the hub auto-generates an owner token (secure by default). A `console-viewer` token is auto-generated for the hub's built-in web console.
 - **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin`. No shell access to the hub required.
 - **Credential storage**: `tela login` and `telad login` store hub tokens securely (0600 file permissions) so you don't need to pass tokens on every command. Credentials persist and are found automatically.
-- **One-time pairing codes**: Generate short-lived codes (e.g., `ABCD-1234`) for users (`tela pair`) and agents (`telad pair`). Codes are single-use, time-limited (10 minutes to 7 days), and replace manual token copying. Users paste a code in TelaGUI or the CLI to get connected.
+- **One-time pairing codes**: Generate short-lived codes (e.g., `ABCD-1234`) for users (`tela pair`) and agents (`telad pair`). Codes are single-use, time-limited (10 minutes to 7 days), and replace manual token copying. Users paste a code in TelaVisor or the CLI to get connected.
 - **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
 - **No admin required**: gVisor netstack operates entirely in userspace. No TUN device, no root/Administrator.
 - **Outbound-only**: Both tela and telad initiate outbound connections to the hub. No inbound ports needed on either end.
@@ -277,7 +285,7 @@ docker/            Caddyfile, docker-compose, cloudflared config
 | **Hub Console** | Web interface for a hub (e.g., `https://hub.example.com/`). |
 | **Daemon / telad** | Long-lived daemon on a managed machine that registers with the hub. |
 | **Client / tela** | CLI on the user's machine that tunnels through the hub to an agent. |
-| **TelaGUI** | Desktop client. Graphical interface for tela with profile management and real-time status. |
+| **TelaVisor** | Desktop client. Graphical interface for tela with profile management and real-time status. |
 | **Machine** | A named resource registered by an agent (e.g., `barn`). |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
 | **Session** | An active encrypted tunnel between a client and an agent. |
@@ -286,7 +294,7 @@ docker/            Caddyfile, docker-compose, cloudflared config
 
 ## Documentation
 
-- [TelaGUI.md](TelaGUI.md) - Desktop client documentation
+- [TelaVisor.md](TelaVisor.md) - Desktop client documentation
 - [REFERENCE.md](REFERENCE.md) - Comprehensive documentation for Tela and its command-line tools
 - [CONFIGURATION.md](CONFIGURATION.md) - Configuration file schemas (`hubs.yaml`, `telad.yaml`, `telahubd.yaml`, portal `config.json`)
 - [DESIGN.md](DESIGN.md) - Architecture specification (includes full glossary)

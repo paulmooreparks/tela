@@ -50,6 +50,23 @@
       <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
     </div>
 
+    <!-- Profile toolbar (visible only on Profiles tab) -->
+    <div class="profile-toolbar hidden" id="profile-toolbar">
+      <select id="profile-select" class="profile-toolbar-select" onchange="switchProfile(this.value)" title="Current profile"></select>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" id="undo-btn" disabled onclick="undoSelections()" title="Undo">&#x21B6;</button>
+      <button class="tb-btn tb-save-btn" id="save-btn" disabled onclick="saveSelections()" title="Save">Save</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" onclick="newProfile()" title="New profile">New</button>
+      <button class="tb-btn" onclick="renameCurrentProfile()" title="Rename profile">Rename</button>
+      <button class="tb-btn tb-delete-btn" onclick="deleteCurrentProfile()" title="Delete profile">Delete</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" onclick="importProfile()" title="Import profile">Import</button>
+      <button class="tb-btn" onclick="exportProfile()" title="Export profile">Export</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" onclick="showProfileOverview()" title="Preview profile YAML">Preview</button>
+    </div>
+
     <!-- Agents mode tab bar -->
     <div class="main-tab-bar hidden" role="tablist" id="tabbar-agents">
       <button class="main-tab active" role="tab" onclick="switchTab('agents', this)">Agents</button>
@@ -76,23 +93,10 @@
     <!-- Profile tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-profile">
       <div class="main-content">
-        <div class="sidebar" id="sidebar">
+        <div class="sidebar prof-tree-sidebar" id="sidebar">
           <div class="sidebar-resize-handle" id="sidebar-resize"></div>
-          <div class="sidebar-header">
-            <select id="profile-select" class="profile-dropdown" onchange="switchProfile(this.value)" title="Profile"></select>
-            <div class="sidebar-toolbar">
-              <button id="undo-btn" class="icon-btn" onclick="undoSelections()" title="Undo changes" disabled>&#x21B6;</button>
-              <button id="save-btn" class="icon-btn" onclick="saveSelections()" title="Save" disabled>Save</button>
-              <div class="sidebar-toolbar-spacer"></div>
-              <button class="icon-btn" onclick="importProfile()" title="Import">Import</button>
-              <button class="icon-btn" onclick="exportProfile()" title="Export">Export</button>
-            </div>
-          </div>
           <div id="sidebar-content">
             <p class="loading">Loading hubs...</p>
-          </div>
-          <div class="sidebar-footer">
-            <button class="btn-primary btn-sm sidebar-footer-btn" onclick="newProfile()">Add Profile</button>
           </div>
         </div>
         <div class="detail-pane" id="detail-pane">
@@ -138,6 +142,7 @@
 
     <!-- Log Panel -->
     <div class="log-panel" id="log-panel">
+      <div class="log-panel-resize" id="log-panel-resize"></div>
       <div class="log-panel-header">
         <div class="log-panel-tabs">
           <button class="log-panel-tab active" onclick="switchLogTab(this, 'log-tv')">
@@ -152,6 +157,9 @@
           <button class="log-panel-tab log-panel-tab-add" onclick="openAttachDialog()" title="Attach log source">+</button>
         </div>
         <div class="log-panel-actions">
+          <button class="term-btn term-btn-green verbose-btn" id="verbose-btn" onclick="toggleVerbose()">
+            <span class="verbose-check-icon" id="verbose-icon">&#x2610;</span> Verbose
+          </button>
           <button class="term-btn" onclick="copyLogPanel()">Copy</button>
           <button class="term-btn" onclick="saveLogPanel()">Save</button>
           <button class="term-btn term-btn-green" onclick="clearLogPanel()">Clear</button>
@@ -242,32 +250,58 @@
   </div>
 
   <!-- Settings Overlay -->
-  <div class="modal-overlay hidden" id="settings-overlay" onclick="if(event.target===this)toggleSettingsOverlay()">
+  <div class="modal-overlay hidden" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
     <div class="modal-dialog modal-settings">
       <div class="modal-header">
         <h3>Settings</h3>
-        <button class="modal-close" onclick="toggleSettingsOverlay()">&times;</button>
+        <button class="modal-close" onclick="closeSettings()">&times;</button>
+      </div>
+      <div class="settings-toolbar">
+        <button class="tb-btn tb-save-btn" id="settings-save-btn" onclick="saveSettingsWithValidation()" disabled>Save</button>
+        <button class="tb-btn" onclick="closeSettings()">Close</button>
       </div>
       <div class="modal-body">
         <div class="modal-body-padded">
           <div class="settings-group">
             <div class="settings-group-header">Connection</div>
-            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-autoConnect" title="Auto-connect" onchange="saveSetting()"></div><div class="settings-label">Auto-connect</div></div>
-            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-reconnectOnDrop" title="Reconnect on drop" onchange="saveSetting()"></div><div class="settings-label">Reconnect on drop</div></div>
-            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-confirmDisconnect" title="Confirm disconnect" onchange="saveSetting()"></div><div class="settings-label">Confirm disconnect</div></div>
+            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoConnect" title="Auto-connect" onchange="markSettingsDirty()"></div><div class="settings-label">Auto-connect on launch</div></div>
+            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-reconnectOnDrop" title="Reconnect on drop" onchange="markSettingsDirty()"></div><div class="settings-label">Reconnect on drop</div></div>
+            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-confirmDisconnect" title="Confirm disconnect" onchange="markSettingsDirty()"></div><div class="settings-label">Confirm disconnect</div></div>
           </div>
           <div class="settings-group">
             <div class="settings-group-header">Window</div>
-            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-minimizeOnClose" title="Minimize to tray on close" onchange="saveSetting()"></div><div class="settings-label">Minimize to tray on close</div></div>
+            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-minimizeOnClose" title="Minimize to tray" onchange="markSettingsDirty()"></div><div class="settings-label">Minimize to tray on close</div></div>
           </div>
           <div class="settings-group">
             <div class="settings-group-header">Updates</div>
-            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="saveSetting()"></div><div class="settings-label">Check for updates</div></div>
+            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="markSettingsDirty()"></div><div class="settings-label">Check for updates</div></div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-header">Profiles</div>
+            <div class="settings-stacked-row">
+              <div class="settings-stacked-label">Default profile</div>
+              <select id="setting-defaultProfile" title="Default profile" onchange="markSettingsDirty()" class="settings-full-control"></select>
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-header">Binary Location</div>
+            <div class="settings-stacked-row">
+              <div class="settings-stacked-label-row">
+                <span>Install folder</span>
+                <button class="icon-btn" onclick="restoreDefaultBinPath()" title="Restore default path">Restore Default</button>
+              </div>
+              <div class="settings-path-row">
+                <input type="text" id="setting-binPath" class="settings-full-control settings-path-input" onchange="markSettingsDirty();refreshBinStatus()" title="Folder containing tela binaries">
+                <button class="icon-btn" onclick="browseBinPath()" title="Browse">Browse</button>
+              </div>
+              <div id="bin-status" class="bin-status"></div>
+            </div>
           </div>
           <div class="settings-group">
             <div class="settings-group-header">Logging</div>
-            <div class="settings-row"><div class="settings-check"><input type="checkbox" id="setting-verboseDefault" title="Verbose by default" onchange="saveSetting()"></div><div class="settings-label">Verbose by default</div></div>
+            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-verboseDefault" title="Verbose by default" onchange="markSettingsDirty()"></div><div class="settings-label">Verbose by default</div></div>
           </div>
+          <div id="settings-error" class="settings-error-msg hidden"></div>
         </div>
       </div>
     </div>

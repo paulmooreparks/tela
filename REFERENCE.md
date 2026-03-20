@@ -250,7 +250,7 @@ Pairing codes are single-use, time-limited codes that let users and agents get t
 
 There are two types:
 
-- **Connect codes** (default): for users who want to connect to machines via `tela` or TelaGUI
+- **Connect codes** (default): for users who want to connect to machines via `tela` or TelaVisor
 - **Register codes**: for agents that need to register machines via `telad`
 
 #### Client pairing (connecting users)
@@ -283,7 +283,7 @@ User onboarding command:
 tela pair -hub wss://hub.example.com -code ABCD-1234
 ```
 
-Or in TelaGUI: click Add Hub, paste the hub URL and the pairing code. TelaGUI auto-detects that it is a pairing code (not a raw token) and exchanges it automatically.
+Or in TelaVisor: click Add Hub, paste the hub URL and the pairing code. TelaVisor auto-detects that it is a pairing code (not a raw token) and exchanges it automatically.
 
 This creates a token with `user` role (can connect to machines, cannot administer the hub) and stores it in the credential store.
 

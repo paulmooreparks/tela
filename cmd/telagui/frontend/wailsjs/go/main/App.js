@@ -54,6 +54,10 @@ export function AssignLocalPort(arg1) {
   return window['go']['main']['App']['AssignLocalPort'](arg1);
 }
 
+export function BrowseBinPath() {
+  return window['go']['main']['App']['BrowseBinPath']();
+}
+
 export function CheckForUpdatesNow() {
   return window['go']['main']['App']['CheckForUpdatesNow']();
 }
@@ -118,6 +122,10 @@ export function ForceQuit() {
   return window['go']['main']['App']['ForceQuit']();
 }
 
+export function GetBinStatus() {
+  return window['go']['main']['App']['GetBinStatus']();
+}
+
 export function GetCLIPath() {
   return window['go']['main']['App']['GetCLIPath']();
 }
@@ -144,6 +152,10 @@ export function GetControlStatus() {
 
 export function GetCurrentProfile() {
   return window['go']['main']['App']['GetCurrentProfile']();
+}
+
+export function GetDefaultBinPath() {
+  return window['go']['main']['App']['GetDefaultBinPath']();
 }
 
 export function GetHubInfo(arg1) {
@@ -196,6 +208,10 @@ export function HasUpdate() {
 
 export function ImportProfile() {
   return window['go']['main']['App']['ImportProfile']();
+}
+
+export function InstallBinary(arg1) {
+  return window['go']['main']['App']['InstallBinary'](arg1);
 }
 
 export function IsConnected() {
@@ -288,4 +304,8 @@ export function ShowWindow() {
 
 export function SwitchProfile(arg1) {
   return window['go']['main']['App']['SwitchProfile'](arg1);
+}
+
+export function ValidateBinPath(arg1) {
+  return window['go']['main']['App']['ValidateBinPath'](arg1);
 }
