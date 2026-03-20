@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -394,16 +396,60 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		}
 		defer conn.Close()
 
-		// Forward the request body (JSON line) to the file share server
-		if _, err := io.Copy(conn, r.Body); err != nil {
+		// Read the full request body and send it to the file share server.
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body failed"})
+			return
+		}
+		if _, err := conn.Write(body); err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "proxy send failed"})
 			return
 		}
 
-		// Stream the response back
+		// Read the JSON response line from the file share server.
+		// The server keeps the connection open for more requests, so we
+		// cannot io.Copy -- we must read exactly the response data.
+		reader := bufio.NewReader(conn)
+		respLine, err := reader.ReadBytes('\n')
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "proxy recv failed"})
+			return
+		}
+
+		// Parse to check if this is a read response (has chunk data following).
+		var fsResp struct {
+			OK   bool  `json:"ok"`
+			Size int64 `json:"size"`
+		}
+		json.Unmarshal(respLine, &fsResp)
+
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
-		io.Copy(w, conn)
+		w.Write(respLine)
+
+		// If this was a successful read response, stream the chunk data too.
+		if fsResp.OK && fsResp.Size > 0 {
+			// Read chunks until "CHUNK 0\n"
+			for {
+				chunkHeader, err := reader.ReadString('\n')
+				if err != nil {
+					break
+				}
+				w.Write([]byte(chunkHeader))
+				if strings.TrimSpace(chunkHeader) == "CHUNK 0" {
+					break
+				}
+				// Parse chunk size and copy that many bytes
+				parts := strings.Fields(strings.TrimSpace(chunkHeader))
+				if len(parts) == 2 {
+					n, _ := strconv.ParseInt(parts[1], 10, 64)
+					if n > 0 {
+						io.CopyN(w, reader, n)
+					}
+				}
+			}
+		}
 	})
 
 	// WebSocket upgrade for real-time events.
