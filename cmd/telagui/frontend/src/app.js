@@ -501,7 +501,10 @@ var updateSkippedVersion = '';
 function checkForUpdate() {
   goApp.GetUpdateInfo().then(function (info) {
     updateInfo = info;
-    if (!info.pending || (!info.guiBehind && !info.cliBehind)) return;
+    if (!info.pending || (!info.guiBehind && !info.cliBehind)) {
+      document.getElementById('update-btn').classList.add('hidden');
+      return;
+    }
     if (updateDismissedForSession) return;
     if (updateSkippedVersion && updateSkippedVersion === info.version) return;
     document.getElementById('update-btn').classList.remove('hidden');
@@ -512,18 +515,10 @@ function refreshSingleBinary(name, btn) {
   btn.classList.add('spinning');
   btn.disabled = true;
   goApp.GetBinStatus().then(function (bins) {
-    var b = null;
-    for (var i = 0; i < bins.length; i++) {
-      if (bins[i].name === name) { b = bins[i]; break; }
-    }
     btn.classList.remove('spinning');
     btn.disabled = false;
-    if (!b) return;
-    if (!b.found || !b.upToDate) {
-      installBinary(name);
-    } else {
-      refreshBinStatus();
-    }
+    refreshBinStatus();
+    checkForUpdate();
   }).catch(function () {
     btn.classList.remove('spinning');
     btn.disabled = false;
@@ -2302,6 +2297,8 @@ function installBinary(name) {
   goApp.InstallBinary(name).then(function () {
     tvLog('Installed ' + name);
     refreshBinStatus();
+    refreshVersionDisplay();
+    checkForUpdate();
   }).catch(function (err) {
     tvLog('Failed to install ' + name + ': ' + err);
   });
