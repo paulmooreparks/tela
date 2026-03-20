@@ -46,6 +46,7 @@
     <div class="main-tab-bar" role="tablist" id="tabbar-clients">
       <button class="main-tab active" role="tab" onclick="switchTab('status', this)">Status</button>
       <button class="main-tab" role="tab" onclick="switchTab('profile', this)">Profiles</button>
+      <button class="main-tab" role="tab" onclick="switchTab('files', this)">Files</button>
       <div class="tab-bar-spacer"></div>
       <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
     </div>
@@ -101,6 +102,25 @@
         </div>
         <div class="detail-pane" id="detail-pane">
           <div id="profile-yaml-view"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Files tab -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-files">
+      <div class="files-pane">
+        <div class="files-toolbar">
+          <select id="files-machine-select" title="Select machine" onchange="onFilesMachineChange()">
+            <option value="">Select machine...</option>
+          </select>
+          <span class="files-path-display" id="files-path-display">/</span>
+          <div class="tab-bar-spacer"></div>
+          <button type="button" class="tb-btn" id="files-upload-btn" onclick="filesUpload()" title="Upload file" disabled>Upload</button>
+          <button type="button" class="tb-btn" onclick="filesRefresh()" title="Refresh">&#x21BB;</button>
+        </div>
+        <div class="files-breadcrumb" id="files-breadcrumb"></div>
+        <div class="files-list" id="files-list">
+          <p class="empty-hint">Select a connected machine with file sharing enabled to browse files.</p>
         </div>
       </div>
     </div>

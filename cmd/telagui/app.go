@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1786,6 +1790,227 @@ func (a *App) GetControlStatus() map[string]interface{} {
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
 	return result
+}
+
+// --- File Share ---
+
+// controlEndpoint reads the control API info and returns (base URL, token).
+func controlEndpoint() (string, string, error) {
+	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")
+	data, err := os.ReadFile(controlPath)
+	if err != nil {
+		return "", "", fmt.Errorf("no active tela connection")
+	}
+	var info struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.Port == 0 {
+		return "", "", fmt.Errorf("invalid control file")
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d", info.Port), info.Token, nil
+}
+
+// FileShareRequest sends a file share operation to a connected machine
+// via the tela control API's /files proxy.
+func (a *App) FileShareRequest(machine string, opJSON string) string {
+	base, token, err := controlEndpoint()
+	if err != nil {
+		return errJSON(err.Error())
+	}
+
+	req, _ := http.NewRequest("POST", base+"/files/"+machine, strings.NewReader(opJSON+"\n"))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.doRequest(req, 30*time.Second)
+	if err != nil {
+		return errJSON("request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	// The response is a JSON line (possibly followed by chunk data for reads).
+	// For list/delete/info, it's just the JSON line. For reads, we handle
+	// the chunked data separately via FileShareDownload.
+	lines := strings.SplitN(string(body), "\n", 2)
+	if len(lines) > 0 {
+		return lines[0]
+	}
+	return errJSON("empty response")
+}
+
+// FileShareDownload downloads a file from a connected machine's file share.
+// Returns the local path where the file was saved, or an error string.
+func (a *App) FileShareDownload(machine string, remotePath string, localPath string) string {
+	base, token, err := controlEndpoint()
+	if err != nil {
+		return errJSON(err.Error())
+	}
+
+	opJSON := fmt.Sprintf(`{"op":"read","path":%s}`, jsonString(remotePath))
+	req, _ := http.NewRequest("POST", base+"/files/"+machine, strings.NewReader(opJSON+"\n"))
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := a.doRequest(req, 120*time.Second)
+	if err != nil {
+		return errJSON("request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Read JSON response header
+	headerLine, err := reader.ReadBytes('\n')
+	if err != nil {
+		return errJSON("read header failed")
+	}
+	var fsResp struct {
+		OK       bool   `json:"ok"`
+		Error    string `json:"error"`
+		Size     int64  `json:"size"`
+		Checksum string `json:"checksum"`
+	}
+	if err := json.Unmarshal(headerLine, &fsResp); err != nil {
+		return errJSON("invalid response")
+	}
+	if !fsResp.OK {
+		return errJSON(fsResp.Error)
+	}
+
+	// Create local file
+	f, err := os.Create(localPath)
+	if err != nil {
+		return errJSON("cannot create file: " + err.Error())
+	}
+	defer f.Close()
+
+	// Read chunks
+	var totalReceived int64
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			os.Remove(localPath)
+			return errJSON("transfer error")
+		}
+		line = strings.TrimRight(line, "\n\r")
+		if !strings.HasPrefix(line, "CHUNK ") {
+			os.Remove(localPath)
+			return errJSON("protocol error")
+		}
+		chunkSize, _ := strconv.ParseInt(strings.TrimPrefix(line, "CHUNK "), 10, 64)
+		if chunkSize == 0 {
+			break
+		}
+		n, err := io.CopyN(f, reader, chunkSize)
+		if err != nil || n != chunkSize {
+			os.Remove(localPath)
+			return errJSON("incomplete chunk")
+		}
+		totalReceived += n
+	}
+
+	return fmt.Sprintf(`{"ok":true,"size":%d,"path":%s}`, totalReceived, jsonString(localPath))
+}
+
+// FileShareUpload uploads a local file to a connected machine's file share.
+func (a *App) FileShareUpload(machine string, localPath string, remoteName string) string {
+	base, token, err := controlEndpoint()
+	if err != nil {
+		return errJSON(err.Error())
+	}
+
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return errJSON(err.Error())
+	}
+
+	// The control API /files proxy expects the full protocol exchange in
+	// the request body. We build: JSON header + chunks + CHUNK 0.
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+
+		// Compute checksum
+		f, err := os.Open(localPath)
+		if err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		h := sha256.New()
+		io.Copy(h, f)
+		checksum := "sha256:" + hex.EncodeToString(h.Sum(nil))
+		f.Seek(0, io.SeekStart)
+
+		// Write request header
+		header := fmt.Sprintf(`{"op":"write","path":%s,"size":%d,"checksum":"%s"}`+"\n",
+			jsonString(remoteName), info.Size(), checksum)
+		pw.Write([]byte(header))
+
+		// Write chunks
+		buf := make([]byte, 16384)
+		for {
+			n, err := f.Read(buf)
+			if n > 0 {
+				pw.Write([]byte(fmt.Sprintf("CHUNK %d\n", n)))
+				pw.Write(buf[:n])
+			}
+			if err != nil {
+				break
+			}
+		}
+		pw.Write([]byte("CHUNK 0\n"))
+		f.Close()
+	}()
+
+	req, _ := http.NewRequest("POST", base+"/files/"+machine, pr)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := a.doRequest(req, 120*time.Second)
+	if err != nil {
+		return errJSON("upload failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	lines := strings.SplitN(string(body), "\n", 2)
+	if len(lines) > 0 {
+		return lines[0]
+	}
+	return errJSON("empty response")
+}
+
+func errJSON(msg string) string {
+	return fmt.Sprintf(`{"ok":false,"error":%s}`, jsonString(msg))
+}
+
+func jsonString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+// SaveFileDialog opens a save file dialog and returns the chosen path.
+func (a *App) SaveFileDialog(defaultName string) string {
+	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		Title:           "Save File",
+		DefaultFilename: defaultName,
+	})
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
+// OpenFileDialog opens a file picker and returns the chosen path.
+func (a *App) OpenFileDialog() string {
+	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Select File to Upload",
+	})
+	if err != nil {
+		return ""
+	}
+	return path
 }
 
 // --- Tool Management ---

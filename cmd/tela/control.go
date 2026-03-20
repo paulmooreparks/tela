@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -366,6 +367,43 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	// File share proxy: POST /files/<machine> with JSON body.
+	// Proxies a single request/response through the tunnel to port 17377.
+	mux.HandleFunc("/files/", func(w http.ResponseWriter, r *http.Request) {
+		if !checkControlAuth(w, r, token) {
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Extract machine name from path: /files/<machine>
+		machine := strings.TrimPrefix(r.URL.Path, "/files/")
+		if machine == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "machine name required"})
+			return
+		}
+
+		conn, err := dialFileShare(machine)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+			return
+		}
+		defer conn.Close()
+
+		// Forward the request body (JSON line) to the file share server
+		if _, err := io.Copy(conn, r.Body); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "proxy send failed"})
+			return
+		}
+
+		// Stream the response back
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		io.Copy(w, conn)
 	})
 
 	// WebSocket upgrade for real-time events.

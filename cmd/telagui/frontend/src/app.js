@@ -56,6 +56,7 @@ function switchTab(name, btn) {
 
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
+  if (name === 'files') refreshFilesTab();
   if (name === 'hubs') refreshHubsTab();
 }
 
@@ -1292,6 +1293,221 @@ function stopConnectionPoll() {
   if (pollIntervalId) {
     clearInterval(pollIntervalId);
     pollIntervalId = null;
+  }
+}
+
+// --- Files Tab ---
+
+var filesCurrentMachine = '';
+var filesCurrentPath = '';
+
+function refreshFilesTab() {
+  var select = document.getElementById('files-machine-select');
+  if (!select) return;
+
+  // Populate machine dropdown from bound services
+  goApp.GetConnectionState().then(function (state) {
+    if (!state.connected) {
+      select.innerHTML = '<option value="">Not connected</option>';
+      document.getElementById('files-list').innerHTML = '<p class="empty-hint">Connect to a hub first.</p>';
+      document.getElementById('files-upload-btn').disabled = true;
+      return;
+    }
+
+    // Get unique machines from bound services
+    var services = Object.keys(selectedServices);
+    var machines = {};
+    services.forEach(function (key) {
+      var svc = selectedServices[key];
+      if (svc.machine) machines[svc.machine] = true;
+    });
+
+    var html = '<option value="">Select machine...</option>';
+    Object.keys(machines).forEach(function (m) {
+      html += '<option value="' + escAttr(m) + '"' + (m === filesCurrentMachine ? ' selected' : '') + '>' + escHtml(m) + '</option>';
+    });
+    select.innerHTML = html;
+
+    if (filesCurrentMachine) {
+      filesListDir(filesCurrentMachine, filesCurrentPath);
+    }
+  });
+}
+
+function onFilesMachineChange() {
+  var select = document.getElementById('files-machine-select');
+  filesCurrentMachine = select.value;
+  filesCurrentPath = '';
+  if (filesCurrentMachine) {
+    filesListDir(filesCurrentMachine, '');
+  } else {
+    document.getElementById('files-list').innerHTML = '<p class="empty-hint">Select a connected machine with file sharing enabled to browse files.</p>';
+    document.getElementById('files-breadcrumb').innerHTML = '';
+    document.getElementById('files-path-display').textContent = '/';
+    document.getElementById('files-upload-btn').disabled = true;
+  }
+}
+
+function filesListDir(machine, path) {
+  var listEl = document.getElementById('files-list');
+  listEl.innerHTML = '<p class="empty-hint">Loading...</p>';
+
+  var req = JSON.stringify({op: 'list', path: path});
+  goApp.FileShareRequest(machine, req).then(function (respJSON) {
+    var resp = JSON.parse(respJSON);
+    if (!resp.ok) {
+      listEl.innerHTML = '<p class="empty-hint">Error: ' + escHtml(resp.error) + '</p>';
+      document.getElementById('files-upload-btn').disabled = true;
+      return;
+    }
+
+    filesCurrentPath = path;
+    document.getElementById('files-upload-btn').disabled = false;
+    updateFilesBreadcrumb(path);
+
+    if (!resp.entries || resp.entries.length === 0) {
+      listEl.innerHTML = '<p class="empty-hint">Directory is empty.</p>';
+      return;
+    }
+
+    // Sort: directories first, then by name
+    resp.entries.sort(function (a, b) {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    var html = '<table class="files-table"><thead><tr>'
+      + '<th class="files-col-name">Name</th>'
+      + '<th class="files-col-size">Size</th>'
+      + '<th class="files-col-modified">Modified</th>'
+      + '<th class="files-col-actions"></th>'
+      + '</tr></thead><tbody>';
+
+    // Parent directory link
+    if (path) {
+      var parent = path.split('/').slice(0, -1).join('/');
+      html += '<tr class="files-row files-row-dir" onclick="filesListDir(\'' + escAttr(machine) + '\', \'' + escAttr(parent) + '\')">'
+        + '<td class="files-col-name"><span class="files-icon">&#x1F4C1;</span> ..</td>'
+        + '<td class="files-col-size">-</td>'
+        + '<td class="files-col-modified">-</td>'
+        + '<td class="files-col-actions"></td>'
+        + '</tr>';
+    }
+
+    resp.entries.forEach(function (entry) {
+      var entryPath = path ? path + '/' + entry.name : entry.name;
+      if (entry.isDir) {
+        html += '<tr class="files-row files-row-dir" onclick="filesListDir(\'' + escAttr(machine) + '\', \'' + escAttr(entryPath) + '\')">'
+          + '<td class="files-col-name"><span class="files-icon">&#x1F4C1;</span> ' + escHtml(entry.name) + '</td>'
+          + '<td class="files-col-size">-</td>'
+          + '<td class="files-col-modified">' + escHtml(formatFileDate(entry.modTime)) + '</td>'
+          + '<td class="files-col-actions"></td>'
+          + '</tr>';
+      } else {
+        html += '<tr class="files-row">'
+          + '<td class="files-col-name"><span class="files-icon">&#x1F4C4;</span> ' + escHtml(entry.name) + '</td>'
+          + '<td class="files-col-size">' + escHtml(formatFileSize(entry.size)) + '</td>'
+          + '<td class="files-col-modified">' + escHtml(formatFileDate(entry.modTime)) + '</td>'
+          + '<td class="files-col-actions">'
+          + '<button type="button" class="files-action-btn" onclick="event.stopPropagation(); filesDownload(\'' + escAttr(machine) + '\', \'' + escAttr(entryPath) + '\', \'' + escAttr(entry.name) + '\')" title="Download">&#x2B07;</button>'
+          + '<button type="button" class="files-action-btn files-delete-btn" onclick="event.stopPropagation(); filesDelete(\'' + escAttr(machine) + '\', \'' + escAttr(entryPath) + '\')" title="Delete">&#x2716;</button>'
+          + '</td>'
+          + '</tr>';
+      }
+    });
+
+    html += '</tbody></table>';
+    listEl.innerHTML = html;
+  });
+}
+
+function updateFilesBreadcrumb(path) {
+  var display = document.getElementById('files-path-display');
+  display.textContent = '/' + (path || '');
+
+  var bc = document.getElementById('files-breadcrumb');
+  var parts = path ? path.split('/') : [];
+  var html = '<span class="files-bc-item" onclick="filesListDir(\'' + escAttr(filesCurrentMachine) + '\', \'\')">/</span>';
+  var accumulated = '';
+  parts.forEach(function (part) {
+    accumulated = accumulated ? accumulated + '/' + part : part;
+    html += ' <span class="files-bc-sep">/</span> '
+      + '<span class="files-bc-item" onclick="filesListDir(\'' + escAttr(filesCurrentMachine) + '\', \'' + escAttr(accumulated) + '\')">' + escHtml(part) + '</span>';
+  });
+  bc.innerHTML = html;
+}
+
+function filesRefresh() {
+  if (filesCurrentMachine) {
+    filesListDir(filesCurrentMachine, filesCurrentPath);
+  }
+}
+
+function filesDownload(machine, remotePath, fileName) {
+  goApp.SaveFileDialog(fileName).then(function (localPath) {
+    if (!localPath) return; // cancelled
+    tvLog('Downloading ' + remotePath + '...');
+    goApp.FileShareDownload(machine, remotePath, localPath).then(function (respJSON) {
+      var resp = JSON.parse(respJSON);
+      if (resp.ok) {
+        tvLog('Downloaded ' + remotePath + ' (' + formatFileSize(resp.size) + ')');
+      } else {
+        tvLog('Download failed: ' + resp.error);
+        showError('Download failed: ' + resp.error);
+      }
+    });
+  });
+}
+
+function filesUpload() {
+  if (!filesCurrentMachine) return;
+  goApp.OpenFileDialog().then(function (localPath) {
+    if (!localPath) return; // cancelled
+    var fileName = localPath.split(/[\\/]/).pop();
+    var remoteName = filesCurrentPath ? filesCurrentPath + '/' + fileName : fileName;
+    tvLog('Uploading ' + fileName + '...');
+    goApp.FileShareUpload(filesCurrentMachine, localPath, remoteName).then(function (respJSON) {
+      var resp = JSON.parse(respJSON);
+      if (resp.ok) {
+        tvLog('Uploaded ' + fileName + ' (' + formatFileSize(resp.size) + ')');
+        filesRefresh();
+      } else {
+        tvLog('Upload failed: ' + resp.error);
+        showError('Upload failed: ' + resp.error);
+      }
+    });
+  });
+}
+
+function filesDelete(machine, remotePath) {
+  if (!confirm('Delete ' + remotePath + '?')) return;
+  var req = JSON.stringify({op: 'delete', path: remotePath});
+  goApp.FileShareRequest(machine, req).then(function (respJSON) {
+    var resp = JSON.parse(respJSON);
+    if (resp.ok) {
+      tvLog('Deleted ' + remotePath);
+      filesRefresh();
+    } else {
+      tvLog('Delete failed: ' + resp.error);
+      showError('Delete failed: ' + resp.error);
+    }
+  });
+}
+
+function formatFileSize(bytes) {
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
+}
+
+function formatFileDate(iso) {
+  if (!iso) return '-';
+  try {
+    var d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  } catch (e) {
+    return iso;
   }
 }
 
