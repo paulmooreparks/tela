@@ -1283,6 +1283,15 @@ body {
   font-family: var(--font);
 }
 .bin-status-action:hover { background: var(--surface-alt); color: var(--text); }
+.bin-refresh-btn {
+  background: none; border: 1px solid var(--border); width: 22px; height: 22px;
+  border-radius: 3px; font-size: 14px; cursor: pointer; color: var(--text-muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; flex-shrink: 0; transition: transform 0.2s;
+}
+.bin-refresh-btn:hover { background: var(--surface-alt); color: var(--text); }
+.bin-refresh-btn.spinning { animation: spin 0.8s linear infinite; pointer-events: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .settings-value { flex: 1; font-family: var(--mono); font-size: 12px; }
 .settings-value a { color: var(--accent); text-decoration: none; }
 .settings-value a:hover { text-decoration: underline; }

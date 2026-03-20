@@ -508,6 +508,28 @@ function checkForUpdate() {
   });
 }
 
+function refreshSingleBinary(name, btn) {
+  btn.classList.add('spinning');
+  btn.disabled = true;
+  goApp.GetBinStatus().then(function (bins) {
+    var b = null;
+    for (var i = 0; i < bins.length; i++) {
+      if (bins[i].name === name) { b = bins[i]; break; }
+    }
+    btn.classList.remove('spinning');
+    btn.disabled = false;
+    if (!b) return;
+    if (!b.found || !b.upToDate) {
+      installBinary(name);
+    } else {
+      refreshBinStatus();
+    }
+  }).catch(function () {
+    btn.classList.remove('spinning');
+    btn.disabled = false;
+  });
+}
+
 function toggleUpdateOverlay() {
   var el = document.getElementById('update-overlay');
   el.classList.toggle('hidden');
@@ -2269,6 +2291,7 @@ function renderBinStatus(container, bins, warningHtml) {
         + '<span class="bin-status-name">' + escHtml(b.name) + '</span>'
         + '<span class="bin-status-ver">' + escHtml(verText) + '</span>'
         + action
+        + '<button type="button" class="bin-refresh-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)" title="Check for updates">&#x21BB;</button>'
         + '</div>';
     });
     container.innerHTML = html;
