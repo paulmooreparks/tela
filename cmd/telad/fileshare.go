@@ -415,14 +415,23 @@ func startFileShareListener(lg *log.Logger, tnet *netstack.Net, agentIP string, 
 
 // handleFileShareConn processes file share requests on a single connection.
 func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig) {
-	dec := json.NewDecoder(conn)
+	// Use a single bufio.Reader for the entire connection lifetime.
+	// json.Decoder buffers ahead and would consume chunk data meant for
+	// the write handler, so we read JSON lines manually instead.
+	reader := bufio.NewReader(conn)
 
 	for {
 		conn.SetDeadline(time.Now().Add(fileShareIdleTimeout))
 
-		var req fsRequest
-		if err := dec.Decode(&req); err != nil {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
 			return // connection closed or timeout
+		}
+
+		var req fsRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			writeResponse(conn, fsResponse{OK: false, Error: "invalid request"})
+			continue
 		}
 
 		switch req.Op {
@@ -431,7 +440,7 @@ func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConf
 		case "read":
 			handleRead(lg, conn, cfg, req)
 		case "write":
-			handleWrite(lg, conn, dec, cfg, req)
+			handleWrite(lg, conn, reader, cfg, req)
 		case "delete":
 			handleDelete(lg, conn, cfg, req)
 		default:
@@ -568,7 +577,7 @@ func handleRead(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req f
 
 // ── WRITE ───────────────────────────────────────────────────────────
 
-func handleWrite(lg *log.Logger, conn net.Conn, dec *json.Decoder, cfg *parsedFileShareConfig, req fsRequest) {
+func handleWrite(lg *log.Logger, conn net.Conn, reader *bufio.Reader, cfg *parsedFileShareConfig, req fsRequest) {
 	if !cfg.writable {
 		writeResponse(conn, fsResponse{OK: false, Error: "file sharing is read-only"})
 		return
@@ -628,10 +637,9 @@ func handleWrite(lg *log.Logger, conn net.Conn, dec *json.Decoder, cfg *parsedFi
 		os.Remove(tmpPath) // clean up on failure; no-op if renamed
 	}()
 
-	// Read chunked data
+	// Read chunked data (using the shared reader from handleFileShareConn)
 	h := sha256.New()
 	var totalReceived int64
-	reader := bufio.NewReader(conn)
 
 	for {
 		conn.SetDeadline(time.Now().Add(fileShareStallTimeout))
