@@ -57,11 +57,11 @@ import (
 )
 
 const (
-	// Default WireGuard MTU. 1280 is the IPv6 minimum and works reliably
-	// across WebSocket-over-TLS, NAT, VPN, and WSL2 network stacks.
-	// Must match the client (tela) MTU. A mismatch causes silent packet
-	// drops during SSH key exchange and other large-packet operations.
-	mtu            = 1280
+	// Default WireGuard MTU. Must match the client (tela) default.
+	// See cmd/tela/main.go for the rationale behind 1100.
+	// Override with TELAD_MTU or -mtu for higher throughput in
+	// environments without WSL2/Hyper-V overhead.
+	defaultMTU     = 1100
 	wsPingInterval = 20 * time.Second
 	wsPongWait     = 45 * time.Second
 	wsWriteWait    = 5 * time.Second
@@ -142,6 +142,7 @@ type registration struct {
 }
 
 var verbose bool
+var tunnelMTU = defaultMTU
 
 // stopCh is closed to signal graceful shutdown (used in service mode).
 var stopCh chan struct{}
@@ -234,8 +235,18 @@ func main() {
 	token := flag.String("token", envOrDefault("TELA_TOKEN", ""), "Auth token (env: TELA_TOKEN)")
 	portsStr := flag.String("ports", envOrDefault("TELAD_PORTS", ""), "Comma-separated port specs: port[:name[:description]]  e.g. 22:SSH,3389:RDP,12345:MyApp (env: TELAD_PORTS)")
 	targetHost := flag.String("target-host", envOrDefault("TELAD_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELAD_TARGET_HOST)")
+	mtuOverride := flag.Int("mtu", 0, "WireGuard tunnel MTU (env: TELAD_MTU; default 1100)")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 	flag.Parse()
+
+	// Resolve MTU: flag > env > default
+	if *mtuOverride > 0 {
+		tunnelMTU = *mtuOverride
+	} else if v := os.Getenv("TELAD_MTU"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			tunnelMTU = n
+		}
+	}
 
 	log.SetFlags(log.Ltime)
 	log.SetPrefix("[telad] ")
@@ -1018,7 +1029,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	tunDev, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{netip.MustParseAddr(sessionAgentIP)},
 		nil, // no DNS
-		mtu,
+		tunnelMTU,
 	)
 	if err != nil {
 		lg.Printf("netstack creation failed: %v", err)

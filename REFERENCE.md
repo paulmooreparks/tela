@@ -500,6 +500,7 @@ telad -hub ws://hub -machine web01 -ports "22:SSH:OpenSSH server,3389:RDP:Remote
 | `-token` | `TELA_TOKEN` | (none) | Hub auth token |
 | `-ports` | `TELAD_PORTS` | (required) | Comma-separated port specs (see below) |
 | `-target-host` | `TELAD_TARGET_HOST` | `127.0.0.1` | Target service host (gateway mode) |
+| `-mtu` | `TELAD_MTU` | `1100` | WireGuard tunnel MTU (see [tunnel MTU](#tunnel-mtu)) |
 | `-v` | | | Verbose logging |
 
 ### Service declaration format
@@ -691,6 +692,7 @@ tela connect -hub <hub-url-or-name> -machine <machine> [options]
 | `-profile` | `TELA_PROFILE` | Named connection profile from `~/.tela/profiles/<name>.yaml` |
 | `-port` | | Local TCP port (legacy; prefer `-ports`) |
 | `-target-port` | | Target port on daemon (legacy; use with `-port`) |
+| `-mtu` | `TELA_MTU` | WireGuard tunnel MTU (default 1100; see [tunnel MTU](#tunnel-mtu)) |
 | `-v` | | Verbose logging |
 
 When neither `-ports` nor `-services` is specified, `tela` auto-binds all ports the daemon advertises.
@@ -1188,6 +1190,34 @@ flowchart TD
 ```
 
 Each tier falls back to the previous one automatically on failure. The hub always relays opaque WireGuard ciphertext regardless of which transport tier is active.
+
+### Tunnel MTU
+
+The WireGuard tunnel uses a default MTU of 1100 bytes. This is conservative: each TCP segment produced by the tunnel's gVisor netstack must survive the full encapsulation chain (WireGuard encryption, WebSocket framing, TLS record, and any virtual NIC overhead) without exceeding the path MTU of the underlying network.
+
+The default of 1100 is chosen to work reliably in all tested environments, including WSL2 (Windows Subsystem for Linux 2). WSL2's Hyper-V virtual network adapter silently drops encapsulated packets that exceed its effective path MTU and does not relay ICMP Fragmentation Needed messages, creating an MTU black hole. At MTU 1100, the encapsulated packets stay below the WSL2 limit.
+
+For environments without this overhead (native Linux, native Windows, direct LAN connections), you can raise the MTU for better throughput:
+
+```bash
+# Client side
+tela connect -hub myhub -machine barn -mtu 1280
+# or
+export TELA_MTU=1280
+
+# Agent side
+telad -config telad.yaml -mtu 1280
+# or
+export TELAD_MTU=1280
+```
+
+Both sides should use the same MTU value. Mismatched MTUs can cause silent packet drops during large-packet operations like SSH key exchange.
+
+| Environment | Recommended MTU |
+|-------------|-----------------|
+| WSL2 | 1100 (default) |
+| Native Windows / Linux / macOS | 1280 |
+| LAN with no proxies or tunnels | 1420 |
 
 ---
 

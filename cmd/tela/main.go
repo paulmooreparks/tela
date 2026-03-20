@@ -51,6 +51,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -71,12 +72,17 @@ import (
 var version = "dev"
 
 const (
-	// Default WireGuard MTU. 1280 is the IPv6 minimum and works reliably
-	// across WebSocket-over-TLS, NAT, VPN, and WSL2 network stacks.
-	// The standard WireGuard MTU of 1420 causes fragmentation when tunneled
-	// over WebSocket+TLS (~100 bytes overhead), leading to failed SSH key
-	// exchanges and other large-packet issues.
-	defaultMTU     = 1280
+	// Default WireGuard MTU. Set conservatively to work through the full
+	// overhead chain: TCP segment + IP header + WireGuard encryption +
+	// WebSocket framing + TLS record + virtual NIC overhead (WSL2).
+	// A 1240-byte TCP segment at MTU 1280 becomes ~1374 bytes on the wire
+	// after encapsulation, which exceeds WSL2's Hyper-V virtual NIC
+	// effective MTU and causes silent packet drops. MTU 1100 keeps the
+	// encapsulated size safely below all known limits.
+	//
+	// Override with TELA_MTU or -mtu for environments where the overhead
+	// is lower (native Linux/Windows, direct LAN connections).
+	defaultMTU     = 1100
 	wsPingInterval = 20 * time.Second
 	wsPongWait     = 45 * time.Second
 	wsWriteWait    = 5 * time.Second
@@ -101,6 +107,7 @@ var portNames = map[uint16]string{
 }
 
 var verbose bool
+var tunnelMTU = defaultMTU
 
 // stopCh is closed to signal graceful shutdown (used in service mode).
 var stopCh chan struct{}
@@ -246,8 +253,18 @@ func cmdConnect(args []string) {
 	// Legacy single-port flags (kept for backward compat)
 	localPort := fs.Int("port", 0, "Local TCP port (legacy; prefer -ports)")
 	targetPort := fs.Int("target-port", 0, "Target port on daemon (legacy; with -port)")
+	mtuOverride := fs.Int("mtu", 0, "WireGuard tunnel MTU (env: TELA_MTU; default 1100)")
 	fs.BoolVar(&verbose, "v", false, "Verbose logging")
 	fs.Parse(args)
+
+	// Resolve MTU: flag > env > default
+	if *mtuOverride > 0 {
+		tunnelMTU = *mtuOverride
+	} else if v := os.Getenv("TELA_MTU"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			tunnelMTU = n
+		}
+	}
 
 	// ── Profile mode: load YAML and run parallel connections ──
 	if *profileFlag != "" {
@@ -1238,7 +1255,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping)
 	tunDev, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{netip.MustParseAddr(sessionHelperIP)},
 		nil, // no DNS
-		defaultMTU,
+		tunnelMTU,
 	)
 	if err != nil {
 		log.Printf("netstack creation failed: %v", err)
