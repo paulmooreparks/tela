@@ -57,7 +57,11 @@ import (
 )
 
 const (
-	mtu            = 1420
+	// Default WireGuard MTU. 1280 is the IPv6 minimum and works reliably
+	// across WebSocket-over-TLS, NAT, VPN, and WSL2 network stacks.
+	// Must match the client (tela) MTU. A mismatch causes silent packet
+	// drops during SSH key exchange and other large-packet operations.
+	mtu            = 1280
 	wsPingInterval = 20 * time.Second
 	wsPongWait     = 45 * time.Second
 	wsWriteWait    = 5 * time.Second
