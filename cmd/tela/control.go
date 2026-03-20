@@ -428,22 +428,23 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		w.WriteHeader(http.StatusOK)
 		w.Write(respLine)
 
-		// If this was a successful read response, stream the chunk data too.
+		// If this was a successful read response, stream all remaining
+		// data (chunk headers + chunk data) until the server closes or
+		// we see CHUNK 0. Use io.Copy to avoid parsing chunk framing
+		// in the proxy -- let the client handle it.
 		if fsResp.OK && fsResp.Size > 0 {
-			// Read chunks until "CHUNK 0\n"
 			for {
-				chunkHeader, err := reader.ReadString('\n')
+				chunkLine, err := reader.ReadString('\n')
 				if err != nil {
 					break
 				}
-				w.Write([]byte(chunkHeader))
-				if strings.TrimSpace(chunkHeader) == "CHUNK 0" {
+				w.Write([]byte(chunkLine))
+				trimmed := strings.TrimSpace(chunkLine)
+				if trimmed == "CHUNK 0" {
 					break
 				}
-				// Parse chunk size and copy that many bytes
-				parts := strings.Fields(strings.TrimSpace(chunkHeader))
-				if len(parts) == 2 {
-					n, _ := strconv.ParseInt(parts[1], 10, 64)
+				if strings.HasPrefix(trimmed, "CHUNK ") {
+					n, _ := strconv.ParseInt(strings.TrimPrefix(trimmed, "CHUNK "), 10, 64)
 					if n > 0 {
 						io.CopyN(w, reader, n)
 					}
