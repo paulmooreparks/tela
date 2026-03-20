@@ -127,6 +127,15 @@ A wildcard ACL (`*`) applies to all machines when present. Register access is si
 
 The log panel is a persistent area at the bottom of the window that provides tabbed log output visible across all modes. You can resize it by dragging its top edge, or collapse it to just its header bar using the arrow button.
 
+When you click into any log tab, scrolling freezes so you can read and select text. Selected text is automatically copied to the clipboard. Scrolling resumes after a short delay.
+
+The following toolbar buttons are availabe at the top of the log panel:
+
+- **Verbose** -- toggles verbose logging for the tela process
+- **Copy** -- copies the active log tab's content to the clipboard
+- **Save** -- saves the active log tab's content to a file
+- **Clear** -- clears the active log tab
+
 ![Log panel with tela output](screens/telavisor12.png)
 
 The panel has three built-in tabs:
@@ -139,20 +148,13 @@ The panel has three built-in tabs:
 
 The Commands tab shows each operation as a compact line with a method badge (GET, POST, DEL, CLI). You can click a line to expand the full command, or click the copy icon to copy the command to the clipboard. The filter bar and method chips at the top of the Commands tab let you narrow the view by text search or HTTP method.
 
-When you click into any log tab, scrolling freezes so you can read and select text. Selected text is automatically copied to the clipboard. Scrolling resumes after a short delay.
-
-The toolbar buttons at the top of the log panel are:
-
-- **Verbose** -- toggles verbose logging for the tela process
-- **Copy** -- copies the active log tab's content to the clipboard
-- **Save** -- saves the active log tab's content to a file
-- **Clear** -- clears the active log tab
+![Settings](screens/telavisor14.png)
 
 ## Settings
 
 You can open the Settings dialog from the gear icon in the title bar. A toolbar at the top of the dialog provides Save and Close buttons that remain visible as you scroll through the settings sections.
 
-![Settings](screens/telavisor14.png)
+![Settings](screens/telavisor15.png)
 
 The settings are organized into sections:
 
