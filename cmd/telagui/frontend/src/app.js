@@ -1298,156 +1298,304 @@ function stopConnectionPoll() {
 
 // --- Files Tab ---
 
+var filesView = 'machines'; // 'machines' | 'files'
 var filesCurrentMachine = '';
 var filesCurrentPath = '';
+var filesNavHistory = [];
+var filesSelectedIndices = new Set();
+var filesLastClickedIndex = -1;
+var filesCurrentEntries = [];
 
 function refreshFilesTab() {
-  var select = document.getElementById('files-machine-select');
-  if (!select) return;
-
-  // Populate machine dropdown from bound services
-  goApp.GetConnectionState().then(function (state) {
-    if (!state.connected) {
-      select.innerHTML = '<option value="">Not connected</option>';
-      document.getElementById('files-list').innerHTML = '<p class="empty-hint">Connect to a hub first.</p>';
-      document.getElementById('files-upload-btn').disabled = true;
-      return;
-    }
-
-    // Get unique machines from bound services
-    var services = Object.keys(selectedServices);
-    var machines = {};
-    services.forEach(function (key) {
-      var svc = selectedServices[key];
-      if (svc.machine) machines[svc.machine] = true;
-    });
-
-    var html = '<option value="">Select machine...</option>';
-    Object.keys(machines).forEach(function (m) {
-      html += '<option value="' + escAttr(m) + '"' + (m === filesCurrentMachine ? ' selected' : '') + '>' + escHtml(m) + '</option>';
-    });
-    select.innerHTML = html;
-
-    if (filesCurrentMachine) {
-      filesListDir(filesCurrentMachine, filesCurrentPath);
-    }
-  });
-}
-
-function onFilesMachineChange() {
-  var select = document.getElementById('files-machine-select');
-  filesCurrentMachine = select.value;
-  filesCurrentPath = '';
-  if (filesCurrentMachine) {
-    filesListDir(filesCurrentMachine, '');
+  if (filesView === 'files' && filesCurrentMachine) {
+    filesListDir(filesCurrentMachine, filesCurrentPath);
   } else {
-    document.getElementById('files-list').innerHTML = '<p class="empty-hint">Select a connected machine with file sharing enabled to browse files.</p>';
-    document.getElementById('files-breadcrumb').innerHTML = '';
-    document.getElementById('files-path-display').textContent = '/';
-    document.getElementById('files-upload-btn').disabled = true;
+    filesShowMachineList();
   }
 }
 
+// ── Machine list view ──
+
+function filesShowMachineList() {
+  filesView = 'machines';
+  filesCurrentMachine = '';
+  filesCurrentPath = '';
+  filesNavHistory = [];
+  filesClearSelection();
+  document.getElementById('files-header').style.display = 'none';
+  document.getElementById('files-actionbar').style.display = 'none';
+  document.getElementById('files-btn-back').disabled = true;
+  document.getElementById('files-btn-up').disabled = true;
+  filesRenderPath();
+
+  goApp.GetConnectionState().then(function (state) {
+    var machines = {};
+    Object.keys(selectedServices).forEach(function (key) {
+      var svc = selectedServices[key];
+      if (svc.machine && !machines[svc.machine]) {
+        machines[svc.machine] = { name: svc.machine, hub: hubNameFromURL(svc.hub) };
+      }
+    });
+
+    var machineList = Object.keys(machines).map(function (k) { return machines[k]; });
+    if (machineList.length === 0) {
+      document.getElementById('files-content').innerHTML = '<div class="files-empty">No machines in profile.</div>';
+      document.getElementById('files-status-counts').textContent = '';
+      return;
+    }
+
+    var html = '<div class="files-machine-list">';
+    machineList.forEach(function (m) {
+      var statusClass = state.connected ? 'online' : 'disconnected';
+      var badge, disabled;
+
+      if (!state.connected) {
+        badge = '<span class="files-machine-badge off">disconnected</span>';
+        disabled = true;
+      } else {
+        // TODO: check capabilities from hub status for fileShare mode
+        badge = '<span class="files-machine-badge">file share</span>';
+        disabled = false;
+      }
+
+      var onclick = disabled ? '' : ' onclick="filesOpenMachine(\'' + escAttr(m.name) + '\')"';
+      var cls = disabled ? ' disabled' : '';
+
+      html += '<div class="files-machine-card' + cls + '"' + onclick + '>'
+        + '<span class="files-machine-status ' + statusClass + '"></span>'
+        + '<span class="fe-icon-machine"></span>'
+        + '<div>'
+        + '<div class="files-machine-name">' + escHtml(m.name) + '</div>'
+        + '<div class="files-machine-meta">' + escHtml(m.hub) + '</div>'
+        + '</div>'
+        + badge
+        + '</div>';
+    });
+    html += '</div>';
+
+    document.getElementById('files-content').innerHTML = html;
+    document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
+  });
+}
+
+function filesOpenMachine(name) {
+  filesCurrentMachine = name;
+  filesCurrentPath = '';
+  filesNavHistory = ['machines'];
+  filesClearSelection();
+  filesListDir(name, '');
+}
+
+// ── File list view ──
+
 function filesListDir(machine, path) {
-  var listEl = document.getElementById('files-list');
-  listEl.innerHTML = '<p class="empty-hint">Loading...</p>';
+  filesView = 'files';
+  document.getElementById('files-header').style.display = 'flex';
+  document.getElementById('files-actionbar').style.display = 'flex';
+  document.getElementById('files-btn-back').disabled = (filesNavHistory.length === 0);
+  document.getElementById('files-btn-up').disabled = false;
+  document.getElementById('files-btn-upload').disabled = false; // TODO: check writable
+  filesRenderPath();
+  filesUpdateActionButtons();
+
+  var listEl = document.getElementById('files-content');
+  listEl.innerHTML = '<div class="files-empty">Loading...</div>';
 
   var req = JSON.stringify({op: 'list', path: path});
   goApp.FileShareRequest(machine, req).then(function (respJSON) {
     var resp = JSON.parse(respJSON);
     if (!resp.ok) {
-      listEl.innerHTML = '<p class="empty-hint">Error: ' + escHtml(resp.error) + '</p>';
-      document.getElementById('files-upload-btn').disabled = true;
+      listEl.innerHTML = '<div class="files-empty">' + escHtml(resp.error) + '</div>';
+      document.getElementById('files-btn-upload').disabled = true;
       return;
     }
 
     filesCurrentPath = path;
-    document.getElementById('files-upload-btn').disabled = false;
-    updateFilesBreadcrumb(path);
-
-    if (!resp.entries || resp.entries.length === 0) {
-      listEl.innerHTML = '<p class="empty-hint">Directory is empty.</p>';
-      return;
-    }
-
-    // Sort: directories first, then by name
-    resp.entries.sort(function (a, b) {
+    filesCurrentEntries = (resp.entries || []).slice();
+    filesCurrentEntries.sort(function (a, b) {
       if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
 
-    var html = '<table class="files-table"><thead><tr>'
-      + '<th class="files-col-name">Name</th>'
-      + '<th class="files-col-size">Size</th>'
-      + '<th class="files-col-modified">Modified</th>'
-      + '<th class="files-col-actions"></th>'
-      + '</tr></thead><tbody>';
+    filesRenderEntries();
+    filesUpdateStatusBar();
+  });
+}
 
-    // Parent directory link
-    if (path) {
-      var parent = path.split('/').slice(0, -1).join('/');
-      html += '<tr class="files-row files-row-dir" onclick="filesListDir(\'' + escAttr(machine) + '\', \'' + escAttr(parent) + '\')">'
-        + '<td class="files-col-name"><span class="files-icon">&#x1F4C1;</span> ..</td>'
-        + '<td class="files-col-size">-</td>'
-        + '<td class="files-col-modified">-</td>'
-        + '<td class="files-col-actions"></td>'
-        + '</tr>';
+function filesRenderEntries() {
+  var html = '';
+  filesCurrentEntries.forEach(function (entry, idx) {
+    var selClass = filesSelectedIndices.has(idx) ? ' selected' : '';
+    var dirClass = entry.isDir ? ' files-entry-dir' : '';
+
+    html += '<div class="files-entry' + dirClass + selClass + '" data-idx="' + idx + '"'
+      + ' onclick="filesOnEntryClick(event, ' + idx + ')"'
+      + ' ondblclick="filesOnEntryDblClick(' + idx + ')">';
+
+    if (entry.isDir) {
+      html += '<span class="fe-name"><span class="fe-icon-dir"></span><span class="fe-label">' + escHtml(entry.name) + '</span></span>'
+        + '<span class="fe-modified">' + escHtml(formatFileDate(entry.modTime)) + '</span>'
+        + '<span class="fe-type">File folder</span>'
+        + '<span class="fe-size"></span>';
+    } else {
+      html += '<span class="fe-name"><span class="fe-icon-file"></span><span class="fe-label">' + escHtml(entry.name) + '</span></span>'
+        + '<span class="fe-modified">' + escHtml(formatFileDate(entry.modTime)) + '</span>'
+        + '<span class="fe-type"></span>'
+        + '<span class="fe-size">' + escHtml(formatFileSize(entry.size)) + '</span>';
     }
-
-    resp.entries.forEach(function (entry) {
-      var entryPath = path ? path + '/' + entry.name : entry.name;
-      if (entry.isDir) {
-        html += '<tr class="files-row files-row-dir" onclick="filesListDir(\'' + escAttr(machine) + '\', \'' + escAttr(entryPath) + '\')">'
-          + '<td class="files-col-name"><span class="files-icon">&#x1F4C1;</span> ' + escHtml(entry.name) + '</td>'
-          + '<td class="files-col-size">-</td>'
-          + '<td class="files-col-modified">' + escHtml(formatFileDate(entry.modTime)) + '</td>'
-          + '<td class="files-col-actions"></td>'
-          + '</tr>';
-      } else {
-        html += '<tr class="files-row">'
-          + '<td class="files-col-name"><span class="files-icon">&#x1F4C4;</span> ' + escHtml(entry.name) + '</td>'
-          + '<td class="files-col-size">' + escHtml(formatFileSize(entry.size)) + '</td>'
-          + '<td class="files-col-modified">' + escHtml(formatFileDate(entry.modTime)) + '</td>'
-          + '<td class="files-col-actions">'
-          + '<button type="button" class="files-action-btn" onclick="event.stopPropagation(); filesDownload(\'' + escAttr(machine) + '\', \'' + escAttr(entryPath) + '\', \'' + escAttr(entry.name) + '\')" title="Download">&#x2B07;</button>'
-          + '<button type="button" class="files-action-btn files-delete-btn" onclick="event.stopPropagation(); filesDelete(\'' + escAttr(machine) + '\', \'' + escAttr(entryPath) + '\')" title="Delete">&#x2716;</button>'
-          + '</td>'
-          + '</tr>';
-      }
-    });
-
-    html += '</tbody></table>';
-    listEl.innerHTML = html;
+    html += '</div>';
   });
+
+  if (filesCurrentEntries.length === 0) {
+    html = '<div class="files-empty">This folder is empty</div>';
+  }
+
+  document.getElementById('files-content').innerHTML = html;
 }
 
-function updateFilesBreadcrumb(path) {
-  var display = document.getElementById('files-path-display');
-  display.textContent = '/' + (path || '');
+// ── Selection ──
 
-  var bc = document.getElementById('files-breadcrumb');
-  var parts = path ? path.split('/') : [];
-  var html = '<span class="files-bc-item" onclick="filesListDir(\'' + escAttr(filesCurrentMachine) + '\', \'\')">/</span>';
-  var accumulated = '';
-  parts.forEach(function (part) {
-    accumulated = accumulated ? accumulated + '/' + part : part;
-    html += ' <span class="files-bc-sep">/</span> '
-      + '<span class="files-bc-item" onclick="filesListDir(\'' + escAttr(filesCurrentMachine) + '\', \'' + escAttr(accumulated) + '\')">' + escHtml(part) + '</span>';
-  });
-  bc.innerHTML = html;
+function filesClearSelection() {
+  filesSelectedIndices.clear();
+  filesLastClickedIndex = -1;
+  filesUpdateActionButtons();
 }
 
-function filesRefresh() {
-  if (filesCurrentMachine) {
-    filesListDir(filesCurrentMachine, filesCurrentPath);
+function filesOnEntryClick(event, idx) {
+  event.stopPropagation();
+  if (event.ctrlKey || event.metaKey) {
+    if (filesSelectedIndices.has(idx)) filesSelectedIndices.delete(idx);
+    else filesSelectedIndices.add(idx);
+    filesLastClickedIndex = idx;
+  } else if (event.shiftKey && filesLastClickedIndex >= 0) {
+    var start = Math.min(filesLastClickedIndex, idx);
+    var end = Math.max(filesLastClickedIndex, idx);
+    for (var i = start; i <= end; i++) filesSelectedIndices.add(i);
+  } else {
+    filesSelectedIndices.clear();
+    filesSelectedIndices.add(idx);
+    filesLastClickedIndex = idx;
+  }
+  document.querySelectorAll('.files-entry').forEach(function (el) {
+    var i = parseInt(el.getAttribute('data-idx'));
+    el.classList.toggle('selected', filesSelectedIndices.has(i));
+  });
+  filesUpdateActionButtons();
+}
+
+function filesOnEntryDblClick(idx) {
+  filesSelectedIndices.clear();
+  filesLastClickedIndex = -1;
+  var entry = filesCurrentEntries[idx];
+  if (!entry) return;
+
+  if (entry.isDir) {
+    var path = filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name;
+    filesNavigateTo(path);
+  } else {
+    filesDownloadFile(entry.name, filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name);
   }
 }
 
-function filesDownload(machine, remotePath, fileName) {
+function filesUpdateActionButtons() {
+  var hasSelection = filesSelectedIndices.size > 0;
+  document.getElementById('files-btn-download').disabled = !hasSelection;
+  document.getElementById('files-btn-delete').disabled = !hasSelection; // TODO: check writable
+
+  var info = document.getElementById('files-selection-info');
+  if (hasSelection && info) {
+    var fc = 0, dc = 0, ts = 0;
+    filesSelectedIndices.forEach(function (i) {
+      var e = filesCurrentEntries[i];
+      if (e) { if (e.isDir) dc++; else { fc++; ts += (e.size || 0); } }
+    });
+    var parts = [];
+    if (fc) parts.push(fc + ' file' + (fc !== 1 ? 's' : ''));
+    if (dc) parts.push(dc + ' folder' + (dc !== 1 ? 's' : ''));
+    info.textContent = parts.join(', ') + ' selected' + (ts > 0 ? ' (' + formatFileSize(ts) + ')' : '');
+  } else if (info) {
+    info.textContent = '';
+  }
+}
+
+// Click empty area clears selection
+document.addEventListener('click', function (e) {
+  if (filesView !== 'files') return;
+  if (!e.target.closest('.files-entry') && !e.target.closest('.files-actionbar') && !e.target.closest('.files-header')) {
+    filesClearSelection();
+    document.querySelectorAll('.files-entry.selected').forEach(function (el) { el.classList.remove('selected'); });
+  }
+});
+
+// ── Navigation ──
+
+function filesNavigateTo(path) {
+  filesNavHistory.push(filesCurrentMachine + ':' + filesCurrentPath);
+  filesCurrentPath = path;
+  filesClearSelection();
+  filesListDir(filesCurrentMachine, path);
+}
+
+function filesGoBack() {
+  if (filesNavHistory.length === 0) return;
+  var prev = filesNavHistory.pop();
+  if (prev === 'machines') { filesShowMachineList(); return; }
+  var parts = prev.split(':');
+  filesCurrentMachine = parts[0];
+  filesCurrentPath = parts[1] || '';
+  filesClearSelection();
+  filesListDir(filesCurrentMachine, filesCurrentPath);
+}
+
+function filesGoUp() {
+  if (!filesCurrentMachine) return;
+  if (!filesCurrentPath) { filesShowMachineList(); return; }
+  filesNavHistory.push(filesCurrentMachine + ':' + filesCurrentPath);
+  var parts = filesCurrentPath.split('/');
+  parts.pop();
+  filesCurrentPath = parts.join('/');
+  filesClearSelection();
+  filesListDir(filesCurrentMachine, filesCurrentPath);
+}
+
+function filesRenderPath() {
+  var el = document.getElementById('files-path');
+  if (!el) return;
+  if (filesView === 'machines') {
+    el.innerHTML = '<span class="files-path-seg root">Machines</span>';
+    return;
+  }
+  var html = '<span class="files-path-seg root" onclick="filesShowMachineList()">Machines</span>';
+  html += '<span class="files-path-sep">&#x203A;</span>';
+  html += '<span class="files-path-seg" onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'\');">' + escHtml(filesCurrentMachine) + '</span>';
+  if (filesCurrentPath) {
+    var parts = filesCurrentPath.split('/');
+    var acc = '';
+    parts.forEach(function (p) {
+      acc = acc ? acc + '/' + p : p;
+      var accCopy = acc;
+      html += '<span class="files-path-sep">&#x203A;</span>';
+      html += '<span class="files-path-seg" onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'' + escAttr(accCopy) + '\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'' + escAttr(accCopy) + '\');">' + escHtml(p) + '</span>';
+    });
+  }
+  el.innerHTML = html;
+}
+
+function filesRefresh() {
+  if (filesView === 'files' && filesCurrentMachine) {
+    filesListDir(filesCurrentMachine, filesCurrentPath);
+  } else {
+    filesShowMachineList();
+  }
+}
+
+// ── Actions ──
+
+function filesDownloadFile(fileName, remotePath) {
   goApp.SaveFileDialog(fileName).then(function (localPath) {
-    if (!localPath) return; // cancelled
+    if (!localPath) return;
     tvLog('Downloading ' + remotePath + '...');
-    goApp.FileShareDownload(machine, remotePath, localPath).then(function (respJSON) {
+    goApp.FileShareDownload(filesCurrentMachine, remotePath, localPath).then(function (respJSON) {
       var resp = JSON.parse(respJSON);
       if (resp.ok) {
         tvLog('Downloaded ' + remotePath + ' (' + formatFileSize(resp.size) + ')');
@@ -1459,10 +1607,20 @@ function filesDownload(machine, remotePath, fileName) {
   });
 }
 
+function filesDownloadSelected() {
+  filesSelectedIndices.forEach(function (i) {
+    var e = filesCurrentEntries[i];
+    if (e && !e.isDir) {
+      var remotePath = filesCurrentPath ? filesCurrentPath + '/' + e.name : e.name;
+      filesDownloadFile(e.name, remotePath);
+    }
+  });
+}
+
 function filesUpload() {
   if (!filesCurrentMachine) return;
   goApp.OpenFileDialog().then(function (localPath) {
-    if (!localPath) return; // cancelled
+    if (!localPath) return;
     var fileName = localPath.split(/[\\/]/).pop();
     var remoteName = filesCurrentPath ? filesCurrentPath + '/' + fileName : fileName;
     tvLog('Uploading ' + fileName + '...');
@@ -1479,20 +1637,48 @@ function filesUpload() {
   });
 }
 
-function filesDelete(machine, remotePath) {
-  if (!confirm('Delete ' + remotePath + '?')) return;
-  var req = JSON.stringify({op: 'delete', path: remotePath});
-  goApp.FileShareRequest(machine, req).then(function (respJSON) {
-    var resp = JSON.parse(respJSON);
-    if (resp.ok) {
-      tvLog('Deleted ' + remotePath);
-      filesRefresh();
-    } else {
-      tvLog('Delete failed: ' + resp.error);
-      showError('Delete failed: ' + resp.error);
-    }
+function filesDeleteSelected() {
+  var names = [];
+  filesSelectedIndices.forEach(function (i) {
+    var e = filesCurrentEntries[i];
+    if (e) names.push(e.name);
+  });
+  if (names.length === 0) return;
+  if (!confirm('Delete ' + names.join(', ') + '?')) return;
+  var deleted = 0;
+  names.forEach(function (name) {
+    var remotePath = filesCurrentPath ? filesCurrentPath + '/' + name : name;
+    var req = JSON.stringify({op: 'delete', path: remotePath});
+    goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
+      var resp = JSON.parse(respJSON);
+      if (resp.ok) tvLog('Deleted ' + remotePath);
+      else tvLog('Delete failed (' + name + '): ' + resp.error);
+      deleted++;
+      if (deleted >= names.length) {
+        filesClearSelection();
+        filesRefresh();
+      }
+    });
   });
 }
+
+// ── Status bar ──
+
+function filesUpdateStatusBar() {
+  var dirs = 0, files = 0, totalSize = 0;
+  filesCurrentEntries.forEach(function (e) {
+    if (e.isDir) dirs++; else { files++; totalSize += (e.size || 0); }
+  });
+  var parts = [];
+  if (files) parts.push(files + ' file' + (files !== 1 ? 's' : ''));
+  if (dirs) parts.push(dirs + ' folder' + (dirs !== 1 ? 's' : ''));
+  var text = parts.join(', ') || 'Empty';
+  document.getElementById('files-status').innerHTML = '<span>' + text + '</span>'
+    + (totalSize > 0 ? '<span class="files-status-sep"></span><span>' + formatFileSize(totalSize) + '</span>' : '')
+    + '<span class="files-status-mode"><span class="files-status-dot rw"></span>read-write</span>';
+}
+
+// ── Formatters ──
 
 function formatFileSize(bytes) {
   if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
@@ -1502,7 +1688,7 @@ function formatFileSize(bytes) {
 }
 
 function formatFileDate(iso) {
-  if (!iso) return '-';
+  if (!iso) return '';
   try {
     var d = new Date(iso);
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});

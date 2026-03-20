@@ -109,18 +109,35 @@
     <!-- Files tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-files">
       <div class="files-pane">
-        <div class="files-toolbar">
-          <select id="files-machine-select" title="Select machine" onchange="onFilesMachineChange()">
-            <option value="">Select machine...</option>
-          </select>
-          <span class="files-path-display" id="files-path-display">/</span>
-          <div class="tab-bar-spacer"></div>
-          <button type="button" class="tb-btn" id="files-upload-btn" onclick="filesUpload()" title="Upload file" disabled>Upload</button>
-          <button type="button" class="tb-btn" onclick="filesRefresh()" title="Refresh">&#x21BB;</button>
+        <div class="files-addressbar">
+          <button type="button" class="files-nav-btn" id="files-btn-back" onclick="filesGoBack()" disabled title="Back">&#x2190;</button>
+          <button type="button" class="files-nav-btn" id="files-btn-up" onclick="filesGoUp()" disabled title="Up one level">&#x2191;</button>
+          <div class="files-path" id="files-path"></div>
+          <button type="button" class="files-nav-btn" onclick="filesRefresh()" title="Refresh">&#x21BB;</button>
         </div>
-        <div class="files-breadcrumb" id="files-breadcrumb"></div>
-        <div class="files-list" id="files-list">
-          <p class="empty-hint">Select a connected machine with file sharing enabled to browse files.</p>
+        <div class="files-actionbar" id="files-actionbar" style="display: none;">
+          <button type="button" class="files-action-btn" id="files-btn-upload" onclick="filesUpload()" disabled>Upload</button>
+          <button type="button" class="files-action-btn" id="files-btn-download" onclick="filesDownloadSelected()" disabled>Download</button>
+          <button type="button" class="files-action-btn danger" id="files-btn-delete" onclick="filesDeleteSelected()" disabled>Delete</button>
+          <div class="tab-bar-spacer"></div>
+          <span id="files-selection-info" style="font-size: 11px; color: var(--text-muted);"></span>
+        </div>
+        <div class="files-header" id="files-header" style="display: none;">
+          <span class="fh-name fh-col">Name</span>
+          <span class="fh-modified fh-col">Date modified</span>
+          <span class="fh-type fh-col">Type</span>
+          <span class="fh-size fh-col">Size</span>
+        </div>
+        <div class="files-scroll" id="files-content">
+          <p class="empty-hint">Connect to browse files.</p>
+        </div>
+        <div class="files-status" id="files-status">
+          <span id="files-status-counts"></span>
+        </div>
+        <div class="files-progress" id="files-progress">
+          <span id="files-progress-label"></span>
+          <div class="files-progress-bar"><div class="files-progress-fill" id="files-progress-fill" style="width: 0%"></div></div>
+          <span id="files-progress-pct">0%</span>
         </div>
       </div>
     </div>
