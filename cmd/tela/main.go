@@ -136,6 +136,8 @@ func main() {
 	switch os.Args[1] {
 	case "connect":
 		cmdConnect(os.Args[2:])
+	case "files":
+		cmdFiles(os.Args[2:])
 	case "machines":
 		cmdMachines(os.Args[2:])
 	case "services":
@@ -1296,6 +1298,10 @@ persistent_keepalive_interval=25
 		return nil
 	}
 	log.Printf("WireGuard tunnel up -- client=%s daemon=%s", sessionHelperIP, sessionAgentIP)
+
+	// Register tunnel for file share access
+	registerTunnel(machineID, tnet, sessionAgentIP)
+	defer unregisterTunnel(machineID)
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	done := make(chan struct{})
