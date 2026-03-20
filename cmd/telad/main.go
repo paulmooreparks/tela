@@ -70,6 +70,12 @@ const (
 var version = "dev"
 
 // controlMessage is the JSON envelope for hub ↔ agent signalling.
+// capabilities is an optional field in control messages that advertises
+// features supported by the agent for this machine.
+type capabilities struct {
+	FileShare *fileShareCapability `json:"fileShare,omitempty"`
+}
+
 type controlMessage struct {
 	Type      string   `json:"type"`
 	MachineID string   `json:"machineId,omitempty"`
@@ -89,6 +95,7 @@ type controlMessage struct {
 	Host      string   `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
 	SessionID  string `json:"sessionId,omitempty"`
 	SessionIdx int    `json:"sessionIdx,omitempty"`
+	Capabilities *capabilities `json:"capabilities,omitempty"`
 }
 
 type serviceDescriptor struct {
@@ -125,6 +132,7 @@ type machineConfig struct {
 	Services    []serviceDescriptor `yaml:"services,omitempty"`
 	Target      string   `yaml:"target,omitempty"` // defaults to 127.0.0.1
 	Token       string   `yaml:"token,omitempty"`  // overrides top-level token
+	FileShare   fileShareConfig     `yaml:"fileShare,omitempty"`
 }
 
 type registration struct {
@@ -139,6 +147,7 @@ type registration struct {
 	Token        string
 	Ports        []uint16
 	Services     []serviceDescriptor
+	FileShare    *parsedFileShareConfig
 }
 
 var verbose bool
@@ -703,6 +712,19 @@ func runMultiMachine(cfg *configFile) {
 			if machineOS == "" {
 				machineOS = runtime.GOOS
 			}
+			// Parse file share config if present.
+			var fsCfg *parsedFileShareConfig
+			if mc.FileShare.Enabled {
+				var err error
+				fsCfg, err = parseFileShareConfig(mc.FileShare)
+				if err != nil {
+					log.Fatalf("[%s] fileShare config error: %v", mc.Name, err)
+				}
+				if err := ensureShareDir(fsCfg.directory); err != nil {
+					log.Fatalf("[%s] fileShare directory error: %v", mc.Name, err)
+				}
+			}
+
 			reg := registration{
 				MachineID:    mc.Name,
 				DisplayName:  mc.DisplayName,
@@ -715,6 +737,7 @@ func runMultiMachine(cfg *configFile) {
 				Token:        mc.Token,
 				Ports:        mc.Ports,
 				Services:     mc.Services,
+				FileShare:    fsCfg,
 			}
 			runSingleMachine(cfg.Hub, reg, mc.Target)
 		}(m)
@@ -915,6 +938,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		Token:        reg.Token,
 		Ports:        reg.Ports,
 		Services:     reg.Services,
+		Capabilities: buildCapabilities(reg.FileShare),
 	}
 	if err := ws.WriteJSON(&regMsg); err != nil {
 		lg.Printf("register failed: %v", err)
@@ -1003,11 +1027,11 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)
 
 	lg.Printf("[session %s] starting -- agent=%s helper=%s", sessionID[:8], sessionAgentIP, sessionHelperIP)
-	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, sessionAgentIP, sessionHelperIP)
+	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, reg.FileShare, sessionAgentIP, sessionHelperIP)
 	lg.Printf("[session %s] ended", sessionID[:8])
 }
 
-func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, sessionAgentIP, sessionHelperIP string) {
+func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, fsCfg *parsedFileShareConfig, sessionAgentIP, sessionHelperIP string) {
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
@@ -1018,7 +1042,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	pubKeyHex := hex.EncodeToString(privKey.PublicKey().Bytes())
 
 	// Send our public key and port list back to helper (via hub relay)
-	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports}
+	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports, Capabilities: buildCapabilities(fsCfg)}
 	if err := ws.WriteJSON(&keyMsg); err != nil {
 		lg.Printf("failed to send pubkey: %v", err)
 		return
@@ -1104,10 +1128,14 @@ persistent_keepalive_interval=25
 		}(listener, port)
 	}
 
+	// Start file share listener if configured
+	cleanupFileShare := startFileShareListener(lg, tnet, sessionAgentIP, fsCfg)
+
 	// Wait for session to end (either session-end message or WS error)
 	<-done
 
 	lg.Println("session ended -- tearing down WireGuard")
+	cleanupFileShare()
 	for _, l := range listeners {
 		l.Close()
 	}
