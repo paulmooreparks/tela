@@ -1892,7 +1892,7 @@ func (a *App) FileShareRequest(machine string, opJSON string) string {
 // FileShareDownload downloads a file from a connected machine's file share.
 // Returns the local path where the file was saved, or an error string.
 func (a *App) FileShareDownload(machine string, remotePath string, localPath string) string {
-	a.logCommand("Download: "+remotePath, "files get -machine "+machine+" "+remotePath+" -o "+localPath)
+	a.logCommand("Download: "+remotePath, "POST /files/"+machine+" {\"op\":\"read\",\"path\":"+jsonString(remotePath)+"}")
 
 	base, token, err := controlEndpoint()
 	if err != nil {
@@ -1903,18 +1903,26 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, strings.NewReader(opJSON+"\n"))
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.doRequest(req, 120*time.Second)
+	resp, err := a.doRequest(req, 300*time.Second)
 	if err != nil {
 		return errJSON("request failed: " + err.Error())
 	}
 	defer resp.Body.Close()
 
-	reader := bufio.NewReader(resp.Body)
+	// Read the entire response body first, then parse chunks from it.
+	// This avoids streaming issues where the HTTP response closes before
+	// all chunk data has been read from the buffered reader.
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errJSON("read response failed: " + err.Error())
+	}
+
+	reader := bufio.NewReader(bytes.NewReader(respBody))
 
 	// Read JSON response header
 	headerLine, err := reader.ReadBytes('\n')
 	if err != nil {
-		return errJSON("read header failed")
+		return errJSON("read header failed: " + err.Error())
 	}
 	var fsResp struct {
 		OK       bool   `json:"ok"`
@@ -1923,7 +1931,7 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 		Checksum string `json:"checksum"`
 	}
 	if err := json.Unmarshal(headerLine, &fsResp); err != nil {
-		return errJSON("invalid response")
+		return errJSON("invalid response: " + string(headerLine))
 	}
 	if !fsResp.OK {
 		return errJSON(fsResp.Error)
@@ -1943,12 +1951,12 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			os.Remove(localPath)
-			return errJSON("transfer error")
+			return errJSON(fmt.Sprintf("chunk read error after %d bytes: %v", totalReceived, err))
 		}
 		line = strings.TrimRight(line, "\n\r")
 		if !strings.HasPrefix(line, "CHUNK ") {
 			os.Remove(localPath)
-			return errJSON("protocol error")
+			return errJSON(fmt.Sprintf("protocol error after %d bytes: expected CHUNK, got %q", totalReceived, line))
 		}
 		chunkSize, _ := strconv.ParseInt(strings.TrimPrefix(line, "CHUNK "), 10, 64)
 		if chunkSize == 0 {
@@ -1957,7 +1965,7 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 		n, err := io.CopyN(io.MultiWriter(f, h), reader, chunkSize)
 		if err != nil || n != chunkSize {
 			os.Remove(localPath)
-			return errJSON("incomplete chunk")
+			return errJSON(fmt.Sprintf("incomplete chunk: wanted %d, got %d: %v", chunkSize, n, err))
 		}
 		totalReceived += n
 	}
@@ -1976,7 +1984,7 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 
 // FileShareUpload uploads a local file to a connected machine's file share.
 func (a *App) FileShareUpload(machine string, localPath string, remoteName string) string {
-	a.logCommand("Upload: "+remoteName, "files put -machine "+machine+" "+localPath+" "+remoteName)
+	a.logCommand("Upload: "+remoteName, "POST /files/"+machine+" {\"op\":\"write\",\"path\":"+jsonString(remoteName)+"}")
 
 	base, token, err := controlEndpoint()
 	if err != nil {
