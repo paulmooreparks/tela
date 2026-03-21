@@ -141,8 +141,10 @@ func NewApp() *App {
 	jar, _ := cookiejar.New(nil)
 	return &App{
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-			Jar:     jar,
+			Jar: jar,
+			// No global Timeout -- per-request context timeouts are used
+			// via doRequest(). A global timeout would override context
+			// deadlines and kill long-running file transfers.
 		},
 		assignedPorts: make(map[int]bool),
 	}
@@ -1858,6 +1860,8 @@ func controlEndpoint() (string, string, error) {
 // FileShareRequest sends a file share operation to a connected machine
 // via the tela control API's /files proxy.
 func (a *App) FileShareRequest(machine string, opJSON string) string {
+	a.logCommand("File share: "+machine, "POST /files/"+machine+" "+opJSON)
+
 	base, token, err := controlEndpoint()
 	if err != nil {
 		return errJSON(err.Error())
@@ -1888,6 +1892,8 @@ func (a *App) FileShareRequest(machine string, opJSON string) string {
 // FileShareDownload downloads a file from a connected machine's file share.
 // Returns the local path where the file was saved, or an error string.
 func (a *App) FileShareDownload(machine string, remotePath string, localPath string) string {
+	a.logCommand("Download: "+remotePath, "files get -machine "+machine+" "+remotePath+" -o "+localPath)
+
 	base, token, err := controlEndpoint()
 	if err != nil {
 		return errJSON(err.Error())
@@ -1930,7 +1936,8 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 	}
 	defer f.Close()
 
-	// Read chunks
+	// Read chunks with checksum verification
+	h := sha256.New()
 	var totalReceived int64
 	for {
 		line, err := reader.ReadString('\n')
@@ -1947,7 +1954,7 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 		if chunkSize == 0 {
 			break
 		}
-		n, err := io.CopyN(f, reader, chunkSize)
+		n, err := io.CopyN(io.MultiWriter(f, h), reader, chunkSize)
 		if err != nil || n != chunkSize {
 			os.Remove(localPath)
 			return errJSON("incomplete chunk")
@@ -1955,11 +1962,22 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 		totalReceived += n
 	}
 
+	// Verify checksum
+	if fsResp.Checksum != "" {
+		computed := "sha256:" + hex.EncodeToString(h.Sum(nil))
+		if computed != fsResp.Checksum {
+			os.Remove(localPath)
+			return errJSON("checksum mismatch (file deleted)")
+		}
+	}
+
 	return fmt.Sprintf(`{"ok":true,"size":%d,"path":%s}`, totalReceived, jsonString(localPath))
 }
 
 // FileShareUpload uploads a local file to a connected machine's file share.
 func (a *App) FileShareUpload(machine string, localPath string, remoteName string) string {
+	a.logCommand("Upload: "+remoteName, "files put -machine "+machine+" "+localPath+" "+remoteName)
+
 	base, token, err := controlEndpoint()
 	if err != nil {
 		return errJSON(err.Error())

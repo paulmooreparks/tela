@@ -382,7 +382,6 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 			return
 		}
 
-		// Extract machine name from path: /files/<machine>
 		machine := strings.TrimPrefix(r.URL.Path, "/files/")
 		if machine == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "machine name required"})
@@ -396,40 +395,37 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		}
 		defer conn.Close()
 
-		// Stream the request body to the file share server concurrently
-		// while reading the response. This avoids buffering the entire
-		// upload in memory and prevents timeout on large files.
-		copyDone := make(chan error, 1)
+		// Stream the request body to the tunnel concurrently.
+		// The telad server processes the request and sends a response
+		// only after it has received all data (for uploads: all chunks).
 		go func() {
-			_, err := io.Copy(conn, r.Body)
-			copyDone <- err
+			io.Copy(conn, r.Body)
 		}()
 
-		// Read the JSON response line from the file share server.
-		// The server keeps the connection open for more requests, so we
-		// cannot io.Copy -- we must read exactly the response data.
-		reader := bufio.NewReader(conn)
+		// Read the JSON response line.
+		reader := bufio.NewReaderSize(conn, 32768)
 		respLine, err := reader.ReadBytes('\n')
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "proxy recv failed"})
 			return
 		}
 
-		// Parse to check if this is a read response (has chunk data following).
 		var fsResp struct {
 			OK   bool  `json:"ok"`
 			Size int64 `json:"size"`
 		}
 		json.Unmarshal(respLine, &fsResp)
 
+		flusher, canFlush := w.(http.Flusher)
+
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
 		w.Write(respLine)
+		if canFlush {
+			flusher.Flush()
+		}
 
-		// If this was a successful read response, stream all remaining
-		// data (chunk headers + chunk data) until the server closes or
-		// we see CHUNK 0. Use io.Copy to avoid parsing chunk framing
-		// in the proxy -- let the client handle it.
+		// For read responses, forward chunk data until CHUNK 0.
 		if fsResp.OK && fsResp.Size > 0 {
 			for {
 				chunkLine, err := reader.ReadString('\n')
@@ -446,6 +442,9 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 					if n > 0 {
 						io.CopyN(w, reader, n)
 					}
+				}
+				if canFlush {
+					flusher.Flush()
 				}
 			}
 		}

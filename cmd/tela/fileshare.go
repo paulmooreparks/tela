@@ -119,6 +119,11 @@ func startFileEventSubscription(machine string, stop chan struct{}) {
 		}()
 
 		for {
+			// Set a read deadline so we detect dead connections.
+			// telad sends events as they happen, so long silences are
+			// expected. 5 minutes is generous enough to avoid false
+			// positives while still detecting dead tunnels.
+			conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
 				return
@@ -174,31 +179,6 @@ type fsEntry struct {
 	Size    int64  `json:"size"`
 	ModTime string `json:"modTime"`
 	IsDir   bool   `json:"isDir"`
-}
-
-// ── Control API file share proxy ────────────────────────────────────
-// These are called from control.go when the /files endpoint is hit.
-
-// controlFileShareHandler handles proxied file share requests from the
-// control API. It dials through the tunnel and proxies the JSON-line
-// protocol.
-func controlFileShareHandler(machine string, reqBody io.Reader, w io.Writer) error {
-	conn, err := dialFileShare(machine)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	// Proxy request
-	if _, err := io.Copy(conn, reqBody); err != nil {
-		return fmt.Errorf("send failed: %w", err)
-	}
-
-	// Proxy response
-	if _, err := io.Copy(w, conn); err != nil {
-		return fmt.Errorf("recv failed: %w", err)
-	}
-	return nil
 }
 
 // ── CLI: tela files ─────────────────────────────────────────────────

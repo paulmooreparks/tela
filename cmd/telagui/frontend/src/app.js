@@ -1672,21 +1672,26 @@ function filesDeleteSelected() {
   });
   if (names.length === 0) return;
   if (!confirm('Delete ' + names.join(', ') + '?')) return;
-  var deleted = 0;
-  names.forEach(function (name) {
+
+  // Delete sequentially to avoid exceeding the connection limit
+  var idx = 0;
+  function deleteNext() {
+    if (idx >= names.length) {
+      filesClearSelection();
+      filesRefresh();
+      return;
+    }
+    var name = names[idx++];
     var remotePath = filesCurrentPath ? filesCurrentPath + '/' + name : name;
     var req = JSON.stringify({op: 'delete', path: remotePath});
     goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
       var resp = JSON.parse(respJSON);
       if (resp.ok) tvLog('Deleted ' + remotePath);
       else tvLog('Delete failed (' + name + '): ' + resp.error);
-      deleted++;
-      if (deleted >= names.length) {
-        filesClearSelection();
-        filesRefresh();
-      }
+      deleteNext();
     });
-  });
+  }
+  deleteNext();
 }
 
 // ── Status bar ──

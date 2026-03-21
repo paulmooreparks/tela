@@ -558,14 +558,16 @@ func handleRead(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req f
 		Checksum: checksum,
 	})
 
-	// Send chunked data
+	// Send chunked data using a buffered writer so each chunk
+	// (header + data) is sent as a single TCP segment when possible.
+	bw := bufio.NewWriterSize(conn, maxChunkSize+64)
 	buf := make([]byte, maxChunkSize)
 	for {
 		n, err := f.Read(buf)
 		if n > 0 {
-			header := fmt.Sprintf("CHUNK %d\n", n)
-			conn.Write([]byte(header))
-			conn.Write(buf[:n])
+			fmt.Fprintf(bw, "CHUNK %d\n", n)
+			bw.Write(buf[:n])
+			bw.Flush()
 		}
 		if err == io.EOF {
 			break
@@ -575,7 +577,8 @@ func handleRead(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req f
 			break
 		}
 	}
-	conn.Write([]byte("CHUNK 0\n"))
+	fmt.Fprint(bw, "CHUNK 0\n")
+	bw.Flush()
 
 	lg.Printf("[fileshare] read %q: %d bytes", req.Path, info.Size())
 }
