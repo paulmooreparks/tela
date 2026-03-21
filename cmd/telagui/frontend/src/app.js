@@ -337,10 +337,9 @@ if (window.runtime) {
       // File change events from telad
       if (evt.type === 'file_created' || evt.type === 'file_modified' || evt.type === 'file_deleted' || evt.type === 'file_renamed') {
         if (filesView === 'files' && evt.machine === filesCurrentMachine) {
-          // Check if the event is in the currently displayed directory
           var evtDir = (evt.path || '').split('/').slice(0, -1).join('/');
           if (evtDir === filesCurrentPath) {
-            filesListDir(filesCurrentMachine, filesCurrentPath);
+            filesDebouncedRefresh(); // debounce to avoid flooding on batch changes
           }
         }
       }
@@ -1316,10 +1315,14 @@ function stopConnectionPoll() {
 var filesView = 'machines'; // 'machines' | 'files'
 var filesCurrentMachine = '';
 var filesCurrentPath = '';
+var filesCurrentWritable = false;
 var filesNavHistory = [];
 var filesSelectedIndices = new Set();
 var filesLastClickedIndex = -1;
 var filesCurrentEntries = [];
+var filesListGeneration = 0;      // guards against stale async responses
+var filesRefreshTimer = null;     // debounce timer for live events
+var filesMachineCapabilities = {}; // cached capabilities from hub status
 
 function refreshFilesTab() {
   if (filesView === 'files' && filesCurrentMachine) {
@@ -1335,7 +1338,9 @@ function filesShowMachineList() {
   filesView = 'machines';
   filesCurrentMachine = '';
   filesCurrentPath = '';
+  filesCurrentWritable = false;
   filesNavHistory = [];
+  filesCurrentEntries = [];
   filesClearSelection();
   document.getElementById('files-header').style.display = 'none';
   document.getElementById('files-actionbar').style.display = 'none';
@@ -1359,9 +1364,9 @@ function filesShowMachineList() {
       return;
     }
 
-    // Fetch capabilities to determine file share status per machine
     var capabilitiesPromise = state.connected ? goApp.GetMachineCapabilities() : Promise.resolve({});
     capabilitiesPromise.then(function (caps) {
+      filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
       machineList.forEach(function (m) {
         var statusClass = state.connected ? 'online' : 'disconnected';
@@ -1374,11 +1379,9 @@ function filesShowMachineList() {
           var mc = caps[m.name];
           var fs = mc && mc.fileShare;
           if (fs && fs.enabled) {
-            if (fs.writable) {
-              badge = '<span class="files-machine-badge">read-write</span>';
-            } else {
-              badge = '<span class="files-machine-badge ro">read-only</span>';
-            }
+            badge = fs.writable
+              ? '<span class="files-machine-badge">read-write</span>'
+              : '<span class="files-machine-badge ro">read-only</span>';
             disabled = false;
           } else {
             badge = '<span class="files-machine-badge none">no file share</span>';
@@ -1403,7 +1406,11 @@ function filesShowMachineList() {
 
       document.getElementById('files-content').innerHTML = html;
       document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
+    }).catch(function () {
+      document.getElementById('files-content').innerHTML = '<div class="files-empty">Failed to load capabilities.</div>';
     });
+  }).catch(function () {
+    document.getElementById('files-content').innerHTML = '<div class="files-empty">Failed to get connection state.</div>';
   });
 }
 
@@ -1412,6 +1419,12 @@ function filesOpenMachine(name) {
   filesCurrentPath = '';
   filesNavHistory = ['machines'];
   filesClearSelection();
+
+  // Determine writable from cached capabilities
+  var mc = filesMachineCapabilities[name];
+  var fs = mc && mc.fileShare;
+  filesCurrentWritable = !!(fs && fs.enabled && fs.writable);
+
   filesListDir(name, '');
 }
 
@@ -1419,11 +1432,12 @@ function filesOpenMachine(name) {
 
 function filesListDir(machine, path) {
   filesView = 'files';
+  var gen = ++filesListGeneration; // guard against stale responses
+
   document.getElementById('files-header').style.display = 'flex';
   document.getElementById('files-actionbar').style.display = 'flex';
   document.getElementById('files-btn-back').disabled = (filesNavHistory.length === 0);
   document.getElementById('files-btn-up').disabled = false;
-  document.getElementById('files-btn-upload').disabled = false; // TODO: check writable
   filesRenderPath();
   filesUpdateActionButtons();
 
@@ -1432,10 +1446,15 @@ function filesListDir(machine, path) {
 
   var req = JSON.stringify({op: 'list', path: path});
   goApp.FileShareRequest(machine, req).then(function (respJSON) {
-    var resp = JSON.parse(respJSON);
+    if (gen !== filesListGeneration) return; // stale response, discard
+    try {
+      var resp = JSON.parse(respJSON);
+    } catch (e) {
+      listEl.innerHTML = '<div class="files-empty">Invalid response from server.</div>';
+      return;
+    }
     if (!resp.ok) {
       listEl.innerHTML = '<div class="files-empty">' + escHtml(resp.error) + '</div>';
-      document.getElementById('files-btn-upload').disabled = true;
       return;
     }
 
@@ -1448,7 +1467,9 @@ function filesListDir(machine, path) {
 
     filesRenderEntries();
     filesUpdateStatusBar();
+    filesUpdateActionButtons();
   }).catch(function (err) {
+    if (gen !== filesListGeneration) return;
     listEl.innerHTML = '<div class="files-empty">' + escHtml(String(err)) + '</div>';
   });
 }
@@ -1531,14 +1552,13 @@ function filesOnEntryDblClick(idx) {
 function filesUpdateActionButtons() {
   var hasSelection = filesSelectedIndices.size > 0;
   var singleSelection = filesSelectedIndices.size === 1;
-  // TODO: check writable from capabilities
-  var isWritable = true;
+  var w = filesCurrentWritable;
 
   document.getElementById('files-btn-download').disabled = !hasSelection;
-  document.getElementById('files-btn-delete').disabled = !hasSelection || !isWritable;
-  document.getElementById('files-btn-rename').disabled = !singleSelection || !isWritable;
-  document.getElementById('files-btn-newfolder').disabled = !isWritable;
-  document.getElementById('files-btn-upload').disabled = !isWritable;
+  document.getElementById('files-btn-delete').disabled = !hasSelection || !w;
+  document.getElementById('files-btn-rename').disabled = !singleSelection || !w;
+  document.getElementById('files-btn-newfolder').disabled = !w;
+  document.getElementById('files-btn-upload').disabled = !w;
 
   var info = document.getElementById('files-selection-info');
   if (hasSelection && info) {
@@ -1578,9 +1598,9 @@ function filesGoBack() {
   if (filesNavHistory.length === 0) return;
   var prev = filesNavHistory.pop();
   if (prev === 'machines') { filesShowMachineList(); return; }
-  var parts = prev.split(':');
-  filesCurrentMachine = parts[0];
-  filesCurrentPath = parts[1] || '';
+  var colonIdx = prev.indexOf(':');
+  filesCurrentMachine = colonIdx >= 0 ? prev.substring(0, colonIdx) : prev;
+  filesCurrentPath = colonIdx >= 0 ? prev.substring(colonIdx + 1) : '';
   filesClearSelection();
   filesListDir(filesCurrentMachine, filesCurrentPath);
 }
@@ -1627,14 +1647,24 @@ function filesRefresh() {
   }
 }
 
+// Debounced refresh for live file events (prevents flooding on batch changes)
+function filesDebouncedRefresh() {
+  if (filesRefreshTimer) clearTimeout(filesRefreshTimer);
+  filesRefreshTimer = setTimeout(function () {
+    filesRefreshTimer = null;
+    filesRefresh();
+  }, 300);
+}
+
 // ── Actions ──
 
 function filesDownloadFile(fileName, remotePath) {
+  var machine = filesCurrentMachine; // capture for closure
   goApp.SaveFileDialog(fileName).then(function (localPath) {
     if (!localPath) return;
     tvLog('Downloading ' + remotePath + '...');
-    goApp.FileShareDownload(filesCurrentMachine, remotePath, localPath).then(function (respJSON) {
-      var resp = JSON.parse(respJSON);
+    goApp.FileShareDownload(machine, remotePath, localPath).then(function (respJSON) {
+      try { var resp = JSON.parse(respJSON); } catch (e) { showError('Download failed: invalid response'); return; }
       if (resp.ok) {
         tvLog('Downloaded ' + remotePath + ' (' + formatFileSize(resp.size) + ')');
       } else {
@@ -1645,28 +1675,45 @@ function filesDownloadFile(fileName, remotePath) {
       tvLog('Download failed: ' + err);
       showError('Download failed: ' + err);
     });
-  });
+  }).catch(function (err) { showError('Save dialog failed: ' + err); });
 }
 
 function filesDownloadSelected() {
+  if (filesSelectedIndices.size === 0) return;
+  // Serialize downloads to avoid multiple save dialogs at once
+  var items = [];
   filesSelectedIndices.forEach(function (i) {
     var e = filesCurrentEntries[i];
     if (e && !e.isDir) {
-      var remotePath = filesCurrentPath ? filesCurrentPath + '/' + e.name : e.name;
-      filesDownloadFile(e.name, remotePath);
+      items.push({ name: e.name, path: filesCurrentPath ? filesCurrentPath + '/' + e.name : e.name });
     }
   });
+  if (items.length === 0) {
+    showError('Directories cannot be downloaded individually.');
+    return;
+  }
+  var idx = 0;
+  function downloadNext() {
+    if (idx >= items.length) return;
+    var item = items[idx++];
+    filesDownloadFile(item.name, item.path);
+    // Note: filesDownloadFile is async but we don't chain here because
+    // each one opens a save dialog. Sequential is better UX.
+  }
+  downloadNext();
 }
 
 function filesUpload() {
   if (!filesCurrentMachine) return;
+  var machine = filesCurrentMachine; // capture for closure
+  var path = filesCurrentPath;
   goApp.OpenFileDialog().then(function (localPath) {
     if (!localPath) return;
     var fileName = localPath.split(/[\\/]/).pop();
-    var remoteName = filesCurrentPath ? filesCurrentPath + '/' + fileName : fileName;
+    var remoteName = path ? path + '/' + fileName : fileName;
     tvLog('Uploading ' + fileName + '...');
-    goApp.FileShareUpload(filesCurrentMachine, localPath, remoteName).then(function (respJSON) {
-      var resp = JSON.parse(respJSON);
+    goApp.FileShareUpload(machine, localPath, remoteName).then(function (respJSON) {
+      try { var resp = JSON.parse(respJSON); } catch (e) { showError('Upload failed: invalid response'); return; }
       if (resp.ok) {
         tvLog('Uploaded ' + fileName + ' (' + formatFileSize(resp.size) + ')');
         filesRefresh();
@@ -1678,7 +1725,7 @@ function filesUpload() {
       tvLog('Upload failed: ' + err);
       showError('Upload failed: ' + err);
     });
-  });
+  }).catch(function (err) { showError('Open dialog failed: ' + err); });
 }
 
 function filesDeleteSelected() {
@@ -1688,48 +1735,50 @@ function filesDeleteSelected() {
     if (e) names.push(e.name);
   });
   if (names.length === 0) return;
+  var machine = filesCurrentMachine; // capture for closure
+  var path = filesCurrentPath;
   showConfirmDialog('Delete', 'Delete ' + names.join(', ') + '?', 'Delete').then(function (yes) {
     if (!yes) return;
-
-    // Delete sequentially to avoid exceeding the connection limit
-  var idx = 0;
-  function deleteNext() {
-    if (idx >= names.length) {
-      filesClearSelection();
-      filesRefresh();
-      return;
+    var idx = 0;
+    function deleteNext() {
+      if (idx >= names.length) {
+        filesClearSelection();
+        filesRefresh();
+        return;
+      }
+      var name = names[idx++];
+      var remotePath = path ? path + '/' + name : name;
+      var req = JSON.stringify({op: 'delete', path: remotePath});
+      goApp.FileShareRequest(machine, req).then(function (respJSON) {
+        try { var resp = JSON.parse(respJSON); } catch (e) { /* ignore parse errors */ }
+        if (resp && resp.ok) tvLog('Deleted ' + remotePath);
+        else tvLog('Delete failed (' + name + '): ' + (resp ? resp.error : 'unknown'));
+        deleteNext();
+      }).catch(function () { deleteNext(); });
     }
-    var name = names[idx++];
-    var remotePath = filesCurrentPath ? filesCurrentPath + '/' + name : name;
-    var req = JSON.stringify({op: 'delete', path: remotePath});
-    goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
-      var resp = JSON.parse(respJSON);
-      if (resp.ok) tvLog('Deleted ' + remotePath);
-      else tvLog('Delete failed (' + name + '): ' + resp.error);
-      deleteNext();
-    }).catch(function () { deleteNext(); });
-  }
-  deleteNext();
-  });
+    deleteNext();
+  }).catch(function () {});
 }
 
 function filesNewFolder() {
   if (!filesCurrentMachine) return;
+  var machine = filesCurrentMachine;
+  var path = filesCurrentPath;
   showPromptDialog('New Folder', '', '', 'Create').then(function (name) {
-  if (!name) return;
-  var path = filesCurrentPath ? filesCurrentPath + '/' + name : name;
-  var req = JSON.stringify({op: 'mkdir', path: path});
-  goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
-    var resp = JSON.parse(respJSON);
-    if (resp.ok) {
-      tvLog('Created folder ' + name);
-      filesRefresh();
-    } else {
-      tvLog('New folder failed: ' + resp.error);
-      showError('New folder failed: ' + resp.error);
-    }
-  }).catch(function (err) { showError('New folder failed: ' + err); });
-  });
+    if (!name) return;
+    var fullPath = path ? path + '/' + name : name;
+    var req = JSON.stringify({op: 'mkdir', path: fullPath});
+    goApp.FileShareRequest(machine, req).then(function (respJSON) {
+      try { var resp = JSON.parse(respJSON); } catch (e) { showError('New folder failed: invalid response'); return; }
+      if (resp.ok) {
+        tvLog('Created folder ' + name);
+        filesRefresh();
+      } else {
+        tvLog('New folder failed: ' + resp.error);
+        showError('New folder failed: ' + resp.error);
+      }
+    }).catch(function (err) { showError('New folder failed: ' + err); });
+  }).catch(function () {});
 }
 
 function filesRenameSelected() {
@@ -1737,14 +1786,15 @@ function filesRenameSelected() {
   var idx = filesSelectedIndices.values().next().value;
   var entry = filesCurrentEntries[idx];
   if (!entry) return;
+  var machine = filesCurrentMachine;
+  var path = filesCurrentPath;
 
   showPromptDialog('Rename', 'Rename "' + entry.name + '" to:', entry.name, 'Rename').then(function (newName) {
     if (!newName || newName === entry.name) return;
-
-    var oldPath = filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name;
+    var oldPath = path ? path + '/' + entry.name : entry.name;
     var req = JSON.stringify({op: 'rename', path: oldPath, newName: newName});
-    goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
-      var resp = JSON.parse(respJSON);
+    goApp.FileShareRequest(machine, req).then(function (respJSON) {
+      try { var resp = JSON.parse(respJSON); } catch (e) { showError('Rename failed: invalid response'); return; }
       if (resp.ok) {
         tvLog('Renamed ' + entry.name + ' to ' + newName);
         filesClearSelection();
@@ -1752,9 +1802,9 @@ function filesRenameSelected() {
       } else {
         tvLog('Rename failed: ' + resp.error);
         showError('Rename failed: ' + resp.error);
-    }
-  }).catch(function (err) { showError('Rename failed: ' + err); });
-  });
+      }
+    }).catch(function (err) { showError('Rename failed: ' + err); });
+  }).catch(function () {});
 }
 
 // ── Status bar ──
@@ -1768,9 +1818,11 @@ function filesUpdateStatusBar() {
   if (files) parts.push(files + ' file' + (files !== 1 ? 's' : ''));
   if (dirs) parts.push(dirs + ' folder' + (dirs !== 1 ? 's' : ''));
   var text = parts.join(', ') || 'Empty';
+  var modeClass = filesCurrentWritable ? 'rw' : 'ro';
+  var modeText = filesCurrentWritable ? 'read-write' : 'read-only';
   document.getElementById('files-status').innerHTML = '<span>' + text + '</span>'
     + (totalSize > 0 ? '<span class="files-status-sep"></span><span>' + formatFileSize(totalSize) + '</span>' : '')
-    + '<span class="files-status-mode"><span class="files-status-dot rw"></span>read-write</span>';
+    + '<span class="files-status-mode"><span class="files-status-dot ' + modeClass + '"></span>' + modeText + '</span>';
 }
 
 // ── Formatters ──
