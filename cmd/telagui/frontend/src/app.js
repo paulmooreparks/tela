@@ -1438,21 +1438,27 @@ function agentsShowDetail(a) {
 
   // Management card (actions not yet implemented)
   html += agentCard('Management',
-    '<div class="card-actions">'
-    + '<button type="button" class="tb-btn" disabled title="Coming soon">Pull Config</button>'
-    + '<button type="button" class="tb-btn" disabled title="Coming soon">Push Config</button>'
-    + '<button type="button" class="tb-btn" disabled title="Coming soon">Restart Agent</button>'
-    + '<button type="button" class="tb-btn" disabled title="Coming soon">View Log</button>'
-    + '</div>'
+    agentRow('Configuration', '<span class="danger-desc">Pull or push the agent config file through the tunnel.</span>'
+      + '<button type="button" class="tb-btn" disabled title="Coming soon">Pull</button>'
+      + '<button type="button" class="tb-btn" disabled title="Coming soon">Push</button>')
+    + agentRow('Agent log', '<span class="danger-desc">View or download the agent log output.</span>'
+      + '<button type="button" class="tb-btn" disabled title="Coming soon">View Log</button>')
+    + agentRow('Restart', '<span class="danger-desc">Restart the telad service on this machine.</span>'
+      + '<button type="button" class="tb-btn" disabled title="Coming soon">Restart</button>')
   );
 
-  // Danger Zone
-  html += '<div class="settings-group" style="border-color:rgba(239,68,68,0.3);">'
-    + '<div class="settings-group-header" style="color:var(--danger);">Danger Zone</div>'
-    + '<div class="card-actions">'
-    + '<button type="button" class="tb-btn tb-delete-btn" disabled title="Coming soon">Stop Agent</button>'
-    + '<button type="button" class="tb-btn tb-delete-btn" disabled title="Coming soon">Unregister</button>'
-    + '</div></div>';
+  // Danger Zone (matches Hubs mode style)
+  html += '<div class="settings-group danger-zone"><div class="settings-group-header">Danger Zone</div>'
+    + '<div class="settings-row"><div class="settings-label">Stop agent</div>'
+    + '<div class="settings-value danger-value">'
+    + '<span class="danger-desc">Stop the telad service on this machine. Users will lose connectivity.</span>'
+    + '<button class="btn-danger btn-sm" disabled title="Coming soon">Stop Agent</button>'
+    + '</div></div>'
+    + '<div class="settings-row"><div class="settings-label">Unregister</div>'
+    + '<div class="settings-value danger-value">'
+    + '<span class="danger-desc">Remove this machine from the hub. The agent will need to re-register.</span>'
+    + '<button class="btn-danger btn-sm" disabled title="Coming soon">Unregister</button>'
+    + '</div></div></div>';
 
   document.getElementById('agents-detail').innerHTML = html;
 }

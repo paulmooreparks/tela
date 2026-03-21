@@ -24,6 +24,7 @@
         </div>
       </div>
       <div class="topbar-right">
+        <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
         <button class="topbar-icon-btn topbar-update-btn hidden" id="update-btn" onclick="toggleUpdateOverlay()" title="Update available">&#x26A0;</button>
         <button class="topbar-icon-btn topbar-conn-btn" id="conn-status-btn" onclick="goToStatus()" title="Connection status">
           <svg class="conn-icon conn-icon-broken" id="conn-icon-broken" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -47,8 +48,6 @@
       <button class="main-tab active" role="tab" onclick="switchTab('status', this)">Status</button>
       <button class="main-tab" role="tab" onclick="switchTab('profile', this)">Profiles</button>
       <button class="main-tab" role="tab" onclick="switchTab('files', this)">Files</button>
-      <div class="tab-bar-spacer"></div>
-      <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
     </div>
 
     <!-- Profile toolbar (visible only on Profiles tab) -->
