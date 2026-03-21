@@ -1174,6 +1174,7 @@ function doConnect() {
     refreshAll();
     refreshStatus();
     refreshFilesTab();
+    agentsRefresh();
     // Connect WebSocket for real-time events
     setTimeout(function () { goApp.ConnectControlWS(); }, 2000);
     // Apply verbose preference (saved toggle or default setting)
@@ -1264,6 +1265,7 @@ function performDisconnect() {
     refreshTerminal();
     refreshStatus();
     filesShowMachineList();
+    agentsRefresh();
   }).catch(function (err) {
     goApp.DisconnectControlWS();
     stopConnectionPoll();
@@ -1271,6 +1273,7 @@ function performDisconnect() {
     updateConnectButton();
     refreshAll();
     filesShowMachineList();
+    agentsRefresh();
     refreshStatus();
   });
 }
