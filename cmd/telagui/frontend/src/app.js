@@ -1612,7 +1612,21 @@ function filesShowMachineList() {
       document.getElementById('files-content').innerHTML = html;
       document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
     }).catch(function () {
-      document.getElementById('files-content').innerHTML = '<div class="files-empty">Failed to load capabilities.</div>';
+      // Capabilities unavailable -- show all machines as clickable
+      // with unknown status. Better than blocking the entire view.
+      var fallbackHtml = '<div class="files-machine-list">';
+      machineList.forEach(function (m) {
+        fallbackHtml += '<div class="files-machine-card" onclick="filesOpenMachine(\'' + escAttr(m.name) + '\')">'
+          + '<span class="files-machine-status online"></span>'
+          + '<span class="fe-icon-machine"></span>'
+          + '<div><div class="files-machine-name">' + escHtml(m.name) + '</div>'
+          + '<div class="files-machine-meta">' + escHtml(m.hub) + '</div></div>'
+          + '<span class="files-machine-badge none">unknown</span>'
+          + '</div>';
+      });
+      fallbackHtml += '</div>';
+      document.getElementById('files-content').innerHTML = fallbackHtml;
+      document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
     });
   }).catch(function () {
     document.getElementById('files-content').innerHTML = '<div class="files-empty">Failed to get connection state.</div>';
