@@ -6,6 +6,10 @@ export function AddHub(arg1, arg2) {
   return window['go']['main']['App']['AddHub'](arg1, arg2);
 }
 
+export function AdminAPICall(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AdminAPICall'](arg1, arg2, arg3, arg4);
+}
+
 export function AdminCreateToken(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminCreateToken'](arg1, arg2, arg3);
 }
@@ -132,6 +136,10 @@ export function FileShareUpload(arg1, arg2, arg3) {
 
 export function ForceQuit() {
   return window['go']['main']['App']['ForceQuit']();
+}
+
+export function GetAgentList() {
+  return window['go']['main']['App']['GetAgentList']();
 }
 
 export function GetBinStatus() {

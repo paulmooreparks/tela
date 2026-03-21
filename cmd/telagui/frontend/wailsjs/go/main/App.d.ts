@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function AddHub(arg1:string,arg2:string):Promise<void>;
 
+export function AdminAPICall(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
 export function AdminCreateToken(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminDeleteToken(arg1:string,arg2:string):Promise<string>;
@@ -67,6 +69,8 @@ export function FileShareRequest(arg1:string,arg2:string):Promise<string>;
 export function FileShareUpload(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ForceQuit():Promise<void>;
+
+export function GetAgentList():Promise<Array<main.AgentInfo>>;
 
 export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
 

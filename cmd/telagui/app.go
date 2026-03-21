@@ -818,7 +818,7 @@ func (a *App) GetHubStatus(hubURL string) HubStatus {
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := a.doRequest(req, 15*time.Second)
 	if err != nil {
 		return HubStatus{Error: err.Error()}
 	}
@@ -975,9 +975,7 @@ func (a *App) adminAPICall(hubURL, method, path string, body []byte) ([]byte, er
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	resp, err := a.httpClient.Do(req.WithContext(ctx))
+	resp, err := a.doRequest(req, 15*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -1946,10 +1944,8 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 		apiURL = strings.Replace(apiURL, "ws://", "http://", 1)
 		apiURL = strings.TrimSuffix(apiURL, "/") + "/api/status"
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+		req, err := http.NewRequest("GET", apiURL, nil)
 		if err != nil {
-			cancel()
 			continue
 		}
 
@@ -1959,8 +1955,7 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 
-		resp, err := a.httpClient.Do(req)
-		cancel()
+		resp, err := a.doRequest(req, 10*time.Second)
 		if err != nil {
 			continue
 		}
@@ -2027,9 +2022,20 @@ func (a *App) FileShareRequest(machine string, opJSON string) string {
 
 	body, _ := io.ReadAll(resp.Body)
 
-	// The response is a JSON line (possibly followed by chunk data for reads).
-	// For list/delete/info, it's just the JSON line. For reads, we handle
-	// the chunked data separately via FileShareDownload.
+	// Error responses from the proxy use pretty-printed JSON (multiline).
+	// Parse them as a whole object rather than splitting on newlines.
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return errJSON(errResp.Error)
+		}
+		return errJSON(fmt.Sprintf("HTTP %d", resp.StatusCode))
+	}
+
+	// Success: the file share protocol uses single-line JSON responses
+	// (possibly followed by chunk data for reads). Take the first line.
 	lines := strings.SplitN(string(body), "\n", 2)
 	if len(lines) > 0 {
 		return lines[0]
@@ -2051,20 +2057,12 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, strings.NewReader(opJSON+"\n"))
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	// Use the HTTP client directly with a long timeout context.
-	// doRequest's defer cancel() would kill the context before we
-	// finish reading the response body.
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	defer cancel()
-	resp, err := a.httpClient.Do(req.WithContext(ctx))
+	resp, err := a.doRequest(req, 300*time.Second)
 	if err != nil {
 		return errJSON("request failed: " + err.Error())
 	}
 	defer resp.Body.Close()
 
-	// Read the entire response body first, then parse chunks from it.
-	// This avoids streaming issues where the HTTP response closes before
-	// all chunk data has been read from the buffered reader.
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errJSON("read response failed: " + err.Error())
@@ -2190,15 +2188,24 @@ func (a *App) FileShareUpload(machine string, localPath string, remoteName strin
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, pr)
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	defer cancel()
-	resp, err := a.httpClient.Do(req.WithContext(ctx))
+	resp, err := a.doRequest(req, 300*time.Second)
 	if err != nil {
 		return errJSON("upload failed: " + err.Error())
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return errJSON(errResp.Error)
+		}
+		return errJSON(fmt.Sprintf("HTTP %d", resp.StatusCode))
+	}
+
 	lines := strings.SplitN(string(body), "\n", 2)
 	if len(lines) > 0 {
 		return lines[0]
@@ -2416,7 +2423,7 @@ func (a *App) EnsureTool(name string) (string, error) {
 func (a *App) latestRelease() (string, error) {
 	req, _ := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := a.httpClient.Do(req)
+	resp, err := a.doRequest(req, 15*time.Second)
 	if err != nil {
 		return "", err
 	}

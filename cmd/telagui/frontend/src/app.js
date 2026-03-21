@@ -1629,7 +1629,7 @@ function filesShowMachineList() {
     var machineList = Object.keys(machines).map(function (k) { return machines[k]; });
     if (machineList.length === 0) {
       document.getElementById('files-content').innerHTML = '<div class="files-empty">No machines in profile.</div>';
-      document.getElementById('files-status-counts').textContent = '';
+      document.getElementById('files-status').innerHTML = '<span id="files-status-counts"></span>';
       return;
     }
 
@@ -1684,7 +1684,8 @@ function filesShowMachineList() {
       html += '</div>';
 
       document.getElementById('files-content').innerHTML = html;
-      document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
+      var countText = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
+      document.getElementById('files-status').innerHTML = '<span id="files-status-counts">' + countText + '</span>';
       } catch (renderErr) {
         tvLog('Machine list render error: ' + renderErr);
       }
@@ -1704,7 +1705,8 @@ function filesShowMachineList() {
       });
       fallbackHtml += '</div>';
       document.getElementById('files-content').innerHTML = fallbackHtml;
-      document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
+      var countText = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
+      document.getElementById('files-status').innerHTML = '<span id="files-status-counts">' + countText + '</span>';
     });
   }).catch(function () {
     document.getElementById('files-content').innerHTML = '<div class="files-empty">Failed to get connection state.</div>';

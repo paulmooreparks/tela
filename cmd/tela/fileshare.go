@@ -80,7 +80,7 @@ func lookupTunnel(machine string) *tunnelInfo {
 // share port and forwards events through the control WebSocket. Runs until
 // the connection closes or the stop channel is signalled.
 func startFileEventSubscription(machine string, stop chan struct{}) {
-	conn, err := dialFileShare(machine)
+	conn, err := tryDialFileShare(machine)
 	if err != nil {
 		return // no file share on this machine
 	}
@@ -141,19 +141,43 @@ func startFileEventSubscription(machine string, stop chan struct{}) {
 }
 
 // dialFileShare dials the file share port on a connected machine's tunnel.
+// dialFileShare connects to a machine's file share port through the tunnel.
+// It retries with increasing timeouts because the file share listener on
+// telad may not be ready immediately after the WireGuard tunnel is up.
 func dialFileShare(machine string) (net.Conn, error) {
 	ti := lookupTunnel(machine)
 	if ti == nil {
 		return nil, fmt.Errorf("no active tunnel for machine %q (is tela connect running?)", machine)
 	}
 	addr := netip.AddrPortFrom(netip.MustParseAddr(ti.agentIP), fileSharePort)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	conn, err := ti.tnet.DialContextTCPAddrPort(ctx, addr)
-	if err != nil {
-		return nil, fmt.Errorf("cannot connect to file share on %s: %w", machine, err)
+
+	delays := []time.Duration{3 * time.Second, 5 * time.Second, 10 * time.Second}
+	var lastErr error
+	for _, d := range delays {
+		ctx, cancel := context.WithTimeout(context.Background(), d)
+		conn, err := ti.tnet.DialContextTCPAddrPort(ctx, addr)
+		cancel()
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+		log.Printf("[fileshare] dial %s:%d timed out after %s, retrying...", machine, fileSharePort, d)
 	}
-	return conn, nil
+	return nil, fmt.Errorf("cannot connect to file share on %s: %w", machine, lastErr)
+}
+
+// tryDialFileShare attempts a single connection to a machine's file share
+// port with a short timeout. Used for best-effort background operations
+// (event subscription) where failure means the machine has no file share.
+func tryDialFileShare(machine string) (net.Conn, error) {
+	ti := lookupTunnel(machine)
+	if ti == nil {
+		return nil, fmt.Errorf("no tunnel")
+	}
+	addr := netip.AddrPortFrom(netip.MustParseAddr(ti.agentIP), fileSharePort)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return ti.tnet.DialContextTCPAddrPort(ctx, addr)
 }
 
 // ── Protocol types (must match cmd/telad/fileshare.go) ──────────────

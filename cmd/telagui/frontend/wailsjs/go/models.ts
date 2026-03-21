@@ -1,5 +1,37 @@
 export namespace main {
 	
+	export class AgentInfo {
+	    id: string;
+	    hub: string;
+	    online: boolean;
+	    version: string;
+	    hostname: string;
+	    os: string;
+	    sessionCount: number;
+	    registeredAt: string;
+	    lastSeen: string;
+	    services: any[];
+	    capabilities: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.hub = source["hub"];
+	        this.online = source["online"];
+	        this.version = source["version"];
+	        this.hostname = source["hostname"];
+	        this.os = source["os"];
+	        this.sessionCount = source["sessionCount"];
+	        this.registeredAt = source["registeredAt"];
+	        this.lastSeen = source["lastSeen"];
+	        this.services = source["services"];
+	        this.capabilities = source["capabilities"];
+	    }
+	}
 	export class BinaryInfo {
 	    name: string;
 	    path: string;
@@ -269,6 +301,7 @@ export namespace main {
 	    hubsSidebarWidth: number;
 	    defaultProfile: string;
 	    binPath: string;
+	    connectTooltipDismissed: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -288,6 +321,7 @@ export namespace main {
 	        this.hubsSidebarWidth = source["hubsSidebarWidth"];
 	        this.defaultProfile = source["defaultProfile"];
 	        this.binPath = source["binPath"];
+	        this.connectTooltipDismissed = source["connectTooltipDismissed"];
 	    }
 	}
 	export class ToolVersions {
