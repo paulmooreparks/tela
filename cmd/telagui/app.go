@@ -1924,6 +1924,7 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 
 		statusData, err := a.adminAPICall(conn.Hub, "GET", "/api/status", nil)
 		if err != nil {
+			log.Printf("[capabilities] %s: %v", conn.Hub, err)
 			continue
 		}
 		var status struct {
@@ -1932,7 +1933,8 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 				Capabilities map[string]interface{} `json:"capabilities"`
 			} `json:"machines"`
 		}
-		if json.Unmarshal(statusData, &status) != nil {
+		if err := json.Unmarshal(statusData, &status); err != nil {
+			log.Printf("[capabilities] %s: unmarshal: %v", conn.Hub, err)
 			continue
 		}
 		for _, m := range status.Machines {

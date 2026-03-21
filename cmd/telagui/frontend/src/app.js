@@ -352,7 +352,7 @@ if (window.runtime) {
     var quitBtn = document.getElementById('quit-btn');
     var connectBtn = document.getElementById('connect-btn');
     if (quitBtn) { quitBtn.classList.add('quitting'); quitBtn.disabled = true; }
-    if (connectBtn) { connectBtn.textContent = 'Disconnecting...'; connectBtn.className = 'topbar-btn disconnecting-btn'; connectBtn.disabled = true; }
+    if (connectBtn) { connectBtn.disabled = true; }
     updateConnIcon('disconnecting');
   });
 
