@@ -324,6 +324,8 @@ if (window.runtime) {
               sel.servicePort = evt.remote;
             }
           });
+          // Service confirmed bound -- update connect button state
+          updateConnectButton();
         }
         if (evt.type === 'tunnel_activity') {
           // Track active tunnels
@@ -1198,8 +1200,13 @@ function doConnect() {
     refreshStatus();
     refreshFilesTab();
     agentsRefresh();
-    // Connect WebSocket for real-time events
-    setTimeout(function () { goApp.ConnectControlWS(); }, 2000);
+    // Connect WebSocket for real-time events. Retry until the
+    // control API is ready (tela needs a moment to start listening).
+    (function connectWS() {
+      goApp.ConnectControlWS().catch(function () {
+        setTimeout(connectWS, 500);
+      });
+    })();
     // Apply verbose preference (saved toggle or default setting)
     setTimeout(function () {
       if (verboseMode) {
