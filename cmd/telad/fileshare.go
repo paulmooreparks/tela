@@ -47,6 +47,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+
 	"golang.zx2c4.com/wireguard/tun/netstack"
 )
 
@@ -443,6 +445,9 @@ func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConf
 			handleWrite(lg, conn, reader, cfg, req)
 		case "delete":
 			handleDelete(lg, conn, cfg, req)
+		case "subscribe":
+			handleSubscribe(lg, conn, cfg)
+			return // subscribe takes over the connection
 		default:
 			writeResponse(conn, fsResponse{OK: false, Error: "unknown operation: " + req.Op})
 		}
@@ -758,4 +763,116 @@ func handleDelete(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req
 
 	lg.Printf("[fileshare] delete %q", req.Path)
 	writeResponse(conn, fsResponse{OK: true})
+}
+
+// ── SUBSCRIBE (live file change events) ─────────────────────────────
+
+// fsEvent is a file change notification sent to subscribed clients.
+type fsEvent struct {
+	Type    string `json:"type"`    // "file_created", "file_modified", "file_deleted", "file_renamed"
+	Path    string `json:"path"`    // relative path within the share
+	Name    string `json:"name"`    // file/directory name
+	IsDir   bool   `json:"isDir"`
+	Size    int64  `json:"size,omitempty"`
+	ModTime string `json:"modTime,omitempty"`
+}
+
+func handleSubscribe(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "cannot create file watcher: " + err.Error()})
+		return
+	}
+	defer watcher.Close()
+
+	// Watch the share directory and all subdirectories.
+	err = filepath.Walk(cfg.directory, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip unreadable
+		}
+		if info.IsDir() {
+			return watcher.Add(path)
+		}
+		return nil
+	})
+	if err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "watch setup failed: " + err.Error()})
+		return
+	}
+
+	// Confirm subscription.
+	writeResponse(conn, fsResponse{OK: true})
+	lg.Printf("[fileshare] subscribe: client watching %s", cfg.directory)
+
+	// Stream events until the connection closes or an error occurs.
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+
+			// Compute relative path within the share.
+			relPath, err := filepath.Rel(cfg.directory, event.Name)
+			if err != nil || strings.HasPrefix(relPath, "..") {
+				continue
+			}
+			// Normalize to forward slashes for the protocol.
+			relPath = filepath.ToSlash(relPath)
+			name := filepath.Base(event.Name)
+
+			// Skip temp files from our own uploads.
+			if strings.HasPrefix(name, ".tela-upload-") {
+				continue
+			}
+
+			var evtType string
+			switch {
+			case event.Op&fsnotify.Create != 0:
+				evtType = "file_created"
+			case event.Op&fsnotify.Write != 0:
+				evtType = "file_modified"
+			case event.Op&fsnotify.Remove != 0:
+				evtType = "file_deleted"
+			case event.Op&fsnotify.Rename != 0:
+				evtType = "file_renamed"
+			default:
+				continue
+			}
+
+			fe := fsEvent{
+				Type: evtType,
+				Path: relPath,
+				Name: name,
+			}
+
+			// For create/modify, stat the file for metadata.
+			if evtType == "file_created" || evtType == "file_modified" {
+				if info, err := os.Lstat(event.Name); err == nil {
+					fe.IsDir = info.IsDir()
+					fe.Size = info.Size()
+					fe.ModTime = info.ModTime().UTC().Format(time.RFC3339)
+
+					// If a new directory was created, watch it too.
+					if info.IsDir() && evtType == "file_created" {
+						watcher.Add(event.Name)
+					}
+				}
+			}
+
+			data, _ := json.Marshal(fe)
+			data = append(data, '\n')
+			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if _, err := conn.Write(data); err != nil {
+				lg.Printf("[fileshare] subscribe: write failed, closing")
+				return
+			}
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			lg.Printf("[fileshare] watch error: %v", err)
+		}
+	}
 }

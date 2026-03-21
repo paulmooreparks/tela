@@ -396,16 +396,14 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		}
 		defer conn.Close()
 
-		// Read the full request body and send it to the file share server.
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body failed"})
-			return
-		}
-		if _, err := conn.Write(body); err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "proxy send failed"})
-			return
-		}
+		// Stream the request body to the file share server concurrently
+		// while reading the response. This avoids buffering the entire
+		// upload in memory and prevents timeout on large files.
+		copyDone := make(chan error, 1)
+		go func() {
+			_, err := io.Copy(conn, r.Body)
+			copyDone <- err
+		}()
 
 		// Read the JSON response line from the file share server.
 		// The server keeps the connection open for more requests, so we

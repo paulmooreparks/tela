@@ -27,6 +27,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/netip"
 	"os"
@@ -73,6 +74,65 @@ func lookupTunnel(machine string) *tunnelInfo {
 	tunnelRegistryMu.Lock()
 	defer tunnelRegistryMu.Unlock()
 	return tunnelRegistry[machine]
+}
+
+// startFileEventSubscription opens a subscribe connection to telad's file
+// share port and forwards events through the control WebSocket. Runs until
+// the connection closes or the stop channel is signalled.
+func startFileEventSubscription(machine string, stop chan struct{}) {
+	conn, err := dialFileShare(machine)
+	if err != nil {
+		return // no file share on this machine
+	}
+
+	// Send subscribe request
+	req, _ := json.Marshal(fsRequest{Op: "subscribe"})
+	req = append(req, '\n')
+	if _, err := conn.Write(req); err != nil {
+		conn.Close()
+		return
+	}
+
+	// Read the confirmation response
+	reader := bufio.NewReader(conn)
+	respLine, err := reader.ReadBytes('\n')
+	if err != nil {
+		conn.Close()
+		return
+	}
+	var resp fsResponse
+	if json.Unmarshal(respLine, &resp) != nil || !resp.OK {
+		conn.Close()
+		return
+	}
+
+	log.Printf("[fileshare] subscribed to events from %s", machine)
+
+	// Forward events until stopped
+	go func() {
+		defer conn.Close()
+
+		// Close connection when stop is signalled
+		go func() {
+			<-stop
+			conn.Close()
+		}()
+
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+
+			// Parse the event and add the machine name
+			var raw map[string]interface{}
+			if json.Unmarshal(line, &raw) != nil {
+				continue
+			}
+			raw["machine"] = machine
+			emitEvent(raw)
+		}
+	}()
 }
 
 // dialFileShare dials the file share port on a connected machine's tunnel.

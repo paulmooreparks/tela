@@ -1303,6 +1303,12 @@ persistent_keepalive_interval=25
 	registerTunnel(machineID, tnet, sessionAgentIP)
 	defer unregisterTunnel(machineID)
 
+	// Subscribe to file change events from this machine (best-effort).
+	// Runs in background; closes when stopFileEvents is closed.
+	stopFileEvents := make(chan struct{})
+	go startFileEventSubscription(machineID, stopFileEvents)
+	defer close(stopFileEvents)
+
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	done := make(chan struct{})
 	go func() {

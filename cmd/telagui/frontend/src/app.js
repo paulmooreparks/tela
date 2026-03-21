@@ -334,6 +334,16 @@ if (window.runtime) {
         }
         refreshStatus();
       }
+      // File change events from telad
+      if (evt.type === 'file_created' || evt.type === 'file_modified' || evt.type === 'file_deleted' || evt.type === 'file_renamed') {
+        if (filesView === 'files' && evt.machine === filesCurrentMachine) {
+          // Check if the event is in the currently displayed directory
+          var evtDir = (evt.path || '').split('/').slice(0, -1).join('/');
+          if (evtDir === filesCurrentPath) {
+            filesListDir(filesCurrentMachine, filesCurrentPath);
+          }
+        }
+      }
     } catch (e) {}
   });
 

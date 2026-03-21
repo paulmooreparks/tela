@@ -4,6 +4,7 @@ go 1.24.4
 
 require (
 	github.com/energye/systray v1.0.3
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/wailsapp/wails/v2 v2.11.0
 	golang.org/x/sys v0.41.0
