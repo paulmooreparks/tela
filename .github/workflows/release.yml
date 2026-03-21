@@ -280,6 +280,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for version computation
+
       - name: Compute version
         id: version
         run: |
