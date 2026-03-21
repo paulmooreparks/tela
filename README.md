@@ -2,7 +2,9 @@
 
 # Tela
 
-Secure remote access to TCP services (SSH, RDP, HTTP, etc.) through an encrypted WireGuard tunnel relayed over WebSocket. No admin privileges or TUN devices required on either end.
+Tela is a free and open-source (FOSS) remote-access system that lets you reach TCP services on remote machines through an encrypted WireGuard tunnel. It works through firewalls, NATs, and corporate proxies without requiring inbound ports, VPN software, kernel drivers, or administrator privileges on either end.
+
+You run a small agent (`telad`) on the machine you want to reach. It connects outbound to a relay hub (`telahubd`). From any other machine, you run the client (`tela`) or the desktop app (TelaVisor) to connect through the hub. The hub pairs the two sides and relays encrypted traffic between them. It never sees the plaintext.
 
 ```mermaid
 graph LR
@@ -23,38 +25,52 @@ graph LR
     end
 ```
 
+## Why Tela
+
+Most remote-access tools require at least one of the following: a VPN that needs administrator privileges to install, inbound firewall rules on the target machine, a cloud account with a specific vendor, or a TUN/TAP kernel driver. Tela requires none of these.
+
+Tela uses WireGuard for encryption, but it runs WireGuard entirely in userspace through gVisor's network stack. There is no kernel module, no TUN device, and no need for root or Administrator. Both the agent and the client make outbound connections to the hub, so neither side needs to open inbound ports or configure port forwarding.
+
+The hub acts as a blind relay. It forwards encrypted WireGuard packets between the agent and the client without being able to decrypt them. Even if the hub is compromised, session contents are not exposed.
+
+Tela tunnels any TCP service. SSH, RDP, HTTP, PostgreSQL, SMB, VNC, or any other protocol that runs over TCP can be reached through a Tela tunnel. The hub does not need to understand the protocol being tunneled.
+
 ## How it works
 
-**tela** (client) and **telad** (daemon) each create a userspace WireGuard tunnel using gVisor netstack. This is pure Go, no kernel TUN, no elevated privileges. The hub relays encrypted WireGuard datagrams between them over WebSocket, with automatic upgrades to faster transports when available:
+The agent (`telad`) and the client (`tela`) each create a userspace WireGuard tunnel using gVisor netstack. The hub (`telahubd`) relays encrypted WireGuard datagrams between them over WebSocket. After the initial connection, Tela automatically negotiates faster transports when available:
 
-| Transport | Path | When |
-|-----------|------|------|
-| WebSocket | tela → hub → telad | Always works (even through corporate proxies) |
-| UDP relay | tela → hub:41820 → telad | When outbound UDP is open |
-| Direct P2P | tela → telad | When STUN hole-punch succeeds |
+| Transport | Path | When it is used |
+|-----------|------|-----------------|
+| WebSocket | tela -> hub -> telad | Always available, works through corporate proxies |
+| UDP relay | tela -> hub:41820 -> telad | When outbound UDP to the hub is open |
+| Direct P2P | tela -> telad | When STUN hole-punching succeeds |
 
-The hub never sees plaintext. It relays opaque WireGuard ciphertext.
+Each transport tier falls back to the previous one automatically on failure. The hub always relays opaque WireGuard ciphertext regardless of which transport is active.
 
 ## Components
 
-| Component | Language | Description |
-|-----------|----------|-------------|
-| **tela** | Go | Client CLI. Connects to hub, establishes WG tunnel, binds localhost listeners |
-| **telad** | Go | Daemon. Registers with hub, exposes local services through WG tunnel |
-| **telahubd** | Go | Hub server. Pairs daemons with clients, relays WS/UDP, serves hub console |
-| **TelaVisor** | Go + JS | Desktop client. Graphical interface for managing connections, hubs, and agents. See [TelaVisor.md](TelaVisor.md) |
+Tela is built from three Go binaries and an optional desktop client:
 
-### TelaVisor
+| Component | Description |
+|-----------|-------------|
+| **tela** | Client CLI. Connects to a hub, establishes a WireGuard tunnel, and binds local TCP ports so native clients (ssh, mstsc, psql, etc.) can connect. |
+| **telad** | Agent daemon. Runs on the target machine, registers with the hub, and exposes local TCP services through the tunnel. |
+| **telahubd** | Hub server. Pairs agents with clients, relays encrypted traffic, and serves a built-in web console. |
+| **TelaVisor** | Desktop client. A graphical interface for managing connections, browsing remote files, and administering hubs. Built with Wails v2 (Go + JavaScript). |
 
-TelaVisor is a desktop client that wraps the `tela` CLI in a graphical interface. It manages hub credentials, connection profiles, and real-time tunnel status without requiring terminal access. You can select which services to connect to, click Connect, and monitor tunnel state as it updates live.
+All three binaries are single-file executables with no runtime dependencies. They run on Windows, Linux, and macOS.
+
+## TelaVisor
+
+TelaVisor wraps the `tela` CLI in a graphical interface. It manages hub credentials, connection profiles, and real-time tunnel status without requiring terminal access. You select which services to connect to, click Connect, and monitor tunnel state as it updates live.
 
 ![TelaVisor Status tab, connected](screens/telavisor04.png)
 
-TelaVisor uses a three-mode layout that mirrors the Tela binaries: Clients (for connections), Agents (for managing telad instances, coming soon), and Hubs (for hub administration including tokens, ACLs, and machine management).
+TelaVisor uses a three-mode layout that mirrors the three Tela binaries. Clients mode manages connections. Agents mode (coming soon) will manage telad instances. Hubs mode provides full hub administration including token management, ACL configuration, and machine monitoring.
 
 ![TelaVisor Hubs, Tokens](screens/telavisor10.png)
 
-A built-in file browser lets you upload, download, rename, move, and delete files on any machine with file sharing enabled. Changes appear in real time as they happen on the remote machine.
+The Files tab provides a built-in file browser for machines with file sharing enabled. You can upload, download, rename, move, and delete files on remote machines through the encrypted tunnel. The file list updates in real time as changes happen on the remote machine.
 
 ![TelaVisor Files tab](screens/telavisor-files.png)
 
@@ -63,30 +79,6 @@ A persistent log panel at the bottom of the window shows application events, liv
 ![TelaVisor log panel](screens/telavisor13.png)
 
 See [TelaVisor.md](TelaVisor.md) for full documentation.
-
-## Networking & port requirements
-
-Tela is outbound-only for daemons and clients, but the **Hub must be reachable**.
-
-At a minimum:
-
-- The **Hub** must accept inbound HTTPS/WebSocket traffic from both `tela` (client) and `telad` (daemon).
-- `telad` must be able to reach the **services** it exposes (either on `localhost` or via `target:` in gateway/bridge mode).
-
-Common requirements by component:
-
-| Component | Needs inbound from Internet | Needs outbound | Notes |
-|----------|------------------------------|---------------|------|
-| **Hub** (`telahubd`) | TCP 443 (recommended) for HTTPS + WebSockets | none special | Optional: UDP 41820 for UDP relay (faster than WS when available). |
-| **Daemon** (`telad`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 (UDP relay) and outbound UDP to STUN (direct P2P). |
-| **Client** (`tela`) | none | TCP 443 to Hub (`wss://...`) | Optional: outbound UDP to Hub:41820 and STUN. Binds `127.0.0.1:<port>` locally for apps (SSH/RDP/etc.). |
-| **Portal (server)** | TCP 80/443 for portal UI + API | HTTPS to each Hub's `/api/status` and `/api/history` | Portal proxies hub requests server-side using a stored viewer token. Browsers never contact hubs directly. |
-
-See also:
-
-- `howto/networking.md`
-- `howto/hub.md`
-- `howto/telad.md`
 
 ## Quick start
 
@@ -98,52 +90,64 @@ go build -o telad ./cmd/telad
 go build -o telahubd ./cmd/telahubd
 ```
 
-### Run locally (3 terminals)
+### Run locally (three terminals)
+
+Start the hub:
 
 ```bash
-# Terminal 1 - Hub
 ./telahubd
+```
 
-# Terminal 2 - Daemon (exposes SSH + RDP)
-./telad -hub ws://localhost -machine mybox -ports "22,3389"
+Start the agent on the machine you want to reach. This example exposes SSH and RDP:
 
-# Terminal 3 - List machines
+```bash
+./telad -hub ws://localhost -machine mybox -ports "22:SSH,3389:RDP"
+```
+
+From a third terminal, list the available machines and connect:
+
+```bash
 ./tela machines -hub ws://localhost
-
-# Terminal 3 - Connect to a machine
 ./tela connect -hub ws://localhost -machine mybox
+```
 
-# Connect by service name instead of port
+You can also connect by service name:
+
+```bash
 ./tela connect -hub ws://localhost -machine mybox -services ssh
 ```
 
-Or set environment variables to skip repeating flags:
+Once connected, use your usual tools against localhost:
+
+```bash
+ssh localhost
+mstsc /v:localhost
+```
+
+To avoid repeating flags, set environment variables:
 
 ```bash
 export TELA_HUB=ws://localhost TELA_MACHINE=mybox
-./tela connect
-./tela machines
-./tela services
+tela connect
+tela machines
+tela services
 ```
-
-Then connect: `ssh localhost` or `mstsc /v:localhost`
 
 ### Hub remotes (name resolution)
 
-If your hubs are listed on a directory service, add it as a remote:
+If your hubs are listed on a directory service, you can add it as a remote and use short hub names:
 
 ```bash
-tela remote add awansaya https://awansaya.net   # configure once, credentials stored locally
-tela machines -hub myhub                         # hub name resolved via remote
+tela remote add awansaya https://awansaya.net   # configure once
+tela machines -hub myhub                         # short name resolved via remote
 tela connect -hub myhub -machine mybox
-tela remote remove awansaya                      # remove the remote
 ```
 
-Short hub names are resolved via: (1) configured remotes, (2) local `hubs.yaml` fallback.
+Short hub names are resolved by querying configured remotes first, then falling back to the local `hubs.yaml` file.
 
 ### Connection profiles
 
-Define all your tunnels in a single YAML file and open them in parallel with one command:
+You can define all your tunnels in a single YAML file and open them in parallel with one command:
 
 ```yaml
 # ~/.tela/profiles/work.yaml
@@ -166,28 +170,25 @@ connections:
 
 ```bash
 tela connect -profile work
-# Opens parallel tunnels to both machines; each auto-reconnects independently.
+# Opens parallel tunnels to both machines. Each auto-reconnects independently.
 # SSH: localhost:2201, Admin panel: localhost:9001, PostgreSQL: localhost:5432
 ```
 
-Profiles support environment variable expansion (`${VAR}`), service name resolution, local port remapping, and connections across multiple hubs. See [REFERENCE.md section 7](REFERENCE.md#7-tela-the-client-cli) for the full schema.
+Profiles support environment variable expansion (`${VAR}`), service name resolution, local port remapping, and connections across multiple hubs. See [REFERENCE.md section 7](REFERENCE.md#7-tela-the-client-cli) for the full profile schema.
 
 ### Run with Docker (production)
 
 ```bash
 docker compose up --build -d
 
-# With flags:
 ./tela connect -hub wss://your-hostname -machine barn
-
-# Or add a remote and use hub names:
-tela remote add awansaya https://awansaya.net
-tela connect -hub your-hub -machine barn
 ```
 
-See [IMPLEMENTATION.md](IMPLEMENTATION.md) §8 for the full Docker Compose setup.
+See [IMPLEMENTATION.md](IMPLEMENTATION.md) for the full Docker Compose setup.
 
 ### Enable authentication (recommended)
+
+On first startup, the hub auto-generates an owner token (secure by default). For Docker deployments, you can bootstrap authentication with an environment variable:
 
 ```bash
 # 1. Generate an owner token
@@ -207,43 +208,57 @@ tela admin grant bob barn -hub wss://your-hub -token <owner-token>
 
 See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admin` reference.
 
-## Authentication & security
+## Authentication and security
 
-- **End-to-end encryption**: WireGuard (Curve25519 key exchange, ChaCha20-Poly1305 data) between tela and telad. The hub is a blind relay.
-- **Token-based auth**: Named token identities with role-based access control (owner/admin/user/viewer). Per-machine ACLs control who can register and connect. On first startup, the hub auto-generates an owner token (secure by default). A `console-viewer` token is auto-generated for the hub's built-in web console.
-- **Remote management**: Owner/admin tokens can manage auth remotely via `tela admin`. No shell access to the hub required.
-- **Credential storage**: `tela login` and `telad login` store hub tokens securely (0600 file permissions) so you don't need to pass tokens on every command. Credentials persist and are found automatically.
-- **One-time pairing codes**: Generate short-lived codes (e.g., `ABCD-1234`) for users (`tela pair`) and agents (`telad pair`). Codes are single-use, time-limited (10 minutes to 7 days), and replace manual token copying. Users paste a code in TelaVisor or the CLI to get connected.
-- **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
-- **File sharing**: Native sandboxed file transfer through the tunnel. Upload, download, rename, move, and delete files on remote machines. No SSH or SFTP required. Configurable per machine with extension filtering and size limits.
-- **No admin required**: gVisor netstack operates entirely in userspace. No TUN device, no root/Administrator.
-- **Outbound-only**: Both tela and telad initiate outbound connections to the hub. No inbound ports needed on either end.
+Tela is designed to be secure by default. The hub auto-generates an owner token on first startup, and all administrative operations require authentication.
+
+**End-to-end encryption.** All traffic between the client and agent is encrypted with WireGuard using Curve25519 for key exchange and ChaCha20-Poly1305 for data encryption. The hub relays opaque ciphertext and cannot read tunnel contents.
+
+**Token-based access control.** The hub uses named token identities with four roles: owner, admin, user, and viewer. Per-machine ACLs control which tokens can register and connect to each machine. A wildcard ACL applies to all machines.
+
+**Remote management.** Owners and admins can manage tokens, ACLs, and portal registrations remotely using `tela admin`. No shell access to the hub is required.
+
+**Credential storage.** The `tela login` and `telad login` commands store hub tokens in a local credential file (0600 permissions) so you do not need to pass tokens on every command.
+
+**One-time pairing codes.** Administrators can generate short-lived pairing codes (e.g., `ABCD-1234`) for users and agents. Codes are single-use, time-limited (10 minutes to 7 days), and replace the need to copy 64-character hex tokens manually. Users paste a code in TelaVisor or run `tela pair` to exchange it for a permanent token.
+
+**File sharing.** The agent can expose a sandboxed directory for file transfer through the tunnel. Upload, download, rename, move, and delete operations are available via the CLI (`tela files`) or the TelaVisor Files tab. File sharing is off by default and must be explicitly enabled per machine. Extension filtering, size limits, and read-only mode are configurable.
+
+**No admin required.** All three binaries run in userspace. gVisor netstack provides a full WireGuard implementation without kernel modules, TUN devices, or elevated privileges.
+
+**Outbound-only.** Both `tela` and `telad` initiate outbound connections to the hub. No inbound ports are needed on either end.
 
 See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and admin API reference. See [howto/telad.md](howto/telad.md) for agent onboarding examples.
 
-## Transport upgrade cascade
+## Networking and port requirements
 
-After the initial WebSocket connection, tela and telad automatically negotiate faster transports:
+Tela is outbound-only for agents and clients. Only the hub needs to be reachable from the internet.
 
-1. **UDP relay**: Hub offers a UDP port alongside WebSocket. Both sides probe it; if reachable, WireGuard datagrams switch to UDP (eliminates TCP-over-TCP). Falls back to WebSocket on timeout.
-2. **Direct tunnel**: Both sides perform STUN discovery (RFC 5389) to learn their public IP:port, exchange endpoints via the hub, and attempt simultaneous UDP hole punching. On success, WireGuard datagrams flow peer-to-peer with zero relay overhead.
+At a minimum, the hub must accept inbound HTTPS/WebSocket traffic from both `tela` (client) and `telad` (agent). The agent must be able to reach the services it exposes, either on localhost or via a target host in gateway mode.
 
-The cascade is fully automatic. Each tier falls through on failure with no user action.
+| Component | Inbound | Outbound | Notes |
+|-----------|---------|----------|-------|
+| **Hub** (`telahubd`) | TCP 443 for HTTPS + WebSocket | None | Optional: UDP 41820 for the UDP relay. |
+| **Agent** (`telad`) | None | TCP 443 to the hub | Optional: outbound UDP to hub:41820 and STUN. |
+| **Client** (`tela`) | None | TCP 443 to the hub | Optional: outbound UDP to hub:41820 and STUN. Binds localhost ports for apps. |
+| **Portal** | TCP 80/443 for the portal UI and API | HTTPS to each hub's `/api/status` and `/api/history` | Proxies hub requests server-side. Browsers do not contact hubs directly. |
+
+See also: [howto/networking.md](howto/networking.md), [howto/hub.md](howto/hub.md), [howto/telad.md](howto/telad.md).
 
 ## Running as an OS service
 
-`tela`, `telad`, and `telahubd` can all run as native OS services (Windows SCM, Linux systemd, macOS launchd). Configuration lives in a YAML file in a system-wide directory. Edit the file and restart to reconfigure; no reinstallation needed.
+All three binaries support native OS service management on Windows (SCM), Linux (systemd), and macOS (launchd). Configuration is stored in a YAML file in a system-wide directory. To reconfigure, edit the file and restart the service.
 
 ```bash
-# Install telad as a service (copies config to system dir)
+# Install telad as a service
 telad service install -config telad.yaml
 telad service start
 
-# Install telahubd as a service (generates config from flags)
+# Install telahubd as a service
 telahubd service install -name myhub -port 80
 telahubd service start
 
-# Install tela client as a service (copies connection profile to system dir)
+# Install tela client as a service (always-on tunnel)
 tela service install -config myprofile.yaml
 tela service start
 
@@ -257,7 +272,7 @@ See [howto/services.md](howto/services.md) for full details.
 
 ## Registering with a portal
 
-Hub operators can register their hub with a Tela portal (like [Awan Saya](https://awansaya.net)) so that users who query the portal can discover the hub:
+Hub operators can register their hub with a Tela portal (such as [Awan Saya](https://awansaya.net)) so that users who query the portal can discover the hub by name:
 
 ```bash
 telahubd portal add awansaya https://awansaya.net
@@ -265,47 +280,46 @@ telahubd portal list
 telahubd portal remove awansaya
 ```
 
-The `portal add` command discovers the portal's hub directory endpoint via `/.well-known/tela` (RFC 8615), registers the hub via its API, and stores the association in the hub config. See the DESIGN document §8.5 for details.
+The `portal add` command discovers the portal's hub directory endpoint via `/.well-known/tela` (RFC 8615), registers the hub via its API, and stores the association in the hub config. See DESIGN.md section 8.5 for details.
 
 ## Project structure
 
 ```
-cmd/tela/          Client CLI (subcommands: connect, machines, services, status, remote, admin, service)
-cmd/telad/         Daemon binary
-cmd/telahubd/      Hub server binary
+cmd/tela/          Client CLI (connect, machines, services, status, remote, admin, files, profile, pair, service)
+cmd/telad/         Agent daemon
+cmd/telahubd/      Hub server
 cmd/telagui/       Desktop client (Wails v2 app)
 internal/service/  Cross-platform OS service management (Windows SCM, systemd, launchd)
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
 howto/             Guides (hub setup, services, networking, use cases)
 www/               Hub console (web UI)
-docker/gohub/      Dockerfile for telahubd
-docker/            Caddyfile, docker-compose, cloudflared config
+docker/            Dockerfile, docker-compose, Caddyfile
 ```
 
 ## Glossary
 
 | Term | Meaning |
 |------|---------|
-| **Hub** | Central relay (`telahubd`) that pairs daemons with clients. Serves the hub console. |
-| **Hub Console** | Web interface for a hub (e.g., `https://hub.example.com/`). |
-| **Daemon / telad** | Long-lived daemon on a managed machine that registers with the hub. |
-| **Client / tela** | CLI on the user's machine that tunnels through the hub to an agent. |
-| **TelaVisor** | Desktop client. Graphical interface for tela with profile management and real-time status. |
-| **Machine** | A named resource registered by an agent (e.g., `barn`). |
-| **Service** | A TCP endpoint exposed through a machine (e.g., SSH :22, RDP :3389). |
-| **Session** | An active encrypted tunnel between a client and an agent. |
-| **Portal** | Multi-hub dashboard. Implements the hub directory API (`/api/hubs`). Can be added as a remote: `tela remote add myportal https://...` |
-
+| **Hub** | The central relay server (`telahubd`). Pairs agents with clients and relays encrypted traffic. Also serves the hub console. |
+| **Hub Console** | The web interface served by a hub (e.g., `https://hub.example.com/`). Shows registered machines, services, and session history. |
+| **Agent / telad** | A long-lived daemon on a managed machine. Registers with the hub and exposes local services through the tunnel. |
+| **Client / tela** | The CLI tool on the user's machine. Connects through the hub to an agent and binds local TCP ports for native clients. |
+| **TelaVisor** | The desktop client. Provides a graphical interface for connections, file browsing, and hub administration. |
+| **Machine** | A named resource registered by an agent (e.g., `barn`). One agent can register one or more machines. |
+| **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). |
+| **Session** | An active encrypted tunnel between a client and an agent. Each session gets its own WireGuard keypair and virtual IP address. |
+| **Portal** | A multi-hub dashboard and directory service. Implements the hub directory API (`/api/hubs`). Can be added as a remote with `tela remote add`. |
+| **File Share** | A sandboxed directory on an agent machine that can be browsed, uploaded to, and downloaded from through the tunnel. |
 
 ## Documentation
 
-- [TelaVisor.md](TelaVisor.md) - Desktop client documentation
-- [REFERENCE.md](REFERENCE.md) - Comprehensive documentation for Tela and its command-line tools
-- [CONFIGURATION.md](CONFIGURATION.md) - Configuration file schemas (`hubs.yaml`, `telad.yaml`, `telahubd.yaml`, portal `config.json`)
-- [DESIGN.md](DESIGN.md) - Architecture specification (includes full glossary)
-- [IMPLEMENTATION.md](IMPLEMENTATION.md) - Deployment runbook
-- [TODO.md](TODO.md) - Roadmap
-- [STATUS.md](STATUS.md) - Traceability matrix (design → implementation)
+- [TelaVisor.md](TelaVisor.md) -- Desktop client documentation
+- [REFERENCE.md](REFERENCE.md) -- Comprehensive reference for all three CLIs, configuration, and APIs
+- [CONFIGURATION.md](CONFIGURATION.md) -- Configuration file schemas for hubs.yaml, telad.yaml, telahubd.yaml, and portal config
+- [DESIGN.md](DESIGN.md) -- Architecture specification
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) -- Deployment runbook
+- [TODO.md](TODO.md) -- Roadmap
+- [STATUS.md](STATUS.md) -- Design-to-implementation traceability matrix
 
 ## License
 
