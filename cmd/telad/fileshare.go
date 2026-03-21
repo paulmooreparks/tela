@@ -341,6 +341,7 @@ type fsRequest struct {
 	Size     int64  `json:"size,omitempty"`
 	Checksum string `json:"checksum,omitempty"`
 	NewName  string `json:"newName,omitempty"` // for rename
+	NewPath  string `json:"newPath,omitempty"` // for move
 }
 
 type fsResponse struct {
@@ -450,6 +451,8 @@ func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConf
 			handleMkdir(lg, conn, cfg, req)
 		case "rename":
 			handleRename(lg, conn, cfg, req)
+		case "move":
+			handleMove(lg, conn, cfg, req)
 		case "subscribe":
 			handleSubscribe(lg, conn, cfg)
 			return // subscribe takes over the connection
@@ -857,6 +860,77 @@ func handleRename(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req
 	}
 
 	lg.Printf("[fileshare] rename %q -> %q", req.Path, req.NewName)
+	writeResponse(conn, fsResponse{OK: true})
+}
+
+// ── MOVE ────────────────────────────────────────────────────────────
+
+func handleMove(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req fsRequest) {
+	if !cfg.writable {
+		writeResponse(conn, fsResponse{OK: false, Error: "file sharing is read-only"})
+		return
+	}
+	if req.Path == "" || req.NewPath == "" {
+		writeResponse(conn, fsResponse{OK: false, Error: "path and newPath required"})
+		return
+	}
+
+	// Validate source path
+	srcAbs, err := cfg.validatePath(req.Path)
+	if err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "source: " + err.Error()})
+		return
+	}
+
+	// Validate destination path
+	dstAbs, err := cfg.validatePath(req.NewPath)
+	if err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "destination: " + err.Error()})
+		return
+	}
+
+	// Check source exists
+	if _, err := os.Lstat(srcAbs); err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "source not found"})
+		return
+	}
+
+	// If destination is an existing directory, move into it
+	if info, err := os.Lstat(dstAbs); err == nil && info.IsDir() {
+		dstAbs = filepath.Join(dstAbs, filepath.Base(srcAbs))
+		// Re-validate the final path
+		rel, err := filepath.Rel(cfg.directory, dstAbs)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			writeResponse(conn, fsResponse{OK: false, Error: "move would escape sandbox"})
+			return
+		}
+	}
+
+	// Check destination doesn't already exist (unless it's a directory we're moving into)
+	if _, err := os.Lstat(dstAbs); err == nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "destination already exists"})
+		return
+	}
+
+	// Ensure destination parent directory exists
+	dstDir := filepath.Dir(dstAbs)
+	if _, err := os.Stat(dstDir); err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "destination directory does not exist"})
+		return
+	}
+
+	// Cannot move a directory into itself
+	if strings.HasPrefix(dstAbs, srcAbs+string(filepath.Separator)) {
+		writeResponse(conn, fsResponse{OK: false, Error: "cannot move a directory into itself"})
+		return
+	}
+
+	if err := os.Rename(srcAbs, dstAbs); err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "move failed: " + err.Error()})
+		return
+	}
+
+	lg.Printf("[fileshare] move %q -> %q", req.Path, req.NewPath)
 	writeResponse(conn, fsResponse{OK: true})
 }
 

@@ -1354,6 +1354,7 @@ body {
 .files-entry:hover { background: rgba(94, 232, 158, 0.10); }
 .files-entry.selected { background: rgba(94, 232, 158, 0.20); }
 .files-entry.selected:hover { background: rgba(94, 232, 158, 0.25); }
+.files-entry.drag-over { background: rgba(94, 232, 158, 0.30); outline: 1px dashed var(--accent); outline-offset: -1px; }
 .files-entry-dir { cursor: pointer; }
 .fe-name {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;

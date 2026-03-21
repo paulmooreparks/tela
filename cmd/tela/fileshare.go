@@ -164,6 +164,7 @@ type fsRequest struct {
 	Size     int64  `json:"size,omitempty"`
 	Checksum string `json:"checksum,omitempty"`
 	NewName  string `json:"newName,omitempty"`
+	NewPath  string `json:"newPath,omitempty"`
 }
 
 type fsResponse struct {
@@ -199,6 +200,12 @@ func cmdFiles(args []string) {
 		cmdFilesPut(args[1:])
 	case "rm":
 		cmdFilesRm(args[1:])
+	case "mkdir":
+		cmdFilesMkdir(args[1:])
+	case "rename":
+		cmdFilesRename(args[1:])
+	case "mv":
+		cmdFilesMv(args[1:])
 	case "info":
 		cmdFilesInfo(args[1:])
 	case "help", "-h", "--help":
@@ -217,11 +224,14 @@ Requires an active tela connect session with file sharing enabled on
 the target machine.
 
 Subcommands:
-  ls    [-machine <id>] [path]           List files
-  get   [-machine <id>] <path> [-o out]  Download a file
-  put   [-machine <id>] <local> [remote] Upload a file
-  rm    [-machine <id>] <path>           Delete a file
-  info  [-machine <id>]                  Show file share status
+  ls     [-machine <id>] [path]             List files
+  get    [-machine <id>] <path> [-o out]    Download a file
+  put    [-machine <id>] <local> [remote]   Upload a file
+  rm     [-machine <id>] <path>             Delete a file
+  mkdir  [-machine <id>] <path>             Create a directory
+  rename [-machine <id>] <path> <new-name>  Rename a file or directory
+  mv     [-machine <id>] <src> <dest>       Move a file or directory
+  info   [-machine <id>]                    Show file share status
 
 `)
 }
@@ -508,6 +518,101 @@ func cmdFilesRm(args []string) {
 	}
 
 	fmt.Printf("Deleted %s\n", remotePath)
+}
+
+func cmdFilesMkdir(args []string) {
+	fs := flag.NewFlagSet("files mkdir", flag.ExitOnError)
+	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	fs.Parse(args)
+
+	if *machine == "" || fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files mkdir -machine <id> <path>")
+		os.Exit(1)
+	}
+	dirPath := fs.Arg(0)
+
+	conn, err := dialFileShare(*machine)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	resp, _, err := sendRequest(conn, fsRequest{Op: "mkdir", Path: dirPath})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if !resp.OK {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", resp.Error)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Created %s\n", dirPath)
+}
+
+func cmdFilesRename(args []string) {
+	fs := flag.NewFlagSet("files rename", flag.ExitOnError)
+	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	fs.Parse(args)
+
+	if *machine == "" || fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files rename -machine <id> <path> <new-name>")
+		os.Exit(1)
+	}
+	oldPath := fs.Arg(0)
+	newName := fs.Arg(1)
+
+	conn, err := dialFileShare(*machine)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	resp, _, err := sendRequest(conn, fsRequest{Op: "rename", Path: oldPath, NewName: newName})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if !resp.OK {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", resp.Error)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Renamed %s -> %s\n", oldPath, newName)
+}
+
+func cmdFilesMv(args []string) {
+	fs := flag.NewFlagSet("files mv", flag.ExitOnError)
+	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	fs.Parse(args)
+
+	if *machine == "" || fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files mv -machine <id> <source> <destination>")
+		os.Exit(1)
+	}
+	srcPath := fs.Arg(0)
+	dstPath := fs.Arg(1)
+
+	conn, err := dialFileShare(*machine)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	resp, _, err := sendRequest(conn, fsRequest{Op: "move", Path: srcPath, NewPath: dstPath})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if !resp.OK {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", resp.Error)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Moved %s -> %s\n", srcPath, dstPath)
 }
 
 func cmdFilesInfo(args []string) {

@@ -95,9 +95,10 @@ function appendTelaLog(text) {
 
 function copyLogPanel() {
   var active = document.querySelector('.log-panel-output:not(.hidden)');
-  if (active && navigator.clipboard) {
-    navigator.clipboard.writeText(active.textContent);
-  }
+  if (!active || !navigator.clipboard) return;
+  // For the command log, copy only the entries list, not the filter bar
+  var entries = active.querySelector('.cmd-list');
+  navigator.clipboard.writeText((entries || active).textContent);
 }
 
 function saveLogPanel() {
@@ -380,10 +381,11 @@ if (window.runtime) {
   window.runtime.EventsOn('app:command', function (entry) {
     if (!entry) return;
     var method = 'CLI';
-    if (entry.description.indexOf('GET ') === 0) method = 'GET';
-    else if (entry.description.indexOf('POST ') === 0) method = 'POST';
-    else if (entry.description.indexOf('DELETE ') === 0) method = 'DELETE';
-    addCommandEntry(method, entry.command, entry.command);
+    var cmd = entry.command || '';
+    if (cmd.indexOf('GET ') === 0) method = 'GET';
+    else if (cmd.indexOf('POST ') === 0) method = 'POST';
+    else if (cmd.indexOf('DELETE ') === 0) method = 'DEL';
+    addCommandEntry(method, entry.description || cmd, cmd);
   });
 }
 
@@ -1475,12 +1477,16 @@ function filesListDir(machine, path) {
 }
 
 function filesRenderEntries() {
+  var canDrag = filesCurrentWritable;
   var html = '';
   filesCurrentEntries.forEach(function (entry, idx) {
     var selClass = filesSelectedIndices.has(idx) ? ' selected' : '';
     var dirClass = entry.isDir ? ' files-entry-dir' : '';
+    var dragAttr = canDrag ? ' draggable="true" ondragstart="filesDragStart(event, ' + idx + ')"' : '';
+    var dropAttr = entry.isDir ? ' ondragover="filesDragOver(event)" ondragenter="filesDragEnter(event)" ondragleave="filesDragLeave(event)" ondrop="filesDrop(event, ' + idx + ')"' : '';
 
     html += '<div class="files-entry' + dirClass + selClass + '" data-idx="' + idx + '"'
+      + dragAttr + dropAttr
       + ' onclick="filesOnEntryClick(event, ' + idx + ')"'
       + ' ondblclick="filesOnEntryDblClick(' + idx + ')">';
 
@@ -1574,6 +1580,84 @@ function filesUpdateActionButtons() {
   } else if (info) {
     info.textContent = '';
   }
+}
+
+// ── Drag and Drop ──
+
+function filesDragStart(event, idx) {
+  // If dragged item is in selection, drag all selected; otherwise drag just this one
+  var items = [];
+  if (filesSelectedIndices.has(idx)) {
+    filesSelectedIndices.forEach(function (i) {
+      var e = filesCurrentEntries[i];
+      if (e) items.push(e.name);
+    });
+  } else {
+    var e = filesCurrentEntries[idx];
+    if (e) items.push(e.name);
+  }
+  event.dataTransfer.setData('text/plain', JSON.stringify(items));
+  event.dataTransfer.effectAllowed = 'move';
+}
+
+function filesDragOver(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+}
+
+function filesDragEnter(event) {
+  event.preventDefault();
+  var row = event.target.closest('.files-entry-dir');
+  if (row) row.classList.add('drag-over');
+}
+
+function filesDragLeave(event) {
+  var row = event.target.closest('.files-entry-dir');
+  if (row && !row.contains(event.relatedTarget)) {
+    row.classList.remove('drag-over');
+  }
+}
+
+function filesDrop(event, targetIdx) {
+  event.preventDefault();
+  var row = event.target.closest('.files-entry-dir');
+  if (row) row.classList.remove('drag-over');
+
+  var targetEntry = filesCurrentEntries[targetIdx];
+  if (!targetEntry || !targetEntry.isDir) return;
+
+  var data = event.dataTransfer.getData('text/plain');
+  var items;
+  try { items = JSON.parse(data); } catch (e) { return; }
+  if (!items || items.length === 0) return;
+
+  // Cannot drop a folder into itself
+  if (items.indexOf(targetEntry.name) >= 0) return;
+
+  var machine = filesCurrentMachine;
+  var path = filesCurrentPath;
+  var targetDir = path ? path + '/' + targetEntry.name : targetEntry.name;
+
+  // Move items sequentially
+  var idx = 0;
+  function moveNext() {
+    if (idx >= items.length) {
+      filesClearSelection();
+      filesRefresh();
+      return;
+    }
+    var name = items[idx++];
+    var srcPath = path ? path + '/' + name : name;
+    var dstPath = targetDir + '/' + name;
+    var req = JSON.stringify({op: 'move', path: srcPath, newPath: dstPath});
+    goApp.FileShareRequest(machine, req).then(function (respJSON) {
+      try { var resp = JSON.parse(respJSON); } catch (e) { /* skip */ }
+      if (resp && resp.ok) tvLog('Moved ' + name + ' to ' + targetEntry.name + '/');
+      else tvLog('Move failed (' + name + '): ' + (resp ? resp.error : 'unknown'));
+      moveNext();
+    }).catch(function () { moveNext(); });
+  }
+  moveNext();
 }
 
 // Click empty area clears selection
