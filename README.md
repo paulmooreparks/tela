@@ -2,6 +2,13 @@
 
 # Tela
 
+[![Release](https://img.shields.io/github/v/release/paulmooreparks/tela?include_prereleases&sort=semver)](https://github.com/paulmooreparks/tela/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/release.yml?branch=main)](https://github.com/paulmooreparks/tela/actions/workflows/release.yml)
+[![License](https://img.shields.io/github/license/paulmooreparks/tela)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/paulmooreparks/tela)](go.mod)
+[![Issues](https://img.shields.io/github/issues/paulmooreparks/tela)](https://github.com/paulmooreparks/tela/issues)
+[![Downloads](https://img.shields.io/github/downloads/paulmooreparks/tela/total)](https://github.com/paulmooreparks/tela/releases)
+
 Tela is a free and open-source (FOSS) remote-access system that lets you reach TCP services on remote machines through an encrypted WireGuard tunnel. It works through firewalls, NATs, and corporate proxies without requiring inbound ports, VPN software, kernel drivers, or administrator privileges on either end.
 
 You run a small agent (`telad`) on the machine you want to reach. It connects outbound to a relay hub (`telahubd`). From any other machine, you run the client (`tela`) or the desktop app (TelaVisor) to connect through the hub. The hub pairs the two sides and relays encrypted traffic between them. It never sees the plaintext.

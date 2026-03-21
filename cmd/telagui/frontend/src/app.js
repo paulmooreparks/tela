@@ -515,12 +515,12 @@ function checkForUpdate() {
   goApp.GetUpdateInfo().then(function (info) {
     updateInfo = info;
     if (!info.pending || (!info.guiBehind && !info.cliBehind)) {
-      document.getElementById('update-btn').classList.add('hidden');
+      document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
       return;
     }
     if (updateDismissedForSession) return;
     if (updateSkippedVersion && updateSkippedVersion === info.version) return;
-    document.getElementById('update-btn').classList.remove('hidden');
+    document.getElementById('update-btn').disabled = false; document.getElementById('update-btn').title = 'Update available';
   });
 }
 
@@ -561,7 +561,7 @@ function applyUpdate() {
   applyBtn.disabled = true;
   goApp.RestartToUpdate().then(function () {
     // If we're still here, it was a CLI-only update
-    document.getElementById('update-btn').classList.add('hidden');
+    document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
     toggleUpdateOverlay();
     applyBtn.textContent = 'Update Now';
     applyBtn.disabled = false;
@@ -577,13 +577,13 @@ function applyUpdate() {
 
 function ignoreUpdateSession() {
   updateDismissedForSession = true;
-  document.getElementById('update-btn').classList.add('hidden');
+  document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
   toggleUpdateOverlay();
 }
 
 function ignoreUpdateForever() {
   if (updateInfo) updateSkippedVersion = updateInfo.version;
-  document.getElementById('update-btn').classList.add('hidden');
+  document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
   toggleUpdateOverlay();
 }
 
@@ -1569,7 +1569,9 @@ function filesShowMachineList() {
       return;
     }
 
-    var capabilitiesPromise = state.connected ? goApp.GetMachineCapabilities() : Promise.resolve({});
+    var capabilitiesPromise = state.connected
+      ? goApp.GetMachineCapabilities().catch(function (err) { tvLog('Capabilities fetch failed: ' + err); return {}; })
+      : Promise.resolve({});
     capabilitiesPromise.then(function (caps) {
       filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
@@ -3132,7 +3134,7 @@ function saveSettingsWithValidation() {
       if (btn) btn.disabled = true;
       if (pathInput) pathInput.classList.remove('invalid');
       // Clear update warning and re-check with new settings
-      document.getElementById('update-btn').classList.add('hidden');
+      document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
       updateDismissedForSession = false;
       updateSkippedVersion = '';
       checkForUpdate();

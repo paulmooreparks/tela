@@ -116,8 +116,11 @@ body {
   50% { opacity: 0.4; }
 }
 
-.topbar-update-btn { color: #f39c12; border-color: #f39c12; font-size: 16px; font-weight: 400; }
-.topbar-update-btn:hover { background: #f39c12; color: #fff; }
+.topbar-update-btn { font-size: 16px; font-weight: 400; }
+.topbar-update-btn:disabled { color: var(--text-muted); border-color: var(--border); opacity: 0.4; cursor: default; }
+.topbar-update-btn:disabled:hover { background: none; }
+.topbar-update-btn:not(:disabled) { color: #f39c12; border-color: #f39c12; }
+.topbar-update-btn:not(:disabled):hover { background: #f39c12; color: #fff; }
 .topbar-quit-btn { color: var(--danger); border-color: var(--danger); }
 .topbar-quit-btn:hover { background: var(--danger); color: #fff; }
 .topbar-quit-btn.quitting { animation: pulse-border 1.2s ease-in-out infinite; cursor: wait; }

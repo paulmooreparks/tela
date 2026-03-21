@@ -15,17 +15,17 @@
           <img src="/src/logo.png" class="app-logo" alt="Tela">
           <span class="app-title">Tela<span class="app-title-visor">Visor</span></span>
         </a>
+        <button type="button" class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
       </div>
       <div class="topbar-center">
         <div class="mode-toggle">
-          <button class="mode-btn active" id="mode-clients-btn" onclick="switchMode('clients')">Clients</button>
+          <button type="button" class="mode-btn active" id="mode-clients-btn" onclick="switchMode('clients')">Clients</button>
           <button class="mode-btn mode-btn-middle" id="mode-agents-btn" onclick="switchMode('agents')">Agents</button>
           <button class="mode-btn" id="mode-hubs-btn" onclick="switchMode('hubs')">Hubs</button>
         </div>
       </div>
       <div class="topbar-right">
-        <button class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
-        <button class="topbar-icon-btn topbar-update-btn hidden" id="update-btn" onclick="toggleUpdateOverlay()" title="Update available">&#x26A0;</button>
+        <button class="topbar-icon-btn topbar-update-btn" id="update-btn" onclick="toggleUpdateOverlay()" title="No updates" disabled>&#x26A0;</button>
         <button class="topbar-icon-btn topbar-conn-btn" id="conn-status-btn" onclick="goToStatus()" title="Connection status">
           <svg class="conn-icon conn-icon-broken" id="conn-icon-broken" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <path d="M6.5 9.5L4.5 11.5C3.4 12.6 1.6 12.6 0.5 11.5C-0.6 10.4 -0.6 8.6 0.5 7.5L3.5 4.5"/>
