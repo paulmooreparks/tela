@@ -1521,7 +1521,7 @@ function filesRenderEntries() {
   });
 
   if (filesCurrentEntries.length === 0) {
-    html = '<div class="files-empty">This folder is empty</div>';
+    html += '<div class="files-empty">This folder is empty</div>';
   }
 
   document.getElementById('files-content').innerHTML = html;
