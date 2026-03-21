@@ -1221,8 +1221,21 @@ function doConnect() {
     startConnectionPoll();
 
     // Connect WebSocket immediately, retry until control API is ready.
+    // After connecting, check if services are already bound (events
+    // may have fired before the WebSocket was listening).
     (function connectWS() {
-      goApp.ConnectControlWS().catch(function () {
+      goApp.ConnectControlWS().then(function () {
+        // WebSocket connected. Check if services are already bound.
+        if (connPhase === 'connecting') {
+          goApp.GetControlServices().then(function (services) {
+            if (services && services.length > 0 && connPhase === 'connecting') {
+              tvLog('Connected');
+              setConnPhase('connected');
+              onConnectionChanged();
+            }
+          });
+        }
+      }).catch(function () {
         if (connPhase === 'connecting' || connPhase === 'connected') {
           setTimeout(connectWS, 500);
         }
@@ -1631,12 +1644,7 @@ function filesShowMachineList() {
       capabilitiesPromise = Promise.resolve({});
     }
     capabilitiesPromise.then(function (caps) {
-      var capKeys = caps ? Object.keys(caps) : [];
-      if (state.connected && capKeys.length === 0) {
-        tvLog('Warning: no capabilities returned for any machine');
-      } else if (state.connected) {
-        tvLog('Capabilities loaded for: ' + capKeys.join(', '));
-      }
+      try {
       filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
       machineList.forEach(function (m) {
@@ -1677,7 +1685,11 @@ function filesShowMachineList() {
 
       document.getElementById('files-content').innerHTML = html;
       document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
-    }).catch(function () {
+      } catch (renderErr) {
+        tvLog('Machine list render error: ' + renderErr);
+      }
+    }).catch(function (err) {
+      tvLog('Machine list error: ' + err);
       // Capabilities unavailable -- show all machines as clickable
       // with unknown status. Better than blocking the entire view.
       var fallbackHtml = '<div class="files-machine-list">';

@@ -130,10 +130,25 @@ type ConnectionState struct {
 }
 
 // doRequest executes an HTTP request with the given timeout using the shared client.
+// The context is kept alive until the response body is fully read. Callers receive
+// a response whose Body is safe to read without context cancellation races.
 func (a *App) doRequest(req *http.Request, timeout time.Duration) (*http.Response, error) {
 	ctx, cancel := context.WithTimeout(req.Context(), timeout)
-	defer cancel()
-	return a.httpClient.Do(req.WithContext(ctx))
+	resp, err := a.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	// Read the entire body while the context is still alive, then replace
+	// resp.Body with an in-memory reader so the caller can read it safely.
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	cancel()
+	if err != nil {
+		return nil, err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return resp, nil
 }
 
 // NewApp creates a new App instance.
@@ -2004,9 +2019,7 @@ func (a *App) FileShareRequest(machine string, opJSON string) string {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	resp, err := a.httpClient.Do(req.WithContext(ctx))
+	resp, err := a.doRequest(req, 30*time.Second)
 	if err != nil {
 		return errJSON("request failed: " + err.Error())
 	}
