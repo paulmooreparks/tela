@@ -752,17 +752,13 @@ func handleDelete(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req
 		writeResponse(conn, fsResponse{OK: false, Error: "file not found"})
 		return
 	}
-	if info.IsDir() {
-		writeResponse(conn, fsResponse{OK: false, Error: "cannot delete directories"})
-		return
-	}
-	if !info.Mode().IsRegular() {
-		writeResponse(conn, fsResponse{OK: false, Error: "not a regular file"})
+	if !info.IsDir() && !info.Mode().IsRegular() {
+		writeResponse(conn, fsResponse{OK: false, Error: "not a regular file or directory"})
 		return
 	}
 
-	// Check extension
-	if !cfg.isExtensionAllowed(req.Path) {
+	// Check extension (files only)
+	if !info.IsDir() && !cfg.isExtensionAllowed(req.Path) {
 		writeResponse(conn, fsResponse{OK: false, Error: "file extension not allowed"})
 		return
 	}
