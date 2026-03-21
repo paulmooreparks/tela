@@ -1794,6 +1794,110 @@ func (a *App) GetControlStatus() map[string]interface{} {
 	return result
 }
 
+// AdminAPICall is the public Wails binding for adminAPICall.
+func (a *App) AdminAPICall(hubURL, method, path string, bodyJSON string) string {
+	var body []byte
+	if bodyJSON != "" {
+		body = []byte(bodyJSON)
+	}
+	data, err := a.adminAPICall(hubURL, method, path, body)
+	if err != nil {
+		return `{"error":"` + strings.ReplaceAll(err.Error(), `"`, `'`) + `"}`
+	}
+	return string(data)
+}
+
+// --- Agents Mode ---
+
+// AgentInfo contains the data for one agent displayed in Agents mode.
+type AgentInfo struct {
+	ID             string                 `json:"id"`
+	Hub            string                 `json:"hub"`
+	Online         bool                   `json:"online"`
+	Version        string                 `json:"version"`
+	Hostname       string                 `json:"hostname"`
+	OS             string                 `json:"os"`
+	SessionCount   int                    `json:"sessionCount"`
+	RegisteredAt   string                 `json:"registeredAt"`
+	LastSeen       string                 `json:"lastSeen"`
+	Services       []map[string]interface{} `json:"services"`
+	Capabilities   map[string]interface{} `json:"capabilities"`
+}
+
+// GetAgentList returns agent info for all machines across all hubs
+// in the current profile.
+func (a *App) GetAgentList() []AgentInfo {
+	var result []AgentInfo
+
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return result
+	}
+	var profile Profile
+	if yaml.Unmarshal(data, &profile) != nil {
+		return result
+	}
+
+	hubsSeen := map[string]bool{}
+	for _, conn := range profile.Connections {
+		if hubsSeen[conn.Hub] {
+			continue
+		}
+		hubsSeen[conn.Hub] = true
+
+		statusData, err := a.adminAPICall(conn.Hub, "GET", "/api/status", nil)
+		if err != nil {
+			continue
+		}
+		var status struct {
+			Machines []struct {
+				ID             string                 `json:"id"`
+				AgentConnected bool                   `json:"agentConnected"`
+				AgentVersion   *string                `json:"agentVersion"`
+				Hostname       *string                `json:"hostname"`
+				OS             *string                `json:"os"`
+				SessionCount   int                    `json:"sessionCount"`
+				RegisteredAt   *string                `json:"registeredAt"`
+				LastSeen       *string                `json:"lastSeen"`
+				Services       []map[string]interface{} `json:"services"`
+				Capabilities   map[string]interface{} `json:"capabilities"`
+			} `json:"machines"`
+		}
+		if json.Unmarshal(statusData, &status) != nil {
+			continue
+		}
+
+		hubName := hubNameFromURLGo(conn.Hub)
+		for _, m := range status.Machines {
+			ai := AgentInfo{
+				ID:           m.ID,
+				Hub:          hubName,
+				Online:       m.AgentConnected,
+				SessionCount: m.SessionCount,
+				Services:     m.Services,
+				Capabilities: m.Capabilities,
+			}
+			if m.AgentVersion != nil { ai.Version = *m.AgentVersion }
+			if m.Hostname != nil { ai.Hostname = *m.Hostname }
+			if m.OS != nil { ai.OS = *m.OS }
+			if m.RegisteredAt != nil { ai.RegisteredAt = *m.RegisteredAt }
+			if m.LastSeen != nil { ai.LastSeen = *m.LastSeen }
+			result = append(result, ai)
+		}
+	}
+	return result
+}
+
+// hubNameFromURLGo extracts a short hub name from a URL (Go-side equivalent).
+func hubNameFromURLGo(u string) string {
+	u = strings.TrimPrefix(u, "wss://")
+	u = strings.TrimPrefix(u, "ws://")
+	u = strings.TrimPrefix(u, "https://")
+	u = strings.TrimPrefix(u, "http://")
+	u = strings.TrimSuffix(u, "/")
+	return u
+}
+
 // --- File Share ---
 
 // GetMachineCapabilities returns a map of machineID -> capabilities

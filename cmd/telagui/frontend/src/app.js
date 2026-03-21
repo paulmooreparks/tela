@@ -57,6 +57,7 @@ function switchTab(name, btn) {
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
   if (name === 'files') refreshFilesTab();
+  if (name === 'agents') agentsRefresh();
   if (name === 'hubs') refreshHubsTab();
 }
 
@@ -1310,6 +1311,202 @@ function stopConnectionPoll() {
     clearInterval(pollIntervalId);
     pollIntervalId = null;
   }
+}
+
+// --- Agents Mode ---
+
+var agentsData = [];
+var agentsSelectedId = '';
+
+function agentsRefresh() {
+  goApp.GetConnectionState().then(function (state) {
+    document.getElementById('agents-pair-btn').disabled = !state.connected;
+    if (!state.connected) {
+      document.getElementById('agents-sidebar-list').innerHTML = '<p class="empty-hint" style="padding:16px;">Connect to view agents.</p>';
+      document.getElementById('agents-detail').innerHTML = '<div class="agents-detail-empty">Connect to view agents.</div>';
+      agentsData = [];
+      return;
+    }
+    goApp.GetAgentList().then(function (agents) {
+      agentsData = agents || [];
+      agentsRenderSidebar();
+      if (agentsSelectedId) {
+        var found = agentsData.find(function (a) { return a.id === agentsSelectedId; });
+        if (found) agentsShowDetail(found);
+        else document.getElementById('agents-detail').innerHTML = '<div class="agents-detail-empty">Select an agent to view details.</div>';
+      }
+    }).catch(function () {
+      document.getElementById('agents-sidebar-list').innerHTML = '<p class="empty-hint" style="padding:16px;">Failed to load agents.</p>';
+    });
+  }).catch(function () {});
+}
+
+function agentsRenderSidebar() {
+  var html = '';
+  agentsData.forEach(function (a) {
+    var active = a.id === agentsSelectedId ? ' active' : '';
+    var dotClass = a.online ? 'online' : 'offline';
+    var ver = a.version || 'unknown';
+    html += '<div class="agents-sidebar-item' + active + '" onclick="agentsSelect(\'' + escAttr(a.id) + '\')">'
+      + '<span class="machine-status-dot ' + dotClass + '"></span>'
+      + '<div>'
+      + '<div class="agents-sidebar-name">' + escHtml(a.id) + '</div>'
+      + '<div class="agents-sidebar-version">' + escHtml(ver) + '</div>'
+      + '</div>'
+      + '</div>';
+  });
+  if (agentsData.length === 0) {
+    html = '<p class="empty-hint" style="padding:16px;">No agents registered.</p>';
+  }
+  document.getElementById('agents-sidebar-list').innerHTML = html;
+}
+
+function agentsSelect(id) {
+  agentsSelectedId = id;
+  agentsRenderSidebar();
+  var agent = agentsData.find(function (a) { return a.id === id; });
+  if (agent) agentsShowDetail(agent);
+}
+
+function agentsShowDetail(a) {
+  var isOnline = a.online;
+  var statusClass = isOnline ? 'online' : 'offline';
+  var statusText = isOnline ? 'Online' : 'Offline';
+  var dis = isOnline ? '' : ' disabled';
+
+  var html = '<div class="agent-detail-header">'
+    + '<div class="agent-detail-title">' + escHtml(a.id) + '</div>'
+    + '<span class="agent-detail-status ' + statusClass + '">' + statusText + '</span>'
+    + '</div>';
+
+  // Agent Info card
+  html += agentCard('Agent Info',
+    agentRow('Version', agentMono(a.version || 'unknown'))
+    + agentRow('Hub', escHtml(a.hub))
+    + agentRow('Hostname', agentMono(a.hostname || '-'))
+    + agentRow('Platform', agentMono(a.os || '-'))
+    + agentRow('Last seen', agentMono(a.lastSeen ? agentFormatDate(a.lastSeen) : '-'))
+    + agentRow('Active sessions', agentMono(a.sessionCount))
+  );
+
+  // Services card
+  var svcHtml = '<div class="agent-svc-tags">';
+  if (a.services && a.services.length > 0) {
+    a.services.forEach(function (s) {
+      var label = (s.name || '') + ' :' + (s.port || '');
+      svcHtml += '<span class="agent-svc-tag">' + escHtml(label) + '</span>';
+    });
+  } else {
+    svcHtml += '<span style="padding:0 16px;color:var(--text-muted);font-size:12px;">No services</span>';
+  }
+  svcHtml += '</div>';
+  html += agentCard('Services', svcHtml);
+
+  // File Share card
+  var fs = a.capabilities && a.capabilities.fileShare;
+  if (fs && fs.enabled) {
+    var badgeCls = fs.writable ? 'rw' : 'ro';
+    var badgeText = fs.writable ? 'read-write' : 'read-only';
+    html += agentCard('File Share',
+      agentRow('Status', '<span class="agent-fs-badge ' + badgeCls + '">' + badgeText + '</span>')
+      + (fs.maxFileSize ? agentRow('Max file size', agentMono(agentFormatBytes(fs.maxFileSize))) : '')
+    );
+  } else {
+    html += agentCard('File Share',
+      agentRow('Status', '<span style="color:var(--text-muted)">Not configured</span>')
+    );
+  }
+
+  // Update card
+  var latestVersion = '';
+  if (typeof updateInfo === 'object' && updateInfo && updateInfo.version) {
+    latestVersion = updateInfo.version;
+  }
+  var isOutdated = latestVersion && a.version && a.version !== latestVersion;
+  var updateContent = '<div class="agent-update-row">'
+    + '<span class="agent-update-current">' + escHtml(a.version || '?') + '</span>';
+  if (isOutdated) {
+    updateContent += '<span class="agent-update-arrow">&#x2192;</span>'
+      + '<span class="agent-update-latest">' + escHtml(latestVersion) + '</span>'
+      + '<span class="agent-update-note">Update available</span>'
+      + '<button type="button" class="tb-btn" disabled title="Agent update not yet implemented">Update</button>';
+  } else {
+    updateContent += '<span class="agent-update-note">Up to date</span>';
+  }
+  updateContent += '</div>';
+  html += agentCard('Update', updateContent);
+
+  // Management card (actions not yet implemented)
+  html += agentCard('Management',
+    '<div class="card-actions">'
+    + '<button type="button" class="tb-btn" disabled title="Coming soon">Pull Config</button>'
+    + '<button type="button" class="tb-btn" disabled title="Coming soon">Push Config</button>'
+    + '<button type="button" class="tb-btn" disabled title="Coming soon">Restart Agent</button>'
+    + '<button type="button" class="tb-btn" disabled title="Coming soon">View Log</button>'
+    + '</div>'
+  );
+
+  // Danger Zone
+  html += '<div class="settings-group" style="border-color:rgba(239,68,68,0.3);">'
+    + '<div class="settings-group-header" style="color:var(--danger);">Danger Zone</div>'
+    + '<div class="card-actions">'
+    + '<button type="button" class="tb-btn tb-delete-btn" disabled title="Coming soon">Stop Agent</button>'
+    + '<button type="button" class="tb-btn tb-delete-btn" disabled title="Coming soon">Unregister</button>'
+    + '</div></div>';
+
+  document.getElementById('agents-detail').innerHTML = html;
+}
+
+function agentsPairAgent() {
+  // Find the first hub from the profile
+  var hub = '';
+  for (var key in selectedServices) {
+    var svc = selectedServices[key];
+    if (svc.hub) { hub = svc.hub; break; }
+  }
+  if (!hub) { showError('No hub available'); return; }
+
+  showPromptDialog('Pair Agent', 'Enter the machine name for the new agent:', '', 'Generate Code').then(function (machine) {
+    if (!machine) return;
+    var wsHub = toWSURL(hub);
+    goApp.AdminAPICall(wsHub, 'POST', '/api/admin/pair-code',
+      JSON.stringify({type: 'register', machines: [machine]}))
+      .then(function (resp) {
+        try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
+        if (data.code) {
+          tvLog('Pairing code for ' + machine + ': ' + data.code);
+          showPromptDialog('Pairing Code', 'Give this code to the agent operator. It expires in ' + (data.expires || '10 minutes') + '.', data.code, 'Close');
+        } else if (data.error) {
+          showError('Pair failed: ' + data.error);
+        }
+      }).catch(function (err) { showError('Pair failed: ' + err); });
+  }).catch(function () {});
+}
+
+function agentCard(title, content) {
+  return '<div class="settings-group"><div class="settings-group-header">' + title + '</div>' + content + '</div>';
+}
+
+function agentRow(label, value) {
+  return '<div class="settings-row"><div class="settings-label">' + label + '</div><div class="settings-value">' + value + '</div></div>';
+}
+
+function agentMono(v) {
+  return '<span style="font-family:var(--mono);font-size:12px;">' + escHtml(String(v)) + '</span>';
+}
+
+function agentFormatDate(iso) {
+  try {
+    var d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  } catch (e) { return iso; }
+}
+
+function agentFormatBytes(n) {
+  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
+  if (n >= 1048576) return (n / 1048576).toFixed(0) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+  return n + ' B';
 }
 
 // --- Files Tab ---

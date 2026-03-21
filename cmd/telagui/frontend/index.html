@@ -144,13 +144,24 @@
       </div>
     </div>
 
-    <!-- Agents tab (placeholder) -->
+    <!-- Agents tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-agents">
-      <div class="status-pane">
-        <div class="status-header">
-          <h1>Agents</h1>
+      <div class="agents-layout">
+        <div class="agents-sidebar">
+          <div class="agents-sidebar-header">
+            <span>Agents</span>
+            <button type="button" class="files-nav-btn" onclick="agentsRefresh()" title="Refresh" style="width:22px;height:22px;font-size:12px;">&#x21BB;</button>
+          </div>
+          <div class="agents-sidebar-list" id="agents-sidebar-list">
+            <p class="empty-hint" style="padding:16px;">Connect to view agents.</p>
+          </div>
+          <div class="agents-sidebar-footer">
+            <button type="button" class="tb-btn" style="flex:1;" id="agents-pair-btn" onclick="agentsPairAgent()" disabled>Pair Agent</button>
+          </div>
         </div>
-        <p class="empty-hint">Agent management is coming soon. You will be able to deploy, configure, and monitor telad instances from here.</p>
+        <div class="agents-detail" id="agents-detail">
+          <div class="agents-detail-empty">Select an agent to view details.</div>
+        </div>
       </div>
     </div>
 

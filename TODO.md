@@ -42,3 +42,15 @@ When peers are on the same LAN, the relay path is already low-latency.
 - [x] tela files CLI (ls, get, put, rm, mkdir, rename, mv, info)
 - [x] TelaVisor Files tab with Explorer-style browser
 - [x] Drag-and-drop move support
+
+## Agents Mode (TelaVisor)
+- [x] Agent list sidebar with status and version
+- [x] Agent detail cards (info, services, file share, update comparison)
+- [x] Pair Agent button (generate register pairing codes)
+- [ ] Live event channel from telad (log feed, status updates)
+- [ ] Remote log viewing (view/download telad logs through the tunnel)
+- [ ] Remote config pull/push (edit telad.yaml through the file share channel)
+- [ ] Remote agent restart (management command through the tunnel)
+- [ ] Remote agent stop (management command through the tunnel)
+- [ ] Remote agent update with watchdog rollback
+- [ ] Unregister agent from hub
