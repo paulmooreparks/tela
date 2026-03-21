@@ -340,6 +340,7 @@ type fsRequest struct {
 	Path     string `json:"path"`
 	Size     int64  `json:"size,omitempty"`
 	Checksum string `json:"checksum,omitempty"`
+	NewName  string `json:"newName,omitempty"` // for rename
 }
 
 type fsResponse struct {
@@ -445,6 +446,10 @@ func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConf
 			handleWrite(lg, conn, reader, cfg, req)
 		case "delete":
 			handleDelete(lg, conn, cfg, req)
+		case "mkdir":
+			handleMkdir(lg, conn, cfg, req)
+		case "rename":
+			handleRename(lg, conn, cfg, req)
 		case "subscribe":
 			handleSubscribe(lg, conn, cfg)
 			return // subscribe takes over the connection
@@ -765,6 +770,93 @@ func handleDelete(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req
 	}
 
 	lg.Printf("[fileshare] delete %q", req.Path)
+	writeResponse(conn, fsResponse{OK: true})
+}
+
+// ── MKDIR ───────────────────────────────────────────────────────────
+
+func handleMkdir(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req fsRequest) {
+	if !cfg.writable {
+		writeResponse(conn, fsResponse{OK: false, Error: "file sharing is read-only"})
+		return
+	}
+	if req.Path == "" {
+		writeResponse(conn, fsResponse{OK: false, Error: "path required"})
+		return
+	}
+
+	absPath, err := cfg.validatePath(req.Path)
+	if err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: err.Error()})
+		return
+	}
+
+	if err := os.Mkdir(absPath, 0700); err != nil {
+		if os.IsExist(err) {
+			writeResponse(conn, fsResponse{OK: false, Error: "directory already exists"})
+		} else {
+			writeResponse(conn, fsResponse{OK: false, Error: "mkdir failed: " + err.Error()})
+		}
+		return
+	}
+
+	lg.Printf("[fileshare] mkdir %q", req.Path)
+	writeResponse(conn, fsResponse{OK: true})
+}
+
+// ── RENAME ──────────────────────────────────────────────────────────
+
+func handleRename(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req fsRequest) {
+	if !cfg.writable {
+		writeResponse(conn, fsResponse{OK: false, Error: "file sharing is read-only"})
+		return
+	}
+	if req.Path == "" || req.NewName == "" {
+		writeResponse(conn, fsResponse{OK: false, Error: "path and newName required"})
+		return
+	}
+
+	// Validate the source path
+	absPath, err := cfg.validatePath(req.Path)
+	if err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: err.Error()})
+		return
+	}
+
+	// NewName must be a bare filename, not a path
+	if strings.Contains(req.NewName, "/") || strings.Contains(req.NewName, "\\") {
+		writeResponse(conn, fsResponse{OK: false, Error: "newName must be a filename, not a path"})
+		return
+	}
+
+	// Build the new path in the same directory
+	newAbs := filepath.Join(filepath.Dir(absPath), req.NewName)
+
+	// Validate the new path is still in the sandbox
+	rel, err := filepath.Rel(cfg.directory, newAbs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		writeResponse(conn, fsResponse{OK: false, Error: "rename would escape sandbox"})
+		return
+	}
+
+	// Check that source exists
+	if _, err := os.Lstat(absPath); err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "source not found"})
+		return
+	}
+
+	// Check that destination doesn't exist
+	if _, err := os.Lstat(newAbs); err == nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "destination already exists"})
+		return
+	}
+
+	if err := os.Rename(absPath, newAbs); err != nil {
+		writeResponse(conn, fsResponse{OK: false, Error: "rename failed: " + err.Error()})
+		return
+	}
+
+	lg.Printf("[fileshare] rename %q -> %q", req.Path, req.NewName)
 	writeResponse(conn, fsResponse{OK: true})
 }
 

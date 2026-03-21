@@ -1526,8 +1526,15 @@ function filesOnEntryDblClick(idx) {
 
 function filesUpdateActionButtons() {
   var hasSelection = filesSelectedIndices.size > 0;
+  var singleSelection = filesSelectedIndices.size === 1;
+  // TODO: check writable from capabilities
+  var isWritable = true;
+
   document.getElementById('files-btn-download').disabled = !hasSelection;
-  document.getElementById('files-btn-delete').disabled = !hasSelection; // TODO: check writable
+  document.getElementById('files-btn-delete').disabled = !hasSelection || !isWritable;
+  document.getElementById('files-btn-rename').disabled = !singleSelection || !isWritable;
+  document.getElementById('files-btn-newfolder').disabled = !isWritable;
+  document.getElementById('files-btn-upload').disabled = !isWritable;
 
   var info = document.getElementById('files-selection-info');
   if (hasSelection && info) {
@@ -1692,6 +1699,48 @@ function filesDeleteSelected() {
     });
   }
   deleteNext();
+}
+
+function filesNewFolder() {
+  if (!filesCurrentMachine) return;
+  var name = prompt('New folder name:');
+  if (!name) return;
+  var path = filesCurrentPath ? filesCurrentPath + '/' + name : name;
+  var req = JSON.stringify({op: 'mkdir', path: path});
+  goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
+    var resp = JSON.parse(respJSON);
+    if (resp.ok) {
+      tvLog('Created folder ' + name);
+      filesRefresh();
+    } else {
+      tvLog('New folder failed: ' + resp.error);
+      showError('New folder failed: ' + resp.error);
+    }
+  });
+}
+
+function filesRenameSelected() {
+  if (filesSelectedIndices.size !== 1) return;
+  var idx = filesSelectedIndices.values().next().value;
+  var entry = filesCurrentEntries[idx];
+  if (!entry) return;
+
+  var newName = prompt('Rename ' + entry.name + ' to:', entry.name);
+  if (!newName || newName === entry.name) return;
+
+  var oldPath = filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name;
+  var req = JSON.stringify({op: 'rename', path: oldPath, newName: newName});
+  goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
+    var resp = JSON.parse(respJSON);
+    if (resp.ok) {
+      tvLog('Renamed ' + entry.name + ' to ' + newName);
+      filesClearSelection();
+      filesRefresh();
+    } else {
+      tvLog('Rename failed: ' + resp.error);
+      showError('Rename failed: ' + resp.error);
+    }
+  });
 }
 
 // ── Status bar ──

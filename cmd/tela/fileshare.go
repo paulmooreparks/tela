@@ -163,6 +163,7 @@ type fsRequest struct {
 	Path     string `json:"path"`
 	Size     int64  `json:"size,omitempty"`
 	Checksum string `json:"checksum,omitempty"`
+	NewName  string `json:"newName,omitempty"`
 }
 
 type fsResponse struct {
