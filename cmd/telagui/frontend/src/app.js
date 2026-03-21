@@ -1603,6 +1603,14 @@ function filesShowMachineList() {
       capabilitiesPromise = Promise.resolve({});
     }
     capabilitiesPromise.then(function (caps) {
+      // Log any capability fetch errors
+      if (caps) {
+        Object.keys(caps).forEach(function (k) {
+          if (k.indexOf('_error_') === 0 && caps[k].error) {
+            tvLog('Capabilities: ' + k.substring(7) + ': ' + caps[k].error);
+          }
+        });
+      }
       filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
       machineList.forEach(function (m) {
@@ -1701,7 +1709,7 @@ function filesListDir(machine, path) {
     try {
       var resp = JSON.parse(respJSON);
     } catch (e) {
-      listEl.innerHTML = '<div class="files-empty">Invalid response from server.</div>';
+      listEl.innerHTML = '<div class="files-empty">Invalid response: ' + escHtml(String(respJSON).substring(0, 200)) + '</div>';
       return;
     }
     if (!resp.ok) {

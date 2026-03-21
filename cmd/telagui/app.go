@@ -1926,9 +1926,9 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 
 		statusData, err := a.adminAPICall(conn.Hub, "GET", "/api/status", nil)
 		if err != nil {
-			if a.ctx != nil {
-				wailsRuntime.EventsEmit(a.ctx, "tela:tvlog", fmt.Sprintf("Capabilities fetch for %s failed: %v", conn.Hub, err))
-			}
+			log.Printf("[capabilities] %s: %v", conn.Hub, err)
+			// Store the error so the frontend can see it
+			result["_error_"+conn.Hub] = map[string]interface{}{"error": err.Error()}
 			continue
 		}
 		var status struct {
