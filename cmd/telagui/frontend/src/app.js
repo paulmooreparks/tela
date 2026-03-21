@@ -324,8 +324,12 @@ if (window.runtime) {
               sel.servicePort = evt.remote;
             }
           });
-          // Service confirmed bound -- update connect button state
-          updateConnectButton();
+          // Service confirmed bound. Transition connecting -> connected.
+          if (connPhase === 'connecting') {
+            tvLog('Connected');
+            setConnPhase('connected');
+            onConnectionChanged();
+          }
         }
         if (evt.type === 'tunnel_activity') {
           // Track active tunnels
@@ -354,8 +358,7 @@ if (window.runtime) {
     var quitBtn = document.getElementById('quit-btn');
     var connectBtn = document.getElementById('connect-btn');
     if (quitBtn) { quitBtn.classList.add('quitting'); quitBtn.disabled = true; }
-    if (connectBtn) { connectBtn.disabled = true; }
-    updateConnIcon('disconnecting');
+    setConnPhase('disconnecting');
   });
 
   window.runtime.EventsOn('app:confirm-quit', function () {
@@ -1123,41 +1126,62 @@ function refreshCurrentPane() {
 
 // --- Connect/Disconnect Toggle ---
 
-function updateConnectButton() {
-  goApp.GetConnectionState().then(function (state) {
-    if (state.connected && state.output && state.output.indexOf('Services available:') !== -1) {
-      updateConnIcon('connected');
-    } else if (state.connected) {
-      // Process running but tunnels not yet ready
-      updateConnIcon('connecting');
-    } else {
-      updateConnIcon('disconnected');
-    }
-  });
+// ── Connection State Management ──
+// Single source of truth. State transitions are event-driven.
+// The poll exists only to detect unexpected process death and
+// to refresh the terminal log. It does not drive state transitions.
+
+var connPhase = 'disconnected'; // 'disconnected' | 'connecting' | 'connected' | 'disconnecting'
+
+function setConnPhase(phase) {
+  connPhase = phase;
+  applyConnectionUI();
 }
 
-function updateConnIcon(state) {
+function applyConnectionUI() {
   var btn = document.getElementById('connect-btn');
-  if (!btn) return;
-
-  // Remove all state classes
-  btn.classList.remove('connected', 'connecting');
-
-  if (state === 'connected') {
-    btn.classList.add('connected');
-    btn.title = 'Disconnect';
-  } else if (state === 'connecting') {
-    btn.classList.add('connecting');
-    btn.title = 'Connecting...';
-  } else if (state === 'disconnecting') {
-    btn.classList.add('connecting');
-    btn.title = 'Disconnecting...';
-  } else {
-    btn.title = 'Connect';
+  if (btn) {
+    btn.classList.remove('connected', 'connecting');
+    btn.disabled = (connPhase === 'disconnecting');
+    if (connPhase === 'connected') {
+      btn.classList.add('connected');
+      btn.title = 'Disconnect';
+    } else if (connPhase === 'connecting' || connPhase === 'disconnecting') {
+      btn.classList.add('connecting');
+      btn.title = connPhase === 'connecting' ? 'Connecting...' : 'Disconnecting...';
+    } else {
+      btn.title = 'Connect';
+    }
   }
 
-  // Dismiss the first-run tooltip on any state change
+  // Tela log dot
+  var dot = document.getElementById('log-tela-dot');
+  if (dot) dot.className = (connPhase === 'connected' || connPhase === 'connecting') ? 'log-dot log-dot-live' : 'log-dot log-dot-idle';
+
+  // Agents pair button
+  var pairBtn = document.getElementById('agents-pair-btn');
+  if (pairBtn) pairBtn.disabled = (connPhase !== 'connected');
+
   dismissConnectTooltip();
+}
+
+// Called when all tabs should reflect the current connection state.
+function onConnectionChanged() {
+  applyConnectionUI();
+  refreshAll();
+  refreshStatus();
+  agentsRefresh();
+  if (connPhase === 'connected') {
+    refreshFilesTab();
+  } else {
+    filesShowMachineList();
+  }
+}
+
+// Legacy compatibility: called from places that used to call updateConnectButton.
+// Now just applies UI from the current phase.
+function updateConnectButton() {
+  applyConnectionUI();
 }
 
 function goToStatus() {
@@ -1167,7 +1191,6 @@ function goToStatus() {
 }
 
 function toggleConnection() {
-  // Dismiss the first-run tooltip permanently
   dismissConnectTooltip();
   goApp.GetSettings().then(function (s) {
     if (!s.connectTooltipDismissed) {
@@ -1176,13 +1199,12 @@ function toggleConnection() {
     }
   }).catch(function () {});
 
-  goApp.GetConnectionState().then(function (state) {
-    if (state.connected) {
-      doDisconnect();
-    } else {
-      doConnect();
-    }
-  });
+  if (connPhase === 'connected' || connPhase === 'connecting') {
+    doDisconnect();
+  } else if (connPhase === 'disconnected') {
+    doConnect();
+  }
+  // If disconnecting, ignore clicks
 }
 
 function doConnect() {
@@ -1190,24 +1212,30 @@ function doConnect() {
   if (connections.length === 0) return;
 
   tvLog('Connecting...');
-  updateConnIcon('connecting');
+  setConnPhase('connecting');
+
   goApp.Connect(JSON.stringify(connections)).then(function () {
-    tvLog('Connected');
+    // Process started. Stay in 'connecting' until first service_bound event.
+    tvLog('Process started, waiting for tunnels...');
     takeSnapshot();
     startConnectionPoll();
-    updateConnectButton(); // stays amber until tela output shows Services available
+
+    // Connect WebSocket immediately, retry until control API is ready.
+    (function connectWS() {
+      goApp.ConnectControlWS().catch(function () {
+        if (connPhase === 'connecting' || connPhase === 'connected') {
+          setTimeout(connectWS, 500);
+        }
+      });
+    })();
+
+    // Refresh tabs (they can show partial state while tunnels establish)
     refreshAll();
     refreshStatus();
     refreshFilesTab();
     agentsRefresh();
-    // Connect WebSocket for real-time events. Retry until the
-    // control API is ready (tela needs a moment to start listening).
-    (function connectWS() {
-      goApp.ConnectControlWS().catch(function () {
-        setTimeout(connectWS, 500);
-      });
-    })();
-    // Apply verbose preference (saved toggle or default setting)
+
+    // Apply verbose preference once WebSocket is likely ready
     setTimeout(function () {
       if (verboseMode) {
         goApp.SetVerbose(true);
@@ -1215,36 +1243,34 @@ function doConnect() {
         goApp.GetSettings().then(function (s) {
           if (s.verboseDefault) {
             verboseMode = true;
-            var btn = document.getElementById('verbose-btn');
-            var icon = document.getElementById('verbose-icon');
-            if (btn) btn.classList.add('active');
-            if (icon) icon.innerHTML = '\u2611';
+            var vbtn = document.getElementById('verbose-btn');
+            var vicon = document.getElementById('verbose-icon');
+            if (vbtn) vbtn.classList.add('active');
+            if (vicon) vicon.innerHTML = '\u2611';
             goApp.SetVerbose(true);
           }
         });
       }
     }, 2000);
   }).catch(function (err) {
+    tvLog('Connection failed: ' + err);
     showError('Connection failed: ' + err);
+    setConnPhase('disconnected');
   });
 }
 
 function doQuit() {
-  goApp.GetConnectionState().then(function (state) {
-    if (state.connected) {
-      goApp.GetSettings().then(function (s) {
-        if (s.confirmDisconnect) {
-          showDisconnectOverlay(function () {
-            goApp.QuitApp();
-          });
-        } else {
-          goApp.QuitApp();
-        }
-      });
-    } else {
-      goApp.QuitApp();
-    }
-  });
+  if (connPhase === 'connected' || connPhase === 'connecting') {
+    goApp.GetSettings().then(function (s) {
+      if (s.confirmDisconnect) {
+        showDisconnectOverlay(function () { goApp.QuitApp(); });
+      } else {
+        goApp.QuitApp();
+      }
+    });
+  } else {
+    goApp.QuitApp();
+  }
 }
 
 var disconnectCallback = null;
@@ -1278,34 +1304,24 @@ function cancelDisconnect() {
 }
 
 function performDisconnect() {
-  var btn = document.getElementById('connect-btn');
-  btn.disabled = true;
   tvLog('Disconnecting...');
-  updateConnIcon('disconnecting');
+  setConnPhase('disconnecting');
 
   goApp.Disconnect().then(function () {
     tvLog('Disconnected');
+  }).catch(function () {
+    tvLog('Disconnect error (cleaning up)');
+  }).finally(function () {
     goApp.DisconnectControlWS();
     stopConnectionPoll();
-    btn.disabled = false;
-    updateConnectButton();
-    refreshAll();
+    setConnPhase('disconnected');
+    onConnectionChanged();
     refreshTerminal();
-    refreshStatus();
-    filesShowMachineList();
-    agentsRefresh();
-  }).catch(function (err) {
-    goApp.DisconnectControlWS();
-    stopConnectionPoll();
-    btn.disabled = false;
-    updateConnectButton();
-    refreshAll();
-    filesShowMachineList();
-    agentsRefresh();
-    refreshStatus();
   });
 }
 
+// The poll exists to detect unexpected process death and refresh
+// the terminal log. It does NOT drive state transitions.
 var pollInFlight = false;
 
 function startConnectionPoll() {
@@ -1316,19 +1332,22 @@ function startConnectionPoll() {
     pollInFlight = true;
     goApp.GetConnectionState().then(function (state) {
       pollInFlight = false;
-      // Always refresh tela log and connection button state
       refreshTerminal();
-      updateConnectButton();
-      if (!state.connected) {
+
+      // Detect unexpected process death
+      if (!state.connected && connPhase === 'connected') {
+        tvLog('Connection lost');
         stopConnectionPoll();
-        updateConnectButton();
-        refreshAll();
+        goApp.DisconnectControlWS();
+        setConnPhase('disconnected');
+        onConnectionChanged();
+        refreshTerminal();
+
         // Auto-reconnect if enabled
         goApp.GetSettings().then(function (s) {
           if (s.reconnectOnDrop && Object.keys(selectedServices).length > 0) {
-            setTimeout(function () {
-              doConnect();
-            }, 3000);
+            tvLog('Reconnecting in 3 seconds...');
+            setTimeout(function () { doConnect(); }, 3000);
           }
         });
       }
@@ -3427,7 +3446,7 @@ function escAttr(s) {
 }
 
 function hubNameFromURL(url) {
-  return url.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return hubNameFromUrl(url);
 }
 
 function showError(msg) {
