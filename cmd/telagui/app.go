@@ -2004,7 +2004,9 @@ func (a *App) FileShareRequest(machine string, opJSON string) string {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := a.doRequest(req, 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	resp, err := a.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return errJSON("request failed: " + err.Error())
 	}
