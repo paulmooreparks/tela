@@ -1316,8 +1316,9 @@ function startConnectionPoll() {
     pollInFlight = true;
     goApp.GetConnectionState().then(function (state) {
       pollInFlight = false;
-      // Always refresh tela log (it's in the persistent panel)
+      // Always refresh tela log and connection button state
       refreshTerminal();
+      updateConnectButton();
       if (!state.connected) {
         stopConnectionPoll();
         updateConnectButton();
