@@ -60,6 +60,12 @@ export function EnsureTool(arg1:string):Promise<string>;
 
 export function ExportProfile():Promise<void>;
 
+export function FileShareDownload(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function FileShareRequest(arg1:string,arg2:string):Promise<string>;
+
+export function FileShareUpload(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function ForceQuit():Promise<void>;
 
 export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
@@ -120,6 +126,8 @@ export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
 export function LogAdminGET(arg1:string,arg2:string):Promise<void>;
 
+export function OpenFileDialog():Promise<string>;
+
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;
 
 export function QuitApp():Promise<void>;
@@ -133,6 +141,8 @@ export function RenameProfile(arg1:string,arg2:string):Promise<void>;
 export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>;
 
 export function RestartToUpdate():Promise<void>;
+
+export function SaveFileDialog(arg1:string):Promise<string>;
 
 export function SaveHubsSidebarWidth(arg1:number):Promise<void>;
 

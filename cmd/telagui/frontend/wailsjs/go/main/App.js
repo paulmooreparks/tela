@@ -118,6 +118,18 @@ export function ExportProfile() {
   return window['go']['main']['App']['ExportProfile']();
 }
 
+export function FileShareDownload(arg1, arg2, arg3) {
+  return window['go']['main']['App']['FileShareDownload'](arg1, arg2, arg3);
+}
+
+export function FileShareRequest(arg1, arg2) {
+  return window['go']['main']['App']['FileShareRequest'](arg1, arg2);
+}
+
+export function FileShareUpload(arg1, arg2, arg3) {
+  return window['go']['main']['App']['FileShareUpload'](arg1, arg2, arg3);
+}
+
 export function ForceQuit() {
   return window['go']['main']['App']['ForceQuit']();
 }
@@ -238,6 +250,10 @@ export function LogAdminGET(arg1, arg2) {
   return window['go']['main']['App']['LogAdminGET'](arg1, arg2);
 }
 
+export function OpenFileDialog() {
+  return window['go']['main']['App']['OpenFileDialog']();
+}
+
 export function PairWithCode(arg1, arg2) {
   return window['go']['main']['App']['PairWithCode'](arg1, arg2);
 }
@@ -264,6 +280,10 @@ export function ResolveAllPorts(arg1) {
 
 export function RestartToUpdate() {
   return window['go']['main']['App']['RestartToUpdate']();
+}
+
+export function SaveFileDialog(arg1) {
+  return window['go']['main']['App']['SaveFileDialog'](arg1);
 }
 
 export function SaveHubsSidebarWidth(arg1) {
