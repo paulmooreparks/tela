@@ -366,6 +366,10 @@ if (window.runtime) {
     document.getElementById('quit-stuck-overlay').style.display = 'flex';
   });
 
+  window.runtime.EventsOn('tela:tvlog', function (msg) {
+    if (msg) tvLog(msg);
+  });
+
   window.runtime.EventsOn('tela:output', function (chunk) {
     if (!chunk) return;
     var el = document.getElementById('log-tela');

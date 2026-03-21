@@ -960,7 +960,9 @@ func (a *App) adminAPICall(hubURL, method, path string, body []byte) ([]byte, er
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := a.httpClient.Do(req)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	resp, err := a.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -968,7 +970,7 @@ func (a *App) adminAPICall(hubURL, method, path string, body []byte) ([]byte, er
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
@@ -1924,7 +1926,9 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 
 		statusData, err := a.adminAPICall(conn.Hub, "GET", "/api/status", nil)
 		if err != nil {
-			log.Printf("[capabilities] %s: %v", conn.Hub, err)
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "tela:tvlog", fmt.Sprintf("Capabilities fetch for %s failed: %v", conn.Hub, err))
+			}
 			continue
 		}
 		var status struct {
@@ -1934,7 +1938,6 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 			} `json:"machines"`
 		}
 		if err := json.Unmarshal(statusData, &status); err != nil {
-			log.Printf("[capabilities] %s: unmarshal: %v", conn.Hub, err)
 			continue
 		}
 		for _, m := range status.Machines {
