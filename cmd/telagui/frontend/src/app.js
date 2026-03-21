@@ -1267,8 +1267,6 @@ function cancelDisconnect() {
 
 function performDisconnect() {
   var btn = document.getElementById('connect-btn');
-  btn.textContent = 'Disconnecting...';
-  btn.className = 'topbar-btn disconnecting-btn';
   btn.disabled = true;
   tvLog('Disconnecting...');
   updateConnIcon('disconnecting');
@@ -1590,9 +1588,16 @@ function filesShowMachineList() {
       return;
     }
 
-    var capabilitiesPromise = state.connected
-      ? goApp.GetMachineCapabilities().catch(function (err) { tvLog('Capabilities fetch failed: ' + err); return {}; })
-      : Promise.resolve({});
+    // Use cached capabilities if available, fetch only if cache is empty
+    var capabilitiesPromise;
+    if (state.connected && Object.keys(filesMachineCapabilities).length > 0) {
+      capabilitiesPromise = Promise.resolve(filesMachineCapabilities);
+    } else if (state.connected) {
+      capabilitiesPromise = goApp.GetMachineCapabilities().catch(function (err) { tvLog('Capabilities fetch failed: ' + err); return {}; });
+    } else {
+      filesMachineCapabilities = {};
+      capabilitiesPromise = Promise.resolve({});
+    }
     capabilitiesPromise.then(function (caps) {
       filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
