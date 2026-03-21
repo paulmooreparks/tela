@@ -571,6 +571,45 @@ Machine fields:
 | `token` | No | Per-machine token override |
 | `ports` | No | Simple port list (alternative to `services`) |
 | `services` | No | Detailed service descriptors (port, name, description) |
+| `fileShare` | No | File sharing configuration (see below) |
+
+### File sharing
+
+telad can expose a sandboxed directory for file transfer through the WireGuard tunnel. File sharing is off by default and must be explicitly enabled per machine.
+
+```yaml
+machines:
+  - name: barn
+    ports: [22, 3389]
+    fileShare:
+      enabled: true
+      directory: C:\TelaShare     # absolute path, required when enabled
+      writable: true               # allow uploads and modifications (default: false)
+      maxFileSize: 50MB            # per-file upload limit (default: 50MB)
+      maxTotalSize: 1GB            # total directory size limit (default: none)
+      allowDelete: false           # allow file deletion (default: false, requires writable)
+      allowedExtensions: []        # whitelist; empty = all allowed
+      blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]  # blacklist
+```
+
+File share configuration fields:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `enabled` | `false` | Enables file sharing for this machine |
+| `directory` | (required) | Absolute path to the shared directory. Created on startup if missing. |
+| `writable` | `false` | Allow uploads, mkdir, rename, move, and delete |
+| `maxFileSize` | `50MB` | Maximum size of a single uploaded file |
+| `maxTotalSize` | (none) | Maximum total size of all files in the directory |
+| `allowDelete` | `false` | Allow file deletion (requires `writable: true`) |
+| `allowedExtensions` | `[]` | Whitelist of file extensions (empty = all allowed) |
+| `blockedExtensions` | see above | Blacklist of file extensions |
+
+The shared directory must not be a system directory (`/`, `/etc`, `C:\Windows`, etc.). Symlinks inside the directory are never followed. All file operations are validated against the sandbox boundary. The directory and its contents are accessible only through authenticated Tela tunnel connections.
+
+When file sharing is enabled, the agent advertises the capability to the hub, which includes it in `/api/status` responses. Clients and UIs (TelaVisor, hub console) can display file sharing availability without establishing a session.
+
+The agent also watches the shared directory for changes using filesystem notifications and streams events (file created, modified, deleted, renamed) to connected clients in real time.
 
 ### Running telad as a service
 
@@ -824,6 +863,36 @@ System config paths (written by `service install`):
 |----------|------|
 | Linux / macOS | `/etc/tela/tela.yaml` |
 | Windows | `%ProgramData%\Tela\tela.yaml` |
+
+#### tela files
+
+File operations on connected machines with file sharing enabled. Requires an active `tela connect` session.
+
+```bash
+tela files ls -machine <machine> [path]
+tela files get -machine <machine> <remote-path> [-o local-path]
+tela files put -machine <machine> <local-path> [remote-name]
+tela files rm -machine <machine> <remote-path>
+tela files mkdir -machine <machine> <path>
+tela files rename -machine <machine> <path> <new-name>
+tela files mv -machine <machine> <source> <destination>
+tela files info -machine <machine>
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `ls` | List files and directories |
+| `get` | Download a file (saves to current directory or `-o` path) |
+| `put` | Upload a file (optionally specify a remote name) |
+| `rm` | Delete a file |
+| `mkdir` | Create a directory |
+| `rename` | Rename a file or directory (new name only, not a path) |
+| `mv` | Move a file or directory to a different location within the share |
+| `info` | Show file share status (file count, directory count, total size) |
+
+All file operations use the `-machine` flag (or `TELA_MACHINE` env var) to identify the target machine. The machine must have `fileShare.enabled: true` in its telad config.
+
+File data is transferred through the WireGuard tunnel using a chunked protocol with SHA-256 checksums. The hub never sees file contents.
 
 #### Deprecated commands
 
@@ -1422,6 +1491,16 @@ tela admin rotate <id> -hub <hub> [-token <token>]
 tela admin list-portals -hub <hub> [-token <token>]
 tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> [-hub-url <url>] [-portal-token <token>]
 tela admin remove-portal <name> -hub <hub> [-token <token>]
+
+# File operations (requires active tela connect session)
+tela files ls -machine <machine> [path]
+tela files get -machine <machine> <path> [-o local]
+tela files put -machine <machine> <local> [remote]
+tela files rm -machine <machine> <path>
+tela files mkdir -machine <machine> <path>
+tela files rename -machine <machine> <path> <new-name>
+tela files mv -machine <machine> <src> <dest>
+tela files info -machine <machine>
 
 # OS service management
 tela service install -config <profile.yaml>

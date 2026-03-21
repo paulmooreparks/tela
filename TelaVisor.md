@@ -75,6 +75,33 @@ When no machine is selected (or when you click Preview), the main area shows a l
 
 When tela is connected, hub and machine checkboxes are disabled to prevent profile changes during an active session.
 
+### Files
+
+The Files tab provides a built-in file browser for machines with file sharing enabled. It operates through the encrypted WireGuard tunnel. No SSH or SFTP is required on the remote machine.
+
+![Files tab](screens/telavisor-files.png)
+
+When you open the Files tab, it shows a list of connected machines with their file sharing status (read-write, read-only, or not configured). Click a machine to browse its shared directory.
+
+The file browser uses an Explorer-style layout:
+
+- **Address bar** with back and up navigation buttons, and a clickable breadcrumb path showing `Machines > barn > stuff > logs`. Each segment is clickable.
+- **Action bar** with Upload, New Folder, Rename, Download, and Delete buttons. Buttons are disabled based on selection state and read-only status.
+- **File list** with Name, Date Modified, Type, and Size columns. Folders appear first, sorted alphabetically.
+- **Status bar** showing file and folder counts, total size, and read-write or read-only mode.
+
+Selection follows standard conventions:
+
+- Click to select a single item
+- Ctrl+click to toggle individual items (multi-select)
+- Shift+click for range selection
+- Double-click a file to download it
+- Double-click a folder to open it
+
+Drag and drop is supported on writable shares. Drag files or folders onto a folder to move them. If the dragged item is part of a multi-selection, all selected items move together. The drop target folder highlights with a dashed outline.
+
+The file list updates in real time. When files are created, modified, deleted, or renamed on the remote machine (by any process, not just TelaVisor), the changes appear automatically.
+
 ## Hubs mode
 
 Hubs mode provides full administration for any hub where you have owner or admin credentials. You select a hub from the dropdown in the sidebar, then navigate between four views using the sidebar navigation.

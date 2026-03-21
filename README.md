@@ -54,6 +54,10 @@ TelaVisor uses a three-mode layout that mirrors the Tela binaries: Clients (for 
 
 ![TelaVisor Hubs, Tokens](screens/telavisor10.png)
 
+A built-in file browser lets you upload, download, rename, move, and delete files on any machine with file sharing enabled. Changes appear in real time as they happen on the remote machine.
+
+![TelaVisor Files tab](screens/telavisor-files.png)
+
 A persistent log panel at the bottom of the window shows application events, live tela output, and a filterable command log that displays every API call and CLI command with copy-to-clipboard support.
 
 ![TelaVisor log panel](screens/telavisor13.png)
@@ -211,6 +215,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admi
 - **Credential storage**: `tela login` and `telad login` store hub tokens securely (0600 file permissions) so you don't need to pass tokens on every command. Credentials persist and are found automatically.
 - **One-time pairing codes**: Generate short-lived codes (e.g., `ABCD-1234`) for users (`tela pair`) and agents (`telad pair`). Codes are single-use, time-limited (10 minutes to 7 days), and replace manual token copying. Users paste a code in TelaVisor or the CLI to get connected.
 - **Environment bootstrap**: Set `TELA_OWNER_TOKEN` in Docker Compose to auto-create the first owner identity on startup.
+- **File sharing**: Native sandboxed file transfer through the tunnel. Upload, download, rename, move, and delete files on remote machines. No SSH or SFTP required. Configurable per machine with extension filtering and size limits.
 - **No admin required**: gVisor netstack operates entirely in userspace. No TUN device, no root/Administrator.
 - **Outbound-only**: Both tela and telad initiate outbound connections to the hub. No inbound ports needed on either end.
 
