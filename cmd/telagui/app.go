@@ -1903,7 +1903,12 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, strings.NewReader(opJSON+"\n"))
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.doRequest(req, 300*time.Second)
+	// Use the HTTP client directly with a long timeout context.
+	// doRequest's defer cancel() would kill the context before we
+	// finish reading the response body.
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	resp, err := a.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return errJSON("request failed: " + err.Error())
 	}
@@ -2037,7 +2042,9 @@ func (a *App) FileShareUpload(machine string, localPath string, remoteName strin
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, pr)
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.doRequest(req, 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	resp, err := a.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return errJSON("upload failed: " + err.Error())
 	}

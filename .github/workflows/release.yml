@@ -2,7 +2,9 @@
 # and attach everything to a GitHub Release.
 #
 # Triggers:
-#   - Push to main: creates release v0.2.<run_number>
+#   - Push to main: creates release vMAJOR.MINOR.PATCH where MAJOR.MINOR
+#     comes from the VERSION file and PATCH is the commit count since
+#     the vMAJOR.MINOR.0 tag. Bump VERSION and tag vX.Y.0 to reset.
 #   - Push a v* tag:  uses the tag name as-is
 #
 # What this proves to users:
@@ -19,6 +21,7 @@ on:
     tags:
       - "v*"
     paths:
+      - "VERSION"
       - "go.mod"
       - "go.sum"
       - "cmd/**"
@@ -62,6 +65,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for version computation
 
       - name: Compute version
         id: version
@@ -69,7 +74,14 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=v0.2.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            BASE=$(cat VERSION | tr -d '[:space:]')
+            BASE_TAG="v${BASE}.0"
+            if git rev-parse "$BASE_TAG" >/dev/null 2>&1; then
+              PATCH=$(git rev-list --count "${BASE_TAG}..HEAD")
+            else
+              PATCH=0
+            fi
+            echo "tag=v${BASE}.${PATCH}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Go
@@ -152,6 +164,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for version computation
 
       - name: Compute version
         id: version
@@ -160,7 +174,14 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=v0.2.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            BASE=$(cat VERSION | tr -d '[:space:]')
+            BASE_TAG="v${BASE}.0"
+            if git rev-parse "$BASE_TAG" >/dev/null 2>&1; then
+              PATCH=$(git rev-list --count "${BASE_TAG}..HEAD")
+            else
+              PATCH=0
+            fi
+            echo "tag=v${BASE}.${PATCH}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Go
@@ -265,7 +286,14 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=v0.2.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            BASE=$(cat VERSION | tr -d '[:space:]')
+            BASE_TAG="v${BASE}.0"
+            if git rev-parse "$BASE_TAG" >/dev/null 2>&1; then
+              PATCH=$(git rev-list --count "${BASE_TAG}..HEAD")
+            else
+              PATCH=0
+            fi
+            echo "tag=v${BASE}.${PATCH}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Download all artifacts

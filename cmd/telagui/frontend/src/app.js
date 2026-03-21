@@ -1259,14 +1259,14 @@ function performDisconnect() {
     refreshAll();
     refreshTerminal();
     refreshStatus();
-    refreshFilesTab();
+    filesShowMachineList();
   }).catch(function (err) {
     goApp.DisconnectControlWS();
     stopConnectionPoll();
     btn.disabled = false;
     updateConnectButton();
     refreshAll();
-    refreshFilesTab();
+    filesShowMachineList();
     refreshStatus();
   });
 }
