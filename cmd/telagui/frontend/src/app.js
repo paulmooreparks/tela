@@ -1592,12 +1592,12 @@ function filesShowMachineList() {
       return;
     }
 
-    // Use cached capabilities if available, fetch only if cache is empty
     var capabilitiesPromise;
-    if (state.connected && Object.keys(filesMachineCapabilities).length > 0) {
-      capabilitiesPromise = Promise.resolve(filesMachineCapabilities);
-    } else if (state.connected) {
-      capabilitiesPromise = goApp.GetMachineCapabilities().catch(function (err) { tvLog('Capabilities fetch failed: ' + err); return {}; });
+    if (state.connected) {
+      capabilitiesPromise = goApp.GetMachineCapabilities().catch(function (err) {
+        tvLog('Capabilities fetch failed: ' + err);
+        return {};
+      });
     } else {
       filesMachineCapabilities = {};
       capabilitiesPromise = Promise.resolve({});
