@@ -324,11 +324,6 @@ if (window.runtime) {
               sel.servicePort = evt.remote;
             }
           });
-          // Transition power button from connecting (amber) to connected (green)
-          var pwrBtn = document.getElementById('connect-btn');
-          if (pwrBtn && pwrBtn.classList.contains('connecting')) {
-            updateConnIcon('connected');
-          }
         }
         if (evt.type === 'tunnel_activity') {
           // Track active tunnels
@@ -1127,9 +1122,6 @@ function refreshCurrentPane() {
 // --- Connect/Disconnect Toggle ---
 
 function updateConnectButton() {
-  var btn = document.getElementById('connect-btn');
-  // If currently in connecting state, don't override -- wait for service_bound
-  if (btn && btn.classList.contains('connecting')) return;
   goApp.GetConnectionState().then(function (state) {
     if (state.connected) {
       updateConnIcon('connected');
@@ -1195,12 +1187,10 @@ function doConnect() {
   tvLog('Connecting...');
   updateConnIcon('connecting');
   goApp.Connect(JSON.stringify(connections)).then(function () {
-    tvLog('Connecting tunnels...');
-    // Process started. Stay in 'connecting' state until service_bound arrives.
+    tvLog('Connected');
     takeSnapshot();
     startConnectionPoll();
-    // Do NOT call updateConnectButton here -- it would set green immediately.
-    // The power button transitions to green when the first service_bound event arrives.
+    updateConnectButton();
     refreshAll();
     refreshStatus();
     refreshFilesTab();
@@ -1611,14 +1601,6 @@ function filesShowMachineList() {
       capabilitiesPromise = Promise.resolve({});
     }
     capabilitiesPromise.then(function (caps) {
-      // Log any capability fetch errors
-      if (caps) {
-        Object.keys(caps).forEach(function (k) {
-          if (k.indexOf('_error_') === 0 && caps[k].error) {
-            tvLog('Capabilities: ' + k.substring(7) + ': ' + caps[k].error);
-          }
-        });
-      }
       filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
       machineList.forEach(function (m) {

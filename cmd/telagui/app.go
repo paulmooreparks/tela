@@ -1904,6 +1904,8 @@ func hubNameFromURLGo(u string) string {
 
 // GetMachineCapabilities returns a map of machineID -> capabilities
 // by querying the hub status API for each hub in the current profile.
+// Uses the stored token if available, but also tries without auth
+// (works for open-mode hubs and viewer tokens delivered via cookie).
 func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 	result := make(map[string]map[string]interface{})
 
@@ -1916,28 +1918,50 @@ func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
 		return result
 	}
 
-	// Collect unique hubs
 	hubsSeen := map[string]bool{}
 	for _, conn := range profile.Connections {
-		if hubsSeen[conn.Hub] {
+		hubURL := conn.Hub
+		if hubsSeen[hubURL] {
 			continue
 		}
-		hubsSeen[conn.Hub] = true
+		hubsSeen[hubURL] = true
 
-		statusData, err := a.adminAPICall(conn.Hub, "GET", "/api/status", nil)
+		// Build the HTTPS URL for the status API
+		apiURL := strings.Replace(hubURL, "wss://", "https://", 1)
+		apiURL = strings.Replace(apiURL, "ws://", "http://", 1)
+		apiURL = strings.TrimSuffix(apiURL, "/") + "/api/status"
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 		if err != nil {
-			log.Printf("[capabilities] %s: %v", conn.Hub, err)
-			// Store the error so the frontend can see it
-			result["_error_"+conn.Hub] = map[string]interface{}{"error": err.Error()}
+			cancel()
 			continue
 		}
+
+		// Add auth token if available
+		token := credstore.LookupToken(toWSURL(hubURL))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
+		resp, err := a.httpClient.Do(req)
+		cancel()
+		if err != nil {
+			continue
+		}
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
 		var status struct {
 			Machines []struct {
 				ID           string                 `json:"id"`
 				Capabilities map[string]interface{} `json:"capabilities"`
 			} `json:"machines"`
 		}
-		if err := json.Unmarshal(statusData, &status); err != nil {
+		if json.Unmarshal(respBody, &status) != nil {
 			continue
 		}
 		for _, m := range status.Machines {
