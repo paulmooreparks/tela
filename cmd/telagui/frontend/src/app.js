@@ -716,17 +716,18 @@ function switchProfile(name) {
 }
 
 function newProfile() {
-  var name = prompt('New profile name:');
-  if (!name) return;
-  goApp.CreateProfile(name).then(function () {
-    goApp.SwitchProfile(name).then(function () {
-      selectedServices = {};
-      refreshProfileList();
-      refreshAll();
-      updateConnectButton();
+  showPromptDialog('New Profile', '', '', 'Create').then(function (name) {
+    if (!name) return;
+    goApp.CreateProfile(name).then(function () {
+      goApp.SwitchProfile(name).then(function () {
+        selectedServices = {};
+        refreshProfileList();
+        refreshAll();
+        updateConnectButton();
+      });
+    }).catch(function (err) {
+      showError(err);
     });
-  }).catch(function (err) {
-    showError(err);
   });
 }
 
@@ -734,14 +735,15 @@ function renameCurrentProfile() {
   var sel = document.getElementById('profile-select');
   if (!sel || !sel.value) return;
   var oldName = sel.value;
-  var newName = prompt('Rename profile "' + oldName + '" to:', oldName);
-  if (!newName || newName === oldName) return;
-  goApp.RenameProfile(oldName, newName).then(function () {
-    tvLog('Renamed profile "' + oldName + '" to "' + newName + '"');
-    refreshProfileList();
-    refreshAll();
-  }).catch(function (err) {
-    showError(err);
+  showPromptDialog('Rename Profile', 'Rename "' + oldName + '" to:', oldName, 'Rename').then(function (newName) {
+    if (!newName || newName === oldName) return;
+    goApp.RenameProfile(oldName, newName).then(function () {
+      tvLog('Renamed profile "' + oldName + '" to "' + newName + '"');
+      refreshProfileList();
+      refreshAll();
+    }).catch(function (err) {
+      showError(err);
+    });
   });
 }
 
@@ -1678,9 +1680,10 @@ function filesDeleteSelected() {
     if (e) names.push(e.name);
   });
   if (names.length === 0) return;
-  if (!confirm('Delete ' + names.join(', ') + '?')) return;
+  showConfirmDialog('Delete', 'Delete ' + names.join(', ') + '?', 'Delete').then(function (yes) {
+    if (!yes) return;
 
-  // Delete sequentially to avoid exceeding the connection limit
+    // Delete sequentially to avoid exceeding the connection limit
   var idx = 0;
   function deleteNext() {
     if (idx >= names.length) {
@@ -1699,11 +1702,12 @@ function filesDeleteSelected() {
     });
   }
   deleteNext();
+  });
 }
 
 function filesNewFolder() {
   if (!filesCurrentMachine) return;
-  var name = prompt('New folder name:');
+  showPromptDialog('New Folder', '', '', 'Create').then(function (name) {
   if (!name) return;
   var path = filesCurrentPath ? filesCurrentPath + '/' + name : name;
   var req = JSON.stringify({op: 'mkdir', path: path});
@@ -1717,6 +1721,7 @@ function filesNewFolder() {
       showError('New folder failed: ' + resp.error);
     }
   });
+  });
 }
 
 function filesRenameSelected() {
@@ -1725,21 +1730,22 @@ function filesRenameSelected() {
   var entry = filesCurrentEntries[idx];
   if (!entry) return;
 
-  var newName = prompt('Rename ' + entry.name + ' to:', entry.name);
-  if (!newName || newName === entry.name) return;
+  showPromptDialog('Rename', 'Rename "' + entry.name + '" to:', entry.name, 'Rename').then(function (newName) {
+    if (!newName || newName === entry.name) return;
 
-  var oldPath = filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name;
-  var req = JSON.stringify({op: 'rename', path: oldPath, newName: newName});
-  goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
-    var resp = JSON.parse(respJSON);
-    if (resp.ok) {
-      tvLog('Renamed ' + entry.name + ' to ' + newName);
-      filesClearSelection();
-      filesRefresh();
-    } else {
-      tvLog('Rename failed: ' + resp.error);
-      showError('Rename failed: ' + resp.error);
+    var oldPath = filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name;
+    var req = JSON.stringify({op: 'rename', path: oldPath, newName: newName});
+    goApp.FileShareRequest(filesCurrentMachine, req).then(function (respJSON) {
+      var resp = JSON.parse(respJSON);
+      if (resp.ok) {
+        tvLog('Renamed ' + entry.name + ' to ' + newName);
+        filesClearSelection();
+        filesRefresh();
+      } else {
+        tvLog('Rename failed: ' + resp.error);
+        showError('Rename failed: ' + resp.error);
     }
+  });
   });
 }
 
@@ -2808,12 +2814,14 @@ function restoreDefaultBinPath() {
 }
 
 function clearCredentialStore() {
-  if (!confirm('This will delete all stored hub tokens. You will need to re-authenticate with each hub. Continue?')) return;
-  goApp.ClearCredentialStore().then(function () {
-    refreshAll();
-    refreshHubsTab();
-  }).catch(function (err) {
-    showError('Failed to clear credential store: ' + err);
+  showConfirmDialog('Clear Credentials', 'This will delete all stored hub tokens. You will need to re-authenticate with each hub.', 'Delete All').then(function (yes) {
+    if (!yes) return;
+    goApp.ClearCredentialStore().then(function () {
+      refreshAll();
+      refreshHubsTab();
+    }).catch(function (err) {
+      showError('Failed to clear credential store: ' + err);
+    });
   });
 }
 
@@ -2915,17 +2923,85 @@ function hubNameFromURL(url) {
 }
 
 function showError(msg) {
-  // Strip Go error prefixes and stack traces for user-facing messages
   var text = String(msg).replace(/^Error:\s*/i, '');
   var el = document.getElementById('error-toast');
   if (el) {
     el.textContent = text;
     el.classList.remove('hidden');
     setTimeout(function () { el.classList.add('hidden'); }, 5000);
-  } else {
-    alert(text);
   }
 }
+
+// ── Themed dialog system (replaces alert/confirm/prompt) ──
+
+var _dialogResolve = null;
+var _dialogMode = ''; // 'confirm' or 'prompt'
+
+function showConfirmDialog(title, message, okLabel) {
+  return new Promise(function (resolve) {
+    _dialogResolve = resolve;
+    _dialogMode = 'confirm';
+    document.getElementById('generic-dialog-title').textContent = title;
+    document.getElementById('generic-dialog-message').textContent = message;
+    document.getElementById('generic-dialog-input').classList.add('hidden');
+    var okBtn = document.getElementById('generic-dialog-ok');
+    okBtn.textContent = okLabel || 'OK';
+    okBtn.className = (okLabel && okLabel.toLowerCase().indexOf('delete') >= 0) ? 'btn-danger' : 'btn-primary';
+    document.getElementById('generic-dialog-overlay').classList.remove('hidden');
+  });
+}
+
+function showPromptDialog(title, message, defaultValue, okLabel) {
+  return new Promise(function (resolve) {
+    _dialogResolve = resolve;
+    _dialogMode = 'prompt';
+    document.getElementById('generic-dialog-title').textContent = title;
+    document.getElementById('generic-dialog-message').textContent = message || '';
+    if (!message) document.getElementById('generic-dialog-message').style.display = 'none';
+    else document.getElementById('generic-dialog-message').style.display = '';
+    var input = document.getElementById('generic-dialog-input');
+    input.classList.remove('hidden');
+    input.value = defaultValue || '';
+    input.placeholder = '';
+    var okBtn = document.getElementById('generic-dialog-ok');
+    okBtn.textContent = okLabel || 'OK';
+    okBtn.className = 'btn-primary';
+    document.getElementById('generic-dialog-overlay').classList.remove('hidden');
+    setTimeout(function () { input.focus(); input.select(); }, 50);
+  });
+}
+
+function genericDialogOk() {
+  document.getElementById('generic-dialog-overlay').classList.add('hidden');
+  if (_dialogResolve) {
+    if (_dialogMode === 'prompt') {
+      _dialogResolve(document.getElementById('generic-dialog-input').value);
+    } else {
+      _dialogResolve(true);
+    }
+    _dialogResolve = null;
+  }
+}
+
+function genericDialogCancel() {
+  document.getElementById('generic-dialog-overlay').classList.add('hidden');
+  if (_dialogResolve) {
+    if (_dialogMode === 'prompt') {
+      _dialogResolve(null);
+    } else {
+      _dialogResolve(false);
+    }
+    _dialogResolve = null;
+  }
+}
+
+// Allow Enter to submit and Escape to cancel
+document.addEventListener('keydown', function (e) {
+  var overlay = document.getElementById('generic-dialog-overlay');
+  if (!overlay || overlay.classList.contains('hidden')) return;
+  if (e.key === 'Enter') { e.preventDefault(); genericDialogOk(); }
+  if (e.key === 'Escape') { e.preventDefault(); genericDialogCancel(); }
+});
 
 function toWSURL(url) {
   if (url.indexOf('https://') === 0) return 'wss://' + url.substring(8);

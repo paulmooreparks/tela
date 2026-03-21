@@ -243,6 +243,26 @@
     </div>
   </div>
 
+  <!-- Generic Dialog (reusable confirm/prompt) -->
+  <div class="modal-overlay hidden" id="generic-dialog-overlay">
+    <div class="modal-dialog modal-confirm">
+      <div class="modal-header">
+        <h3 id="generic-dialog-title">Dialog</h3>
+        <button type="button" class="modal-close" onclick="genericDialogCancel()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <p id="generic-dialog-message" class="confirm-message"></p>
+          <input type="text" id="generic-dialog-input" class="settings-full-control hidden" title="Input" placeholder="Enter value">
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="genericDialogCancel()">Cancel</button>
+            <button type="button" class="btn-primary" id="generic-dialog-ok" onclick="genericDialogOk()">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Quit Stuck Overlay -->
   <div class="modal-overlay" id="quit-stuck-overlay" style="display:none;">
     <div class="modal-dialog modal-confirm">
