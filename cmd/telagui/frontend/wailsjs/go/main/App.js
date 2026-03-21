@@ -182,6 +182,10 @@ export function GetKnownHubs() {
   return window['go']['main']['App']['GetKnownHubs']();
 }
 
+export function GetMachineCapabilities() {
+  return window['go']['main']['App']['GetMachineCapabilities']();
+}
+
 export function GetProfilePath() {
   return window['go']['main']['App']['GetProfilePath']();
 }

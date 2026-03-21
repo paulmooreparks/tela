@@ -1357,37 +1357,51 @@ function filesShowMachineList() {
       return;
     }
 
-    var html = '<div class="files-machine-list">';
-    machineList.forEach(function (m) {
-      var statusClass = state.connected ? 'online' : 'disconnected';
-      var badge, disabled;
+    // Fetch capabilities to determine file share status per machine
+    var capabilitiesPromise = state.connected ? goApp.GetMachineCapabilities() : Promise.resolve({});
+    capabilitiesPromise.then(function (caps) {
+      var html = '<div class="files-machine-list">';
+      machineList.forEach(function (m) {
+        var statusClass = state.connected ? 'online' : 'disconnected';
+        var badge, disabled;
 
-      if (!state.connected) {
-        badge = '<span class="files-machine-badge off">disconnected</span>';
-        disabled = true;
-      } else {
-        // TODO: check capabilities from hub status for fileShare mode
-        badge = '<span class="files-machine-badge">file share</span>';
-        disabled = false;
-      }
+        if (!state.connected) {
+          badge = '<span class="files-machine-badge off">disconnected</span>';
+          disabled = true;
+        } else {
+          var mc = caps[m.name];
+          var fs = mc && mc.fileShare;
+          if (fs && fs.enabled) {
+            if (fs.writable) {
+              badge = '<span class="files-machine-badge">read-write</span>';
+            } else {
+              badge = '<span class="files-machine-badge ro">read-only</span>';
+            }
+            disabled = false;
+          } else {
+            badge = '<span class="files-machine-badge none">no file share</span>';
+            disabled = true;
+          }
+        }
 
-      var onclick = disabled ? '' : ' onclick="filesOpenMachine(\'' + escAttr(m.name) + '\')"';
-      var cls = disabled ? ' disabled' : '';
+        var onclick = disabled ? '' : ' onclick="filesOpenMachine(\'' + escAttr(m.name) + '\')"';
+        var cls = disabled ? ' disabled' : '';
 
-      html += '<div class="files-machine-card' + cls + '"' + onclick + '>'
-        + '<span class="files-machine-status ' + statusClass + '"></span>'
-        + '<span class="fe-icon-machine"></span>'
-        + '<div>'
-        + '<div class="files-machine-name">' + escHtml(m.name) + '</div>'
-        + '<div class="files-machine-meta">' + escHtml(m.hub) + '</div>'
-        + '</div>'
-        + badge
-        + '</div>';
+        html += '<div class="files-machine-card' + cls + '"' + onclick + '>'
+          + '<span class="files-machine-status ' + statusClass + '"></span>'
+          + '<span class="fe-icon-machine"></span>'
+          + '<div>'
+          + '<div class="files-machine-name">' + escHtml(m.name) + '</div>'
+          + '<div class="files-machine-meta">' + escHtml(m.hub) + '</div>'
+          + '</div>'
+          + badge
+          + '</div>';
+      });
+      html += '</div>';
+
+      document.getElementById('files-content').innerHTML = html;
+      document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
     });
-    html += '</div>';
-
-    document.getElementById('files-content').innerHTML = html;
-    document.getElementById('files-status-counts').textContent = machineList.length + ' machine' + (machineList.length !== 1 ? 's' : '');
   });
 }
 

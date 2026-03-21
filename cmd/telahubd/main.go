@@ -199,6 +199,7 @@ type machineEntry struct {
 	Tags         []string
 	Location     string
 	Owner        string
+	Capabilities map[string]interface{}
 }
 
 type serviceDesc struct {
@@ -446,11 +447,12 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		Tags           []string      `json:"tags"`
 		Location       *string       `json:"location"`
 		Owner          *string       `json:"owner"`
-		AgentConnected bool          `json:"agentConnected"`
-		SessionCount   int           `json:"sessionCount"`
-		RegisteredAt   *string       `json:"registeredAt"`
-		LastSeen       *string       `json:"lastSeen"`
-		Services       []serviceDesc `json:"services"`
+		AgentConnected bool                   `json:"agentConnected"`
+		SessionCount   int                    `json:"sessionCount"`
+		RegisteredAt   *string                `json:"registeredAt"`
+		LastSeen       *string                `json:"lastSeen"`
+		Services       []serviceDesc          `json:"services"`
+		Capabilities   map[string]interface{} `json:"capabilities,omitempty"`
 	}
 
 	list := make([]statusMachine, 0, len(machines))
@@ -484,6 +486,9 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		if entry.Owner != "" {
 			sm.Owner = &entry.Owner
+		}
+		if entry.Capabilities != nil {
+			sm.Capabilities = entry.Capabilities
 		}
 		if !entry.RegisteredAt.IsZero() {
 			s := entry.RegisteredAt.UTC().Format(time.RFC3339)
@@ -695,7 +700,8 @@ type signalingMsg struct {
 	SessionID string `json:"sessionId,omitempty"`
 
 	// Forwarded through (peer-endpoint, wg-pubkey, etc.)
-	Message string `json:"message,omitempty"`
+	Message      string                 `json:"message,omitempty"`
+	Capabilities map[string]interface{} `json:"capabilities,omitempty"`
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
@@ -845,6 +851,9 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	}
 	if msg.Owner != "" {
 		entry.Owner = msg.Owner
+	}
+	if msg.Capabilities != nil {
+		entry.Capabilities = msg.Capabilities
 	}
 	entry.LastSeen = now
 	if entry.RegisteredAt.IsZero() {

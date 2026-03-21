@@ -1794,6 +1794,50 @@ func (a *App) GetControlStatus() map[string]interface{} {
 
 // --- File Share ---
 
+// GetMachineCapabilities returns a map of machineID -> capabilities
+// by querying the hub status API for each hub in the current profile.
+func (a *App) GetMachineCapabilities() map[string]map[string]interface{} {
+	result := make(map[string]map[string]interface{})
+
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return result
+	}
+	var profile Profile
+	if yaml.Unmarshal(data, &profile) != nil {
+		return result
+	}
+
+	// Collect unique hubs
+	hubsSeen := map[string]bool{}
+	for _, conn := range profile.Connections {
+		if hubsSeen[conn.Hub] {
+			continue
+		}
+		hubsSeen[conn.Hub] = true
+
+		statusData, err := a.adminAPICall(conn.Hub, "GET", "/api/status", nil)
+		if err != nil {
+			continue
+		}
+		var status struct {
+			Machines []struct {
+				ID           string                 `json:"id"`
+				Capabilities map[string]interface{} `json:"capabilities"`
+			} `json:"machines"`
+		}
+		if json.Unmarshal(statusData, &status) != nil {
+			continue
+		}
+		for _, m := range status.Machines {
+			if m.Capabilities != nil {
+				result[m.ID] = m.Capabilities
+			}
+		}
+	}
+	return result
+}
+
 // controlEndpoint reads the control API info and returns (base URL, token).
 func controlEndpoint() (string, string, error) {
 	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")

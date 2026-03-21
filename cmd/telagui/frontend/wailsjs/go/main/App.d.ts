@@ -92,6 +92,8 @@ export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
+export function GetMachineCapabilities():Promise<Record<string, Record<string, any>>>;
+
 export function GetProfilePath():Promise<string>;
 
 export function GetSettings():Promise<main.Settings>;
