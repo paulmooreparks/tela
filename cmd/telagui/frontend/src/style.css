@@ -1320,6 +1320,7 @@ body {
   cursor: pointer; padding: 1px 4px; border-radius: 3px; white-space: nowrap; flex-shrink: 0;
 }
 .files-path-seg:hover { background: rgba(255,255,255,0.08); }
+.files-path-seg.drag-over { background: rgba(94, 232, 158, 0.25); outline: 1px dashed var(--accent); outline-offset: -1px; }
 .files-path-seg.root { font-weight: 600; }
 .files-path-sep { color: var(--text-muted); font-size: 11px; margin: 0 1px; flex-shrink: 0; pointer-events: none; }
 .files-actionbar {

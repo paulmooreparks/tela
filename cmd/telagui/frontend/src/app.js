@@ -1479,6 +1479,22 @@ function filesListDir(machine, path) {
 function filesRenderEntries() {
   var canDrag = filesCurrentWritable;
   var html = '';
+
+  // Parent directory row (drop target for moving items up)
+  if (filesCurrentPath) {
+    var parentDropAttr = canDrag
+      ? ' ondragover="filesDragOver(event)" ondragenter="filesDragEnter(event)" ondragleave="filesDragLeave(event)" ondrop="filesDropParent(event)"'
+      : '';
+    html += '<div class="files-entry files-entry-dir" data-idx="-1"'
+      + parentDropAttr
+      + ' ondblclick="filesGoUp()">'
+      + '<span class="fe-name"><span class="fe-icon-dir"></span><span class="fe-label">..</span></span>'
+      + '<span class="fe-modified"></span>'
+      + '<span class="fe-type">Parent folder</span>'
+      + '<span class="fe-size"></span>'
+      + '</div>';
+  }
+
   filesCurrentEntries.forEach(function (entry, idx) {
     var selClass = filesSelectedIndices.has(idx) ? ' selected' : '';
     var dirClass = entry.isDir ? ' files-entry-dir' : '';
@@ -1660,6 +1676,80 @@ function filesDrop(event, targetIdx) {
   moveNext();
 }
 
+function filesDropParent(event) {
+  event.preventDefault();
+  var row = event.target.closest('.files-entry-dir');
+  if (row) row.classList.remove('drag-over');
+
+  var data = event.dataTransfer.getData('text/plain');
+  var items;
+  try { items = JSON.parse(data); } catch (e) { return; }
+  if (!items || items.length === 0) return;
+
+  var machine = filesCurrentMachine;
+  var path = filesCurrentPath;
+  // Parent path
+  var parentParts = path.split('/');
+  parentParts.pop();
+  var parentDir = parentParts.join('/');
+
+  var idx = 0;
+  function moveNext() {
+    if (idx >= items.length) {
+      filesClearSelection();
+      filesRefresh();
+      return;
+    }
+    var name = items[idx++];
+    var srcPath = path ? path + '/' + name : name;
+    var dstPath = parentDir ? parentDir + '/' + name : name;
+    var req = JSON.stringify({op: 'move', path: srcPath, newPath: dstPath});
+    goApp.FileShareRequest(machine, req).then(function (respJSON) {
+      try { var resp = JSON.parse(respJSON); } catch (e) { /* skip */ }
+      if (resp && resp.ok) tvLog('Moved ' + name + ' to parent');
+      else tvLog('Move failed (' + name + '): ' + (resp ? resp.error : 'unknown'));
+      moveNext();
+    }).catch(function () { moveNext(); });
+  }
+  moveNext();
+}
+
+function filesDropToBreadcrumb(event, targetPath) {
+  event.preventDefault();
+  event.target.classList.remove('drag-over');
+
+  var data = event.dataTransfer.getData('text/plain');
+  var items;
+  try { items = JSON.parse(data); } catch (e) { return; }
+  if (!items || items.length === 0) return;
+
+  var machine = filesCurrentMachine;
+  var path = filesCurrentPath;
+
+  // Don't move to the same directory
+  if (targetPath === path) return;
+
+  var idx = 0;
+  function moveNext() {
+    if (idx >= items.length) {
+      filesClearSelection();
+      filesRefresh();
+      return;
+    }
+    var name = items[idx++];
+    var srcPath = path ? path + '/' + name : name;
+    var dstPath = targetPath ? targetPath + '/' + name : name;
+    var req = JSON.stringify({op: 'move', path: srcPath, newPath: dstPath});
+    goApp.FileShareRequest(machine, req).then(function (respJSON) {
+      try { var resp = JSON.parse(respJSON); } catch (e) { /* skip */ }
+      if (resp && resp.ok) tvLog('Moved ' + name + ' to /' + (targetPath || ''));
+      else tvLog('Move failed (' + name + '): ' + (resp ? resp.error : 'unknown'));
+      moveNext();
+    }).catch(function () { moveNext(); });
+  }
+  moveNext();
+}
+
 // Click empty area clears selection
 document.addEventListener('click', function (e) {
   if (filesView !== 'files') return;
@@ -1703,13 +1793,22 @@ function filesGoUp() {
 function filesRenderPath() {
   var el = document.getElementById('files-path');
   if (!el) return;
+  var canDrop = filesCurrentWritable && filesView === 'files';
+  var dropAttrs = function (targetPath) {
+    if (!canDrop) return '';
+    return ' ondragover="filesDragOver(event)" ondragenter="event.preventDefault(); this.classList.add(\'drag-over\')"'
+      + ' ondragleave="this.classList.remove(\'drag-over\')"'
+      + ' ondrop="filesDropToBreadcrumb(event, \'' + escAttr(targetPath) + '\')"';
+  };
+
   if (filesView === 'machines') {
     el.innerHTML = '<span class="files-path-seg root">Machines</span>';
     return;
   }
+  // Machine root segment (drop target = machine root '')
   var html = '<span class="files-path-seg root" onclick="filesShowMachineList()">Machines</span>';
   html += '<span class="files-path-sep">&#x203A;</span>';
-  html += '<span class="files-path-seg" onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'\');">' + escHtml(filesCurrentMachine) + '</span>';
+  html += '<span class="files-path-seg"' + dropAttrs('') + ' onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'\');">' + escHtml(filesCurrentMachine) + '</span>';
   if (filesCurrentPath) {
     var parts = filesCurrentPath.split('/');
     var acc = '';
@@ -1717,7 +1816,7 @@ function filesRenderPath() {
       acc = acc ? acc + '/' + p : p;
       var accCopy = acc;
       html += '<span class="files-path-sep">&#x203A;</span>';
-      html += '<span class="files-path-seg" onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'' + escAttr(accCopy) + '\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'' + escAttr(accCopy) + '\');">' + escHtml(p) + '</span>';
+      html += '<span class="files-path-seg"' + dropAttrs(accCopy) + ' onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'' + escAttr(accCopy) + '\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'' + escAttr(accCopy) + '\');">' + escHtml(p) + '</span>';
     });
   }
   el.innerHTML = html;
