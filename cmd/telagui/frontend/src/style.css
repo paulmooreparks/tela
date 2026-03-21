@@ -73,6 +73,31 @@ body {
   position: relative;
 }
 .topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; }
+/* Power button (connect/disconnect) */
+.topbar-power-btn {
+  font-size: 18px; font-weight: 400; transition: all 0.2s;
+  width: 30px; height: 30px;
+}
+.topbar-power-btn:not(.connected):hover { border-color: var(--accent); color: var(--accent); }
+.topbar-power-btn.connected { border-color: var(--accent); color: var(--accent); background: rgba(94,232,158,0.1); }
+.topbar-power-btn.connected:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
+.topbar-power-btn.connecting { animation: pulse-border 1.2s ease-in-out infinite; color: #f39c12; border-color: #f39c12; }
+
+/* First-run connect tooltip */
+.connect-tooltip {
+  position: absolute; top: 44px; right: 120px;
+  background: var(--surface); border: 1px solid var(--accent); border-radius: 6px;
+  padding: 8px 14px; font-size: 12px; color: var(--text);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100;
+  white-space: nowrap;
+}
+.connect-tooltip.hidden { display: none; }
+.connect-tooltip-arrow {
+  position: absolute; top: -7px; right: 72px;
+  width: 12px; height: 12px; background: var(--surface);
+  border-left: 1px solid var(--accent); border-top: 1px solid var(--accent);
+  transform: rotate(45deg);
+}
 .topbar-center { position: absolute; left: 50%; transform: translateX(-50%); }
 .app-brand {
   display: flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none;

@@ -2590,8 +2590,9 @@ type Settings struct {
 	ConfirmDisconnect   bool   `yaml:"confirmDisconnect" json:"confirmDisconnect"`
 	SidebarWidth        int    `yaml:"sidebarWidth" json:"sidebarWidth"`
 	HubsSidebarWidth    int    `yaml:"hubsSidebarWidth" json:"hubsSidebarWidth"`
-	DefaultProfile      string `yaml:"defaultProfile" json:"defaultProfile"`
-	BinPath             string `yaml:"binPath" json:"binPath"`
+	DefaultProfile           string `yaml:"defaultProfile" json:"defaultProfile"`
+	BinPath                  string `yaml:"binPath" json:"binPath"`
+	ConnectTooltipDismissed  bool   `yaml:"connectTooltipDismissed" json:"connectTooltipDismissed"`
 }
 
 func defaultSettings() Settings {

@@ -491,6 +491,21 @@ loadSavedSelections().then(function () {
   });
 });
 
+// First-run connect tooltip
+(function () {
+  goApp.GetSettings().then(function (s) {
+    if (s.connectTooltipDismissed) {
+      dismissConnectTooltip();
+    }
+    // else: tooltip is visible by default in the HTML
+  }).catch(function () {});
+})();
+
+function dismissConnectTooltip() {
+  var tip = document.getElementById('connect-tooltip');
+  if (tip) tip.classList.add('hidden');
+}
+
 // Check for updates after a short delay (versions need time to fetch)
 setTimeout(function () {
   refreshVersionDisplay();
@@ -1106,41 +1121,35 @@ function updateConnectButton() {
   var btn = document.getElementById('connect-btn');
   goApp.GetConnectionState().then(function (state) {
     if (state.connected) {
-      btn.textContent = 'Disconnect';
-      btn.className = 'topbar-btn disconnect-btn';
       updateConnIcon('connected');
     } else {
-      var hasSelections = Object.keys(selectedServices).length > 0;
-      btn.textContent = 'Connect';
-      btn.className = 'topbar-btn connect-btn' + (hasSelections ? '' : ' disabled');
-      btn.title = hasSelections ? '' : 'Select services in Profiles first';
       updateConnIcon('disconnected');
     }
   });
 }
 
 function updateConnIcon(state) {
-  var iconBtn = document.getElementById('conn-status-btn');
-  var broken = document.getElementById('conn-icon-broken');
-  var linked = document.getElementById('conn-icon-linked');
-  if (!iconBtn || !broken || !linked) return;
+  var btn = document.getElementById('connect-btn');
+  if (!btn) return;
 
-  iconBtn.className = 'topbar-icon-btn topbar-conn-btn ' + state;
-  if (state === 'connected' || state === 'connecting') {
-    broken.classList.add('hidden');
-    linked.classList.remove('hidden');
+  // Remove all state classes
+  btn.classList.remove('connected', 'connecting');
+
+  if (state === 'connected') {
+    btn.classList.add('connected');
+    btn.title = 'Disconnect';
+  } else if (state === 'connecting') {
+    btn.classList.add('connecting');
+    btn.title = 'Connecting...';
+  } else if (state === 'disconnecting') {
+    btn.classList.add('connecting');
+    btn.title = 'Disconnecting...';
   } else {
-    broken.classList.remove('hidden');
-    linked.classList.add('hidden');
+    btn.title = 'Connect';
   }
 
-  var titles = {
-    disconnected: 'Disconnected',
-    connecting: 'Connecting...',
-    connected: 'Connected',
-    disconnecting: 'Disconnecting...'
-  };
-  iconBtn.title = titles[state] || 'Connection status';
+  // Dismiss the first-run tooltip on any state change
+  dismissConnectTooltip();
 }
 
 function goToStatus() {
@@ -1150,6 +1159,15 @@ function goToStatus() {
 }
 
 function toggleConnection() {
+  // Dismiss the first-run tooltip permanently
+  dismissConnectTooltip();
+  goApp.GetSettings().then(function (s) {
+    if (!s.connectTooltipDismissed) {
+      s.connectTooltipDismissed = true;
+      goApp.SaveSettings(s);
+    }
+  }).catch(function () {});
+
   goApp.GetConnectionState().then(function (state) {
     if (state.connected) {
       doDisconnect();

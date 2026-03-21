@@ -15,7 +15,6 @@
           <img src="/src/logo.png" class="app-logo" alt="Tela">
           <span class="app-title">Tela<span class="app-title-visor">Visor</span></span>
         </a>
-        <button type="button" class="topbar-btn connect-btn" id="connect-btn" onclick="toggleConnection()">Connect</button>
       </div>
       <div class="topbar-center">
         <div class="mode-toggle">
@@ -25,21 +24,16 @@
         </div>
       </div>
       <div class="topbar-right">
+        <button class="topbar-icon-btn topbar-power-btn" id="connect-btn" onclick="toggleConnection()" title="Connect">&#x23FB;</button>
         <button class="topbar-icon-btn topbar-update-btn" id="update-btn" onclick="toggleUpdateOverlay()" title="No updates" disabled>&#x26A0;</button>
-        <button class="topbar-icon-btn topbar-conn-btn" id="conn-status-btn" onclick="goToStatus()" title="Connection status">
-          <svg class="conn-icon conn-icon-broken" id="conn-icon-broken" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <path d="M6.5 9.5L4.5 11.5C3.4 12.6 1.6 12.6 0.5 11.5C-0.6 10.4 -0.6 8.6 0.5 7.5L3.5 4.5"/>
-            <path d="M9.5 6.5L11.5 4.5C12.6 3.4 14.4 3.4 15.5 4.5C16.6 5.6 16.6 7.4 15.5 8.5L12.5 11.5"/>
-          </svg>
-          <svg class="conn-icon conn-icon-linked hidden" id="conn-icon-linked" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <path d="M6 10L4.5 11.5C3.4 12.6 1.6 12.6 0.5 11.5C-0.6 10.4 -0.6 8.6 0.5 7.5L3.5 4.5C4.6 3.4 6.4 3.4 7.5 4.5"/>
-            <path d="M10 6L11.5 4.5C12.6 3.4 14.4 3.4 15.5 4.5C16.6 5.6 16.6 7.4 15.5 8.5L12.5 11.5C11.4 12.6 9.6 12.6 8.5 11.5"/>
-            <line x1="5.5" y1="10.5" x2="10.5" y2="5.5"/>
-          </svg>
-        </button>
         <button class="topbar-icon-btn" onclick="toggleAboutOverlay()" title="About TelaVisor">i</button>
         <button class="topbar-icon-btn" onclick="toggleSettingsOverlay()" title="Settings">&#x2699;</button>
         <button class="topbar-icon-btn topbar-quit-btn" id="quit-btn" onclick="doQuit()" title="Quit">&#x2715;</button>
+      </div>
+      <!-- First-run tooltip -->
+      <div class="connect-tooltip" id="connect-tooltip">
+        <div class="connect-tooltip-arrow"></div>
+        Click here to connect once you're ready.
       </div>
     </div>
 

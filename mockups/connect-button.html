@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TelaVisor Mockup - Connect Button Options</title>
+<link rel="stylesheet" href="../cmd/telagui/frontend/src/style.css">
+<style>
+.topbar, .app-brand, .mode-toggle, .topbar-icon-btn, .topbar-btn, .mode-btn { -webkit-app-region: unset !important; }
+.app-title-visor { color: var(--accent); }
+
+body { background: var(--bg); }
+#app { height: auto; }
+
+.option-label {
+  padding: 24px 20px 8px; font-size: 14px; font-weight: 700; color: var(--text);
+  border-top: 1px solid var(--border); margin-top: 8px;
+}
+.option-desc {
+  padding: 0 20px 12px; font-size: 12px; color: var(--text-muted); line-height: 1.5;
+}
+
+/* ===== Option-specific styles ===== */
+
+/* Option A: Connection status icon becomes the button */
+.conn-toggle-icon {
+  -webkit-app-region: no-drag;
+  background: none; border: 2px solid var(--text-muted); color: var(--text-muted);
+  width: 32px; height: 32px; border-radius: 50%; font-size: 14px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  padding: 0; transition: all 0.2s;
+}
+.conn-toggle-icon.connected { border-color: var(--accent); color: var(--accent); }
+.conn-toggle-icon.connected:hover { background: rgba(239,68,68,0.1); border-color: var(--danger); color: var(--danger); }
+.conn-toggle-icon:not(.connected):hover { background: rgba(94,232,158,0.1); border-color: var(--accent); color: var(--accent); }
+.conn-toggle-icon .conn-label {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  font-size: 9px; white-space: nowrap; margin-top: 2px; font-family: var(--font);
+  pointer-events: none;
+}
+
+/* Option B: Integrated into mode toggle */
+.mode-toggle-with-conn {
+  display: flex; align-items: center; gap: 0;
+}
+.mode-conn-btn {
+  -webkit-app-region: no-drag;
+  padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); background: none; color: var(--text-muted);
+  font-family: var(--font); border-radius: 4px 0 0 4px; margin-right: -1px;
+}
+.mode-conn-btn.connected {
+  background: var(--accent); color: #111; border-color: var(--accent);
+}
+.mode-conn-btn:not(.connected) {
+  background: none; color: var(--text-muted);
+}
+.mode-conn-btn:not(.connected):hover {
+  background: rgba(94,232,158,0.15); color: var(--accent); border-color: var(--accent);
+}
+.mode-conn-btn.connected:hover {
+  background: var(--danger); border-color: var(--danger); color: #fff;
+}
+
+/* Option C: Below the mode toggle (second row) */
+.topbar-conn-row {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 0 4px; gap: 8px;
+}
+.conn-pill {
+  -webkit-app-region: no-drag;
+  padding: 3px 16px; font-size: 11px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: none; color: var(--text-muted); font-family: var(--font);
+  display: flex; align-items: center; gap: 6px;
+}
+.conn-pill .conn-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted);
+}
+.conn-pill.connected .conn-dot { background: var(--accent); }
+.conn-pill.connected { border-color: var(--accent); color: var(--accent); }
+.conn-pill:not(.connected):hover { border-color: var(--accent); color: var(--accent); }
+.conn-pill.connected:hover { border-color: var(--danger); color: var(--danger); }
+.conn-pill.connected:hover .conn-dot { background: var(--danger); }
+.conn-pill-profile { font-weight: 400; color: var(--text-muted); font-size: 10px; }
+
+/* Option D: Replace the chain-link icon entirely */
+.conn-power-btn {
+  -webkit-app-region: no-drag;
+  background: none; border: 2px solid var(--text-muted); color: var(--text-muted);
+  width: 30px; height: 30px; border-radius: 50%; font-size: 16px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  padding: 0; transition: all 0.2s; position: relative;
+}
+.conn-power-btn:not(.connected):hover { border-color: var(--accent); color: var(--accent); }
+.conn-power-btn.connected { border-color: var(--accent); color: var(--accent); background: rgba(94,232,158,0.1); }
+.conn-power-btn.connected:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
+
+/* Option E: Text button between logo and mode, with state color */
+.conn-text-btn {
+  -webkit-app-region: no-drag;
+  padding: 4px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: none; color: var(--text-muted); font-family: var(--font);
+  display: flex; align-items: center; gap: 6px; transition: all 0.15s;
+}
+.conn-text-btn .conn-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted);
+}
+.conn-text-btn:not(.connected):hover { border-color: var(--accent); color: var(--accent); }
+.conn-text-btn:not(.connected):hover .conn-dot { background: var(--accent); }
+.conn-text-btn.connected { border-color: var(--accent); color: var(--text); }
+.conn-text-btn.connected .conn-dot { background: var(--accent); }
+.conn-text-btn.connected:hover { border-color: var(--danger); color: var(--danger); }
+.conn-text-btn.connected:hover .conn-dot { background: var(--danger); }
+</style>
+</head>
+<body>
+<div id="app" style="height: auto;">
+
+<!-- ==================== OPTION A ==================== -->
+<div class="option-label">Option A: Merge with the connection status icon (right side)</div>
+<div class="option-desc">
+  The chain-link icon becomes the connect/disconnect button. Click it to toggle.
+  Green border when connected. Hover shows red (disconnect). Eliminates one element.
+</div>
+
+<!-- Disconnected state -->
+<div class="topbar" style="position:relative;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle">
+      <button class="mode-btn active">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="conn-toggle-icon" title="Click to connect" onclick="this.classList.toggle('connected')">
+      &#x26A1;
+    </button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Connected state -->
+<div class="topbar" style="position:relative; margin-top:4px;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle">
+      <button class="mode-btn active">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="conn-toggle-icon connected" title="Click to disconnect" onclick="this.classList.toggle('connected')">
+      &#x26A1;
+    </button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- ==================== OPTION B ==================== -->
+<div class="option-label">Option B: Integrated into the mode toggle group</div>
+<div class="option-desc">
+  A "Connect" button on the left end of the mode toggle strip. When connected, it turns
+  green and reads the profile name. Hover turns it red. The mode buttons shift right.
+</div>
+
+<!-- Disconnected -->
+<div class="topbar" style="position:relative;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle-with-conn">
+      <button class="mode-conn-btn" onclick="this.classList.toggle('connected')">Connect</button>
+      <button class="mode-btn active" style="border-radius:0;">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Connected -->
+<div class="topbar" style="position:relative; margin-top:4px;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle-with-conn">
+      <button class="mode-conn-btn connected" onclick="this.classList.toggle('connected')">Home Cloud</button>
+      <button class="mode-btn active" style="border-radius:0;">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- ==================== OPTION C ==================== -->
+<div class="option-label">Option C: Connection pill below the topbar</div>
+<div class="option-desc">
+  A small pill-shaped indicator below the mode toggle. Shows profile name and status dot.
+  Click to connect/disconnect. Always visible across all modes. Doubles as a status
+  indicator.
+</div>
+
+<!-- Disconnected -->
+<div class="topbar" style="position:relative;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div class="mode-toggle">
+        <button class="mode-btn active">Clients</button>
+        <button class="mode-btn mode-btn-middle">Agents</button>
+        <button class="mode-btn">Hubs</button>
+      </div>
+      <button class="conn-pill" onclick="this.classList.toggle('connected')">
+        <span class="conn-dot"></span>
+        Disconnected
+      </button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Connected -->
+<div class="topbar" style="position:relative; margin-top:4px;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div class="mode-toggle">
+        <button class="mode-btn active">Clients</button>
+        <button class="mode-btn mode-btn-middle">Agents</button>
+        <button class="mode-btn">Hubs</button>
+      </div>
+      <button class="conn-pill connected" onclick="this.classList.toggle('connected')">
+        <span class="conn-dot"></span>
+        Home Cloud
+      </button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- ==================== OPTION D ==================== -->
+<div class="option-label">Option D: Power button icon (replaces chain-link)</div>
+<div class="option-desc">
+  A universally recognized power symbol as the connect/disconnect toggle.
+  Green glow when connected. Red on hover to disconnect.
+  Simple, compact, unambiguous.
+</div>
+
+<!-- Disconnected -->
+<div class="topbar" style="position:relative;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle">
+      <button class="mode-btn active">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="conn-power-btn" title="Connect" onclick="this.classList.toggle('connected')">&#x23FB;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Connected -->
+<div class="topbar" style="position:relative; margin-top:4px;">
+  <div class="topbar-left">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle">
+      <button class="mode-btn active">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="conn-power-btn connected" title="Disconnect" onclick="this.classList.toggle('connected')">&#x23FB;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- ==================== OPTION E ==================== -->
+<div class="option-label">Option E: Text button with status dot (left of center)</div>
+<div class="option-desc">
+  A bordered text button with an embedded status dot. Shows "Connect" when disconnected,
+  profile name when connected. The dot is grey (off), green (on), or red (hover to disconnect).
+  Positioned between the logo and the mode toggle.
+</div>
+
+<!-- Disconnected -->
+<div class="topbar" style="position:relative;">
+  <div class="topbar-left" style="gap:16px;">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+    <button class="conn-text-btn" onclick="this.classList.toggle('connected'); this.querySelector('.conn-lbl').textContent = this.classList.contains('connected') ? 'Home Cloud' : 'Connect';">
+      <span class="conn-dot"></span>
+      <span class="conn-lbl">Connect</span>
+    </button>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle">
+      <button class="mode-btn active">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Connected -->
+<div class="topbar" style="position:relative; margin-top:4px;">
+  <div class="topbar-left" style="gap:16px;">
+    <a class="app-brand"><span class="app-title">Tela<span class="app-title-visor">Visor</span></span></a>
+    <button class="conn-text-btn connected" onclick="this.classList.toggle('connected'); this.querySelector('.conn-lbl').textContent = this.classList.contains('connected') ? 'Home Cloud' : 'Connect';">
+      <span class="conn-dot"></span>
+      <span class="conn-lbl">Home Cloud</span>
+    </button>
+  </div>
+  <div class="topbar-center">
+    <div class="mode-toggle">
+      <button class="mode-btn active">Clients</button>
+      <button class="mode-btn mode-btn-middle">Agents</button>
+      <button class="mode-btn">Hubs</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" disabled>&#x26A0;</button>
+    <button class="topbar-icon-btn">i</button>
+    <button class="topbar-icon-btn">&#x2699;</button>
+    <button class="topbar-icon-btn" style="color:var(--danger);">&#x2715;</button>
+  </div>
+</div>
+
+<div style="padding: 20px; color: var(--text-muted); font-size: 12px;">
+  Click the connect/disconnect elements to toggle state. All options are interactive.
+</div>
+
+</div>
+</body>
+</html>
