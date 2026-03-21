@@ -395,12 +395,9 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		}
 		defer conn.Close()
 
-		// Stream the request body to the tunnel concurrently.
-		// The telad server processes the request and sends a response
-		// only after it has received all data (for uploads: all chunks).
-		go func() {
-			io.Copy(conn, r.Body)
-		}()
+		// Read the full request body and write it to the tunnel.
+		reqBody, _ := io.ReadAll(r.Body)
+		conn.Write(reqBody)
 
 		// Read the JSON response line.
 		reader := bufio.NewReaderSize(conn, 32768)
