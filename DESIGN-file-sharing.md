@@ -284,7 +284,7 @@ Response:
 {"ok": true}
 ```
 
-Directories cannot be deleted via this operation. Only regular files.
+Both files and empty directories can be deleted. Deleting a non-empty directory returns an error.
 
 #### MKDIR
 
