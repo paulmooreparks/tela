@@ -1448,6 +1448,8 @@ function filesListDir(machine, path) {
 
     filesRenderEntries();
     filesUpdateStatusBar();
+  }).catch(function (err) {
+    listEl.innerHTML = '<div class="files-empty">' + escHtml(String(err)) + '</div>';
   });
 }
 
@@ -1639,6 +1641,9 @@ function filesDownloadFile(fileName, remotePath) {
         tvLog('Download failed: ' + resp.error);
         showError('Download failed: ' + resp.error);
       }
+    }).catch(function (err) {
+      tvLog('Download failed: ' + err);
+      showError('Download failed: ' + err);
     });
   });
 }
@@ -1669,6 +1674,9 @@ function filesUpload() {
         tvLog('Upload failed: ' + resp.error);
         showError('Upload failed: ' + resp.error);
       }
+    }).catch(function (err) {
+      tvLog('Upload failed: ' + err);
+      showError('Upload failed: ' + err);
     });
   });
 }
@@ -1699,7 +1707,7 @@ function filesDeleteSelected() {
       if (resp.ok) tvLog('Deleted ' + remotePath);
       else tvLog('Delete failed (' + name + '): ' + resp.error);
       deleteNext();
-    });
+    }).catch(function () { deleteNext(); });
   }
   deleteNext();
   });
@@ -1720,7 +1728,7 @@ function filesNewFolder() {
       tvLog('New folder failed: ' + resp.error);
       showError('New folder failed: ' + resp.error);
     }
-  });
+  }).catch(function (err) { showError('New folder failed: ' + err); });
   });
 }
 
@@ -1745,7 +1753,7 @@ function filesRenameSelected() {
         tvLog('Rename failed: ' + resp.error);
         showError('Rename failed: ' + resp.error);
     }
-  });
+  }).catch(function (err) { showError('Rename failed: ' + err); });
   });
 }
 
