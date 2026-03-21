@@ -1123,8 +1123,11 @@ function refreshCurrentPane() {
 
 function updateConnectButton() {
   goApp.GetConnectionState().then(function (state) {
-    if (state.connected) {
+    if (state.connected && state.output && state.output.indexOf('Services available:') !== -1) {
       updateConnIcon('connected');
+    } else if (state.connected) {
+      // Process running but tunnels not yet ready
+      updateConnIcon('connecting');
     } else {
       updateConnIcon('disconnected');
     }
@@ -1190,7 +1193,7 @@ function doConnect() {
     tvLog('Connected');
     takeSnapshot();
     startConnectionPoll();
-    updateConnectButton();
+    updateConnectButton(); // stays amber until tela output shows Services available
     refreshAll();
     refreshStatus();
     refreshFilesTab();
@@ -1601,6 +1604,12 @@ function filesShowMachineList() {
       capabilitiesPromise = Promise.resolve({});
     }
     capabilitiesPromise.then(function (caps) {
+      var capKeys = caps ? Object.keys(caps) : [];
+      if (state.connected && capKeys.length === 0) {
+        tvLog('Warning: no capabilities returned for any machine');
+      } else if (state.connected) {
+        tvLog('Capabilities loaded for: ' + capKeys.join(', '));
+      }
       filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
       machineList.forEach(function (m) {
@@ -1699,7 +1708,8 @@ function filesListDir(machine, path) {
     try {
       var resp = JSON.parse(respJSON);
     } catch (e) {
-      listEl.innerHTML = '<div class="files-empty">Invalid response: ' + escHtml(String(respJSON).substring(0, 200)) + '</div>';
+      tvLog('Invalid file list response: ' + String(respJSON).substring(0, 200));
+      listEl.innerHTML = '<div class="files-empty">Invalid response from server. The tunnel may not be ready yet. Try clicking Refresh.</div>';
       return;
     }
     if (!resp.ok) {
