@@ -324,6 +324,11 @@ if (window.runtime) {
               sel.servicePort = evt.remote;
             }
           });
+          // Transition power button from connecting (amber) to connected (green)
+          var pwrBtn = document.getElementById('connect-btn');
+          if (pwrBtn && pwrBtn.classList.contains('connecting')) {
+            updateConnIcon('connected');
+          }
         }
         if (evt.type === 'tunnel_activity') {
           // Track active tunnels
@@ -1123,6 +1128,8 @@ function refreshCurrentPane() {
 
 function updateConnectButton() {
   var btn = document.getElementById('connect-btn');
+  // If currently in connecting state, don't override -- wait for service_bound
+  if (btn && btn.classList.contains('connecting')) return;
   goApp.GetConnectionState().then(function (state) {
     if (state.connected) {
       updateConnIcon('connected');
@@ -1188,11 +1195,12 @@ function doConnect() {
   tvLog('Connecting...');
   updateConnIcon('connecting');
   goApp.Connect(JSON.stringify(connections)).then(function () {
-    tvLog('Connected');
-    // Connect auto-saves the profile; update snapshot
+    tvLog('Connecting tunnels...');
+    // Process started. Stay in 'connecting' state until service_bound arrives.
     takeSnapshot();
     startConnectionPoll();
-    updateConnectButton();
+    // Do NOT call updateConnectButton here -- it would set green immediately.
+    // The power button transitions to green when the first service_bound event arrives.
     refreshAll();
     refreshStatus();
     refreshFilesTab();
