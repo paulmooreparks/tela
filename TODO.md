@@ -6,7 +6,7 @@
 - [x] Hub `/status` JSON endpoint (registered machines, active sessions)
 
 ## Phase 2: UDP Relay ✅
-- [x] Hub UDP listener alongside WebSocket (port 41820, configurable via `HUB_UDP_PORT`)
+- [x] Hub UDP listener alongside WebSocket (port 41820, configurable via `TELAHUBD_UDP_PORT`)
 - [x] Post-signaling upgrade: both sides independently switch WG datagrams to UDP
 - [x] Automatic fallback to WebSocket if UDP blocked (probe timeout → stays on WS)
 - [x] Asymmetric mode: hub bridges UDP↔WebSocket when only one side upgrades
@@ -29,9 +29,16 @@ When peers are on the same LAN, the relay path is already low-latency.
 - [ ] Mesh networking (multi-peer)
 - [x] ACL policies (per-machine token-based RBAC; advanced attribute-based policies are future work)
 - [ ] Mobile clients (iOS/Android)
-- [ ] GUI (system tray / menu bar)
+- [x] GUI (system tray / menu bar) -- TelaVisor with system tray support
 - [ ] OIDC/SSO authentication (layer on top of token auth)
 - [ ] Audit logging
-- [ ] Multiple simultaneous sessions per machine
+- [x] Multiple simultaneous sessions per machine
 - [ ] Direct tunnel liveness detection (fall back to relay if direct path goes stale)
 - [ ] OAuth2 Device Authorization Grant for portal login (RFC 8628)
+
+## File Sharing
+- [x] Native file sharing protocol (list, read, write, delete, mkdir, rename, move)
+- [x] Live file change notifications (fsnotify + subscribe)
+- [x] tela files CLI (ls, get, put, rm, mkdir, rename, mv, info)
+- [x] TelaVisor Files tab with Explorer-style browser
+- [x] Drag-and-drop move support

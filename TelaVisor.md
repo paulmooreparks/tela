@@ -156,7 +156,7 @@ The log panel is a persistent area at the bottom of the window that provides tab
 
 When you click into any log tab, scrolling freezes so you can read and select text. Selected text is automatically copied to the clipboard. Scrolling resumes after a short delay.
 
-The following toolbar buttons are availabe at the top of the log panel:
+The following toolbar buttons are available at the top of the log panel:
 
 - **Verbose** -- toggles verbose logging for the tela process
 - **Copy** -- copies the active log tab's content to the clipboard

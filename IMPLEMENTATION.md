@@ -200,10 +200,10 @@ services:
       - "3002:80"           # HTTP + WebSocket (cloudflared points here)
       - "41820:41820/udp"    # UDP relay for WireGuard datagrams
     environment:
-      - HUB_PORT=80
-      - HUB_UDP_PORT=41820
-      - HUB_UDP_HOST=${HUB_UDP_HOST:-}  # set to real public IP when behind proxy
-      - HUB_NAME=gohub
+      - TELAHUBD_PORT=80
+      - TELAHUBD_UDP_PORT=41820
+      - TELAHUBD_UDP_HOST=${TELAHUBD_UDP_HOST:-}  # set to real public IP when behind proxy
+      - TELAHUBD_NAME=gohub
       # - TELA_OWNER_TOKEN=<hex>   # uncomment to enable auth (see §8.1)
     volumes:
       - hub-data:/app/data
@@ -348,7 +348,6 @@ tela connect -hub barn-hub -machine barn
 ### Remaining iteration targets
 
 - Binary multiplexed framing (DESIGN.md §6.3)
-- Multiple simultaneous sessions per machine
 
 ---
 

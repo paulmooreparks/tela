@@ -9,7 +9,7 @@ Traceability matrix mapping each DESIGN.md section to current implementation sta
 - 🔮 **Future**: Awan Saya scope or Phase 3+
 - 📄 **Doc-only**: Informational section, no implementation required
 
-Last updated: 2026-03-09
+Last updated: 2026-03-21
 
 ---
 
@@ -252,6 +252,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 9. **Direct tunnel (P2P)**: STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)
 10. **CLI remote management**: `tela remote add` configures a hub directory, `tela remote remove` removes it (`tela login`/`tela logout` kept as deprecated aliases)
 11. **Remote-based hub name resolution**: Short hub names resolved via configured remotes' `/api/hubs` with local `hubs.yaml` fallback
+12. **File sharing**: Native file transfer protocol (list, read, write, delete, mkdir, rename, move) with live change notifications, sandboxed per machine, accessible via `tela files` CLI and TelaVisor Files tab
 
 ### Biggest gaps to Phase 1 spec
 
@@ -262,4 +263,3 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 5. **Agent identity** (§12.1): No Ed25519 keys; agents identified by string only
 6. **Certificate pinning** (§12.2): Neither side validates Hub cert fingerprint
 7. **Test suite** (§20): No automated tests
-8. **Multiple simultaneous sessions**: One session per machine at a time

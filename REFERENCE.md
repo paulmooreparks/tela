@@ -212,6 +212,18 @@ telahubd user rotate alice
 telahubd user remove alice
 ```
 
+**Print the owner token:**
+
+```bash
+telahubd user show-owner
+```
+
+**Print the viewer token:**
+
+```bash
+telahubd user show-viewer
+```
+
 All changes take effect immediately (hot-reload). No hub restart required.
 
 **Docker bootstrap (environment variable):**
@@ -412,6 +424,11 @@ If you need to override the embedded console with custom files, set `TELAHUBD_WW
 | `/api/admin/portals` | GET | owner/admin | List portal registrations |
 | `/api/admin/portals` | POST | owner/admin | Add/update a portal registration |
 | `/api/admin/portals?name=<n>` | DELETE | owner/admin | Remove a portal registration |
+| `/api/admin/acls` | GET | owner/admin | List per-machine ACL rules |
+| `/api/admin/grant-register` | POST | owner/admin | Grant register access for a machine |
+| `/api/admin/revoke-register` | POST | owner/admin | Revoke register access |
+| `/api/admin/pair-code` | POST | owner/admin | Generate a pairing code |
+| `/api/pair` | POST | none | Exchange a pairing code for a token |
 | `/.well-known/tela` | GET | none | Hub directory discovery (RFC 8615) |
 | `/api/hubs` | GET | viewer+ | Hub listing for portal/CLI resolution |
 
@@ -656,6 +673,7 @@ Reference copy paths (if using `-config` mode):
 | `TELA_TOKEN` | (none) | Hub auth token |
 | `TELAD_PORTS` | (none) | Comma-separated port specs (e.g. `22:SSH,3389:RDP`) |
 | `TELAD_TARGET_HOST` | `127.0.0.1` | Target service host (gateway mode) |
+| `TELAD_MTU` | `1100` | WireGuard tunnel MTU |
 
 Environment variables serve as defaults. Flags override environment variables, and config file values override both.
 
@@ -804,6 +822,25 @@ tela remote add awansaya https://awansaya.net
 tela connect -hub myhub -machine web01   # "myhub" resolved via the remote
 ```
 
+#### tela profile
+
+Manages connection profiles.
+
+```bash
+tela profile list                     # list available profiles
+tela profile show <name>              # display profile YAML
+tela profile create <name>            # create a new empty profile
+tela profile delete <name>            # delete a profile
+```
+
+#### tela pair
+
+Exchanges a pairing code for a hub token and stores it in the credential store.
+
+```bash
+tela pair -hub <hub-url> -code <code> # exchange a pairing code for a token
+```
+
 #### tela admin
 
 Remote hub auth and portal management. Requires an owner or admin token.
@@ -896,7 +933,7 @@ File data is transferred through the WireGuard tunnel using a chunked protocol w
 
 #### Deprecated commands
 
-`tela login <url>` and `tela logout` are deprecated aliases for `tela remote add portal <url>` and `tela remote remove portal`, respectively. They still work but print a deprecation notice.
+`tela login <url>` and `tela logout <url>` are legacy commands for storing and removing hub credentials. They predate `tela remote` and serve a different purpose: `tela login` stores a hub token in the credential store (`credentials.yaml`), while `tela remote add` stores a remote entry for hub name resolution (`config.yaml`). Both are still functional.
 
 ### Connection profiles
 
@@ -1049,6 +1086,7 @@ hubs:
 | `TELA_TOKEN` | Default auth token (used by connect, machines, services, status) |
 | `TELA_OWNER_TOKEN` | Owner/admin token (preferred by `tela admin`) |
 | `TELA_PROFILE` | Default connection profile name |
+| `TELA_MTU` | WireGuard tunnel MTU (default 1100) |
 
 ### Config and credential storage
 
@@ -1432,6 +1470,8 @@ telahubd user remove <id>                   # remove identity
 telahubd user grant <id> <machineId>        # grant connect access
 telahubd user revoke <id> <machineId>       # revoke connect access
 telahubd user rotate <id>                   # regenerate token
+telahubd user show-owner                    # print the owner token
+telahubd user show-viewer                   # print the viewer token
 
 # Portal registration
 telahubd portal add <name> <portal-url>
@@ -1478,6 +1518,12 @@ tela status   -hub <hub> [-token <token>]
 tela remote add <name> <portal-url>
 tela remote remove <name>
 tela remote list
+
+# Profile management
+tela profile list | show <name> | create <name> | delete <name>
+
+# Pairing
+tela pair -hub <hub-url> -code <code>
 
 # Remote hub auth management (owner/admin)
 tela admin list-tokens   -hub <hub> [-token <token>]

@@ -131,6 +131,8 @@ Tela must not:
 - Allow protocol churn or dependency creep.
 - Become a general cloud platform (Tela is the substrate, not the platform).
 
+> **Implementation note:** The hub now includes a token-based RBAC system with four roles (owner, admin, user, viewer) and per-machine ACLs. This was implemented as part of the hub's auth model (section 13), not as an external identity provider.
+
 ---
 
 # **3. Design Philosophy & Invariants**
@@ -498,7 +500,7 @@ The Hub never sees private keys and cannot decrypt tunnel traffic (**zero-knowle
 
 - Agent: `10.77.{N}.1/32` (N = session index, 1-254)
 - Client: `10.77.{N}.2/32`
-- MTU: 1420
+- MTU: 1100 (default, configurable via -mtu flag or TELA_MTU / TELAD_MTU environment variables)
 
 ### Security Properties
 
@@ -538,7 +540,7 @@ If the UDP probe times out (2 seconds), the side stays on WebSocket with zero de
 
 #### Port
 
-The Hub's UDP relay port defaults to **41820** (a nod to WireGuard's standard port 51820). It is configurable via the `HUB_UDP_PORT` environment variable. When the hub is behind a proxy or tunnel that doesn't forward UDP (e.g. Cloudflare), set `HUB_UDP_HOST` to the hub's real public IP or a DNS name that resolves directly. The hub includes this address in `udp-offer` messages so that clients and agents send UDP to the actual host rather than the proxy.
+The Hub's UDP relay port defaults to **41820** (a nod to WireGuard's standard port 51820). It is configurable via the `TELAHUBD_UDP_PORT` environment variable. When the hub is behind a proxy or tunnel that doesn't forward UDP (e.g. Cloudflare), set `TELAHUBD_UDP_HOST` to the hub's real public IP or a DNS name that resolves directly. The hub includes this address in `udp-offer` messages so that clients and agents send UDP to the actual host rather than the proxy.
 
 ### Direct Tunnel (Phase 3 - STUN + Hole Punching)
 
@@ -670,7 +672,7 @@ The Hub is **not** an identity provider, dashboard engine, policy engine, orches
 - **Language:** Go
 - **Binary:** `telahubd`, static, cross-compiled, no CGO.
 - **Dependencies:** `gorilla/websocket` (WS+HTTP), `gopkg.in/yaml.v3` (config). No Node.js, no MeshCentral, no ORMs.
-- **Config:** YAML file (`telahubd.yaml`) with `port`, `udpPort`, `name`, `wwwDir`, `auth`, and `portals` fields. Loaded via `-config` flag; env vars (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`, `HUB_WWW_DIR`) override file values.
+- **Config:** YAML file (`telahubd.yaml`) with `port`, `udpPort`, `name`, `wwwDir`, `auth`, and `portals` fields. Loaded via `-config` flag; env vars (`TELAHUBD_PORT`, `TELAHUBD_UDP_PORT`, `TELAHUBD_NAME`, `TELAHUBD_WWW_DIR`) override file values.
 - **Dependency constraints:** No frontend frameworks, no complex dependency trees, no microservices, no build systems.
 
 > **Implementation note (§8.2):** The `telahubd` binary also supports three subcommand families:

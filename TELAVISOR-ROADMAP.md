@@ -27,6 +27,9 @@ TelaVisor today handles the core connection workflow:
 - Terminal output, command log, verbose mode
 - Auto-update (self-update for standalone installs, defers to package manager otherwise)
 - System tray with minimize-to-tray on close
+- File browser (upload, download, rename, move, delete, mkdir, drag-and-drop)
+- Live file change notifications
+- Themed dialog system (no browser dialogs)
 
 ## Roadmap
 
@@ -141,14 +144,14 @@ This section maps every `tela` CLI command to its TelaVisor equivalent. Gaps are
 
 | CLI command | Flags | TelaVisor equivalent | Status |
 |---|---|---|---|
-| `tela admin list-tokens` | `-hub`, `-token`, `-json` | Not implemented | Gap (Phase 2) |
-| `tela admin add-token <id>` | `-hub`, `-token`, `-role` | Not implemented | Gap (Phase 2) |
-| `tela admin remove-token <id>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
-| `tela admin rotate <id>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
-| `tela admin grant <id> <machine>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
-| `tela admin revoke <id> <machine>` | `-hub`, `-token` | Not implemented | Gap (Phase 2) |
-| `tela admin pair-code <machine>` | `-hub`, `-token`, `-expires`, `-type`, `-machines` | Not implemented | Gap (Phase 2) |
-| `tela admin list-portals` | `-hub`, `-token`, `-json` | Not implemented | Gap |
+| `tela admin list-tokens` | `-hub`, `-token`, `-json` | Hubs mode, Tokens view | Implemented |
+| `tela admin add-token <id>` | `-hub`, `-token`, `-role` | Hubs mode, Tokens view | Implemented |
+| `tela admin remove-token <id>` | `-hub`, `-token` | Hubs mode, Tokens view | Implemented |
+| `tela admin rotate <id>` | `-hub`, `-token` | Hubs mode, Tokens view | Implemented |
+| `tela admin grant <id> <machine>` | `-hub`, `-token` | Hubs mode, ACLs view | Implemented |
+| `tela admin revoke <id> <machine>` | `-hub`, `-token` | Hubs mode, ACLs view | Implemented |
+| `tela admin pair-code <machine>` | `-hub`, `-token`, `-expires`, `-type`, `-machines` | Hubs mode, Tokens view | Implemented |
+| `tela admin list-portals` | `-hub`, `-token`, `-json` | Hubs mode, Hub Settings | Implemented |
 | `tela admin add-portal <name>` | `-hub`, `-token`, `-portal-url`, `-portal-token`, `-hub-url` | Not implemented | Gap |
 | `tela admin remove-portal <name>` | `-hub`, `-token` | Not implemented | Gap |
 
@@ -170,13 +173,14 @@ OS service management requires elevated privileges and system-level configuratio
 
 ### Gap summary
 
-**12 commands fully implemented** (connect, machines, services, profile CRUD, login, logout, pair, version).
+**20 commands fully implemented** (connect, machines, services, profile CRUD, login, logout, pair, version, plus 8 admin commands in Hubs mode).
 
 **1 command partially implemented** (status -- online indicators but no detailed hub info).
 
-**13 commands not implemented:**
-- 10 admin subcommands (Phase 2 roadmap)
+**3 commands not implemented:**
 - 3 remote subcommands (low priority)
+
+Admin commands (tokens, ACLs, pairing codes) are now implemented in Hubs mode.
 
 **7 commands intentionally out of scope** (OS service management).
 

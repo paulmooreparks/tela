@@ -213,6 +213,35 @@ Notes:
 - If you provide `services` but omit `ports`, `telad` derives `ports` automatically.
 - If you provide `ports` but omit `services`, `telad` generates minimal service entries (port-only).
 
+**File share configuration:**
+
+Each machine can expose a sandboxed directory for file transfer through the WireGuard tunnel. File sharing is off by default and must be explicitly enabled.
+
+```yaml
+fileShare:
+  enabled: true
+  directory: /home/shared
+  writable: true
+  maxFileSize: 50MB
+  maxTotalSize: 1GB
+  allowDelete: false
+  allowedExtensions: []
+  blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
+```
+
+File share fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enables file sharing for this machine |
+| `directory` | string | (required) | Absolute path to the shared directory. Created on startup if missing. |
+| `writable` | bool | `false` | Allows clients to upload files, create directories, rename, and move |
+| `maxFileSize` | string | `50MB` | Maximum size of a single uploaded file. Supports KB, MB, GB suffixes. |
+| `maxTotalSize` | string | (none) | Maximum total size of all files in the shared directory |
+| `allowDelete` | bool | `false` | Allows clients to delete files. Requires `writable: true`. |
+| `allowedExtensions` | []string | `[]` | Whitelist of file extensions. Empty means all extensions are allowed (subject to `blockedExtensions`). |
+| `blockedExtensions` | []string | see above | Blacklist of file extensions. Applied after `allowedExtensions`. |
+
 **Example (two machines):**
 
 ```yaml
@@ -275,7 +304,8 @@ auth:
 
 - `port`, `udpPort`, `udpHost`, `name`, `wwwDir`: same as the corresponding env vars.
 - Precedence: **env vars override YAML**, and YAML overrides built-in defaults.
-- Supported env vars: `HUB_PORT`, `HUB_UDP_PORT`, `HUB_UDP_HOST`, `HUB_NAME`, `HUB_WWW_DIR`.
+- Supported env vars: `TELAHUBD_PORT`, `TELAHUBD_UDP_PORT`, `TELAHUBD_UDP_HOST`, `TELAHUBD_NAME`, `TELAHUBD_WWW_DIR`.
+- Portal-related env vars: `TELAHUBD_PORTAL_URL`, `TELAHUBD_PORTAL_TOKEN`, `TELAHUBD_PUBLIC_URL`.
 - `udpHost`: when the hub is behind a proxy or tunnel (e.g. Cloudflare) that doesn't forward UDP, set this to the hub's real public IP or a DNS name that resolves to it. The hub includes this in `udp-offer` messages so clients send UDP to the right address.
 
 ### Auth block (`auth:`)
