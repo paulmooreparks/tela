@@ -588,6 +588,7 @@ Machine fields:
 | `token` | No | Per-machine token override |
 | `ports` | No | Simple port list (alternative to `services`) |
 | `services` | No | Detailed service descriptors (port, name, description) |
+| `gateway` | No | Path-based HTTP reverse proxy (see [gateway](#gateway-path-based-reverse-proxy)) |
 | `fileShare` | No | File sharing configuration (see below) |
 
 ### File sharing
@@ -627,6 +628,60 @@ The shared directory must not be a system directory (`/`, `/etc`, `C:\Windows`, 
 When file sharing is enabled, the agent advertises the capability to the hub, which includes it in `/api/status` responses. Clients and UIs (TelaVisor, hub console) can display file sharing availability without establishing a session.
 
 The agent also watches the shared directory for changes using filesystem notifications and streams events (file created, modified, deleted, renamed) to connected clients in real time.
+
+### Gateway (path-based reverse proxy)
+
+telad can run a built-in HTTP reverse proxy that routes requests by URL path to different local services. This eliminates the need for a separate reverse proxy (nginx, Caddy, Traefik) when exposing multiple HTTP services through a single tunnel port.
+
+The gateway listens on a single port inside the WireGuard tunnel. Incoming requests are matched by path prefix (longest match first) and forwarded to the corresponding local service.
+
+```yaml
+machines:
+  - name: myapp
+    services:
+      - port: 5432
+        name: postgres
+        proto: tcp
+    gateway:
+      port: 8080
+      routes:
+        - path: /api/
+          target: 4000        # REST API on localhost:4000
+        - path: /metrics/
+          target: 4100        # metrics agent on localhost:4100
+        - path: /
+          target: 3000        # web UI on localhost:3000
+```
+
+In this example, telad exposes two tunnel services: the gateway on port 8080 and PostgreSQL on port 5432. The three HTTP services (3000, 4000, 4100) are internal to the machine and accessible only through the gateway.
+
+A connecting client includes `gateway` in their profile:
+
+```yaml
+connections:
+  - hub: wss://hub.example.com
+    machine: myapp
+    services: [gateway, postgres]
+```
+
+This gives the user `localhost:8080` (gateway) and `localhost:5432` (PostgreSQL). Opening `localhost:8080/` in a browser serves the web UI. Requests to `localhost:8080/api/users` are proxied to the API. The browser sees a single origin, so no CORS configuration is needed.
+
+Gateway configuration fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `port` | Yes | Port to listen on inside the tunnel |
+| `routes` | Yes | List of path-to-port routing rules |
+| `routes[].path` | Yes | URL path prefix (e.g. `/api/`, `/`) |
+| `routes[].target` | Yes | Local port to proxy to (e.g. 4000) |
+
+Routes are matched by longest path prefix first. A route with `path: /` acts as the default and matches all requests not matched by a more specific route.
+
+The gateway registers itself with the hub as a service named `gateway` with `proto: http`. Clients discover it through the hub's status API like any other service.
+
+The gateway does not terminate TLS (the WireGuard tunnel provides end-to-end encryption), does not do load balancing, and does not transform requests or responses. It is a transparent HTTP reverse proxy for tunnel-internal routing.
+
+See [DESIGN-gateway.md](DESIGN-gateway.md) for the full design specification.
 
 ### Running telad as a service
 

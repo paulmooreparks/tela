@@ -133,6 +133,7 @@ type machineConfig struct {
 	Target      string   `yaml:"target,omitempty"` // defaults to 127.0.0.1
 	Token       string   `yaml:"token,omitempty"`  // overrides top-level token
 	FileShare   fileShareConfig     `yaml:"fileShare,omitempty"`
+	Gateway     *gatewayConfig      `yaml:"gateway,omitempty"`
 }
 
 type registration struct {
@@ -148,6 +149,7 @@ type registration struct {
 	Ports        []uint16
 	Services     []serviceDescriptor
 	FileShare    *parsedFileShareConfig
+	Gateway      *gatewayConfig
 }
 
 var verbose bool
@@ -738,7 +740,9 @@ func runMultiMachine(cfg *configFile) {
 				Ports:        mc.Ports,
 				Services:     mc.Services,
 				FileShare:    fsCfg,
+				Gateway:      mc.Gateway,
 			}
+			mergeGatewayIntoRegistration(&reg, mc.Gateway)
 			runSingleMachine(cfg.Hub, reg, mc.Target)
 		}(m)
 	}
@@ -1027,11 +1031,11 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)
 
 	lg.Printf("[session %s] starting -- agent=%s helper=%s", sessionID[:8], sessionAgentIP, sessionHelperIP)
-	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, reg.FileShare, sessionAgentIP, sessionHelperIP)
+	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, reg.FileShare, reg.Gateway, sessionAgentIP, sessionHelperIP)
 	lg.Printf("[session %s] ended", sessionID[:8])
 }
 
-func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, fsCfg *parsedFileShareConfig, sessionAgentIP, sessionHelperIP string) {
+func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, fsCfg *parsedFileShareConfig, gwCfg *gatewayConfig, sessionAgentIP, sessionHelperIP string) {
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
@@ -1131,10 +1135,14 @@ persistent_keepalive_interval=25
 	// Start file share listener if configured
 	cleanupFileShare := startFileShareListener(lg, tnet, sessionAgentIP, fsCfg)
 
+	// Start gateway if configured
+	cleanupGateway := startGatewayListener(lg, tnet, sessionAgentIP, gwCfg, targetHost)
+
 	// Wait for session to end (either session-end message or WS error)
 	<-done
 
 	lg.Println("session ended -- tearing down WireGuard")
+	cleanupGateway()
 	cleanupFileShare()
 	for _, l := range listeners {
 		l.Close()

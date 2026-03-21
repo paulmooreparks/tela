@@ -61,7 +61,7 @@ Tela is built from three Go binaries and an optional desktop client:
 | Component | Description |
 |-----------|-------------|
 | **tela** | Client CLI. Connects to a hub, establishes a WireGuard tunnel, and binds local TCP ports so native clients (ssh, mstsc, psql, etc.) can connect. |
-| **telad** | Agent daemon. Runs on the target machine, registers with the hub, and exposes local TCP services through the tunnel. |
+| **telad** | Agent daemon. Runs on the target machine, registers with the hub, and exposes local TCP services through the tunnel. Includes a built-in HTTP gateway for path-based routing to multiple services. |
 | **telahubd** | Hub server. Pairs agents with clients, relays encrypted traffic, and serves a built-in web console. |
 | **TelaVisor** | Desktop client. A graphical interface for managing connections, browsing remote files, and administering hubs. Built with Wails v2 (Go + JavaScript). |
 
@@ -231,6 +231,8 @@ Tela is designed to be secure by default. The hub auto-generates an owner token 
 
 **File sharing.** The agent can expose a sandboxed directory for file transfer through the tunnel. Upload, download, rename, move, and delete operations are available via the CLI (`tela files`) or the TelaVisor Files tab. File sharing is off by default and must be explicitly enabled per machine. Extension filtering, size limits, and read-only mode are configurable.
 
+**Gateway.** The agent can run a built-in HTTP reverse proxy that routes requests by URL path to different local services. This lets you expose a multi-service application (web UI, REST API, metrics) through a single tunnel port without needing nginx, Caddy, or any other reverse proxy. See [REFERENCE.md](REFERENCE.md#gateway-path-based-reverse-proxy) for configuration details.
+
 **No admin required.** All three binaries run in userspace. gVisor netstack provides a full WireGuard implementation without kernel modules, TUN devices, or elevated privileges.
 
 **Outbound-only.** Both `tela` and `telad` initiate outbound connections to the hub. No inbound ports are needed on either end.
@@ -317,6 +319,7 @@ docker/            Dockerfile, docker-compose, Caddyfile
 | **Session** | An active encrypted tunnel between a client and an agent. Each session gets its own WireGuard keypair and virtual IP address. |
 | **Portal** | A multi-hub dashboard and directory service. Implements the hub directory API (`/api/hubs`). Can be added as a remote with `tela remote add`. |
 | **File Share** | A sandboxed directory on an agent machine that can be browsed, uploaded to, and downloaded from through the tunnel. |
+| **Gateway** | A built-in HTTP reverse proxy in telad that routes requests by URL path to different local services through a single tunnel port. |
 
 ## Documentation
 
