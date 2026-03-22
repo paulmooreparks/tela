@@ -1897,3 +1897,20 @@ body {
 [data-theme="dark"] .token-table td { border-color: var(--border); }
 [data-theme="dark"] .token-table th { border-color: var(--border); color: var(--text-muted); }
 [data-theme="dark"] .token-table tr:hover td { background: var(--surface-alt); }
+/* Hubs: select, nav, cards, forms */
+[data-theme="dark"] .hubs-hub-selector select {
+  background: var(--surface); color: var(--text); border-color: var(--border);
+}
+[data-theme="dark"] .hubs-admin-nav-item { color: var(--text-muted); }
+[data-theme="dark"] .hubs-admin-nav-item:hover { color: var(--text); background: var(--surface-alt); }
+[data-theme="dark"] .hubs-admin-nav-item.active { color: var(--accent); }
+[data-theme="dark"] .hub-admin-detail { color: var(--text); }
+[data-theme="dark"] .hub-section { border-color: var(--border); }
+[data-theme="dark"] .hub-section-title { color: var(--text); }
+[data-theme="dark"] .hub-info-label { color: var(--text-muted); }
+[data-theme="dark"] .hub-info-value { color: var(--text); }
+[data-theme="dark"] select { background: var(--surface); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .admin-form-row input,
+[data-theme="dark"] .admin-form-row select {
+  background: var(--bg); color: var(--text); border-color: var(--border);
+}
