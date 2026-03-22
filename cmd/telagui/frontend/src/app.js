@@ -778,7 +778,7 @@ function deleteCurrentProfile() {
   var sel = document.getElementById('profile-select');
   if (!sel || !sel.value) return;
   var name = sel.value;
-  goApp.ConfirmDialog('Delete Profile', 'Delete profile "' + name + '"? This cannot be undone.').then(function (yes) {
+  showConfirmDialog('Delete Profile', 'Delete profile "' + name + '"? This cannot be undone.', 'Delete').then(function (yes) {
     if (!yes) return;
     goApp.DeleteProfile(name).then(function () {
       tvLog('Deleted profile "' + name + '"');
@@ -2660,7 +2660,7 @@ function submitCreateToken(event) {
 }
 
 function deleteToken(id) {
-  goApp.ConfirmDialog('Delete Token', 'Delete identity "' + id + '"? This removes the token and all its ACL entries.').then(function (yes) {
+  showConfirmDialog('Delete Token', 'Delete identity "' + id + '"? This removes the token and all its ACL entries.', 'Delete').then(function (yes) {
     if (!yes) return;
     goApp.AdminDeleteToken(currentAdminHub, id).then(function () {
       renderHubTokens(document.getElementById('hubs-admin-detail'));
@@ -2669,7 +2669,7 @@ function deleteToken(id) {
 }
 
 function rotateToken(id) {
-  goApp.ConfirmDialog('Rotate Token', 'Rotate token for "' + id + '"? The old token will stop working immediately.').then(function (yes) {
+  showConfirmDialog('Rotate Token', 'Rotate token for "' + id + '"? The old token will stop working immediately.', 'Rotate').then(function (yes) {
     if (!yes) return;
     goApp.AdminRotateToken(currentAdminHub, id).then(function (raw) {
       var data;
@@ -2870,7 +2870,7 @@ function submitGrantAccess(event) {
 }
 
 function revokeConnect(id, machineId) {
-  goApp.ConfirmDialog('Revoke Access', 'Revoke connect access for "' + id + '" on "' + machineId + '"?').then(function (yes) {
+  showConfirmDialog('Revoke Access', 'Revoke connect access for "' + id + '" on "' + machineId + '"?', 'Revoke').then(function (yes) {
     if (!yes) return;
     goApp.AdminRevokeConnect(currentAdminHub, id, machineId).then(function () {
       renderHubACLs(document.getElementById('hubs-admin-detail'));
@@ -2879,7 +2879,7 @@ function revokeConnect(id, machineId) {
 }
 
 function revokeRegister(id, machineId) {
-  goApp.ConfirmDialog('Revoke Access', 'Revoke register access for "' + id + '" on "' + machineId + '"?').then(function (yes) {
+  showConfirmDialog('Revoke Access', 'Revoke register access for "' + id + '" on "' + machineId + '"?', 'Revoke').then(function (yes) {
     if (!yes) return;
     goApp.AdminRevokeRegister(currentAdminHub, id, machineId).then(function () {
       renderHubACLs(document.getElementById('hubs-admin-detail'));
@@ -2890,7 +2890,7 @@ function revokeRegister(id, machineId) {
 // --- Hub Management ---
 
 function removeHub(url) {
-  goApp.ConfirmDialog('Remove Hub', 'Remove this hub and all its saved selections?').then(function (yes) {
+  showConfirmDialog('Remove Hub', 'Remove this hub and all its saved selections?', 'Remove').then(function (yes) {
     if (!yes) return;
     Object.keys(selectedServices).forEach(function (key) {
       if (key.indexOf(url + '||') === 0) delete selectedServices[key];
@@ -3265,7 +3265,7 @@ try {
 
 function closeSettings() {
   if (settingsDirty) {
-    goApp.ConfirmDialog('Unsaved Changes', 'You have unsaved settings changes. Discard them?').then(function (yes) {
+    showConfirmDialog('Unsaved Changes', 'You have unsaved settings changes. Discard them?', 'Discard').then(function (yes) {
       if (!yes) return;
       discardAndClose();
     });
