@@ -431,6 +431,8 @@ func (a *App) GetUpdateVersion() string {
 type UpdateInfo struct {
 	Pending        bool   `json:"pending"`
 	Version        string `json:"version"`
+	GUI            string `json:"gui"`
+	CLI            string `json:"cli"`
 	GUIBehind      bool   `json:"guiBehind"`
 	CLIBehind      bool   `json:"cliBehind"`
 	PackageManaged bool   `json:"packageManaged"`
@@ -449,6 +451,8 @@ func (a *App) GetUpdateInfo() UpdateInfo {
 	return UpdateInfo{
 		Pending:        pending,
 		Version:        ver,
+		GUI:            tv.GUI,
+		CLI:            tv.CLI,
 		GUIBehind:      tv.GUIBehind,
 		CLIBehind:      tv.CLIBehind,
 		PackageManaged: isPackageManaged(),

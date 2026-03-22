@@ -349,6 +349,8 @@ export namespace main {
 	export class UpdateInfo {
 	    pending: boolean;
 	    version: string;
+	    gui: string;
+	    cli: string;
 	    guiBehind: boolean;
 	    cliBehind: boolean;
 	    packageManaged: boolean;
@@ -361,6 +363,8 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pending = source["pending"];
 	        this.version = source["version"];
+	        this.gui = source["gui"];
+	        this.cli = source["cli"];
 	        this.guiBehind = source["guiBehind"];
 	        this.cliBehind = source["cliBehind"];
 	        this.packageManaged = source["packageManaged"];
