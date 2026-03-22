@@ -499,11 +499,13 @@
       display: flex; align-items: center; gap: 10px;
       box-sizing: border-box; width: 100%; margin: 0; padding: 10px 16px;
       font-family: var(--font); font-size: 0.88rem; font-weight: 500;
-      line-height: 1.4; color: var(--color-text); background: none;
+      line-height: 1.4; color: #334155; background: none;
       border: none; cursor: pointer; text-align: left;
     }
-    .theme-dd-menu button:hover { background: var(--color-bg-hover); color: var(--color-accent); }
+    .theme-dd-menu button:hover { background: #f4f6f9; color: var(--color-accent); }
     .theme-dd-menu button.active { color: var(--color-accent); font-weight: 600; }
+    [data-theme="dark"] .theme-dd-menu button { color: #e5e7eb; }
+    [data-theme="dark"] .theme-dd-menu button:hover { background: #1a2332; }
     .theme-dd-icon { font-size: 1rem; opacity: 0.7; width: 20px; text-align: center; flex-shrink: 0; }
 
     /* ── Dark mode extras ────────────────────────────────── */
