@@ -233,6 +233,8 @@ Tela is designed to be secure by default. The hub auto-generates an owner token 
 
 **Gateway.** The agent can run a built-in HTTP reverse proxy that routes requests by URL path to different local services. This lets you expose a multi-service application (web UI, REST API, metrics) through a single tunnel port without needing nginx, Caddy, or any other reverse proxy. See [REFERENCE.md](REFERENCE.md#gateway-path-based-reverse-proxy) for configuration details.
 
+**Upstreams.** The agent can forward a service's outbound dependency calls to configurable targets. Services call `localhost:PORT` and telad routes to the real dependency, which can be local, on another machine, or in a different environment. This lets developers rewire service dependencies by editing a YAML file without changing code, containers, or remote environments. See [REFERENCE.md](REFERENCE.md#upstreams-dependency-routing) for configuration details.
+
 **No admin required.** All three binaries run in userspace. gVisor netstack provides a full WireGuard implementation without kernel modules, TUN devices, or elevated privileges.
 
 **Outbound-only.** Both `tela` and `telad` initiate outbound connections to the hub. No inbound ports are needed on either end.
@@ -320,9 +322,11 @@ docker/            Dockerfile, docker-compose, Caddyfile
 | **Portal** | A multi-hub dashboard and directory service. Implements the hub directory API (`/api/hubs`). Can be added as a remote with `tela remote add`. |
 | **File Share** | A sandboxed directory on an agent machine that can be browsed, uploaded to, and downloaded from through the tunnel. |
 | **Gateway** | A built-in HTTP reverse proxy in telad that routes requests by URL path to different local services through a single tunnel port. |
+| **Upstream** | A dependency route in telad that forwards outbound service calls from localhost to a configurable target, providing a virtual dispatch layer for service-to-service communication. |
 
 ## Documentation
 
+- [TELA-DESIGN-LANGUAGE.md](TELA-DESIGN-LANGUAGE.md) -- Tela Design Language (visual language specification)
 - [TelaVisor.md](TelaVisor.md) -- Desktop client documentation
 - [REFERENCE.md](REFERENCE.md) -- Comprehensive reference for all three CLIs, configuration, and APIs
 - [CONFIGURATION.md](CONFIGURATION.md) -- Configuration file schemas for hubs.yaml, telad.yaml, telahubd.yaml, and portal config

@@ -500,13 +500,14 @@ loadSavedSelections().then(function () {
   });
 });
 
-// First-run connect tooltip
+// First-run connect tooltip + theme
 (function () {
   goApp.GetSettings().then(function (s) {
     if (s.connectTooltipDismissed) {
       dismissConnectTooltip();
     }
-    // else: tooltip is visible by default in the HTML
+    // Apply saved theme
+    applyTelaTheme(s.theme || 'system');
   }).catch(function () {});
 })();
 
@@ -3157,6 +3158,12 @@ function refreshSettings() {
       }
     }
 
+    // Theme radio
+    var themeVal = s.theme || 'system';
+    var themeRadios = document.querySelectorAll('input[name="setting-theme"]');
+    themeRadios.forEach(function (r) { r.checked = r.value === themeVal; });
+    applyTelaTheme(themeVal);
+
     // Populate default profile dropdown
     var sel = document.getElementById('setting-defaultProfile');
     if (sel) {
@@ -3175,6 +3182,7 @@ function refreshSettings() {
 }
 
 function gatherSettings() {
+  var themeRadio = document.querySelector('input[name="setting-theme"]:checked');
   return {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
@@ -3185,7 +3193,8 @@ function gatherSettings() {
     autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
     verboseDefault: document.getElementById('setting-verboseDefault').checked,
     defaultProfile: document.getElementById('setting-defaultProfile') ? document.getElementById('setting-defaultProfile').value : '',
-    binPath: getBinPathValue()
+    binPath: getBinPathValue(),
+    theme: themeRadio ? themeRadio.value : 'system'
   };
 }
 
@@ -3228,7 +3237,31 @@ function markSettingsDirty() {
   settingsDirty = true;
   var btn = document.getElementById('settings-save-btn');
   if (btn) btn.disabled = false;
+
+  // Apply theme immediately on change (live preview)
+  var themeRadio = document.querySelector('input[name="setting-theme"]:checked');
+  if (themeRadio) applyTelaTheme(themeRadio.value);
 }
+
+// ── Theme ──────────────────────────────────────────────────────────
+
+function applyTelaTheme(pref) {
+  if (pref === 'system') {
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', pref);
+  }
+}
+
+// Listen for OS theme changes
+try {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+    var themeRadio = document.querySelector('input[name="setting-theme"]:checked');
+    var pref = themeRadio ? themeRadio.value : 'system';
+    if (pref === 'system') applyTelaTheme('system');
+  });
+} catch (e) {}
 
 function closeSettings() {
   if (settingsDirty) {

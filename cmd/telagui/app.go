@@ -2644,6 +2644,7 @@ type Settings struct {
 	DefaultProfile           string `yaml:"defaultProfile" json:"defaultProfile"`
 	BinPath                  string `yaml:"binPath" json:"binPath"`
 	ConnectTooltipDismissed  bool   `yaml:"connectTooltipDismissed" json:"connectTooltipDismissed"`
+	Theme                   string `yaml:"theme" json:"theme"`
 }
 
 func defaultSettings() Settings {
@@ -2656,6 +2657,7 @@ func defaultSettings() Settings {
 		AutoCheckUpdates:  true,
 		VerboseDefault:    false,
 		ConfirmDisconnect: true,
+		Theme:             "system",
 	}
 }
 

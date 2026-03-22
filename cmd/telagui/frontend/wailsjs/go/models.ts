@@ -302,6 +302,7 @@ export namespace main {
 	    defaultProfile: string;
 	    binPath: string;
 	    connectTooltipDismissed: boolean;
+	    theme: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -322,6 +323,7 @@ export namespace main {
 	        this.defaultProfile = source["defaultProfile"];
 	        this.binPath = source["binPath"];
 	        this.connectTooltipDismissed = source["connectTooltipDismissed"];
+	        this.theme = source["theme"];
 	    }
 	}
 	export class ToolVersions {

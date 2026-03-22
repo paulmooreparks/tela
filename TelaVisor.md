@@ -4,6 +4,8 @@ TelaVisor is a desktop client for Tela. It wraps the `tela` command-line tool in
 
 TelaVisor runs on Windows, Linux, and macOS. It is built with [Wails v2](https://wails.io/), using Go for the backend and plain JavaScript for the frontend.
 
+TelaVisor establishes the [Tela Design Language (TDL)](TELA-DESIGN-LANGUAGE.md), the visual language shared across all Tela products. The top bar, mode toggle, tab bar, toolbar separators, icon buttons, modals, and color system defined in TelaVisor are the reference implementation for TDL.
+
 ## What TelaVisor does
 
 TelaVisor manages the full lifecycle of connecting to remote services through Tela hubs:

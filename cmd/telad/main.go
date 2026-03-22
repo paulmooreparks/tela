@@ -134,6 +134,7 @@ type machineConfig struct {
 	Token       string   `yaml:"token,omitempty"`  // overrides top-level token
 	FileShare   fileShareConfig     `yaml:"fileShare,omitempty"`
 	Gateway     *gatewayConfig      `yaml:"gateway,omitempty"`
+	Upstreams   []upstreamConfig    `yaml:"upstreams,omitempty"`
 }
 
 type registration struct {
@@ -743,6 +744,12 @@ func runMultiMachine(cfg *configFile) {
 				Gateway:      mc.Gateway,
 			}
 			mergeGatewayIntoRegistration(&reg, mc.Gateway)
+
+			// Start upstream listeners (run for telad's lifetime, independent of sessions).
+			cleanupUpstreams := startUpstreamListeners(
+				log.New(os.Stderr, fmt.Sprintf("[%s] ", mc.Name), log.Ltime), mc.Upstreams)
+			defer cleanupUpstreams()
+
 			runSingleMachine(cfg.Hub, reg, mc.Target)
 		}(m)
 	}

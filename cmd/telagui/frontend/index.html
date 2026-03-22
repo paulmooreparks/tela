@@ -332,6 +332,17 @@
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-confirmDisconnect" title="Confirm disconnect" onchange="markSettingsDirty()"></div><div class="settings-label">Confirm disconnect</div></div>
           </div>
           <div class="settings-group">
+            <div class="settings-group-header">Appearance</div>
+            <div class="settings-stacked-row">
+              <div class="settings-stacked-label">Theme</div>
+              <div class="settings-radio-row">
+                <label class="settings-radio-label"><input type="radio" name="setting-theme" value="light" onchange="markSettingsDirty()"> Light</label>
+                <label class="settings-radio-label"><input type="radio" name="setting-theme" value="dark" onchange="markSettingsDirty()"> Dark</label>
+                <label class="settings-radio-label"><input type="radio" name="setting-theme" value="system" onchange="markSettingsDirty()"> System</label>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
             <div class="settings-group-header">Window</div>
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-minimizeOnClose" title="Minimize to tray" onchange="markSettingsDirty()"></div><div class="settings-label">Minimize to tray on close</div></div>
           </div>

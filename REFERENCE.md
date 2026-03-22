@@ -589,6 +589,7 @@ Machine fields:
 | `ports` | No | Simple port list (alternative to `services`) |
 | `services` | No | Detailed service descriptors (port, name, description) |
 | `gateway` | No | Path-based HTTP reverse proxy (see [gateway](#gateway-path-based-reverse-proxy)) |
+| `upstreams` | No | Dependency forwarding (see [upstreams](#upstreams-dependency-routing)) |
 | `fileShare` | No | File sharing configuration (see below) |
 
 ### File sharing
@@ -628,6 +629,50 @@ The shared directory must not be a system directory (`/`, `/etc`, `C:\Windows`, 
 When file sharing is enabled, the agent advertises the capability to the hub, which includes it in `/api/status` responses. Clients and UIs (TelaVisor, hub console) can display file sharing availability without establishing a session.
 
 The agent also watches the shared directory for changes using filesystem notifications and streams events (file created, modified, deleted, renamed) to connected clients in real time.
+
+### Upstreams (dependency routing)
+
+Upstreams let telad act as a routing layer for a service's outbound dependencies. Instead of a service calling its dependencies directly at hardcoded addresses, the service calls `localhost:PORT` and telad forwards the connection to a configurable target.
+
+This provides a layer of indirection (like a virtual method dispatch) that lets you rewire service dependencies by editing a YAML file. Different developers can run the same service containers with different upstream configurations, pointing dependencies at local, test, or production instances without changing the service code or the remote environment.
+
+```yaml
+machines:
+  - name: service3
+    services:
+      - port: 41002
+        name: service3
+    upstreams:
+      - port: 41000
+        name: service1
+        target: localhost:41000       # forward to local Service 1
+      - port: 41001
+        name: service2
+        target: localhost:41001       # forward to local Service 2
+      - port: 1433
+        name: db
+        target: int-db.local:1433    # forward to INT database
+```
+
+In this example, Service 3 is configured to call `localhost:41000` for Service 1, `localhost:41001` for Service 2, and `localhost:1433` for the database. telad intercepts these calls and forwards them to the configured targets. To switch from INT's database to a local one, change the target:
+
+```yaml
+      - port: 1433
+        name: db
+        target: localhost:1433        # now uses local database
+```
+
+No code changes, no container rebuilds, no impact on other environments.
+
+Upstream listeners bind on `0.0.0.0` so they are reachable from Docker containers on the same network. They start when telad starts and run for its lifetime, independent of tunnel sessions.
+
+Upstream configuration fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `port` | Yes | Port to listen on |
+| `target` | Yes | Address to forward to (`host:port`) |
+| `name` | No | Human-readable label for logging |
 
 ### Gateway (path-based reverse proxy)
 
