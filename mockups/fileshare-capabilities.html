@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Share Capabilities Mockup</title>
+<style>
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --surface-alt: #f0f1f4;
+  --text: #1a1a2e; --text-muted: #6b7280; --accent: #2ecc71;
+  --accent-hover: #27ae60; --topbar-bg: #1b2636; --border: #e2e5ea;
+  --danger: #e74c3c; --warn: #f39c12; --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+[data-theme="dark"] {
+  --bg: #111827; --surface: #1f2937; --surface-alt: #1a2332;
+  --text: #e5e7eb; --text-muted: #9ca3af; --border: #374151;
+  --topbar-bg: #0f172a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); padding: 24px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 16px; max-width: 600px;
+}
+.card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 14px; }
+
+/* Option A: Compact tag row */
+.cap-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.cap-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600;
+}
+.cap-tag-yes { background: #1a2e1a; color: #86efac; }
+.cap-tag-no { background: #2d1b1b; color: #fca5a5; }
+.cap-tag-info { background: var(--surface-alt); color: var(--text-muted); }
+.cap-dot { width: 6px; height: 6px; border-radius: 50%; }
+.cap-dot-yes { background: #86efac; }
+.cap-dot-no { background: #fca5a5; }
+
+/* Option B: Info rows (like hub settings) */
+.cap-row { display: flex; padding: 6px 0; border-bottom: 1px solid var(--surface-alt); font-size: 0.85rem; }
+.cap-row:last-child { border-bottom: none; }
+.cap-label { width: 140px; color: var(--text-muted); flex-shrink: 0; }
+.cap-value { flex: 1; }
+.cap-yes { color: #86efac; }
+.cap-no { color: #fca5a5; }
+
+/* Option C: Two-column grid */
+.cap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cap-cell {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: var(--surface-alt); border-radius: 6px; font-size: 0.85rem;
+}
+.cap-cell-icon { font-size: 14px; }
+.cap-cell-label { flex: 1; }
+.cap-cell-value { font-weight: 600; font-size: 0.82rem; }
+
+h2 { font-size: 1rem; color: var(--text-muted); margin: 32px 0 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+h2:first-child { margin-top: 0; }
+p.note { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<h2>Option A: Tags</h2>
+<p class="note">Compact, scannable. Good for the machine list and agent detail cards.</p>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-tags">
+    <span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>
+    <span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Delete</span>
+    <span class="cap-tag cap-tag-info">Max file: 50 MB</span>
+  </div>
+</div>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-tags">
+    <span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>
+    <span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> No delete</span>
+    <span class="cap-tag cap-tag-info">Max file: 50 MB</span>
+    <span class="cap-tag cap-tag-info">Blocked: .exe, .bat, .cmd</span>
+  </div>
+</div>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-tags">
+    <span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> Read only</span>
+  </div>
+</div>
+
+<h2>Option B: Info rows</h2>
+<p class="note">Detailed, consistent with Hub Settings layout. Good for the Agents detail pane.</p>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-row"><span class="cap-label">Status</span><span class="cap-value cap-yes">Enabled</span></div>
+  <div class="cap-row"><span class="cap-label">Access</span><span class="cap-value cap-yes">Read and write</span></div>
+  <div class="cap-row"><span class="cap-label">Delete</span><span class="cap-value cap-yes">Allowed</span></div>
+  <div class="cap-row"><span class="cap-label">Max file size</span><span class="cap-value">50 MB</span></div>
+</div>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-row"><span class="cap-label">Status</span><span class="cap-value cap-yes">Enabled</span></div>
+  <div class="cap-row"><span class="cap-label">Access</span><span class="cap-value cap-yes">Read and write</span></div>
+  <div class="cap-row"><span class="cap-label">Delete</span><span class="cap-value cap-no">Not allowed</span></div>
+  <div class="cap-row"><span class="cap-label">Max file size</span><span class="cap-value">50 MB</span></div>
+  <div class="cap-row"><span class="cap-label">Blocked types</span><span class="cap-value">.exe, .bat, .cmd, .ps1, .sh</span></div>
+</div>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-row"><span class="cap-label">Status</span><span class="cap-value cap-yes">Enabled</span></div>
+  <div class="cap-row"><span class="cap-label">Access</span><span class="cap-value">Read only</span></div>
+</div>
+
+<h2>Option C: Grid cells</h2>
+<p class="note">Visual, glanceable. Each capability is a distinct cell with icon.</p>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-grid">
+    <div class="cap-cell"><span class="cap-cell-icon">&#x1F4DD;</span><span class="cap-cell-label">Write</span><span class="cap-cell-value cap-yes">Yes</span></div>
+    <div class="cap-cell"><span class="cap-cell-icon">&#x1F5D1;</span><span class="cap-cell-label">Delete</span><span class="cap-cell-value cap-yes">Yes</span></div>
+    <div class="cap-cell"><span class="cap-cell-icon">&#x1F4C4;</span><span class="cap-cell-label">Max file</span><span class="cap-cell-value">50 MB</span></div>
+    <div class="cap-cell"><span class="cap-cell-icon">&#x1F6AB;</span><span class="cap-cell-label">Blocked</span><span class="cap-cell-value">.exe, .bat</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>File Share</h3>
+  <div class="cap-grid">
+    <div class="cap-cell"><span class="cap-cell-icon">&#x1F4DD;</span><span class="cap-cell-label">Write</span><span class="cap-cell-value cap-yes">Yes</span></div>
+    <div class="cap-cell"><span class="cap-cell-icon">&#x1F5D1;</span><span class="cap-cell-label">Delete</span><span class="cap-cell-value cap-no">No</span></div>
+    <div class="cap-cell"><span class="cap-cell-icon">&#x1F4C4;</span><span class="cap-cell-label">Max file</span><span class="cap-cell-value">50 MB</span></div>
+  </div>
+</div>
+
+<h2>Proposed usage</h2>
+<p class="note">Use Option A (tags) for the Files tab machine list badge area and the Status tab status bar. Use Option B (info rows) for the Agents detail card. Both show the same data, just at different density levels.</p>
+
+</body>
+</html>

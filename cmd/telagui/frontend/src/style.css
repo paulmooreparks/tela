@@ -1307,6 +1307,26 @@ body {
 .mtu-check-label { display: flex; align-items: center; gap: 6px; font-weight: 500 !important; cursor: pointer; }
 .mtu-check-label input { accent-color: var(--accent); }
 [data-theme="dark"] .mtu-form-row input[type="number"] { background: var(--bg); color: var(--text); border-color: var(--border); }
+/* ── Capability tags ── */
+.cap-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.cap-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 600;
+}
+.cap-tag-yes { background: #eef8f1; color: #2d7d46; }
+.cap-tag-no { background: #fef2f2; color: #c0392b; }
+.cap-tag-info { background: var(--surface-alt); color: var(--text-muted); }
+.cap-dot { width: 5px; height: 5px; border-radius: 50%; }
+.cap-dot-yes { background: #2d7d46; }
+.cap-dot-no { background: #c0392b; }
+[data-theme="dark"] .cap-tag-yes { background: #1a2e1a; color: #86efac; }
+[data-theme="dark"] .cap-tag-no { background: #2d1b1b; color: #fca5a5; }
+[data-theme="dark"] .cap-dot-yes { background: #86efac; }
+[data-theme="dark"] .cap-dot-no { background: #fca5a5; }
+.cap-yes { color: #2d7d46; }
+.cap-no { color: #c0392b; }
+[data-theme="dark"] .cap-yes { color: #86efac; }
+[data-theme="dark"] .cap-no { color: #fca5a5; }
 .status-svc-link { color: var(--accent); text-decoration: none; }
 .status-svc-link:hover { text-decoration: underline; }
 .machine-unreachable { opacity: 0.6; }

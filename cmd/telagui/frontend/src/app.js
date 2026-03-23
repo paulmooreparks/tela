@@ -1695,12 +1695,22 @@ function agentsShowDetail(a) {
   // File Share card
   var fs = a.capabilities && a.capabilities.fileShare;
   if (fs && fs.enabled) {
-    var badgeCls = fs.writable ? 'rw' : 'ro';
-    var badgeText = fs.writable ? 'read-write' : 'read-only';
-    html += agentCard('File Share',
-      agentRow('Status', '<span class="agent-fs-badge ' + badgeCls + '">' + badgeText + '</span>')
-      + (fs.maxFileSize ? agentRow('Max file size', agentMono(agentFormatBytes(fs.maxFileSize))) : '')
-    );
+    var rows = '';
+    rows += agentRow('Status', '<span class="cap-yes">Enabled</span>');
+    rows += agentRow('Access', fs.writable ? '<span class="cap-yes">Read and write</span>' : 'Read only');
+    if (fs.writable) {
+      rows += agentRow('Delete', fs.allowDelete ? '<span class="cap-yes">Allowed</span>' : '<span class="cap-no">Not allowed</span>');
+    }
+    if (fs.maxFileSize) {
+      rows += agentRow('Max file size', agentFormatBytes(fs.maxFileSize));
+    }
+    if (fs.blockedExtensions && fs.blockedExtensions.length > 0) {
+      rows += agentRow('Blocked types', escHtml(fs.blockedExtensions.join(', ')));
+    }
+    if (fs.allowedExtensions && fs.allowedExtensions.length > 0) {
+      rows += agentRow('Allowed types', escHtml(fs.allowedExtensions.join(', ')));
+    }
+    html += agentCard('File Share', rows);
   } else {
     html += agentCard('File Share',
       agentRow('Status', '<span style="color:var(--text-muted)">Not configured</span>')
@@ -1885,9 +1895,24 @@ function filesShowMachineList() {
           var mc = caps[m.name];
           var fs = mc && mc.fileShare;
           if (fs && fs.enabled) {
-            badge = fs.writable
-              ? '<span class="files-machine-badge">read-write</span>'
-              : '<span class="files-machine-badge ro">read-only</span>';
+            badge = '<span class="cap-tags">';
+            if (fs.writable) {
+              badge += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>';
+              if (fs.allowDelete) {
+                badge += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Delete</span>';
+              } else {
+                badge += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> No delete</span>';
+              }
+            } else {
+              badge += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> Read only</span>';
+            }
+            if (fs.maxFileSize) {
+              badge += '<span class="cap-tag cap-tag-info">Max: ' + formatFileSize(fs.maxFileSize) + '</span>';
+            }
+            if (fs.blockedExtensions && fs.blockedExtensions.length > 0) {
+              badge += '<span class="cap-tag cap-tag-info">Blocked: ' + escHtml(fs.blockedExtensions.join(', ')) + '</span>';
+            }
+            badge += '</span>';
             disabled = false;
           } else {
             badge = '<span class="files-machine-badge none">no file share</span>';

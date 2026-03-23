@@ -81,10 +81,12 @@ type fileShareConfig struct {
 
 // fileShareCapability is advertised in control messages.
 type fileShareCapability struct {
-	Enabled     bool  `json:"enabled"`
-	Writable    bool  `json:"writable"`
-	AllowDelete bool  `json:"allowDelete"`
-	MaxFileSize int64 `json:"maxFileSize"`
+	Enabled           bool     `json:"enabled"`
+	Writable          bool     `json:"writable"`
+	AllowDelete       bool     `json:"allowDelete"`
+	MaxFileSize       int64    `json:"maxFileSize"`
+	BlockedExtensions []string `json:"blockedExtensions,omitempty"`
+	AllowedExtensions []string `json:"allowedExtensions,omitempty"`
 }
 
 // parsedFileShareConfig holds validated, ready-to-use file share settings.
@@ -105,14 +107,19 @@ func buildCapabilities(fsCfg *parsedFileShareConfig) *capabilities {
 	if fsCfg == nil || !fsCfg.enabled {
 		return nil
 	}
-	return &capabilities{
-		FileShare: &fileShareCapability{
-			Enabled:     true,
-			Writable:    fsCfg.writable,
-			AllowDelete: fsCfg.allowDelete,
-			MaxFileSize: fsCfg.maxFileSize,
-		},
+	cap := &fileShareCapability{
+		Enabled:     true,
+		Writable:    fsCfg.writable,
+		AllowDelete: fsCfg.allowDelete,
+		MaxFileSize: fsCfg.maxFileSize,
 	}
+	for ext := range fsCfg.blockedExtensions {
+		cap.BlockedExtensions = append(cap.BlockedExtensions, ext)
+	}
+	for ext := range fsCfg.allowedExtensions {
+		cap.AllowedExtensions = append(cap.AllowedExtensions, ext)
+	}
+	return &capabilities{FileShare: cap}
 }
 
 // Default blocked extensions when none are configured.
