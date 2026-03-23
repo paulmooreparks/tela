@@ -32,6 +32,8 @@ export function AdminRotateToken(arg1:string,arg2:string):Promise<string>;
 
 export function AssignLocalPort(arg1:number):Promise<number>;
 
+export function AttachToExisting():Promise<boolean>;
+
 export function BrowseBinPath():Promise<string>;
 
 export function CheckForUpdatesNow():Promise<void>;
@@ -49,6 +51,8 @@ export function ConnectControlWS():Promise<void>;
 export function CreateProfile(arg1:string):Promise<void>;
 
 export function DeleteProfile(arg1:string):Promise<void>;
+
+export function Detach():Promise<void>;
 
 export function DetectCredentialType(arg1:string):Promise<string>;
 

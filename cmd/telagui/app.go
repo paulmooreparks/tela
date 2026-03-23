@@ -47,6 +47,7 @@ type App struct {
 	telaProcess *os.Process
 	telaOutput  string
 	connected   bool
+	attached    bool // true when attached to external tela (not launched by TV)
 
 	// Self-update state
 	updatePending bool
@@ -124,6 +125,7 @@ type Profile struct {
 // ConnectionState is the current connection state returned to the frontend.
 type ConnectionState struct {
 	Connected   bool               `json:"connected"`
+	Attached    bool               `json:"attached"`
 	Pid         int                `json:"pid"`
 	Output      string             `json:"output"`
 	Connections []ProfileConnection `json:"connections"`
@@ -200,6 +202,15 @@ func (a *App) startup(ctx context.Context) {
 	if settings.AutoCheckUpdates {
 		go a.checkForUpdates()
 	}
+
+	// Try attaching to an already-running tela
+	go func() {
+		// Small delay to let the UI initialize
+		time.Sleep(500 * time.Millisecond)
+		if a.AttachToExisting() {
+			wailsRuntime.EventsEmit(a.ctx, "tela:attached", true)
+		}
+	}()
 }
 
 // checkForUpdates checks if any managed binary (telavisor or tela CLI) is
@@ -665,6 +676,15 @@ func (a *App) ConfirmDisconnect() bool {
 	if !a.IsConnected() {
 		return true
 	}
+	a.mu.Lock()
+	isAttached := a.attached
+	a.mu.Unlock()
+
+	// Attached mode: no confirmation needed (detach is non-destructive)
+	if isAttached {
+		return true
+	}
+
 	s := a.GetSettings()
 	if !s.ConfirmDisconnect {
 		return true
@@ -1357,6 +1377,56 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 }
 
 // Connect starts tela connect -profile telavisor in the background.
+// AttachToExisting checks if tela is already running (service, terminal, etc.)
+// and attaches to it without launching a new process. Returns true if attached.
+func (a *App) AttachToExisting() bool {
+	a.mu.Lock()
+	if a.connected {
+		a.mu.Unlock()
+		return true
+	}
+	a.mu.Unlock()
+
+	base, token, err := controlEndpoint()
+	if err != nil {
+		return false
+	}
+
+	// Probe the control API
+	req, _ := http.NewRequest("GET", base+"/services", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := a.doRequest(req, 3*time.Second)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return false
+	}
+
+	// tela is running externally -- attach
+	a.mu.Lock()
+	a.connected = true
+	a.attached = true
+	a.telaProcess = nil
+	a.mu.Unlock()
+
+	log.Printf("[telavisor] attached to existing tela at %s", base)
+	a.logCommand("Attached to running tela", "GET "+base+"/services -> 200 OK")
+	return true
+}
+
+// Detach disconnects TV from an externally-running tela without stopping it.
+func (a *App) Detach() {
+	a.mu.Lock()
+	a.connected = false
+	a.attached = false
+	a.telaProcess = nil
+	a.mu.Unlock()
+	a.DisconnectControlWS()
+	a.logCommand("Detached", "Disconnected from external tela (process still running)")
+}
+
 func (a *App) Connect(connectionsJSON string) (string, error) {
 	a.mu.Lock()
 	if a.connected {
@@ -1364,6 +1434,11 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 		return "", fmt.Errorf("already connected -- disconnect first")
 	}
 	a.mu.Unlock()
+
+	// Check if tela is already running externally
+	if a.AttachToExisting() {
+		return "Attached to running tela", nil
+	}
 
 	telaPath := a.findTool("tela")
 	if telaPath == "" {
@@ -1428,9 +1503,20 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 	return fmt.Sprintf("Connected (pid %d)", pid), nil
 }
 
-// Disconnect kills the running tela process.
+// Disconnect stops the tela connection. If attached to an external process,
+// it detaches without killing. If TV launched the process, it shuts it down.
 func (a *App) Disconnect() error {
-	// Try the control API first (graceful shutdown)
+	a.mu.Lock()
+	isAttached := a.attached
+	a.mu.Unlock()
+
+	// Attached to external tela: just detach, don't kill
+	if isAttached {
+		a.Detach()
+		return nil
+	}
+
+	// TV launched this process: shut it down
 	if a.disconnectViaControlAPI() {
 		a.logCommand("Disconnect", "curl -X DELETE http://localhost:<port>/ -H 'Authorization: Bearer <token>'")
 		a.mu.Lock()
@@ -1514,6 +1600,7 @@ func (a *App) GetConnectionState() ConnectionState {
 
 	state := ConnectionState{
 		Connected: a.connected,
+		Attached:  a.attached,
 		Output:    a.telaOutput,
 	}
 

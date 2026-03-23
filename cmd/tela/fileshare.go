@@ -29,6 +29,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -141,6 +142,86 @@ func startFileEventSubscription(machine string, stop chan struct{}) {
 }
 
 // dialFileShare dials the file share port on a connected machine's tunnel.
+// fileShareRequest sends a file share request, trying the in-process tunnel first,
+// then falling back to the control API of a running tela instance.
+func fileShareRequest(machine string, req fsRequest) (*fsResponse, *bufio.Reader, error) {
+	conn, err := dialFileShare(machine)
+	if err == nil {
+		resp, reader, sendErr := sendRequest(conn, req)
+		if sendErr != nil {
+			conn.Close()
+			return nil, nil, sendErr
+		}
+		return resp, reader, nil
+	}
+
+	// Fall back to control API
+	return controlFileShareRequest(machine, req)
+}
+
+// controlFileShareRequest sends a file share operation through the control API
+// of a running tela process. This works even when called from a separate process.
+func controlFileShareRequest(machine string, req fsRequest) (*fsResponse, *bufio.Reader, error) {
+	controlPath := filepath.Join(telaConfigDir(), "run", "control.json")
+	data, err := os.ReadFile(controlPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("no running tela instance found (no control file)")
+	}
+	var info struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.Port == 0 {
+		return nil, nil, fmt.Errorf("invalid control file")
+	}
+
+	reqBody, _ := json.Marshal(req)
+	reqBody = append(reqBody, '\n')
+	url := fmt.Sprintf("http://127.0.0.1:%d/files/%s", info.Port, machine)
+
+	httpReq, _ := http.NewRequest("POST", url, strings.NewReader(string(reqBody)))
+	httpReq.Header.Set("Authorization", "Bearer "+info.Token)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	httpReq = httpReq.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, nil, fmt.Errorf("control API request failed: %w", err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, nil, fmt.Errorf("read response failed: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return nil, nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	reader := bufio.NewReader(strings.NewReader(string(body)))
+	line, err := reader.ReadBytes('\n')
+	if err != nil && len(line) == 0 {
+		return nil, nil, fmt.Errorf("empty response")
+	}
+
+	var fsResp fsResponse
+	if err := json.Unmarshal(line, &fsResp); err != nil {
+		return nil, nil, fmt.Errorf("invalid response: %w", err)
+	}
+
+	return &fsResp, reader, nil
+}
+
 // dialFileShare connects to a machine's file share port through the tunnel.
 // It retries with increasing timeouts because the file share listener on
 // telad may not be ready immediately after the WireGuard tunnel is up.
@@ -298,14 +379,7 @@ func cmdFilesLs(args []string) {
 		path = fs.Arg(0)
 	}
 
-	conn, err := dialFileShare(*machine)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	resp, _, err := sendRequest(conn, fsRequest{Op: "list", Path: path})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "list", Path: path})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -343,14 +417,7 @@ func cmdFilesGet(args []string) {
 	}
 	remotePath := fs.Arg(0)
 
-	conn, err := dialFileShare(*machine)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	resp, reader, err := sendRequest(conn, fsRequest{Op: "read", Path: remotePath})
+	resp, reader, err := fileShareRequest(*machine, fsRequest{Op: "read", Path: remotePath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -524,14 +591,7 @@ func cmdFilesRm(args []string) {
 	}
 	remotePath := fs.Arg(0)
 
-	conn, err := dialFileShare(*machine)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	resp, _, err := sendRequest(conn, fsRequest{Op: "delete", Path: remotePath})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "delete", Path: remotePath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -555,14 +615,7 @@ func cmdFilesMkdir(args []string) {
 	}
 	dirPath := fs.Arg(0)
 
-	conn, err := dialFileShare(*machine)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	resp, _, err := sendRequest(conn, fsRequest{Op: "mkdir", Path: dirPath})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "mkdir", Path: dirPath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -587,14 +640,7 @@ func cmdFilesRename(args []string) {
 	oldPath := fs.Arg(0)
 	newName := fs.Arg(1)
 
-	conn, err := dialFileShare(*machine)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	resp, _, err := sendRequest(conn, fsRequest{Op: "rename", Path: oldPath, NewName: newName})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "rename", Path: oldPath, NewName: newName})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -619,14 +665,7 @@ func cmdFilesMv(args []string) {
 	srcPath := fs.Arg(0)
 	dstPath := fs.Arg(1)
 
-	conn, err := dialFileShare(*machine)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	resp, _, err := sendRequest(conn, fsRequest{Op: "move", Path: srcPath, NewPath: dstPath})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "move", Path: srcPath, NewPath: dstPath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -649,15 +688,8 @@ func cmdFilesInfo(args []string) {
 		os.Exit(1)
 	}
 
-	conn, err := dialFileShare(*machine)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
 	// List root to verify connectivity and show basic info
-	resp, _, err := sendRequest(conn, fsRequest{Op: "list", Path: ""})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "list", Path: ""})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

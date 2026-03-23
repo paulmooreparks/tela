@@ -254,7 +254,10 @@ function refreshStatus() {
 
   // Single Go call -- not nested inside anything
   goApp.GetConnectionState().then(function (state) {
-    if (state.connected) {
+    if (state.connected && state.attached) {
+      badge.textContent = 'Attached (external tela)';
+      badge.className = 'status-connection-state connected';
+    } else if (state.connected) {
       badge.textContent = 'Connected (PID ' + state.pid + ')';
       badge.className = 'status-connection-state connected';
     } else {
@@ -281,8 +284,20 @@ function refreshStatus() {
           var portStr = 'localhost:' + svc.localPort;
           var tunnelKey = g.machine + ':' + svc.localPort;
           var tunnelCount = activeTunnels[tunnelKey] || 0;
+          var portFound = state.output && state.output.indexOf(portStr) !== -1;
 
-          if (state.output && state.output.indexOf(portStr) !== -1) {
+          // In attached mode, we don't have stdout output.
+          // Check if the service appears in the bound services list.
+          if (!portFound && state.attached && boundServicesCache) {
+            for (var si = 0; si < boundServicesCache.length; si++) {
+              if (boundServicesCache[si].local === svc.localPort && boundServicesCache[si].machine === g.machine) {
+                portFound = true;
+                break;
+              }
+            }
+          }
+
+          if (portFound) {
             if (tunnelCount > 0) {
               indicatorClass = 'available';
               statusText = 'Active (' + tunnelCount + ')';
@@ -389,6 +404,25 @@ if (window.runtime) {
     // Update tela dot to live
     var dot = document.getElementById('log-tela-dot');
     if (dot) dot.className = 'log-dot log-dot-live';
+  });
+
+  window.runtime.EventsOn('tela:attached', function () {
+    tvLog('Attached to running tela');
+    connAttached = true;
+    setConnPhase('connected');
+    // Fetch bound services from control API
+    goApp.GetControlServices().then(function (svcs) {
+      boundServicesCache = svcs || [];
+      onConnectionChanged();
+    }).catch(function () {});
+    // Connect WebSocket for live events
+    goApp.ConnectControlWS().then(function () {
+      goApp.GetControlServices().then(function (svcs) {
+        boundServicesCache = svcs || [];
+        onConnectionChanged();
+      });
+    }).catch(function () {});
+    onConnectionChanged();
   });
 
   window.runtime.EventsOn('app:command', function (entry) {
@@ -1143,6 +1177,8 @@ function refreshCurrentPane() {
 // to refresh the terminal log. It does not drive state transitions.
 
 var connPhase = 'disconnected'; // 'disconnected' | 'connecting' | 'connected' | 'disconnecting'
+var connAttached = false; // true when attached to external tela
+var boundServicesCache = null; // cached bound services from control API
 
 function setConnPhase(phase) {
   connPhase = phase;
@@ -1156,7 +1192,7 @@ function applyConnectionUI() {
     btn.disabled = (connPhase === 'disconnecting');
     if (connPhase === 'connected') {
       btn.classList.add('connected');
-      btn.title = 'Disconnect';
+      btn.title = connAttached ? 'Detach' : 'Disconnect';
     } else if (connPhase === 'connecting' || connPhase === 'disconnecting') {
       btn.classList.add('connecting');
       btn.title = connPhase === 'connecting' ? 'Connecting...' : 'Disconnecting...';
@@ -1285,6 +1321,11 @@ function doConnect() {
 
 function doQuit() {
   if (connPhase === 'connected' || connPhase === 'connecting') {
+    // Attached mode: just quit (detach is non-destructive)
+    if (connAttached) {
+      goApp.QuitApp();
+      return;
+    }
     goApp.GetSettings().then(function (s) {
       if (s.confirmDisconnect) {
         showDisconnectOverlay(function () { goApp.QuitApp(); });
@@ -1300,12 +1341,19 @@ function doQuit() {
 var disconnectCallback = null;
 
 function doDisconnect() {
-  goApp.GetSettings().then(function (s) {
-    if (!s.confirmDisconnect) {
+  // Attached mode: detach without confirmation (non-destructive)
+  goApp.GetConnectionState().then(function (state) {
+    if (state.attached) {
       performDisconnect();
       return;
     }
-    showDisconnectOverlay(performDisconnect);
+    goApp.GetSettings().then(function (s) {
+      if (!s.confirmDisconnect) {
+        performDisconnect();
+        return;
+      }
+      showDisconnectOverlay(performDisconnect);
+    });
   });
 }
 
@@ -1328,14 +1376,16 @@ function cancelDisconnect() {
 }
 
 function performDisconnect() {
-  tvLog('Disconnecting...');
+  tvLog(connAttached ? 'Detaching...' : 'Disconnecting...');
   setConnPhase('disconnecting');
 
   goApp.Disconnect().then(function () {
-    tvLog('Disconnected');
+    tvLog(connAttached ? 'Detached' : 'Disconnected');
   }).catch(function () {
     tvLog('Disconnect error (cleaning up)');
   }).finally(function () {
+    connAttached = false;
+    boundServicesCache = null;
     goApp.DisconnectControlWS();
     stopConnectionPoll();
     setConnPhase('disconnected');
@@ -3166,7 +3216,12 @@ function refreshTerminal() {
     if (dot) {
       dot.className = state.connected ? 'log-dot log-dot-live' : 'log-dot log-dot-idle';
     }
-    if (!state.connected) {
+    if (state.connected && state.attached) {
+      var el = document.getElementById('log-tela');
+      if (el && (el.textContent === 'Not connected.' || !el.textContent.trim())) {
+        el.textContent = 'Attached to external tela. Log output is in the terminal where tela is running.';
+      }
+    } else if (!state.connected) {
       var el = document.getElementById('log-tela');
       if (el && el.textContent !== 'Not connected.' && !el.textContent.trim()) {
         el.textContent = 'Not connected.';

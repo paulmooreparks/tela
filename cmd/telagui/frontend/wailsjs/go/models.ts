@@ -124,6 +124,7 @@ export namespace main {
 	}
 	export class ConnectionState {
 	    connected: boolean;
+	    attached: boolean;
 	    pid: number;
 	    output: string;
 	    connections: ProfileConnection[];
@@ -135,6 +136,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.connected = source["connected"];
+	        this.attached = source["attached"];
 	        this.pid = source["pid"];
 	        this.output = source["output"];
 	        this.connections = this.convertValues(source["connections"], ProfileConnection);

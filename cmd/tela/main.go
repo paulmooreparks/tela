@@ -180,13 +180,14 @@ Commands:
   machines  List registered machines and their services
   services  List services on a specific machine
   status    Show hub status summary
+  files     File operations on connected machines (ls, get, put, rm, mkdir, rename, mv, info)
   profile   Manage connection profiles (list, show, create, delete)
   remote    Manage hub directory remotes (add, remove, list)
   login     Store hub credentials in the credential store
   logout    Remove hub credentials from the credential store
   pair      Exchange a pairing code for a hub connect token
-  admin     Remote hub auth management (tokens, ACLs)
-  service   Manage tela as an OS service (install, start, stop, etc.)
+  admin     Remote hub auth management (tokens, ACLs, portals, pairing codes)
+  service   Manage tela as an OS service (install, start, stop, uninstall, status)
   version   Print version and exit
 
 Environment Variables:

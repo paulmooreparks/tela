@@ -62,6 +62,10 @@ export function AssignLocalPort(arg1) {
   return window['go']['main']['App']['AssignLocalPort'](arg1);
 }
 
+export function AttachToExisting() {
+  return window['go']['main']['App']['AttachToExisting']();
+}
+
 export function BrowseBinPath() {
   return window['go']['main']['App']['BrowseBinPath']();
 }
@@ -96,6 +100,10 @@ export function CreateProfile(arg1) {
 
 export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
+}
+
+export function Detach() {
+  return window['go']['main']['App']['Detach']();
 }
 
 export function DetectCredentialType(arg1) {
