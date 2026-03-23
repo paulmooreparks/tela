@@ -43,6 +43,24 @@ When peers are on the same LAN, the relay path is already low-latency.
 - [x] TelaVisor Files tab with Explorer-style browser
 - [x] Drag-and-drop move support
 
+## TelaVisor Enhancements
+
+### High value, low effort
+- [ ] Remote management UI (tela remote add/remove/list) in Settings
+- [ ] Credential viewer in Settings (show stored hub tokens, remove individual entries)
+- [ ] Pairing code generation in Hubs mode (type, expiration, machine scope)
+- [ ] Service install/uninstall UI (install current profile as OS service, show status, start/stop)
+
+### Medium value, medium effort
+- [ ] Gateway-aware service display (show "Open in browser" link for gateway services)
+- [ ] Hub console embed (view hub console within Hubs mode without opening a browser)
+- [ ] Per-profile MTU override (instead of global-only setting)
+
+### Lower priority
+- [ ] Hub explorer (browse any hub's machines and services without adding to profile)
+- [ ] Connection history (show recent sessions from /api/history in Status or Hubs view)
+- [ ] Profile export as CLI command (copy equivalent tela connect command to clipboard)
+
 ## Agents Mode (TelaVisor)
 - [x] Agent list sidebar with status and version
 - [x] Agent detail cards (info, services, file share, update comparison)

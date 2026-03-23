@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function AddHub(arg1:string,arg2:string):Promise<void>;
 
+export function AddRemote(arg1:string,arg2:string):Promise<void>;
+
 export function AdminAPICall(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AdminCreateToken(arg1:string,arg2:string,arg3:string):Promise<string>;
@@ -100,6 +102,8 @@ export function GetMachineCapabilities():Promise<Record<string, Record<string, a
 
 export function GetProfilePath():Promise<string>;
 
+export function GetServiceStatus():Promise<string>;
+
 export function GetSettings():Promise<main.Settings>;
 
 export function GetStoredToken(arg1:string):Promise<string>;
@@ -118,6 +122,8 @@ export function HasUpdate():Promise<boolean>;
 
 export function ImportProfile():Promise<void>;
 
+export function InstallAsService():Promise<string>;
+
 export function InstallBinary(arg1:string):Promise<void>;
 
 export function IsConnected():Promise<boolean>;
@@ -126,7 +132,11 @@ export function IsPackageManaged():Promise<boolean>;
 
 export function IsQuitting():Promise<boolean>;
 
+export function ListCredentials():Promise<Array<main.CredentialInfo>>;
+
 export function ListProfiles():Promise<Array<string>>;
+
+export function ListRemotes():Promise<Array<main.RemoteInfo>>;
 
 export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
@@ -140,7 +150,11 @@ export function QuitApp():Promise<void>;
 
 export function ReleaseLocalPort(arg1:number):Promise<void>;
 
+export function RemoveCredential(arg1:string):Promise<void>;
+
 export function RemoveHub(arg1:string):Promise<void>;
+
+export function RemoveRemote(arg1:string):Promise<void>;
 
 export function RenameProfile(arg1:string,arg2:string):Promise<void>;
 
@@ -162,6 +176,10 @@ export function SaveTerminalOutput(arg1:string):Promise<string>;
 
 export function SendControlCommand(arg1:string):Promise<void>;
 
+export function ServiceStart():Promise<string>;
+
+export function ServiceStop():Promise<string>;
+
 export function SetVerbose(arg1:boolean):Promise<void>;
 
 export function ShouldAutoConnect():Promise<boolean>;
@@ -169,5 +187,7 @@ export function ShouldAutoConnect():Promise<boolean>;
 export function ShowWindow():Promise<void>;
 
 export function SwitchProfile(arg1:string):Promise<void>;
+
+export function UninstallService():Promise<string>;
 
 export function ValidateBinPath(arg1:string):Promise<string>;

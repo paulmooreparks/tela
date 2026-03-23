@@ -15,12 +15,12 @@
           <img src="/src/logo.png" class="app-logo" alt="Tela">
           <span class="app-title">Tela<span class="app-title-visor">Visor</span></span>
         </a>
+        <span class="app-version" id="app-version"></span>
       </div>
       <div class="topbar-center">
         <div class="mode-toggle">
           <button type="button" class="mode-btn active" id="mode-clients-btn" onclick="switchMode('clients')">Clients</button>
-          <button class="mode-btn mode-btn-middle" id="mode-agents-btn" onclick="switchMode('agents')">Agents</button>
-          <button class="mode-btn" id="mode-hubs-btn" onclick="switchMode('hubs')">Hubs</button>
+          <button type="button" class="mode-btn" id="mode-infra-btn" onclick="switchMode('infra')">Infrastructure</button>
         </div>
       </div>
       <div class="topbar-right">
@@ -42,6 +42,7 @@
       <button class="main-tab active" role="tab" onclick="switchTab('status', this)">Status</button>
       <button class="main-tab" role="tab" onclick="switchTab('profile', this)">Profiles</button>
       <button class="main-tab" role="tab" onclick="switchTab('files', this)">Files</button>
+      <button class="main-tab" role="tab" onclick="switchTab('client-settings', this)">Client Settings</button>
     </div>
 
     <!-- Profile toolbar (visible only on Profiles tab) -->
@@ -61,14 +62,12 @@
       <button class="tb-btn" onclick="showProfileOverview()" title="Preview profile YAML">Preview</button>
     </div>
 
-    <!-- Agents mode tab bar -->
-    <div class="main-tab-bar hidden" role="tablist" id="tabbar-agents">
-      <button class="main-tab active" role="tab" onclick="switchTab('agents', this)">Agents</button>
-    </div>
-
-    <!-- Hubs mode tab bar -->
-    <div class="main-tab-bar hidden" role="tablist" id="tabbar-hubs">
+    <!-- Infrastructure mode tab bar -->
+    <div class="main-tab-bar hidden" role="tablist" id="tabbar-infra">
       <button class="main-tab active" role="tab" onclick="switchTab('hubs', this)">Hubs</button>
+      <button class="main-tab" role="tab" onclick="switchTab('agents', this)">Agents</button>
+      <button class="main-tab" role="tab" onclick="switchTab('remotes', this)">Remotes</button>
+      <button class="main-tab" role="tab" onclick="switchTab('credentials', this)">Credentials</button>
     </div>
 
     <!-- Status tab -->
@@ -172,6 +171,8 @@
             <div class="hubs-admin-nav-item" data-view="machines" onclick="showHubAdminView('machines')">Machines</div>
             <div class="hubs-admin-nav-item" data-view="tokens" onclick="showHubAdminView('tokens')">Tokens</div>
             <div class="hubs-admin-nav-item" data-view="acls" onclick="showHubAdminView('acls')">ACLs</div>
+            <div class="hubs-admin-nav-item" data-view="console" onclick="showHubAdminView('console')">Console</div>
+            <div class="hubs-admin-nav-item" data-view="history" onclick="showHubAdminView('history')">History</div>
           </div>
           <div class="hubs-admin-sidebar-footer">
             <button class="btn-primary btn-sm sidebar-footer-btn" onclick="openAddHubModal()">Add Hub</button>
@@ -180,6 +181,72 @@
         <div class="hubs-admin-detail" id="hubs-admin-detail">
           <p class="empty-hint">Select a hub to view details.</p>
         </div>
+      </div>
+    </div>
+
+    <!-- Client Settings tab -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-client-settings">
+      <div class="status-pane">
+        <h1 style="margin-bottom:4px;">Client Settings</h1>
+        <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Configuration for how tela runs on this machine.</p>
+
+        <div class="settings-card-block">
+          <h3>Default Profile</h3>
+          <p class="settings-card-desc">The profile loaded on startup and used by the system service.</p>
+          <select id="cs-default-profile" title="Default profile" class="settings-full-control" onchange="markSettingsDirty()"></select>
+        </div>
+
+        <div class="settings-card-block">
+          <h3>Binary Location</h3>
+          <p class="settings-card-desc">Folder containing tela binaries.</p>
+          <div class="settings-path-row">
+            <input type="text" id="cs-binPath" class="settings-full-control settings-path-input" title="Binary folder" onchange="markSettingsDirty();refreshBinStatus()">
+            <button class="icon-btn" onclick="browseBinPath()" title="Browse">Browse</button>
+            <button class="icon-btn" onclick="restoreDefaultBinPath()" title="Restore default">Restore Default</button>
+          </div>
+        </div>
+
+        <div class="settings-card-block">
+          <div class="settings-card-head"><h3>Installed Tools</h3><button type="button" class="tb-btn tools-action-btn" onclick="refreshClientToolVersions()" title="Check all versions">&#x21BB; Refresh</button></div>
+          <p class="settings-card-desc">Versions of tela binaries found in the configured location.</p>
+          <div id="cs-bin-status" class="bin-status"></div>
+        </div>
+
+        <div class="settings-card-block">
+          <h3>System Service</h3>
+          <p class="settings-card-desc">Run the default profile as an always-on background service that starts with the OS.</p>
+          <div class="service-status-row">Status: <strong id="cs-service-status">checking...</strong></div>
+          <div class="settings-service-actions">
+            <button type="button" class="tb-btn" id="svc-install-btn" onclick="installService()">Install</button>
+            <button type="button" class="tb-btn" id="svc-start-btn" onclick="startService()" disabled>Start</button>
+            <button type="button" class="tb-btn" id="svc-stop-btn" onclick="stopService()" disabled>Stop</button>
+            <button type="button" class="tb-btn tb-delete-btn" id="svc-uninstall-btn" onclick="uninstallService()" disabled>Uninstall</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Remotes tab -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-remotes">
+      <div class="status-pane">
+        <h1 style="margin-bottom:4px;">Remotes</h1>
+        <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Hub directory endpoints for short name resolution. Equivalent to <code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela remote</code>.</p>
+        <div id="remotes-list-pane"></div>
+        <div class="settings-inline-form" style="margin-top:12px;">
+          <input type="text" id="remote-name-input" placeholder="Name" title="Remote name" class="settings-sm-input">
+          <input type="text" id="remote-url-input" placeholder="Portal URL" title="Portal URL" class="settings-md-input">
+          <button type="button" class="tb-btn" onclick="addRemote()">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Credentials tab -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-credentials">
+      <div class="status-pane">
+        <h1 style="margin-bottom:4px;">Stored Credentials</h1>
+        <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Hub tokens stored in the local credential file. Equivalent to <code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela login</code> / <code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela logout</code>.</p>
+        <div id="credentials-list-pane"></div>
+        <div style="margin-top:12px;"><button type="button" class="tb-btn tb-delete-btn" onclick="clearAllCredentials()">Clear All</button></div>
       </div>
     </div>
 
@@ -348,28 +415,8 @@
           </div>
           <div class="settings-group">
             <div class="settings-group-header">Updates</div>
-            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="markSettingsDirty()"></div><div class="settings-label">Check for updates</div></div>
-          </div>
-          <div class="settings-group">
-            <div class="settings-group-header">Profiles</div>
-            <div class="settings-stacked-row">
-              <div class="settings-stacked-label">Default profile</div>
-              <select id="setting-defaultProfile" title="Default profile" onchange="markSettingsDirty()" class="settings-full-control"></select>
-            </div>
-          </div>
-          <div class="settings-group">
-            <div class="settings-group-header">Binary Location</div>
-            <div class="settings-stacked-row">
-              <div class="settings-stacked-label-row">
-                <span>Install folder</span>
-                <button class="icon-btn" onclick="restoreDefaultBinPath()" title="Restore default path">Restore Default</button>
-              </div>
-              <div class="settings-path-row">
-                <input type="text" id="setting-binPath" class="settings-full-control settings-path-input" onchange="markSettingsDirty();refreshBinStatus()" title="Folder containing tela binaries">
-                <button class="icon-btn" onclick="browseBinPath()" title="Browse">Browse</button>
-              </div>
-              <div id="bin-status" class="bin-status"></div>
-            </div>
+            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="markSettingsDirty()"></div><div class="settings-label">Check for updates automatically</div></div>
+            <div class="settings-check-now"><button type="button" class="tb-btn" onclick="goApp.CheckForUpdatesNow()">Check Now</button></div>
           </div>
           <div class="settings-group">
             <div class="settings-group-header">Logging</div>

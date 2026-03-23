@@ -17,7 +17,7 @@ var profileDirty = false;
 // --- Modes & Tabs ---
 
 var currentMode = 'clients';
-var tabBars = { clients: 'tabbar-clients', agents: 'tabbar-agents', hubs: 'tabbar-hubs' };
+var tabBars = { clients: 'tabbar-clients', infra: 'tabbar-infra' };
 
 function switchMode(mode) {
   currentMode = mode;
@@ -59,6 +59,9 @@ function switchTab(name, btn) {
   if (name === 'files') refreshFilesTab();
   if (name === 'agents') agentsRefresh();
   if (name === 'hubs') refreshHubsTab();
+  if (name === 'remotes') refreshRemotesList();
+  if (name === 'credentials') refreshCredentialsList();
+  if (name === 'client-settings') refreshClientSettings();
 }
 
 // --- Log Panel ---
@@ -509,6 +512,12 @@ loadSavedSelections().then(function () {
     // Apply saved theme
     applyTelaTheme(s.theme || 'system');
   }).catch(function () {});
+
+  // Version stamp
+  goApp.GetVersion().then(function (v) {
+    var el = document.getElementById('app-version');
+    if (el && v) el.textContent = v;
+  }).catch(function () {});
 })();
 
 function dismissConnectTooltip() {
@@ -550,16 +559,17 @@ function checkForUpdate() {
 }
 
 function refreshSingleBinary(name, btn) {
-  btn.classList.add('spinning');
   btn.disabled = true;
-  goApp.GetBinStatus().then(function (bins) {
-    btn.classList.remove('spinning');
-    btn.disabled = false;
+  btn.textContent = 'Installing...';
+  goApp.InstallBinary(name).then(function () {
+    btn.textContent = 'Done';
     refreshBinStatus();
+    refreshClientToolVersions();
     checkForUpdate();
-  }).catch(function () {
-    btn.classList.remove('spinning');
+  }).catch(function (err) {
     btn.disabled = false;
+    btn.textContent = 'Retry';
+    tvLog('Install ' + name + ' failed: ' + err);
   });
 }
 
@@ -2385,6 +2395,8 @@ function renderHubAdminDetail() {
     case 'machines': renderHubMachines(pane); break;
     case 'tokens': renderHubTokens(pane); break;
     case 'acls': renderHubACLs(pane); break;
+    case 'console': renderHubConsole(pane); break;
+    case 'history': renderHubHistory(pane); break;
     default: pane.innerHTML = '';
   }
 }
@@ -2887,6 +2899,59 @@ function revokeRegister(id, machineId) {
   });
 }
 
+// --- Hub Console View ---
+
+function renderHubConsole(pane) {
+  var hub = currentAdminHub;
+  var consoleUrl = hub.replace('wss://', 'https://').replace('ws://', 'http://');
+  consoleUrl = consoleUrl.replace(/\/$/, '') + '/';
+  pane.innerHTML = '<h2>Hub Console</h2>'
+    + '<p class="section-desc">Embedded console for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<div style="margin-bottom:8px;"><a href="' + escAttr(consoleUrl) + '" target="_blank" rel="noopener" style="font-size:0.82rem;color:var(--accent);">Open in browser</a></div>'
+    + '<iframe src="' + escAttr(consoleUrl) + '" style="width:100%;height:500px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);"></iframe>';
+}
+
+// --- Hub History View ---
+
+function renderHubHistory(pane) {
+  var hub = currentAdminHub;
+  pane.innerHTML = '<h2>Connection History</h2>'
+    + '<p class="section-desc">Recent sessions on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="loading">Loading...</p>';
+
+  goApp.LogAdminGET(hub, '/api/history');
+  goApp.AdminAPICall(hub, 'GET', '/api/history', '').then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      pane.innerHTML = '<h2>Connection History</h2><p class="section-desc">' + escHtml(data.error) + '</p>';
+      return;
+    }
+    var events = data.events || data || [];
+    if (!Array.isArray(events)) events = [];
+
+    var html = '<h2>Connection History</h2>'
+      + '<p class="section-desc">Recent sessions on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>';
+
+    if (events.length === 0) {
+      html += '<p class="empty-hint">No history available.</p>';
+    } else {
+      events.forEach(function (ev) {
+        var time = ev.timestamp || ev.time || '';
+        if (time) {
+          try { time = new Date(time).toISOString().replace('T', ' ').replace(/\.\d+Z$/, 'Z'); } catch (e) {}
+        }
+        html += '<div class="history-item">'
+          + '<span class="history-time">' + escHtml(time) + '</span>'
+          + '<span class="history-event">' + escHtml(ev.event || ev.type || '') + '</span>'
+          + '<span class="history-detail"> ' + escHtml(ev.machine || '') + (ev.identity ? ' (' + escHtml(ev.identity) + ')' : '') + '</span>'
+          + '</div>';
+      });
+    }
+    pane.innerHTML = html;
+  });
+}
+
 // --- Hub Management ---
 
 function removeHub(url) {
@@ -3145,44 +3210,28 @@ function refreshSettings() {
     document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
 
-    // Populate binary path (show default if empty)
-    var binPathInput = document.getElementById('setting-binPath');
-    if (binPathInput) {
-      if (s.binPath) {
-        binPathInput.value = s.binPath;
-      } else {
-        goApp.GetDefaultBinPath().then(function (p) {
-          binPathInput.value = p;
-          binPathInput.setAttribute('data-default', p);
-        });
-      }
-    }
-
     // Theme radio
     var themeVal = s.theme || 'system';
     var themeRadios = document.querySelectorAll('input[name="setting-theme"]');
     themeRadios.forEach(function (r) { r.checked = r.value === themeVal; });
     applyTelaTheme(themeVal);
-
-    // Populate default profile dropdown
-    var sel = document.getElementById('setting-defaultProfile');
-    if (sel) {
-      goApp.ListProfiles().then(function (profiles) {
-        sel.innerHTML = '';
-        (profiles || []).forEach(function (p) {
-          var opt = document.createElement('option');
-          opt.value = p;
-          opt.textContent = p;
-          if (p === (s.defaultProfile || '')) opt.selected = true;
-          sel.appendChild(opt);
-        });
-      });
-    }
   });
 }
 
 function gatherSettings() {
   var themeRadio = document.querySelector('input[name="setting-theme"]:checked');
+  // Preserve defaultProfile and binPath from current settings (they're managed in Client Settings tab now)
+  var existing = {};
+  try {
+    var csProfile = document.getElementById('cs-default-profile');
+    var csBinPath = document.getElementById('cs-binPath');
+    if (csProfile) existing.defaultProfile = csProfile.value;
+    if (csBinPath) {
+      var val = csBinPath.value.trim();
+      var def = csBinPath.getAttribute('data-default') || '';
+      existing.binPath = val === def ? '' : val;
+    }
+  } catch (e) {}
   return {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
@@ -3192,8 +3241,8 @@ function gatherSettings() {
     minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
     autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
     verboseDefault: document.getElementById('setting-verboseDefault').checked,
-    defaultProfile: document.getElementById('setting-defaultProfile') ? document.getElementById('setting-defaultProfile').value : '',
-    binPath: getBinPathValue(),
+    defaultProfile: existing.defaultProfile || '',
+    binPath: existing.binPath || '',
     theme: themeRadio ? themeRadio.value : 'system'
   };
 }
@@ -3201,26 +3250,13 @@ function gatherSettings() {
 function saveSettingsWithValidation() {
   var s = gatherSettings();
   var errEl = document.getElementById('settings-error');
-  var pathInput = document.getElementById('setting-binPath');
   errEl.classList.add('hidden');
   errEl.textContent = '';
-  if (pathInput) pathInput.classList.remove('invalid');
 
-  // Validate bin path
-  goApp.ValidateBinPath(s.binPath).then(function (warning) {
-    if (warning && warning.indexOf('does not exist') === -1) {
-      // Hard errors (not a directory, cannot access)
-      errEl.textContent = warning;
-      errEl.classList.remove('hidden');
-      if (pathInput) pathInput.classList.add('invalid');
-      return;
-    }
-    // Valid (or just a "will be created" warning, which is OK)
-    goApp.SaveSettings(JSON.stringify(s)).then(function () {
+  goApp.SaveSettings(JSON.stringify(s)).then(function () {
       settingsDirty = false;
       var btn = document.getElementById('settings-save-btn');
       if (btn) btn.disabled = true;
-      if (pathInput) pathInput.classList.remove('invalid');
       // Clear update warning and re-check with new settings
       document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
       updateDismissedForSession = false;
@@ -3228,7 +3264,6 @@ function saveSettingsWithValidation() {
       checkForUpdate();
       refreshVersionDisplay();
     });
-  });
 }
 
 var settingsDirty = false;
@@ -3395,6 +3430,252 @@ function clearCredentialStore() {
       refreshHubsTab();
     }).catch(function (err) {
       showError('Failed to clear credential store: ' + err);
+    });
+  });
+}
+
+// ── Remotes view (Hubs mode) ───────────────────────────────────────
+
+function renderRemotesView(pane) {
+  pane.innerHTML = '<h2>Remotes</h2>'
+    + '<p class="section-desc">Hub directory endpoints for short name resolution. Equivalent to <code>tela remote</code>.</p>'
+    + '<div id="remotes-list-pane"></div>'
+    + '<div class="settings-inline-form" style="margin-top:12px;">'
+    + '<input type="text" id="remote-name-input" placeholder="Name" title="Remote name" class="settings-sm-input">'
+    + '<input type="text" id="remote-url-input" placeholder="Portal URL" title="Portal URL" class="settings-md-input">'
+    + '<button type="button" class="tb-btn" onclick="addRemote()">Add</button>'
+    + '</div>';
+  refreshRemotesList();
+}
+
+function refreshRemotesList() {
+  goApp.ListRemotes().then(function (remotes) {
+    var el = document.getElementById('remotes-list-pane');
+    if (!el) return;
+    if (!remotes || remotes.length === 0) {
+      el.innerHTML = '<p class="empty-hint">No remotes configured.</p>';
+      return;
+    }
+    var html = '<table class="admin-table"><thead><tr><th>Name</th><th>URL</th><th></th></tr></thead><tbody>';
+    remotes.forEach(function (r) {
+      html += '<tr><td><strong>' + escHtml(r.name) + '</strong></td>'
+        + '<td>' + escHtml(r.url) + '</td>'
+        + '<td><button class="icon-btn danger" onclick="removeRemote(\'' + escAttr(r.name) + '\')">Remove</button></td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  });
+}
+
+function addRemote() {
+  var nameInput = document.getElementById('remote-name-input');
+  var urlInput = document.getElementById('remote-url-input');
+  var name = nameInput.value.trim();
+  var url = urlInput.value.trim();
+  if (!name || !url) return;
+  goApp.AddRemote(name, url).then(function () {
+    nameInput.value = '';
+    urlInput.value = '';
+    refreshRemotesList();
+  }).catch(function (err) {
+    tvLog('Add remote failed: ' + err);
+  });
+}
+
+function removeRemote(name) {
+  goApp.RemoveRemote(name).then(function () {
+    refreshRemotesList();
+  }).catch(function (err) {
+    tvLog('Remove remote failed: ' + err);
+  });
+}
+
+// ── Credentials view (Hubs mode) ──────────────────────────────────
+
+function renderCredentialsView(pane) {
+  pane.innerHTML = '<h2>Stored Credentials</h2>'
+    + '<p class="section-desc">Hub tokens stored in the local credential file. Equivalent to <code>tela login</code> / <code>tela logout</code>.</p>'
+    + '<div id="credentials-list-pane"></div>'
+    + '<div style="margin-top:12px;"><button type="button" class="tb-btn tb-delete-btn" onclick="clearAllCredentials()">Clear All</button></div>';
+  refreshCredentialsList();
+}
+
+function refreshCredentialsList() {
+  goApp.ListCredentials().then(function (creds) {
+    var el = document.getElementById('credentials-list-pane');
+    if (!el) return;
+    if (!creds || creds.length === 0) {
+      el.innerHTML = '<p class="empty-hint">No stored credentials.</p>';
+      return;
+    }
+    var html = '<table class="admin-table"><thead><tr><th>Hub</th><th>Identity</th><th></th></tr></thead><tbody>';
+    creds.forEach(function (c) {
+      var identity = c.identity || '';
+      html += '<tr><td>' + escHtml(c.hubUrl) + '</td>'
+        + '<td>' + escHtml(identity) + '</td>'
+        + '<td><button class="icon-btn danger" onclick="removeCredential(\'' + escAttr(c.hubUrl) + '\')">Remove</button></td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  });
+}
+
+function removeCredential(hubUrl) {
+  showConfirmDialog('Remove Credential', 'Remove stored token for ' + hubUrl + '?', 'Remove').then(function (yes) {
+    if (!yes) return;
+    goApp.RemoveCredential(hubUrl).then(function () {
+      refreshCredentialsList();
+      refreshAll();
+    }).catch(function (err) {
+      tvLog('Remove credential failed: ' + err);
+    });
+  });
+}
+
+function clearAllCredentials() {
+  showConfirmDialog('Clear All Credentials', 'This will delete all stored hub tokens. You will need to re-authenticate with each hub.', 'Delete All').then(function (yes) {
+    if (!yes) return;
+    goApp.ClearCredentialStore().then(function () {
+      refreshCredentialsList();
+      refreshAll();
+    }).catch(function (err) {
+      tvLog('Clear credentials failed: ' + err);
+    });
+  });
+}
+
+// ── Service management ────────────────────────────────────────────
+
+function refreshServiceStatus() {
+  goApp.GetServiceStatus().then(function (raw) {
+    var el = document.getElementById('cs-service-status');
+    if (!el) return;
+    var s = (raw || '').toLowerCase();
+    var installed = s.indexOf('installed: true') !== -1;
+    var running = s.indexOf('running: true') !== -1;
+    var notInstalled = s.indexOf('not installed') !== -1 || s === '';
+
+    if (notInstalled) {
+      el.innerHTML = '<span style="color:var(--text-muted);">Not installed</span>';
+    } else if (running) {
+      el.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
+    } else if (installed) {
+      el.innerHTML = '<span class="bin-dot bin-dot-missing"></span> Installed (stopped)';
+    } else {
+      el.innerHTML = '<span style="color:var(--text-muted);">' + escHtml(raw) + '</span>';
+    }
+
+    // Enable/disable buttons
+    var installBtn = document.getElementById('svc-install-btn');
+    var startBtn = document.getElementById('svc-start-btn');
+    var stopBtn = document.getElementById('svc-stop-btn');
+    var uninstallBtn = document.getElementById('svc-uninstall-btn');
+    if (installBtn) installBtn.disabled = installed || running;
+    if (startBtn) startBtn.disabled = !installed || running;
+    if (stopBtn) stopBtn.disabled = !running;
+    if (uninstallBtn) uninstallBtn.disabled = !installed && !running;
+  });
+}
+
+function installService() {
+  goApp.InstallAsService().then(function (msg) {
+    tvLog('Service installed: ' + msg);
+    refreshServiceStatus();
+  }).catch(function (err) {
+    tvLog('Install service failed: ' + err);
+  });
+}
+
+function uninstallService() {
+  showConfirmDialog('Uninstall Service', 'Remove the tela client system service?', 'Uninstall').then(function (yes) {
+    if (!yes) return;
+    goApp.UninstallService().then(function (msg) {
+      tvLog('Service uninstalled: ' + msg);
+      refreshServiceStatus();
+    }).catch(function (err) {
+      tvLog('Uninstall service failed: ' + err);
+    });
+  });
+}
+
+function startService() {
+  goApp.ServiceStart().then(function (msg) {
+    tvLog('Service started: ' + msg);
+    refreshServiceStatus();
+  }).catch(function (err) {
+    tvLog('Start service failed: ' + err);
+  });
+}
+
+function stopService() {
+  goApp.ServiceStop().then(function (msg) {
+    tvLog('Service stopped: ' + msg);
+    refreshServiceStatus();
+  }).catch(function (err) {
+    tvLog('Stop service failed: ' + err);
+  });
+}
+
+// ── Client Settings tab ────────────────────────────────────────────
+
+function refreshClientSettings() {
+  // Populate default profile dropdown
+  goApp.GetSettings().then(function (s) {
+    var sel = document.getElementById('cs-default-profile');
+    if (sel) {
+      goApp.ListProfiles().then(function (profiles) {
+        sel.innerHTML = '';
+        (profiles || []).forEach(function (p) {
+          var opt = document.createElement('option');
+          opt.value = p;
+          opt.textContent = p;
+          if (p === (s.defaultProfile || '')) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      });
+    }
+    // Binary path
+    var pathInput = document.getElementById('cs-binPath');
+    if (pathInput) {
+      if (s.binPath) {
+        pathInput.value = s.binPath;
+      } else {
+        goApp.GetDefaultBinPath().then(function (p) {
+          pathInput.value = p;
+          pathInput.setAttribute('data-default', p);
+        });
+      }
+    }
+  });
+  // Installed tools
+  refreshClientToolVersions();
+  refreshServiceStatus();
+}
+
+function refreshClientToolVersions() {
+  goApp.GetBinStatus().then(function (bins) {
+    var el = document.getElementById('cs-bin-status');
+    if (!el || !bins) return;
+    goApp.GetVersion().then(function (ver) {
+      var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Version</th><th>Status</th><th></th></tr></thead><tbody>';
+      // TelaVisor itself
+      html += '<tr><td><span class="bin-dot bin-dot-ok"></span>TelaVisor</td>'
+        + '<td class="tools-version">' + escHtml(ver || 'dev') + '</td>'
+        + '<td class="tools-status-ok">installed</td><td></td></tr>';
+      bins.forEach(function (b) {
+        var dotClass = b.found ? 'bin-dot-ok' : 'bin-dot-missing';
+        var status = b.found ? (b.upToDate ? 'up to date' : 'update available') : 'missing';
+        var statusClass = b.found ? (b.upToDate ? 'tools-status-ok' : 'tools-status-warn') : 'tools-status-warn';
+        var action = b.found
+          ? (b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>')
+          : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
+        html += '<tr><td><span class="bin-dot ' + dotClass + '"></span>' + escHtml(b.name) + '</td>'
+          + '<td class="tools-version">' + escHtml(b.version || 'not found') + '</td>'
+          + '<td class="' + statusClass + '">' + status + '</td>'
+          + '<td>' + action + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
     });
   });
 }

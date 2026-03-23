@@ -2842,6 +2842,204 @@ func (a *App) ExportProfile() error {
 	return nil
 }
 
+// ── Remote management ─────────────────────────────────────────────
+
+type RemoteInfo struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+type telaConfig struct {
+	Remotes map[string]remoteEntry `yaml:"remotes,omitempty"`
+}
+
+type remoteEntry struct {
+	URL          string `yaml:"url"`
+	Token        string `yaml:"token,omitempty"`
+	HubDirectory string `yaml:"hub_directory,omitempty"`
+}
+
+func telaConfigPath() string {
+	return filepath.Join(telaConfigDir(), "config.yaml")
+}
+
+func loadTelaConfig() telaConfig {
+	var cfg telaConfig
+	data, err := os.ReadFile(telaConfigPath())
+	if err != nil {
+		cfg.Remotes = make(map[string]remoteEntry)
+		return cfg
+	}
+	yaml.Unmarshal(data, &cfg)
+	if cfg.Remotes == nil {
+		cfg.Remotes = make(map[string]remoteEntry)
+	}
+	return cfg
+}
+
+func saveTelaConfig(cfg telaConfig) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(telaConfigPath())
+	os.MkdirAll(dir, 0700)
+	return os.WriteFile(telaConfigPath(), data, 0600)
+}
+
+// ListRemotes returns all configured hub directory remotes.
+func (a *App) ListRemotes() []RemoteInfo {
+	cfg := loadTelaConfig()
+	var result []RemoteInfo
+	for name, entry := range cfg.Remotes {
+		result = append(result, RemoteInfo{Name: name, URL: entry.URL})
+	}
+	return result
+}
+
+// AddRemote adds a hub directory remote.
+func (a *App) AddRemote(name, url string) error {
+	if name == "" || url == "" {
+		return fmt.Errorf("name and URL are required")
+	}
+	cfg := loadTelaConfig()
+	cfg.Remotes[name] = remoteEntry{URL: url}
+	a.logCommand("Add remote", "tela remote add "+name+" "+url)
+	return saveTelaConfig(cfg)
+}
+
+// RemoveRemote removes a hub directory remote.
+func (a *App) RemoveRemote(name string) error {
+	cfg := loadTelaConfig()
+	if _, ok := cfg.Remotes[name]; !ok {
+		return fmt.Errorf("remote %q not found", name)
+	}
+	delete(cfg.Remotes, name)
+	a.logCommand("Remove remote", "tela remote remove "+name)
+	return saveTelaConfig(cfg)
+}
+
+// ── Credential management ─────────────────────────────────────────
+
+type CredentialInfo struct {
+	HubURL   string `json:"hubUrl"`
+	Identity string `json:"identity"`
+}
+
+// ListCredentials returns all stored hub credentials.
+func (a *App) ListCredentials() []CredentialInfo {
+	credPath := credstore.UserPath()
+	store, err := credstore.Load(credPath)
+	if err != nil {
+		return []CredentialInfo{}
+	}
+	var result []CredentialInfo
+	for url, cred := range store.Hubs {
+		result = append(result, CredentialInfo{HubURL: url, Identity: cred.Identity})
+	}
+	return result
+}
+
+// RemoveCredential removes a single hub credential.
+func (a *App) RemoveCredential(hubURL string) error {
+	credPath := credstore.UserPath()
+	store, err := credstore.Load(credPath)
+	if err != nil {
+		return fmt.Errorf("load credential store: %w", err)
+	}
+	if _, ok := store.Hubs[hubURL]; !ok {
+		return fmt.Errorf("no credential for %s", hubURL)
+	}
+	delete(store.Hubs, hubURL)
+	a.logCommand("Remove credential", "tela logout "+hubURL)
+	return store.Save(credPath)
+}
+
+// ── Service management ────────────────────────────────────────────
+
+// InstallAsService installs the current profile as an OS service.
+func (a *App) InstallAsService() (string, error) {
+	profilePath := profilePath()
+	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("no profile to install (save a profile first)")
+	}
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "install", "-config", profilePath)
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Install service", telaPath+" service install -config "+profilePath)
+	return strings.TrimSpace(string(out)), nil
+}
+
+// UninstallService removes the tela client OS service.
+func (a *App) UninstallService() (string, error) {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "uninstall")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Uninstall service", telaPath+" service uninstall")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// GetServiceStatus returns the tela client service status.
+func (a *App) GetServiceStatus() string {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "not installed"
+	}
+	cmd := exec.Command(telaPath, "service", "status")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "not installed"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// ServiceStart starts the tela client OS service.
+func (a *App) ServiceStart() (string, error) {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "start")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Start service", telaPath+" service start")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// ServiceStop stops the tela client OS service.
+func (a *App) ServiceStop() (string, error) {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "stop")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Stop service", telaPath+" service stop")
+	return strings.TrimSpace(string(out)), nil
+}
+
 // --- Helpers ---
 
 func toWSURL(hubURL string) string {

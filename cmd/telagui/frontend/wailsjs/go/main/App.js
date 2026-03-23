@@ -6,6 +6,10 @@ export function AddHub(arg1, arg2) {
   return window['go']['main']['App']['AddHub'](arg1, arg2);
 }
 
+export function AddRemote(arg1, arg2) {
+  return window['go']['main']['App']['AddRemote'](arg1, arg2);
+}
+
 export function AdminAPICall(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AdminAPICall'](arg1, arg2, arg3, arg4);
 }
@@ -198,6 +202,10 @@ export function GetProfilePath() {
   return window['go']['main']['App']['GetProfilePath']();
 }
 
+export function GetServiceStatus() {
+  return window['go']['main']['App']['GetServiceStatus']();
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
@@ -234,6 +242,10 @@ export function ImportProfile() {
   return window['go']['main']['App']['ImportProfile']();
 }
 
+export function InstallAsService() {
+  return window['go']['main']['App']['InstallAsService']();
+}
+
 export function InstallBinary(arg1) {
   return window['go']['main']['App']['InstallBinary'](arg1);
 }
@@ -250,8 +262,16 @@ export function IsQuitting() {
   return window['go']['main']['App']['IsQuitting']();
 }
 
+export function ListCredentials() {
+  return window['go']['main']['App']['ListCredentials']();
+}
+
 export function ListProfiles() {
   return window['go']['main']['App']['ListProfiles']();
+}
+
+export function ListRemotes() {
+  return window['go']['main']['App']['ListRemotes']();
 }
 
 export function LoadProfile() {
@@ -278,8 +298,16 @@ export function ReleaseLocalPort(arg1) {
   return window['go']['main']['App']['ReleaseLocalPort'](arg1);
 }
 
+export function RemoveCredential(arg1) {
+  return window['go']['main']['App']['RemoveCredential'](arg1);
+}
+
 export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
+}
+
+export function RemoveRemote(arg1) {
+  return window['go']['main']['App']['RemoveRemote'](arg1);
 }
 
 export function RenameProfile(arg1, arg2) {
@@ -322,6 +350,14 @@ export function SendControlCommand(arg1) {
   return window['go']['main']['App']['SendControlCommand'](arg1);
 }
 
+export function ServiceStart() {
+  return window['go']['main']['App']['ServiceStart']();
+}
+
+export function ServiceStop() {
+  return window['go']['main']['App']['ServiceStop']();
+}
+
 export function SetVerbose(arg1) {
   return window['go']['main']['App']['SetVerbose'](arg1);
 }
@@ -336,6 +372,10 @@ export function ShowWindow() {
 
 export function SwitchProfile(arg1) {
   return window['go']['main']['App']['SwitchProfile'](arg1);
+}
+
+export function UninstallService() {
+  return window['go']['main']['App']['UninstallService']();
 }
 
 export function ValidateBinPath(arg1) {

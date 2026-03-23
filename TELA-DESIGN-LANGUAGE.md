@@ -85,13 +85,13 @@ Every TDL application follows the same vertical layout:
 ```mermaid
 block-beta
   columns 1
-  block:topbar["Top bar (44px, --topbar-bg)"]
+  block:topbar["Top bar"]
     columns 3
     Logo["Logo"]
     ModeToggle["Mode Toggle"]
     Icons["Icons | User Menu"]
   end
-  block:tabbar["Tab bar (--surface-alt)"]
+  block:tabbar
     columns 4
     Tab1["Tab"]
     Tab2["Tab"]

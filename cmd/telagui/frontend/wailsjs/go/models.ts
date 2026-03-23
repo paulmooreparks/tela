@@ -158,6 +158,20 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class CredentialInfo {
+	    hubUrl: string;
+	    identity: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CredentialInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hubUrl = source["hubUrl"];
+	        this.identity = source["identity"];
+	    }
+	}
 	export class ServiceInfo {
 	    name: string;
 	    port: number;
@@ -287,6 +301,20 @@ export namespace main {
 	}
 	
 	
+	export class RemoteInfo {
+	    name: string;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoteInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.url = source["url"];
+	    }
+	}
 	
 	export class Settings {
 	    autoConnect: boolean;
