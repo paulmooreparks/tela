@@ -2516,7 +2516,7 @@ func (a *App) InstallBinary(name string) error {
 	}
 	os.Chmod(destPath, 0755)
 
-	a.logCommand("Install "+name+" "+latest, "# Downloaded "+binaryName+" to "+destPath)
+	// Logged by installTool caller
 	return nil
 }
 
