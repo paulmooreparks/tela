@@ -121,6 +121,7 @@ type ProfileService struct {
 // Profile is the top-level profile YAML structure.
 type Profile struct {
 	Connections []ProfileConnection `yaml:"connections" json:"connections"`
+	MTU         int                 `yaml:"mtu,omitempty" json:"mtu,omitempty"`
 }
 
 // ConnectionState is the current connection state returned to the frontend.
@@ -1364,7 +1365,16 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 		connections[i].Token = ""
 	}
 
-	profile := Profile{Connections: connections}
+	// Preserve MTU from existing profile if any
+	existingMTU := 0
+	if existingData, err := os.ReadFile(profilePath()); err == nil {
+		var existing Profile
+		if yaml.Unmarshal(existingData, &existing) == nil {
+			existingMTU = existing.MTU
+		}
+	}
+
+	profile := Profile{Connections: connections, MTU: existingMTU}
 
 	data, err := yaml.Marshal(profile)
 	if err != nil {
@@ -3160,6 +3170,44 @@ func (a *App) ServiceStop() (string, error) {
 	}
 	a.logCommand("Stop service", telaPath+" service stop")
 	return strings.TrimSpace(string(out)), nil
+}
+
+// GetProfileMTU returns the MTU override for the current profile (0 = use default).
+func (a *App) GetProfileMTU() int {
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return 0
+	}
+	var profile Profile
+	if yaml.Unmarshal(data, &profile) != nil {
+		return 0
+	}
+	return profile.MTU
+}
+
+// SetProfileMTU sets the MTU override for the current profile.
+func (a *App) SetProfileMTU(mtu int) error {
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return err
+	}
+	var profile Profile
+	if yaml.Unmarshal(data, &profile) != nil {
+		return fmt.Errorf("invalid profile")
+	}
+	profile.MTU = mtu
+	out, err := yaml.Marshal(profile)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(profilePath(), out, 0600)
+}
+
+// IsAttached returns true if TV is attached to an external tela process.
+func (a *App) IsAttached() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.attached
 }
 
 // waitForProcessExit polls until the tela process is no longer tracked,

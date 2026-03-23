@@ -104,6 +104,8 @@ export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
 export function GetMachineCapabilities():Promise<Record<string, Record<string, any>>>;
 
+export function GetProfileMTU():Promise<number>;
+
 export function GetProfilePath():Promise<string>;
 
 export function GetServiceStatus():Promise<string>;
@@ -129,6 +131,8 @@ export function ImportProfile():Promise<void>;
 export function InstallAsService():Promise<string>;
 
 export function InstallBinary(arg1:string):Promise<void>;
+
+export function IsAttached():Promise<boolean>;
 
 export function IsConnected():Promise<boolean>;
 
@@ -183,6 +187,8 @@ export function SendControlCommand(arg1:string):Promise<void>;
 export function ServiceStart():Promise<string>;
 
 export function ServiceStop():Promise<string>;
+
+export function SetProfileMTU(arg1:number):Promise<void>;
 
 export function SetVerbose(arg1:boolean):Promise<void>;
 

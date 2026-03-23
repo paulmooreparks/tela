@@ -60,6 +60,9 @@
       <button class="tb-btn" onclick="exportProfile()" title="Export profile">Export</button>
       <span class="tb-sep"></span>
       <button class="tb-btn" onclick="showProfileOverview()" title="Preview profile YAML">Preview</button>
+      <button class="tb-btn" onclick="copyProfileCLI()" title="Copy tela connect command to clipboard">Copy CLI</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" onclick="openMTUDialog()" title="Set tunnel MTU">Set MTU...</button>
     </div>
 
     <!-- Infrastructure mode tab bar -->
@@ -171,7 +174,6 @@
             <div class="hubs-admin-nav-item" data-view="machines" onclick="showHubAdminView('machines')">Machines</div>
             <div class="hubs-admin-nav-item" data-view="tokens" onclick="showHubAdminView('tokens')">Tokens</div>
             <div class="hubs-admin-nav-item" data-view="acls" onclick="showHubAdminView('acls')">ACLs</div>
-            <div class="hubs-admin-nav-item" data-view="console" onclick="showHubAdminView('console')">Console</div>
             <div class="hubs-admin-nav-item" data-view="history" onclick="showHubAdminView('history')">History</div>
           </div>
           <div class="hubs-admin-sidebar-footer">
@@ -306,6 +308,36 @@
           <div class="modal-actions">
             <button type="button" class="btn-secondary" onclick="cancelDisconnect()">No</button>
             <button type="button" class="btn-danger" onclick="confirmDisconnect()">Yes, Disconnect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MTU Dialog -->
+  <div class="modal-overlay hidden" id="mtu-dialog" onclick="if(event.target===this)closeMTUDialog()">
+    <div class="modal-dialog modal-settings">
+      <div class="modal-header">
+        <h3>Tunnel MTU</h3>
+        <button class="modal-close" onclick="closeMTUDialog()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <p class="mtu-explanation">The WireGuard tunnel wraps each TCP segment in encryption (WireGuard), framing (WebSocket), and TLS. If the resulting packet exceeds the network path MTU, it is silently dropped.</p>
+          <p class="mtu-explanation">The default of 1100 works in all tested environments including WSL2. Native Windows, Linux, and macOS can typically use 1280. Direct LAN connections with no proxies can use 1420. Higher values improve throughput for large transfers.</p>
+          <p class="mtu-explanation">Both the client and agent should use the same MTU. Mismatched values can cause silent packet drops during SSH key exchange or large file transfers.</p>
+          <div class="mtu-form">
+            <div class="mtu-form-row">
+              <label for="mtu-value">MTU value</label>
+              <input type="number" id="mtu-value" min="576" max="1500" step="1" value="1100" title="MTU value">
+            </div>
+            <div class="mtu-form-row">
+              <label class="mtu-check-label"><input type="checkbox" id="mtu-use-default" checked onchange="onMTUDefaultToggle(this.checked)"> Use default (1100)</label>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeMTUDialog()">Cancel</button>
+            <button type="button" class="btn-primary" onclick="saveMTUDialog()">Save</button>
           </div>
         </div>
       </div>

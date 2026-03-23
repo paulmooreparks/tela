@@ -504,6 +504,7 @@ func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 // connectionProfile is the YAML schema for ~/.tela/profiles/<name>.yaml.
 type connectionProfile struct {
 	Connections []profileConnection `yaml:"connections"`
+	MTU         int                 `yaml:"mtu,omitempty"`
 }
 
 // profileConnection defines one hub+machine+services entry in a profile.
@@ -563,6 +564,11 @@ func runProfile(name string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Apply profile-level MTU if set
+	if profile.MTU > 0 {
+		tunnelMTU = profile.MTU
 	}
 
 	// Only initialize stopCh if not already set (service mode sets it externally).

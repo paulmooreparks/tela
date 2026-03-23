@@ -206,6 +206,10 @@ export function GetMachineCapabilities() {
   return window['go']['main']['App']['GetMachineCapabilities']();
 }
 
+export function GetProfileMTU() {
+  return window['go']['main']['App']['GetProfileMTU']();
+}
+
 export function GetProfilePath() {
   return window['go']['main']['App']['GetProfilePath']();
 }
@@ -256,6 +260,10 @@ export function InstallAsService() {
 
 export function InstallBinary(arg1) {
   return window['go']['main']['App']['InstallBinary'](arg1);
+}
+
+export function IsAttached() {
+  return window['go']['main']['App']['IsAttached']();
 }
 
 export function IsConnected() {
@@ -364,6 +372,10 @@ export function ServiceStart() {
 
 export function ServiceStop() {
   return window['go']['main']['App']['ServiceStop']();
+}
+
+export function SetProfileMTU(arg1) {
+  return window['go']['main']['App']['SetProfileMTU'](arg1);
 }
 
 export function SetVerbose(arg1) {

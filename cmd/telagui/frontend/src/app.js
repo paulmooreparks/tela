@@ -322,11 +322,19 @@ function refreshStatus() {
           }
         }
 
+        // Clickable link for HTTP services (gateway, http) when listening
+        var svcNameLower = (svc.service || '').toLowerCase();
+        var isHttpService = svcNameLower === 'gateway' || svcNameLower === 'http' || svcNameLower === 'web';
+        var localDisplay = 'localhost:' + svc.localPort;
+        if (isHttpService && portFound) {
+          localDisplay = '<a href="http://localhost:' + svc.localPort + '" target="_blank" rel="noopener" class="status-svc-link">localhost:' + svc.localPort + '</a>';
+        }
+
         html += '<div class="settings-row status-svc-row">'
           + '<span class="status-svc-indicator ' + indicatorClass + '"></span>'
           + '<div class="status-svc-name">' + escHtml(svc.service) + '</div>'
           + '<div class="status-svc-remote">' + (svc.servicePort ? ':' + svc.servicePort : '') + '</div>'
-          + '<div class="status-svc-local ' + localClass + '">localhost:' + svc.localPort + '</div>'
+          + '<div class="status-svc-local ' + localClass + '">' + localDisplay + '</div>'
           + '<div class="status-svc-status">' + statusText + '</div>'
           + '</div>';
       });
@@ -554,6 +562,7 @@ loadSavedSelections().then(function () {
   tvLog('Profile loaded');
   refreshStatus();
   refreshAll();
+  refreshProfileMTU();
   // Re-take snapshot after refreshAll to account for hub status reconciliation
   setTimeout(function () { takeSnapshot(); }, 1000);
   // Auto-connect if enabled and there are saved selections
@@ -752,6 +761,59 @@ function copyProfilePath() {
   });
 }
 
+function refreshProfileMTU() {
+  // Called on profile load; no visible UI to update (dialog reads on open)
+}
+
+function openMTUDialog() {
+  goApp.GetProfileMTU().then(function (mtu) {
+    var isDefault = !mtu || mtu === 0;
+    var input = document.getElementById('mtu-value');
+    var checkbox = document.getElementById('mtu-use-default');
+    if (input) {
+      input.value = isDefault ? 1100 : mtu;
+      input.disabled = isDefault;
+    }
+    if (checkbox) checkbox.checked = isDefault;
+    document.getElementById('mtu-dialog').classList.remove('hidden');
+  });
+}
+
+function closeMTUDialog() {
+  document.getElementById('mtu-dialog').classList.add('hidden');
+}
+
+function onMTUDefaultToggle(checked) {
+  var input = document.getElementById('mtu-value');
+  if (input) input.disabled = checked;
+}
+
+function saveMTUDialog() {
+  var checkbox = document.getElementById('mtu-use-default');
+  var input = document.getElementById('mtu-value');
+  var mtu = checkbox && checkbox.checked ? 0 : (parseInt(input.value) || 1100);
+  goApp.SetProfileMTU(mtu).then(function () {
+    closeMTUDialog();
+  }).catch(function (err) {
+    tvLog('Set MTU failed: ' + err);
+  });
+}
+
+function copyProfileCLI() {
+  goApp.GetProfilePath().then(function (path) {
+    if (!path) return;
+    var cmd = 'tela connect -profile "' + path + '"';
+    var mtuInput = document.getElementById('profile-mtu');
+    var mtu = mtuInput ? parseInt(mtuInput.value) : 0;
+    if (mtu > 0) {
+      cmd += ' -mtu ' + mtu;
+    }
+    navigator.clipboard.writeText(cmd).then(function () {
+      tvLog('Copied: ' + cmd);
+    });
+  });
+}
+
 function showProfileOverview() {
   selectedHubURL = null;
   selectedMachineId = null;
@@ -811,6 +873,7 @@ function switchProfile(name) {
     loadSavedSelections().then(function () {
       refreshAll();
       updateConnectButton();
+      refreshProfileMTU();
     });
   });
 }
@@ -1748,6 +1811,7 @@ var filesView = 'machines'; // 'machines' | 'files'
 var filesCurrentMachine = '';
 var filesCurrentPath = '';
 var filesCurrentWritable = false;
+var filesCurrentAllowDelete = false;
 var filesNavHistory = [];
 var filesSelectedIndices = new Set();
 var filesLastClickedIndex = -1;
@@ -1882,10 +1946,11 @@ function filesOpenMachine(name) {
   filesNavHistory = ['machines'];
   filesClearSelection();
 
-  // Determine writable from cached capabilities
+  // Determine writable and delete permissions from cached capabilities
   var mc = filesMachineCapabilities[name];
   var fs = mc && mc.fileShare;
   filesCurrentWritable = !!(fs && fs.enabled && fs.writable);
+  filesCurrentAllowDelete = !!(fs && fs.enabled && fs.writable && fs.allowDelete);
 
   filesListDir(name, '');
 }
@@ -2038,7 +2103,7 @@ function filesUpdateActionButtons() {
   var w = filesCurrentWritable;
 
   document.getElementById('files-btn-download').disabled = !hasSelection;
-  document.getElementById('files-btn-delete').disabled = !hasSelection || !w;
+  document.getElementById('files-btn-delete').disabled = !hasSelection || !filesCurrentAllowDelete;
   document.getElementById('files-btn-rename').disabled = !singleSelection || !w;
   document.getElementById('files-btn-newfolder').disabled = !w;
   document.getElementById('files-btn-upload').disabled = !w;
@@ -4013,6 +4078,19 @@ document.addEventListener('keydown', function (e) {
   if (!overlay || overlay.classList.contains('hidden')) return;
   if (e.key === 'Enter') { e.preventDefault(); genericDialogOk(); }
   if (e.key === 'Escape') { e.preventDefault(); genericDialogCancel(); }
+});
+
+// DEL key in Files tab triggers delete on selected items
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Delete') return;
+  // Only when Files tab is active, files are shown, and no modal is open
+  var filesPane = document.getElementById('tab-files');
+  if (!filesPane || filesPane.classList.contains('hidden')) return;
+  if (!document.getElementById('generic-dialog-overlay').classList.contains('hidden')) return;
+  if (filesSelectedIndices.size === 0) return;
+  if (!filesCurrentAllowDelete) return;
+  e.preventDefault();
+  filesDeleteSelected();
 });
 
 function toWSURL(url) {

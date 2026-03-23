@@ -38,7 +38,7 @@ func main() {
 				wailsRuntime.WindowHide(app.ctx)
 				return true // hide to tray instead of closing
 			}
-			if app.IsConnected() && s.ConfirmDisconnect {
+			if app.IsConnected() && s.ConfirmDisconnect && !app.IsAttached() {
 				// Ask JS to show the disconnect overlay
 				wailsRuntime.EventsEmit(app.ctx, "app:confirm-quit")
 				return true // prevent close, JS will call QuitApp if confirmed
