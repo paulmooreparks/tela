@@ -151,12 +151,6 @@ func (a *App) doRequest(req *http.Request, timeout time.Duration) (*http.Respons
 		return nil, err
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(body))
-
-	// Log the completed request with its actual HTTP method
-	method := req.Method
-	desc := fmt.Sprintf("%s %s -> %d", method, req.URL.Path, resp.StatusCode)
-	a.logCommandWithMethod(method, desc, fmt.Sprintf("%s %s -> %d", method, req.URL.String(), resp.StatusCode))
-
 	return resp, nil
 }
 
@@ -724,6 +718,19 @@ func (a *App) GetCommandLog() []CommandLogEntry {
 	return result
 }
 
+// doRequestLogged is like doRequest but logs the completed request to the command log.
+// Use for user-initiated operations (admin API, file share). Do not use for background polls.
+func (a *App) doRequestLogged(req *http.Request, timeout time.Duration) (*http.Response, error) {
+	resp, err := a.doRequest(req, timeout)
+	if err != nil {
+		return nil, err
+	}
+	a.logCommandWithMethod(req.Method,
+		fmt.Sprintf("%s %s -> %d", req.Method, req.URL.Path, resp.StatusCode),
+		fmt.Sprintf("%s %s -> %d", req.Method, req.URL.String(), resp.StatusCode))
+	return resp, nil
+}
+
 func (a *App) logCommand(description, command string) {
 	a.logCommandWithMethod("CLI", description, command)
 }
@@ -1007,7 +1014,7 @@ func (a *App) adminAPICall(hubURL, method, path string, body []byte) ([]byte, er
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := a.doRequest(req, 15*time.Second)
+	resp, err := a.doRequestLogged(req, 15*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -1579,7 +1586,7 @@ func (a *App) disconnectViaControlAPI() bool {
 	}
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 
-	resp, err := a.doRequest(req, 5*time.Second)
+	resp, err := a.doRequestLogged(req, 5*time.Second)
 	if err != nil {
 		return false
 	}
@@ -2133,7 +2140,7 @@ func (a *App) FileShareRequest(machine string, opJSON string) string {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := a.doRequest(req, 30*time.Second)
+	resp, err := a.doRequestLogged(req, 30*time.Second)
 	if err != nil {
 		return errJSON("request failed: " + err.Error())
 	}
@@ -2176,7 +2183,7 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, strings.NewReader(opJSON+"\n"))
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.doRequest(req, 300*time.Second)
+	resp, err := a.doRequestLogged(req, 300*time.Second)
 	if err != nil {
 		return errJSON("request failed: " + err.Error())
 	}
@@ -2307,7 +2314,7 @@ func (a *App) FileShareUpload(machine string, localPath string, remoteName strin
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, pr)
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.doRequest(req, 300*time.Second)
+	resp, err := a.doRequestLogged(req, 300*time.Second)
 	if err != nil {
 		return errJSON("upload failed: " + err.Error())
 	}

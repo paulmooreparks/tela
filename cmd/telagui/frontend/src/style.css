@@ -1295,6 +1295,12 @@ body {
 .settings-path-row { display: flex; gap: 6px; align-items: center; }
 .settings-path-row .settings-full-control { flex: 1; }
 .app-version { font-size: 11px; color: #64748b; font-weight: 400; margin-left: 2px; }
+.machine-unreachable { opacity: 0.6; }
+.machine-dot.unreachable { background: var(--text-muted); }
+.unreachable-badge {
+  font-size: 10px; color: var(--text-muted); margin-left: 6px;
+  font-style: italic;
+}
 .hubs-admin-nav-sep { height: 1px; background: var(--border); margin: 6px 12px; }
 .settings-card-block {
   background: var(--surface); border: 1px solid var(--border);

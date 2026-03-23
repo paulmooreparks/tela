@@ -970,18 +970,40 @@ function renderHubInSidebar(content, hub, isConnected) {
         reconcileServicePorts(hub.url, status.machines);
       }
 
-      if (status.machines && included) {
-        status.machines.forEach(function (m) {
-          var mId = m.id || m.hostname;
+      if (included) {
+        var renderedMachines = {};
+        if (status.machines) {
+          status.machines.forEach(function (m) {
+            var mId = m.id || m.hostname;
+            renderedMachines[mId] = true;
+            var mEl = document.createElement('div');
+            mEl.className = 'machine-item';
+            if (selectedHubURL === hub.url && selectedMachineId === mId) mEl.classList.add('selected');
+            var dotClass = m.agentConnected ? 'online' : 'offline';
+            mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
+              + escHtml(mId);
+            mEl.onclick = function (e) {
+              e.stopPropagation();
+              selectMachine(hub, m, mEl);
+            };
+            hubContainer.appendChild(mEl);
+          });
+        }
+        // Show machines in the profile that aren't in the status response
+        Object.keys(selectedServices).forEach(function (key) {
+          var sel = selectedServices[key];
+          if (sel.hub !== hub.url) return;
+          if (renderedMachines[sel.machine]) return;
+          renderedMachines[sel.machine] = true;
           var mEl = document.createElement('div');
-          mEl.className = 'machine-item';
-          if (selectedHubURL === hub.url && selectedMachineId === mId) mEl.classList.add('selected');
-          var dotClass = m.agentConnected ? 'online' : 'offline';
-          mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
-            + escHtml(mId);
+          mEl.className = 'machine-item machine-unreachable';
+          if (selectedHubURL === hub.url && selectedMachineId === sel.machine) mEl.classList.add('selected');
+          mEl.innerHTML = '<span class="machine-dot unreachable"></span>'
+            + escHtml(sel.machine)
+            + '<span class="unreachable-badge">unreachable</span>';
           mEl.onclick = function (e) {
             e.stopPropagation();
-            selectMachine(hub, m, mEl);
+            selectMachine(hub, { id: sel.machine, services: [], agentConnected: false, unreachable: true }, mEl);
           };
           hubContainer.appendChild(mEl);
         });
@@ -1055,6 +1077,39 @@ function renderMachineDetail(hub, machine) {
       + '<p class="section-desc">' + (machine.agentConnected ? 'Online' : 'Offline')
       + ' on ' + escHtml(hubName) + '</p>';
 
+    if (machine.unreachable) {
+      html += '<p class="empty-hint" style="margin-bottom:12px;">This machine is not currently registered on the hub.</p>';
+      // Show services from the profile so they can be unchecked
+      var profileServices = [];
+      Object.keys(selectedServices).forEach(function (key) {
+        var sel = selectedServices[key];
+        if (sel.hub === hub.url && sel.machine === machineId) {
+          profileServices.push({ name: sel.service, port: sel.servicePort || 0, proto: 'tcp', key: key });
+        }
+      });
+      if (profileServices.length > 0) {
+        html += '<div class="settings-group"><div class="settings-group-header">Services</div>';
+        profileServices.forEach(function (svc) {
+          var localPort = selectedServices[svc.key] ? selectedServices[svc.key].localPort : '';
+          html += '<div class="profile-svc-row">'
+            + '<input type="checkbox" checked' + (isConnected ? ' disabled' : '')
+            + ' onchange="toggleService(\'' + escAttr(hub.url) + '\', \'' + escAttr(machineId) + '\', \'' + escAttr(svc.name) + '\', ' + svc.port + ', this.checked)">'
+            + '<div class="profile-svc-name">' + escHtml(svc.name) + '</div>'
+            + '<div class="profile-svc-port">' + (svc.port ? ':' + svc.port : '') + '</div>'
+            + '<div class="profile-svc-proto">' + escHtml(svc.proto) + '</div>';
+          if (localPort) {
+            html += '<div class="profile-svc-local">localhost:' + localPort + '</div>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<p class="empty-hint">No services in profile.</p>';
+      }
+      pane.innerHTML = html;
+      return;
+    }
+
     if (services.length === 0) {
       html += '<p class="empty-hint">No services advertised.</p>';
     } else {
@@ -1085,6 +1140,19 @@ function renderMachineDetail(hub, machine) {
 }
 
 // --- Service Selection ---
+
+function removeUnreachableMachine(hubURL, machineId) {
+  var keysToRemove = [];
+  Object.keys(selectedServices).forEach(function (key) {
+    var sel = selectedServices[key];
+    if (sel.hub === hubURL && sel.machine === machineId) {
+      keysToRemove.push(key);
+    }
+  });
+  keysToRemove.forEach(function (key) { delete selectedServices[key]; });
+  markProfileDirty();
+  refreshAll();
+}
 
 function toggleService(hubURL, machineId, serviceName, servicePort, checked) {
   var key = makeServiceKey(hubURL, machineId, serviceName);
