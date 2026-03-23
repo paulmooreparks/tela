@@ -136,7 +136,7 @@ function addCommandEntry(method, desc, fullCmd) {
   var list = document.getElementById('cmd-list');
   if (!list) return;
   var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z').substring(11, 19);
-  var methodClass = 'cmd-m-' + method.toLowerCase().replace('delete', 'del');
+  var methodClass = 'cmd-m-' + method.toLowerCase();
   var methodLabel = method === 'DELETE' ? 'DEL' : method;
 
   // One-line version for display: strip backslash-newline continuations
@@ -457,9 +457,8 @@ if (window.runtime) {
 
   window.runtime.EventsOn('app:command', function (entry) {
     if (!entry) return;
-    var method = entry.method || 'CLI';
-    if (method === 'DELETE') method = 'DEL';
-    addCommandEntry(method, entry.description || entry.command, entry.command || '');
+    var badge = (entry.method === 'CLI' || !entry.method) ? 'CLI' : 'API';
+    addCommandEntry(badge, entry.description || entry.command, entry.command || '');
   });
 
   // Now that all event listeners are registered, check for running tela

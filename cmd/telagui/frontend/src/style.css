@@ -1850,9 +1850,7 @@ body {
 }
 .cmd-cp:hover { color: #e2e8f0; background: #475569; }
 .cmd-ts { color: #94a3b8; }
-.cmd-m-get { color: #6ee7b7; font-weight: 700; }
-.cmd-m-post { color: #93c5fd; font-weight: 700; }
-.cmd-m-del { color: #fca5a5; font-weight: 700; }
+.cmd-m-api { color: #93c5fd; font-weight: 700; }
 .cmd-m-cli { color: #d8b4fe; font-weight: 700; }
 .cmd-expanded {
   background: #0f172a; padding: 2px 12px 4px 24px; display: block;

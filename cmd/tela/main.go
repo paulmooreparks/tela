@@ -1388,8 +1388,14 @@ persistent_keepalive_interval=25
 		return nil
 	}
 
-	// Wait for WebSocket to close (session end) or signal
-	<-done
+	// Wait for WebSocket to close (session end) or shutdown signal
+	select {
+	case <-done:
+	case <-stopCh:
+		// Shutdown signaled -- close WebSocket to unblock the reader
+		wsConn.Close()
+		<-done
+	}
 	log.Println("session ended -- cleaning up")
 	for _, l := range listeners {
 		l.Close()

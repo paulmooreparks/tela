@@ -726,7 +726,7 @@ func (a *App) doRequestLogged(req *http.Request, timeout time.Duration) (*http.R
 		return nil, err
 	}
 	a.logCommandWithMethod(req.Method,
-		fmt.Sprintf("%s %s -> %d", req.Method, req.URL.Path, resp.StatusCode),
+		fmt.Sprintf("%s -> %d", req.URL.Path, resp.StatusCode),
 		fmt.Sprintf("%s %s -> %d", req.Method, req.URL.String(), resp.StatusCode))
 	return resp, nil
 }
