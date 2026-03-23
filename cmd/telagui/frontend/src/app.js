@@ -288,11 +288,21 @@ function refreshStatus() {
 
           // In attached mode, we don't have stdout output.
           // Check if the service appears in the bound services list.
-          if (!portFound && state.attached && boundServicesCache) {
+          if (!portFound && state.attached && boundServicesCache && boundServicesCache.length > 0) {
             for (var si = 0; si < boundServicesCache.length; si++) {
-              if (boundServicesCache[si].local === svc.localPort && boundServicesCache[si].machine === g.machine) {
+              var bs = boundServicesCache[si];
+              if (parseInt(bs.local) === parseInt(svc.localPort) && bs.machine === g.machine) {
                 portFound = true;
                 break;
+              }
+            }
+            // If no exact match, try matching by machine only (port may differ from profile)
+            if (!portFound) {
+              for (var si2 = 0; si2 < boundServicesCache.length; si2++) {
+                if (boundServicesCache[si2].machine === g.machine) {
+                  portFound = true;
+                  break;
+                }
               }
             }
           }
@@ -410,30 +420,50 @@ if (window.runtime) {
     tvLog('Attached to running tela');
     connAttached = true;
     setConnPhase('connected');
-    // Fetch bound services from control API
-    goApp.GetControlServices().then(function (svcs) {
-      boundServicesCache = svcs || [];
-      onConnectionChanged();
-    }).catch(function () {});
-    // Connect WebSocket for live events
-    goApp.ConnectControlWS().then(function () {
+
+    // Update tela log tab immediately
+    var logEl = document.getElementById('log-tela');
+    if (logEl) logEl.textContent = 'Attached to external tela. Log output is in the terminal where tela is running.';
+    var logDot = document.getElementById('log-tela-dot');
+    if (logDot) logDot.className = 'log-dot log-dot-live';
+
+    // Fetch bound services, then refresh UI
+    function fetchAndRefresh() {
       goApp.GetControlServices().then(function (svcs) {
         boundServicesCache = svcs || [];
         onConnectionChanged();
-      });
-    }).catch(function () {});
+      }).catch(function () {});
+    }
+
+    // Connect WebSocket for live events, then fetch services
+    goApp.ConnectControlWS().then(function () {
+      fetchAndRefresh();
+    }).catch(function () {
+      // WebSocket failed, still try fetching services via HTTP
+      fetchAndRefresh();
+    });
+
+    // Also fetch immediately in case WS takes time
+    fetchAndRefresh();
+  });
+
+  window.runtime.EventsOn('tela:disconnected', function () {
+    tvLog('External tela disconnected');
+    connAttached = false;
+    boundServicesCache = null;
+    setConnPhase('disconnected');
     onConnectionChanged();
   });
 
   window.runtime.EventsOn('app:command', function (entry) {
     if (!entry) return;
-    var method = 'CLI';
-    var cmd = entry.command || '';
-    if (cmd.indexOf('GET ') === 0) method = 'GET';
-    else if (cmd.indexOf('POST ') === 0) method = 'POST';
-    else if (cmd.indexOf('DELETE ') === 0) method = 'DEL';
-    addCommandEntry(method, entry.description || cmd, cmd);
+    var method = entry.method || 'CLI';
+    if (method === 'DELETE') method = 'DEL';
+    addCommandEntry(method, entry.description || entry.command, entry.command || '');
   });
+
+  // Now that all event listeners are registered, check for running tela
+  goApp.TryAttach();
 }
 
 // --- Sidebar Resize ---
@@ -529,9 +559,9 @@ loadSavedSelections().then(function () {
   setTimeout(function () { takeSnapshot(); }, 1000);
   // Auto-connect if enabled and there are saved selections
   goApp.ShouldAutoConnect().then(function (should) {
-    if (should && Object.keys(selectedServices).length > 0) {
+    if (should && Object.keys(selectedServices).length > 0 && connPhase === 'disconnected') {
       setTimeout(function () {
-        doConnect();
+        if (connPhase === 'disconnected') doConnect();
       }, 1500); // delay to let hub status load
     }
   });
@@ -1258,6 +1288,11 @@ function doConnect() {
   var connections = buildConnections();
   if (connections.length === 0) return;
 
+  // Only reset if not already connected/attached
+  if (connPhase !== 'disconnected') return;
+
+  connAttached = false;
+  boundServicesCache = null;
   tvLog('Connecting...');
   setConnPhase('connecting');
 
@@ -2460,8 +2495,8 @@ function renderHubSettings(pane) {
     + '<p class="section-desc">Connection and configuration for <strong>' + escHtml(hubName) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
-  goApp.LogAdminGET(hub, '/api/status');
-  goApp.LogAdminGET(hub, '/api/admin/portals');
+
+
 
   // Fetch hub info and portals in parallel (flat, no nesting)
   var hubInfoData = null;
@@ -2572,7 +2607,7 @@ function renderHubMachines(pane) {
     + '<p class="section-desc">Registered machines on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
-  goApp.LogAdminGET(hub, '/api/status');
+
   goApp.GetHubStatus(hub).then(function (status) {
     if (!status.online) {
       pane.innerHTML = '<h2>Machines</h2><p class="section-desc">Hub is offline or unreachable.</p>';
@@ -2618,7 +2653,7 @@ function renderHubTokens(pane) {
     + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
-  goApp.LogAdminGET(hub, '/api/admin/tokens');
+
   goApp.AdminListTokens(hub).then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { data = {}; }
@@ -2784,7 +2819,7 @@ function renderHubACLs(pane) {
     + '<p class="section-desc">Manage per-machine permissions for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
-  goApp.LogAdminGET(hub, '/api/admin/acls');
+
   goApp.AdminListACLs(hub).then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { data = {}; }
@@ -2969,7 +3004,7 @@ function renderHubHistory(pane) {
     + '<p class="section-desc">Recent sessions on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
-  goApp.LogAdminGET(hub, '/api/history');
+
   goApp.AdminAPICall(hub, 'GET', '/api/history', '').then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { data = {}; }

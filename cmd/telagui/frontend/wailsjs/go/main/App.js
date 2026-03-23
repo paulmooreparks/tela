@@ -382,6 +382,10 @@ export function SwitchProfile(arg1) {
   return window['go']['main']['App']['SwitchProfile'](arg1);
 }
 
+export function TryAttach() {
+  return window['go']['main']['App']['TryAttach']();
+}
+
 export function UninstallService() {
   return window['go']['main']['App']['UninstallService']();
 }

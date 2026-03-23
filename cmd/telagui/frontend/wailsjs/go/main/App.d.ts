@@ -192,6 +192,8 @@ export function ShowWindow():Promise<void>;
 
 export function SwitchProfile(arg1:string):Promise<void>;
 
+export function TryAttach():Promise<boolean>;
+
 export function UninstallService():Promise<string>;
 
 export function ValidateBinPath(arg1:string):Promise<string>;

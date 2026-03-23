@@ -56,6 +56,7 @@ export namespace main {
 	}
 	export class CommandLogEntry {
 	    time: string;
+	    method: string;
 	    description: string;
 	    command: string;
 	
@@ -66,6 +67,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.time = source["time"];
+	        this.method = source["method"];
 	        this.description = source["description"];
 	        this.command = source["command"];
 	    }
