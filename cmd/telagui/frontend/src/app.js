@@ -481,6 +481,14 @@ if (window.runtime) {
     boundServicesCache = null;
     setConnPhase('disconnected');
     onConnectionChanged();
+    // Auto-stop mount when tela disconnects
+    goApp.IsMountRunning().then(function (running) {
+      if (running) {
+        goApp.StopMount();
+        tvLog('Mount stopped (tela disconnected)');
+        refreshMountStatus();
+      }
+    });
   });
 
   window.runtime.EventsOn('app:command', function (entry) {
@@ -837,6 +845,70 @@ function saveMTUDialog() {
     closeMTUDialog();
   }).catch(function (err) {
     tvLog('Set MTU failed: ' + err);
+  });
+}
+
+function openMountConfigDialog() {
+  goApp.GetMountConfig().then(function (mc) {
+    var pointInput = document.getElementById('mount-config-point');
+    var portInput = document.getElementById('mount-config-port');
+    if (pointInput) pointInput.value = mc.mount || '';
+    if (portInput) portInput.value = mc.port || 18080;
+    document.getElementById('mount-config-dialog').classList.remove('hidden');
+  });
+}
+
+function closeMountConfigDialog() {
+  document.getElementById('mount-config-dialog').classList.add('hidden');
+}
+
+function saveMountConfigDialog() {
+  var point = (document.getElementById('mount-config-point').value || '').trim();
+  var port = parseInt(document.getElementById('mount-config-port').value) || 18080;
+  goApp.SetMountConfig({mount: point, port: port}).then(function () {
+    closeMountConfigDialog();
+    updateMountButtonState();
+  }).catch(function (err) {
+    tvLog('Set mount config failed: ' + err);
+  });
+}
+
+function clearMountConfig() {
+  goApp.SetMountConfig({mount: '', port: 0}).then(function () {
+    closeMountConfigDialog();
+    updateMountButtonState();
+  }).catch(function (err) {
+    tvLog('Clear mount config failed: ' + err);
+  });
+}
+
+// Update mount button enabled state based on connection + profile config.
+function updateMountButtonState() {
+  var mountBtn = document.getElementById('mount-btn');
+  if (!mountBtn) return;
+
+  if (connPhase !== 'connected') {
+    mountBtn.disabled = true;
+    mountBtn.title = 'Mount file shares (not connected)';
+    return;
+  }
+
+  goApp.GetMountConfig().then(function (mc) {
+    goApp.IsMountRunning().then(function (running) {
+      if (running) {
+        mountBtn.disabled = false;
+        mountBtn.classList.add('mounted');
+        mountBtn.title = 'Unmount file shares';
+      } else if (mc.mount) {
+        mountBtn.disabled = false;
+        mountBtn.classList.remove('mounted');
+        mountBtn.title = 'Mount file shares (' + mc.mount + ')';
+      } else {
+        mountBtn.disabled = true;
+        mountBtn.classList.remove('mounted');
+        mountBtn.title = 'No mount configured (Profiles > Mount...)';
+      }
+    });
   });
 }
 
@@ -1402,6 +1474,9 @@ function applyConnectionUI() {
     }
   }
 
+  // Mount button: check connection + config
+  updateMountButtonState();
+
   // Tela log dot
   var dot = document.getElementById('log-tela-dot');
   if (dot) dot.className = (connPhase === 'connected' || connPhase === 'connecting') ? 'log-dot log-dot-live' : 'log-dot log-dot-idle';
@@ -1584,6 +1659,11 @@ function cancelDisconnect() {
 function performDisconnect() {
   tvLog(connAttached ? 'Detaching...' : 'Disconnecting...');
   setConnPhase('disconnecting');
+
+  // Stop mount before disconnecting
+  goApp.IsMountRunning().then(function (running) {
+    if (running) goApp.StopMount();
+  });
 
   goApp.Disconnect().then(function () {
     tvLog(connAttached ? 'Detached' : 'Disconnected');
@@ -3957,17 +4037,32 @@ function stopService() {
 
 function refreshMountStatus() {
   goApp.IsMountRunning().then(function (running) {
+    // Client Settings card
     var el = document.getElementById('mount-status');
-    if (!el) return;
-    if (running) {
-      el.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
-    } else {
-      el.innerHTML = '<span style="color:var(--text-muted);">Not running</span>';
+    if (el) {
+      if (running) {
+        el.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
+      } else {
+        el.innerHTML = '<span style="color:var(--text-muted);">Not running</span>';
+      }
     }
     var startBtn = document.getElementById('mount-start-btn');
     var stopBtn = document.getElementById('mount-stop-btn');
     if (startBtn) startBtn.disabled = running;
     if (stopBtn) stopBtn.disabled = !running;
+
+    // Topbar button
+    updateMountButtonState();
+  });
+}
+
+function toggleMount() {
+  goApp.IsMountRunning().then(function (running) {
+    if (running) {
+      stopMountProcess();
+    } else {
+      startMountProcess();
+    }
   });
 }
 
@@ -3981,7 +4076,7 @@ function startMountProcess() {
 }
 
 function stopMountProcess() {
-  goApp.StopMount().then(function (msg) {
+  goApp.StopMount().then(function () {
     tvLog('Mount stopped');
     refreshMountStatus();
   }).catch(function (err) {

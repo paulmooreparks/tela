@@ -121,10 +121,17 @@ type ProfileService struct {
 	Remote int    `yaml:"remote,omitempty" json:"remote,omitempty"`
 }
 
+// ProfileMount defines WebDAV mount configuration.
+type ProfileMount struct {
+	Mount string `yaml:"mount,omitempty" json:"mount"`
+	Port  int    `yaml:"port,omitempty" json:"port"`
+}
+
 // Profile is the top-level profile YAML structure.
 type Profile struct {
 	Connections []ProfileConnection `yaml:"connections" json:"connections"`
 	MTU         int                 `yaml:"mtu,omitempty" json:"mtu,omitempty"`
+	Mount       ProfileMount        `yaml:"mount,omitempty" json:"mount"`
 }
 
 // ConnectionState is the current connection state returned to the frontend.
@@ -3178,6 +3185,7 @@ func (a *App) ServiceStop() (string, error) {
 // ── Mount (WebDAV) child process management ──────────────────────
 
 // StartMount launches "tela mount" as a child process and streams its output.
+// It reads mount config from the current profile.
 func (a *App) StartMount() (string, error) {
 	a.mu.Lock()
 	if a.mountProcess != nil {
@@ -3191,7 +3199,16 @@ func (a *App) StartMount() (string, error) {
 		return "", fmt.Errorf("tela binary not found")
 	}
 
-	cmd := exec.Command(telaPath, "mount")
+	mc := a.GetMountConfig()
+	args := []string{"mount"}
+	if mc.Port > 0 {
+		args = append(args, "-port", fmt.Sprintf("%d", mc.Port))
+	}
+	if mc.Mount != "" {
+		args = append(args, "-mount", mc.Mount)
+	}
+
+	cmd := exec.Command(telaPath, args...)
 	hideConsoleWindow(cmd)
 
 	outPipe, _ := cmd.StdoutPipe()
@@ -3207,7 +3224,7 @@ func (a *App) StartMount() (string, error) {
 	a.mountProcess = cmd.Process
 	a.mu.Unlock()
 
-	a.logCommand("Start mount", telaPath+" mount")
+	a.logCommand("Start mount", telaPath+" "+strings.Join(args, " "))
 
 	go func() {
 		buf := make([]byte, 4096)
@@ -3279,6 +3296,37 @@ func (a *App) SetProfileMTU(mtu int) error {
 		return fmt.Errorf("invalid profile")
 	}
 	profile.MTU = mtu
+	out, err := yaml.Marshal(profile)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(profilePath(), out, 0600)
+}
+
+// GetMountConfig returns the mount configuration from the current profile.
+func (a *App) GetMountConfig() ProfileMount {
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return ProfileMount{}
+	}
+	var profile Profile
+	if yaml.Unmarshal(data, &profile) != nil {
+		return ProfileMount{}
+	}
+	return profile.Mount
+}
+
+// SetMountConfig saves the mount configuration to the current profile.
+func (a *App) SetMountConfig(mount ProfileMount) error {
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return err
+	}
+	var profile Profile
+	if yaml.Unmarshal(data, &profile) != nil {
+		return fmt.Errorf("invalid profile")
+	}
+	profile.Mount = mount
 	out, err := yaml.Marshal(profile)
 	if err != nil {
 		return err

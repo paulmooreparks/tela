@@ -508,6 +508,13 @@ func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 type connectionProfile struct {
 	Connections []profileConnection `yaml:"connections"`
 	MTU         int                 `yaml:"mtu,omitempty"`
+	Mount       profileMount        `yaml:"mount,omitempty"`
+}
+
+// profileMount defines the WebDAV mount configuration in a profile.
+type profileMount struct {
+	Mount string `yaml:"mount,omitempty"` // drive letter (T:) or directory path
+	Port  int    `yaml:"port,omitempty"`  // WebDAV listen port (default 18080)
 }
 
 // profileConnection defines one hub+machine+services entry in a profile.
@@ -591,6 +598,24 @@ func runProfile(name string) {
 	defer cleanupControl()
 
 	log.Printf("loaded profile with %d connection(s)", len(profile.Connections))
+
+	// Auto-start mount if configured in profile
+	if profile.Mount.Mount != "" {
+		port := profile.Mount.Port
+		if port == 0 {
+			port = 18080
+		}
+		go func() {
+			// Brief delay to let connections establish
+			select {
+			case <-time.After(2 * time.Second):
+			case <-stopCh:
+				return
+			}
+			log.Printf("auto-starting mount: %s (port %d)", profile.Mount.Mount, port)
+			cmdMount([]string{"-port", fmt.Sprintf("%d", port), "-mount", profile.Mount.Mount})
+		}()
+	}
 
 	var wg sync.WaitGroup
 	for i, conn := range profile.Connections {

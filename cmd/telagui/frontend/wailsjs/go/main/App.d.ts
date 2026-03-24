@@ -104,6 +104,8 @@ export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
 export function GetMachineCapabilities():Promise<Record<string, Record<string, any>>>;
 
+export function GetMountConfig():Promise<main.ProfileMount>;
+
 export function GetProfileMTU():Promise<number>;
 
 export function GetProfilePath():Promise<string>;
@@ -189,6 +191,8 @@ export function SendControlCommand(arg1:string):Promise<void>;
 export function ServiceStart():Promise<string>;
 
 export function ServiceStop():Promise<string>;
+
+export function SetMountConfig(arg1:main.ProfileMount):Promise<void>;
 
 export function SetProfileMTU(arg1:number):Promise<void>;
 

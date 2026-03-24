@@ -206,6 +206,10 @@ export function GetMachineCapabilities() {
   return window['go']['main']['App']['GetMachineCapabilities']();
 }
 
+export function GetMountConfig() {
+  return window['go']['main']['App']['GetMountConfig']();
+}
+
 export function GetProfileMTU() {
   return window['go']['main']['App']['GetProfileMTU']();
 }
@@ -376,6 +380,10 @@ export function ServiceStart() {
 
 export function ServiceStop() {
   return window['go']['main']['App']['ServiceStop']();
+}
+
+export function SetMountConfig(arg1) {
+  return window['go']['main']['App']['SetMountConfig'](arg1);
 }
 
 export function SetProfileMTU(arg1) {
