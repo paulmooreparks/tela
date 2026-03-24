@@ -2451,7 +2451,7 @@ func (a *App) GetBinStatus() []BinaryInfo {
 	latest, _ := a.latestRelease()
 
 	var results []BinaryInfo
-	for _, name := range []string{"tela", "telad", "telahubd"} {
+	for _, name := range []string{"tela", "telad", "telahubd", "telafs"} {
 		bin := name
 		if runtime.GOOS == "windows" {
 			bin += ".exe"
@@ -3169,6 +3169,87 @@ func (a *App) ServiceStop() (string, error) {
 		return "", fmt.Errorf("%s: %s", err, string(out))
 	}
 	a.logCommand("Stop service", telaPath+" service stop")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// ── telafs service management ─────────────────────────────────────
+
+// InstallTelafsService installs telafs as an OS service.
+func (a *App) InstallTelafsService() (string, error) {
+	telafsPath := a.findTool("telafs")
+	if telafsPath == "" {
+		return "", fmt.Errorf("telafs binary not found")
+	}
+	cmd := exec.Command(telafsPath, "service", "install")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Install telafs service", telafsPath+" service install")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// UninstallTelafsService removes the telafs OS service.
+func (a *App) UninstallTelafsService() (string, error) {
+	telafsPath := a.findTool("telafs")
+	if telafsPath == "" {
+		return "", fmt.Errorf("telafs binary not found")
+	}
+	cmd := exec.Command(telafsPath, "service", "uninstall")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Uninstall telafs service", telafsPath+" service uninstall")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// GetTelafsServiceStatus returns the telafs service status.
+func (a *App) GetTelafsServiceStatus() string {
+	telafsPath := a.findTool("telafs")
+	if telafsPath == "" {
+		return "not installed"
+	}
+	cmd := exec.Command(telafsPath, "service", "status")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "not installed"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TelafsServiceStart starts the telafs OS service.
+func (a *App) TelafsServiceStart() (string, error) {
+	telafsPath := a.findTool("telafs")
+	if telafsPath == "" {
+		return "", fmt.Errorf("telafs binary not found")
+	}
+	cmd := exec.Command(telafsPath, "service", "start")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Start telafs service", telafsPath+" service start")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// TelafsServiceStop stops the telafs OS service.
+func (a *App) TelafsServiceStop() (string, error) {
+	telafsPath := a.findTool("telafs")
+	if telafsPath == "" {
+		return "", fmt.Errorf("telafs binary not found")
+	}
+	cmd := exec.Command(telafsPath, "service", "stop")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Stop telafs service", telafsPath+" service stop")
 	return strings.TrimSpace(string(out)), nil
 }
 

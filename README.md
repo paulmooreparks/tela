@@ -64,8 +64,9 @@ Tela is built from three Go binaries and an optional desktop client:
 | **telad** | Agent daemon. Runs on the target machine, registers with the hub, and exposes local TCP services through the tunnel. Includes a built-in HTTP gateway for path-based routing to multiple services. |
 | **telahubd** | Hub server. Pairs agents with clients, relays encrypted traffic, and serves a built-in web console. |
 | **TelaVisor** | Desktop client. A graphical interface for managing connections, browsing remote files, and administering hubs. Built with Wails v2 (Go + JavaScript). |
+| **telafs** | File system bridge. A WebDAV server that mounts Tela file shares as a local drive in Windows Explorer, macOS Finder, or Linux file managers. |
 
-All three binaries are single-file executables with no runtime dependencies. They run on Windows, Linux, and macOS.
+All four binaries are single-file executables with no runtime dependencies. They run on Windows, Linux, and macOS.
 
 ## TelaVisor
 
@@ -95,6 +96,7 @@ See [TelaVisor.md](TelaVisor.md) for full documentation.
 go build -o tela ./cmd/tela
 go build -o telad ./cmd/telad
 go build -o telahubd ./cmd/telahubd
+go build -o telafs ./cmd/telafs
 ```
 
 ### Run locally (three terminals)
@@ -231,6 +233,8 @@ Tela is designed to be secure by default. The hub auto-generates an owner token 
 
 **File sharing.** The agent can expose a sandboxed directory for file transfer through the tunnel. Upload, download, rename, move, and delete operations are available via the CLI (`tela files`) or the TelaVisor Files tab. File sharing is off by default and must be explicitly enabled per machine. Extension filtering, size limits, and read-only mode are configurable.
 
+**Explorer integration.** `telafs` is a WebDAV server that mounts Tela file shares as a local drive. On Windows, run `net use T: http://localhost:18080/` to map the drive. Each connected machine with file sharing enabled appears as a top-level folder. No kernel drivers or third-party software required.
+
 **Gateway.** The agent can run a built-in HTTP reverse proxy that routes requests by URL path to different local services. This lets you expose a multi-service application (web UI, REST API, metrics) through a single tunnel port without needing nginx, Caddy, or any other reverse proxy. See [REFERENCE.md](REFERENCE.md#gateway-path-based-reverse-proxy) for configuration details.
 
 **Upstreams.** The agent can forward a service's outbound dependency calls to configurable targets. Services call `localhost:PORT` and telad routes to the real dependency, which can be local, on another machine, or in a different environment. This lets developers rewire service dependencies by editing a YAML file without changing code, containers, or remote environments. See [REFERENCE.md](REFERENCE.md#upstreams-dependency-routing) for configuration details.
@@ -258,7 +262,7 @@ See also: [howto/networking.md](howto/networking.md), [howto/hub.md](howto/hub.m
 
 ## Running as an OS service
 
-All three binaries support native OS service management on Windows (SCM), Linux (systemd), and macOS (launchd). Configuration is stored in a YAML file in a system-wide directory. To reconfigure, edit the file and restart the service.
+All four binaries support native OS service management on Windows (SCM), Linux (systemd), and macOS (launchd). Configuration is stored in a YAML file in a system-wide directory. To reconfigure, edit the file and restart the service.
 
 ```bash
 # Install telad as a service
@@ -273,10 +277,15 @@ telahubd service start
 tela service install -config myprofile.yaml
 tela service start
 
+# Install telafs as a service (always-on WebDAV server)
+telafs service install -port 18080
+telafs service start
+
 # Reconfigure: edit the config, then restart
 telad service restart
 telahubd service restart
 tela service restart
+telafs service restart
 ```
 
 See [howto/services.md](howto/services.md) for full details.
@@ -300,6 +309,7 @@ cmd/tela/          Client CLI (connect, machines, services, status, remote, admi
 cmd/telad/         Agent daemon
 cmd/telahubd/      Hub server
 cmd/telagui/       Desktop client (Wails v2 app)
+cmd/telafs/        WebDAV server for file share drive mapping
 internal/service/  Cross-platform OS service management (Windows SCM, systemd, launchd)
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
 howto/             Guides (hub setup, services, networking, use cases)
@@ -320,6 +330,7 @@ docker/            Dockerfile, docker-compose, Caddyfile
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). |
 | **Session** | An active encrypted tunnel between a client and an agent. Each session gets its own WireGuard keypair and virtual IP address. |
 | **Portal** | A multi-hub dashboard and directory service. Implements the hub directory API (`/api/hubs`). Can be added as a remote with `tela remote add`. |
+| **telafs** | A WebDAV server that mounts Tela file shares as a local drive. Windows Explorer, macOS Finder, and Linux file managers can browse remote files as if they were local. |
 | **File Share** | A sandboxed directory on an agent machine that can be browsed, uploaded to, and downloaded from through the tunnel. |
 | **Gateway** | A built-in HTTP reverse proxy in telad that routes requests by URL path to different local services through a single tunnel port. |
 | **Upstream** | A dependency route in telad that forwards outbound service calls from localhost to a configurable target, providing a virtual dispatch layer for service-to-service communication. |

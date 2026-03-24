@@ -3863,6 +3863,77 @@ function stopService() {
   });
 }
 
+// ── telafs service management ──────────────────────────────────────
+
+function refreshTelafsServiceStatus() {
+  goApp.GetTelafsServiceStatus().then(function (raw) {
+    var el = document.getElementById('telafs-status');
+    if (!el) return;
+    var s = (raw || '').toLowerCase();
+    var installed = s.indexOf('installed: true') !== -1;
+    var running = s.indexOf('running: true') !== -1;
+    var notInstalled = s.indexOf('not installed') !== -1 || s === '';
+
+    if (notInstalled) {
+      el.innerHTML = '<span style="color:var(--text-muted);">Not installed</span>';
+    } else if (running) {
+      el.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
+    } else if (installed) {
+      el.innerHTML = '<span class="bin-dot bin-dot-missing"></span> Installed (stopped)';
+    } else {
+      el.innerHTML = '<span style="color:var(--text-muted);">' + escHtml(raw) + '</span>';
+    }
+
+    var installBtn = document.getElementById('telafs-install-btn');
+    var startBtn = document.getElementById('telafs-start-btn');
+    var stopBtn = document.getElementById('telafs-stop-btn');
+    var uninstallBtn = document.getElementById('telafs-uninstall-btn');
+    if (installBtn) installBtn.disabled = installed || running;
+    if (startBtn) startBtn.disabled = !installed || running;
+    if (stopBtn) stopBtn.disabled = !running;
+    if (uninstallBtn) uninstallBtn.disabled = !installed && !running;
+  });
+}
+
+function installTelafsService() {
+  goApp.InstallTelafsService().then(function (msg) {
+    tvLog('telafs service installed: ' + msg);
+    refreshTelafsServiceStatus();
+  }).catch(function (err) {
+    tvLog('Install telafs service failed: ' + err);
+  });
+}
+
+function uninstallTelafsService() {
+  showConfirmDialog('Uninstall telafs', 'Remove the telafs WebDAV system service?', 'Uninstall').then(function (yes) {
+    if (!yes) return;
+    goApp.UninstallTelafsService().then(function (msg) {
+      tvLog('telafs service uninstalled: ' + msg);
+      refreshTelafsServiceStatus();
+    }).catch(function (err) {
+      tvLog('Uninstall telafs service failed: ' + err);
+    });
+  });
+}
+
+function startTelafsService() {
+  goApp.TelafsServiceStart().then(function (msg) {
+    tvLog('telafs service started: ' + msg);
+    refreshTelafsServiceStatus();
+  }).catch(function (err) {
+    tvLog('Start telafs service failed: ' + err);
+  });
+}
+
+function stopTelafsService() {
+  goApp.TelafsServiceStop().then(function (msg) {
+    tvLog('telafs service stopped: ' + msg);
+    refreshTelafsServiceStatus();
+  }).catch(function (err) {
+    tvLog('Stop telafs service failed: ' + err);
+  });
+}
+
 // ── Client Settings tab ────────────────────────────────────────────
 
 function refreshClientSettings() {
@@ -3897,6 +3968,7 @@ function refreshClientSettings() {
   // Installed tools
   refreshClientToolVersions();
   refreshServiceStatus();
+  refreshTelafsServiceStatus();
 }
 
 function refreshClientToolVersions() {
