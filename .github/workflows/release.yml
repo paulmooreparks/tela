@@ -1,5 +1,5 @@
-# Build tela and telad binaries for all platforms, publish SHA-256 hashes,
-# and attach everything to a GitHub Release.
+# Build tela, telad, telahubd, and telafs binaries for all platforms,
+# publish SHA-256 hashes, and attach everything to a GitHub Release.
 #
 # Triggers:
 #   - Push to main: creates release vMAJOR.MINOR.PATCH where MAJOR.MINOR
@@ -118,6 +118,16 @@ jobs:
           go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
             -o dist/telahubd-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
             ./cmd/telahubd
+
+      - name: Build telafs
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
+            -o dist/telafs-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
+            ./cmd/telafs
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -316,7 +326,7 @@ jobs:
           VERSION="${{ steps.version.outputs.tag }}"
           echo "{\"version\":\"${VERSION}\",\"binaries\":{" > release.json
           first=true
-          for f in tela-* telad-* telahubd-* telavisor-*; do
+          for f in tela-* telad-* telafs-* telahubd-* telavisor-*; do
             hash=$(sha256sum "$f" | cut -d' ' -f1)
             size=$(stat -c%s "$f")
             if [ "$first" = true ]; then
