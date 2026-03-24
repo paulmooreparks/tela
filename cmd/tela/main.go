@@ -508,13 +508,6 @@ func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 type connectionProfile struct {
 	Connections []profileConnection `yaml:"connections"`
 	MTU         int                 `yaml:"mtu,omitempty"`
-	Mount       profileMount        `yaml:"mount,omitempty"`
-}
-
-// profileMount defines the WebDAV mount configuration in a profile.
-type profileMount struct {
-	Mount string `yaml:"mount,omitempty"` // drive letter (T:) or directory path
-	Port  int    `yaml:"port,omitempty"`  // WebDAV listen port (default 18080)
 }
 
 // profileConnection defines one hub+machine+services entry in a profile.
@@ -523,6 +516,13 @@ type profileConnection struct {
 	Machine  string           `yaml:"machine"`
 	Token    string           `yaml:"token"`
 	Services []profileService `yaml:"services,omitempty"`
+	Mount    profileMount     `yaml:"mount,omitempty"`
+}
+
+// profileMount defines the WebDAV mount configuration for a connection.
+type profileMount struct {
+	Mount string `yaml:"mount,omitempty"` // drive letter (T:) or directory path
+	Port  int    `yaml:"port,omitempty"`  // WebDAV listen port (default 18080)
 }
 
 // profileService defines a port mapping within a profile connection.
@@ -599,22 +599,25 @@ func runProfile(name string) {
 
 	log.Printf("loaded profile with %d connection(s)", len(profile.Connections))
 
-	// Auto-start mount if configured in profile
-	if profile.Mount.Mount != "" {
-		port := profile.Mount.Port
+	// Auto-start mounts for connections that have mount config
+	for _, conn := range profile.Connections {
+		if conn.Mount.Mount == "" {
+			continue
+		}
+		mc := conn.Mount
+		port := mc.Port
 		if port == 0 {
 			port = 18080
 		}
-		go func() {
-			// Brief delay to let connections establish
+		go func(mountPoint string, mountPort int) {
 			select {
 			case <-time.After(2 * time.Second):
 			case <-stopCh:
 				return
 			}
-			log.Printf("auto-starting mount: %s (port %d)", profile.Mount.Mount, port)
-			cmdMount([]string{"-port", fmt.Sprintf("%d", port), "-mount", profile.Mount.Mount})
-		}()
+			log.Printf("auto-starting mount: %s (port %d)", mountPoint, mountPort)
+			cmdMount([]string{"-port", fmt.Sprintf("%d", mountPort), "-mount", mountPoint})
+		}(mc.Mount, port)
 	}
 
 	var wg sync.WaitGroup

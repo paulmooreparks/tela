@@ -848,8 +848,11 @@ function saveMTUDialog() {
   });
 }
 
-function openMountConfigDialog() {
-  goApp.GetMountConfig().then(function (mc) {
+var mountConfigMachine = ''; // machine being edited in mount config dialog
+
+function openMountConfigDialog(machine) {
+  mountConfigMachine = machine;
+  goApp.GetMountConfig(machine).then(function (mc) {
     var pointInput = document.getElementById('mount-config-point');
     var portInput = document.getElementById('mount-config-port');
     if (pointInput) pointInput.value = mc.mount || '';
@@ -865,24 +868,31 @@ function closeMountConfigDialog() {
 function saveMountConfigDialog() {
   var point = (document.getElementById('mount-config-point').value || '').trim();
   var port = parseInt(document.getElementById('mount-config-port').value) || 18080;
-  goApp.SetMountConfig({mount: point, port: port}).then(function () {
+  goApp.SetMountConfig(mountConfigMachine, {mount: point, port: port}).then(function () {
     closeMountConfigDialog();
     updateMountButtonState();
+    // Re-render the machine detail if still selected
+    if (selectedMachineId === mountConfigMachine) {
+      refreshAll();
+    }
   }).catch(function (err) {
     tvLog('Set mount config failed: ' + err);
   });
 }
 
 function clearMountConfig() {
-  goApp.SetMountConfig({mount: '', port: 0}).then(function () {
+  goApp.SetMountConfig(mountConfigMachine, {mount: '', port: 0}).then(function () {
     closeMountConfigDialog();
     updateMountButtonState();
+    if (selectedMachineId === mountConfigMachine) {
+      refreshAll();
+    }
   }).catch(function (err) {
     tvLog('Clear mount config failed: ' + err);
   });
 }
 
-// Update mount button enabled state based on connection + profile config.
+// Update mount button enabled state based on connection + any mount config.
 function updateMountButtonState() {
   var mountBtn = document.getElementById('mount-btn');
   if (!mountBtn) return;
@@ -893,20 +903,21 @@ function updateMountButtonState() {
     return;
   }
 
-  goApp.GetMountConfig().then(function (mc) {
+  goApp.GetAllMountConfigs().then(function (configs) {
     goApp.IsMountRunning().then(function (running) {
       if (running) {
         mountBtn.disabled = false;
         mountBtn.classList.add('mounted');
         mountBtn.title = 'Unmount file shares';
-      } else if (mc.mount) {
+      } else if (configs && Object.keys(configs).length > 0) {
         mountBtn.disabled = false;
         mountBtn.classList.remove('mounted');
-        mountBtn.title = 'Mount file shares (' + mc.mount + ')';
+        var first = configs[Object.keys(configs)[0]];
+        mountBtn.title = 'Mount file shares (' + first.mount + ')';
       } else {
         mountBtn.disabled = true;
         mountBtn.classList.remove('mounted');
-        mountBtn.title = 'No mount configured (Profiles > Mount...)';
+        mountBtn.title = 'No mount configured';
       }
     });
   });
@@ -1311,6 +1322,26 @@ function renderMachineDetail(hub, machine) {
     }
 
     pane.innerHTML = html;
+
+    // Append mount config card (async, after initial render)
+    goApp.GetMountConfig(machineId).then(function (mc) {
+      var mountHtml = '<div class="settings-group" style="margin-top:16px;">'
+        + '<div class="settings-group-header">Mount</div>';
+      if (mc.mount) {
+        mountHtml += '<div class="cap-tags" style="margin:8px 0;">'
+          + '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> ' + escHtml(mc.mount) + '</span>';
+        if (mc.port && mc.port !== 18080) {
+          mountHtml += '<span class="cap-tag cap-tag-info">port ' + mc.port + '</span>';
+        }
+        mountHtml += '</div>';
+      } else {
+        mountHtml += '<p class="empty-hint" style="margin:8px 0;font-size:12px;">Not configured</p>';
+      }
+      mountHtml += '<button type="button" class="tb-btn" style="margin-top:4px;" '
+        + 'onclick="openMountConfigDialog(\'' + escAttr(machineId) + '\')">Configure...</button>'
+        + '</div>';
+      pane.innerHTML += mountHtml;
+    });
   });
 }
 

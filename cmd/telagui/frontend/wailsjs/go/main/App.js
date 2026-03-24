@@ -154,6 +154,10 @@ export function GetAgentList() {
   return window['go']['main']['App']['GetAgentList']();
 }
 
+export function GetAllMountConfigs() {
+  return window['go']['main']['App']['GetAllMountConfigs']();
+}
+
 export function GetBinStatus() {
   return window['go']['main']['App']['GetBinStatus']();
 }
@@ -206,8 +210,8 @@ export function GetMachineCapabilities() {
   return window['go']['main']['App']['GetMachineCapabilities']();
 }
 
-export function GetMountConfig() {
-  return window['go']['main']['App']['GetMountConfig']();
+export function GetMountConfig(arg1) {
+  return window['go']['main']['App']['GetMountConfig'](arg1);
 }
 
 export function GetProfileMTU() {
@@ -382,8 +386,8 @@ export function ServiceStop() {
   return window['go']['main']['App']['ServiceStop']();
 }
 
-export function SetMountConfig(arg1) {
-  return window['go']['main']['App']['SetMountConfig'](arg1);
+export function SetMountConfig(arg1, arg2) {
+  return window['go']['main']['App']['SetMountConfig'](arg1, arg2);
 }
 
 export function SetProfileMTU(arg1) {
