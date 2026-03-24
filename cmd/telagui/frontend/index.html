@@ -120,10 +120,10 @@
           <span id="files-selection-info" style="font-size: 11px; color: var(--text-muted);"></span>
         </div>
         <div class="files-header" id="files-header" style="display: none;">
-          <span class="fh-name fh-col">Name</span>
-          <span class="fh-modified fh-col">Date modified</span>
-          <span class="fh-type fh-col">Type</span>
-          <span class="fh-size fh-col">Size</span>
+          <span class="fh-name fh-col" onclick="filesSortBy('name')">Name <span class="fh-arrow" id="fh-arrow-name">&#x25B2;</span></span>
+          <span class="fh-modified fh-col" onclick="filesSortBy('modified')">Date modified <span class="fh-arrow hidden" id="fh-arrow-modified"></span></span>
+          <span class="fh-type fh-col" onclick="filesSortBy('type')">Type <span class="fh-arrow hidden" id="fh-arrow-type"></span></span>
+          <span class="fh-size fh-col" onclick="filesSortBy('size')">Size <span class="fh-arrow hidden" id="fh-arrow-size"></span></span>
         </div>
         <div class="files-scroll" id="files-content">
           <p class="empty-hint">Connect to browse files.</p>
@@ -228,13 +228,11 @@
 
         <div class="settings-card-block">
           <h3>Explorer Integration</h3>
-          <p class="settings-card-desc">Mount file shares as a local drive using telafs (WebDAV). Requires telafs to be installed.</p>
-          <div class="service-status-row">Status: <strong id="telafs-status">checking...</strong></div>
+          <p class="settings-card-desc">Mount file shares as a local drive via WebDAV (<code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela mount</code>).</p>
+          <div class="service-status-row">Status: <strong id="mount-status">not running</strong></div>
           <div class="settings-service-actions">
-            <button type="button" class="tb-btn" id="telafs-install-btn" onclick="installTelafsService()">Install Service</button>
-            <button type="button" class="tb-btn" id="telafs-start-btn" onclick="startTelafsService()" disabled>Start</button>
-            <button type="button" class="tb-btn" id="telafs-stop-btn" onclick="stopTelafsService()" disabled>Stop</button>
-            <button type="button" class="tb-btn tb-delete-btn" id="telafs-uninstall-btn" onclick="uninstallTelafsService()" disabled>Uninstall</button>
+            <button type="button" class="tb-btn" id="mount-start-btn" onclick="startMountProcess()">Start</button>
+            <button type="button" class="tb-btn" id="mount-stop-btn" onclick="stopMountProcess()" disabled>Stop</button>
           </div>
         </div>
       </div>
@@ -275,6 +273,9 @@
           <button class="log-panel-tab" onclick="switchLogTab(this, 'log-tela')">
             <span class="log-dot log-dot-idle" id="log-tela-dot"></span>tela
           </button>
+          <button class="log-panel-tab" onclick="switchLogTab(this, 'log-mount')">
+            <span class="log-dot log-dot-idle" id="log-mount-dot"></span>mount
+          </button>
           <button class="log-panel-tab" onclick="switchLogTab(this, 'log-commands')">
             <span class="log-dot log-dot-cmd"></span>Commands
           </button>
@@ -292,6 +293,7 @@
       </div>
       <pre class="log-panel-output" id="log-tv"></pre>
       <pre class="log-panel-output hidden" id="log-tela">Not connected.</pre>
+      <pre class="log-panel-output hidden" id="log-mount">Not running.</pre>
       <div class="log-panel-output hidden" id="log-commands">
         <div class="cmd-filter-bar">
           <input class="cmd-filter-input" placeholder="Filter..." oninput="filterCommands(this.value)" title="Filter commands">
@@ -403,13 +405,7 @@
       </div>
       <div class="modal-body">
         <div class="modal-body-padded">
-          <div class="settings-group">
-            <div class="settings-group-header">Versions</div>
-            <div class="settings-row"><div class="settings-label">TelaVisor current</div><div class="settings-value" id="update-gui-current"></div></div>
-            <div class="settings-row"><div class="settings-label">TelaVisor latest</div><div class="settings-value update-latest" id="update-gui-latest"></div></div>
-            <div class="settings-row"><div class="settings-label">tela CLI current</div><div class="settings-value" id="update-cli-current"></div></div>
-            <div class="settings-row"><div class="settings-label">tela CLI latest</div><div class="settings-value update-latest" id="update-cli-latest"></div></div>
-          </div>
+          <div id="update-table-container"></div>
           <p class="update-note" id="update-note"></p>
           <div class="modal-actions update-actions">
             <button type="button" class="btn-secondary" onclick="ignoreUpdateForever()">Skip This Version</button>

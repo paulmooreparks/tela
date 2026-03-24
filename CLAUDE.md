@@ -3,14 +3,13 @@
 ## Project Overview
 
 Tela is a FOSS encrypted remote-access fabric using WireGuard tunnels.
-Four binaries, one Go module (`github.com/paulmooreparks/tela`):
+Three binaries, one Go module (`github.com/paulmooreparks/tela`):
 
 | Binary | Path | Role |
 |--------|------|------|
-| `tela` | `cmd/tela/` | Client CLI (connects to machines via hub) |
+| `tela` | `cmd/tela/` | Client CLI (connects to machines via hub, mounts file shares) |
 | `telad` | `cmd/telad/` | Agent daemon (registers machines with hub, exposes local services) |
 | `telahubd` | `cmd/telahubd/` | Hub server (HTTP + WebSocket + UDP relay on a single port) |
-| `telafs` | `cmd/telafs/` | WebDAV server (mounts file shares as local drives) |
 
 Supporting packages:
 - `internal/service/` -- Cross-platform OS service management (Windows SCM, systemd, launchd)
@@ -36,7 +35,7 @@ go vet ./...            # Static analysis
 go test ./...           # Run tests (if any)
 ```
 
-All four binaries must compile cleanly after any change. Always run both
+All three binaries must compile cleanly after any change. Always run both
 `go build ./...` and `go vet ./...` before considering work complete.
 
 ## Guiding Principles

@@ -270,6 +270,10 @@ export function IsConnected() {
   return window['go']['main']['App']['IsConnected']();
 }
 
+export function IsMountRunning() {
+  return window['go']['main']['App']['IsMountRunning']();
+}
+
 export function IsPackageManaged() {
   return window['go']['main']['App']['IsPackageManaged']();
 }
@@ -388,6 +392,14 @@ export function ShouldAutoConnect() {
 
 export function ShowWindow() {
   return window['go']['main']['App']['ShowWindow']();
+}
+
+export function StartMount() {
+  return window['go']['main']['App']['StartMount']();
+}
+
+export function StopMount() {
+  return window['go']['main']['App']['StopMount']();
 }
 
 export function SwitchProfile(arg1) {

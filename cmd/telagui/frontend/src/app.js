@@ -424,6 +424,26 @@ if (window.runtime) {
     if (dot) dot.className = 'log-dot log-dot-live';
   });
 
+  window.runtime.EventsOn('mount:output', function (chunk) {
+    if (!chunk) return;
+    var el = document.getElementById('log-mount');
+    if (!el) return;
+    if (el.textContent === 'Not running.') el.textContent = '';
+    el.textContent += chunk;
+    if (!logPanelFrozen) el.scrollTop = el.scrollHeight;
+    var dot = document.getElementById('log-mount-dot');
+    if (dot) dot.className = 'log-dot log-dot-live';
+    refreshMountStatus();
+  });
+
+  window.runtime.EventsOn('mount:stopped', function () {
+    var dot = document.getElementById('log-mount-dot');
+    if (dot) dot.className = 'log-dot log-dot-idle';
+    var el = document.getElementById('log-mount');
+    if (el) el.textContent += '\n[mount stopped]\n';
+    refreshMountStatus();
+  });
+
   window.runtime.EventsOn('tela:attached', function () {
     tvLog('Attached to running tela');
     connAttached = true;
@@ -649,10 +669,31 @@ function toggleUpdateOverlay() {
   var el = document.getElementById('update-overlay');
   el.classList.toggle('hidden');
   if (!el.classList.contains('hidden') && updateInfo) {
-    document.getElementById('update-gui-current').textContent = updateInfo.gui || 'dev';
-    document.getElementById('update-cli-current').textContent = updateInfo.cli || 'not installed';
-    document.getElementById('update-gui-latest').textContent = updateInfo.version || '?';
-    document.getElementById('update-cli-latest').textContent = updateInfo.version || '?';
+    var container = document.getElementById('update-table-container');
+    goApp.GetBinStatus().then(function (bins) {
+      var latest = updateInfo.version || ((bins && bins.length > 0) ? bins[0].latest : '?');
+      var guiVer = updateInfo.gui || 'dev';
+      var guiUpToDate = guiVer === latest;
+
+      var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Installed</th><th>Available</th></tr></thead><tbody>';
+      // TelaVisor
+      html += '<tr><td>TelaVisor</td>'
+        + '<td class="tools-version">' + escHtml(guiVer) + '</td>'
+        + '<td class="tools-version ' + (guiUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(latest) + '</td></tr>';
+      // All managed binaries
+      if (bins) {
+        bins.forEach(function (b) {
+          var installedText = b.found ? (b.version || 'unknown') : 'not found';
+          var installedClass = b.found ? '' : ' tools-status-warn';
+          var availClass = b.found ? (b.upToDate ? 'tools-status-ok' : 'tools-status-warn') : 'tools-status-warn';
+          html += '<tr><td>' + escHtml(b.name) + '</td>'
+            + '<td class="tools-version' + installedClass + '">' + escHtml(installedText) + '</td>'
+            + '<td class="tools-version ' + availClass + '">' + escHtml(b.latest || '?') + '</td></tr>';
+        });
+      }
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    });
 
     var notes = [];
     if (updateInfo.guiBehind) notes.push('TelaVisor is out of date.');
@@ -1826,6 +1867,8 @@ var filesNavHistory = [];
 var filesSelectedIndices = new Set();
 var filesLastClickedIndex = -1;
 var filesCurrentEntries = [];
+var filesSortCol = 'name';        // current sort column: name, modified, type, size
+var filesSortAsc = true;          // sort direction
 var filesListGeneration = 0;      // guards against stale async responses
 var filesRefreshTimer = null;     // debounce timer for live events
 var filesMachineCapabilities = {}; // cached capabilities from hub status
@@ -2013,11 +2056,7 @@ function filesListDir(machine, path) {
 
     filesCurrentPath = path;
     filesCurrentEntries = (resp.entries || []).slice();
-    filesCurrentEntries.sort(function (a, b) {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-
+    filesSortEntries();
     filesRenderEntries();
     filesUpdateStatusBar();
     filesUpdateActionButtons();
@@ -2025,6 +2064,57 @@ function filesListDir(machine, path) {
     if (gen !== filesListGeneration) return;
     listEl.innerHTML = '<div class="files-empty">' + escHtml(String(err)) + '</div>';
   });
+}
+
+function filesSortEntries() {
+  filesCurrentEntries.sort(function (a, b) {
+    // Directories always group together: dirs first when ascending, last when descending
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    var cmp = 0;
+    switch (filesSortCol) {
+      case 'name':
+        cmp = a.name.localeCompare(b.name);
+        break;
+      case 'modified':
+        cmp = (a.modTime || '').localeCompare(b.modTime || '');
+        break;
+      case 'type':
+        var extA = a.isDir ? '' : (a.name.indexOf('.') !== -1 ? a.name.split('.').pop().toLowerCase() : '');
+        var extB = b.isDir ? '' : (b.name.indexOf('.') !== -1 ? b.name.split('.').pop().toLowerCase() : '');
+        cmp = extA.localeCompare(extB);
+        if (cmp === 0) cmp = a.name.localeCompare(b.name);
+        break;
+      case 'size':
+        cmp = (a.size || 0) - (b.size || 0);
+        if (cmp === 0) cmp = a.name.localeCompare(b.name);
+        break;
+    }
+    return filesSortAsc ? cmp : -cmp;
+  });
+}
+
+function filesSortBy(col) {
+  if (filesSortCol === col) {
+    filesSortAsc = !filesSortAsc;
+  } else {
+    filesSortCol = col;
+    // Default descending for date and size (newest/largest first)
+    filesSortAsc = (col !== 'modified' && col !== 'size');
+  }
+  // Update arrow indicators
+  ['name', 'modified', 'type', 'size'].forEach(function (c) {
+    var arrow = document.getElementById('fh-arrow-' + c);
+    if (!arrow) return;
+    if (c === col) {
+      arrow.classList.remove('hidden');
+      arrow.innerHTML = filesSortAsc ? '&#x25B2;' : '&#x25BC;';
+    } else {
+      arrow.classList.add('hidden');
+    }
+  });
+  filesClearSelection();
+  filesSortEntries();
+  filesRenderEntries();
 }
 
 function filesRenderEntries() {
@@ -3863,74 +3953,39 @@ function stopService() {
   });
 }
 
-// ── telafs service management ──────────────────────────────────────
+// ── Mount (WebDAV) process management ─────────────────────────────
 
-function refreshTelafsServiceStatus() {
-  goApp.GetTelafsServiceStatus().then(function (raw) {
-    var el = document.getElementById('telafs-status');
+function refreshMountStatus() {
+  goApp.IsMountRunning().then(function (running) {
+    var el = document.getElementById('mount-status');
     if (!el) return;
-    var s = (raw || '').toLowerCase();
-    var installed = s.indexOf('installed: true') !== -1;
-    var running = s.indexOf('running: true') !== -1;
-    var notInstalled = s.indexOf('not installed') !== -1 || s === '';
-
-    if (notInstalled) {
-      el.innerHTML = '<span style="color:var(--text-muted);">Not installed</span>';
-    } else if (running) {
+    if (running) {
       el.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
-    } else if (installed) {
-      el.innerHTML = '<span class="bin-dot bin-dot-missing"></span> Installed (stopped)';
     } else {
-      el.innerHTML = '<span style="color:var(--text-muted);">' + escHtml(raw) + '</span>';
+      el.innerHTML = '<span style="color:var(--text-muted);">Not running</span>';
     }
-
-    var installBtn = document.getElementById('telafs-install-btn');
-    var startBtn = document.getElementById('telafs-start-btn');
-    var stopBtn = document.getElementById('telafs-stop-btn');
-    var uninstallBtn = document.getElementById('telafs-uninstall-btn');
-    if (installBtn) installBtn.disabled = installed || running;
-    if (startBtn) startBtn.disabled = !installed || running;
+    var startBtn = document.getElementById('mount-start-btn');
+    var stopBtn = document.getElementById('mount-stop-btn');
+    if (startBtn) startBtn.disabled = running;
     if (stopBtn) stopBtn.disabled = !running;
-    if (uninstallBtn) uninstallBtn.disabled = !installed && !running;
   });
 }
 
-function installTelafsService() {
-  goApp.InstallTelafsService().then(function (msg) {
-    tvLog('telafs service installed: ' + msg);
-    refreshTelafsServiceStatus();
+function startMountProcess() {
+  goApp.StartMount().then(function (msg) {
+    tvLog('Mount started: ' + msg);
+    refreshMountStatus();
   }).catch(function (err) {
-    tvLog('Install telafs service failed: ' + err);
+    tvLog('Start mount failed: ' + err);
   });
 }
 
-function uninstallTelafsService() {
-  showConfirmDialog('Uninstall telafs', 'Remove the telafs WebDAV system service?', 'Uninstall').then(function (yes) {
-    if (!yes) return;
-    goApp.UninstallTelafsService().then(function (msg) {
-      tvLog('telafs service uninstalled: ' + msg);
-      refreshTelafsServiceStatus();
-    }).catch(function (err) {
-      tvLog('Uninstall telafs service failed: ' + err);
-    });
-  });
-}
-
-function startTelafsService() {
-  goApp.TelafsServiceStart().then(function (msg) {
-    tvLog('telafs service started: ' + msg);
-    refreshTelafsServiceStatus();
+function stopMountProcess() {
+  goApp.StopMount().then(function (msg) {
+    tvLog('Mount stopped');
+    refreshMountStatus();
   }).catch(function (err) {
-    tvLog('Start telafs service failed: ' + err);
-  });
-}
-
-function stopTelafsService() {
-  goApp.TelafsServiceStop().then(function (msg) {
-    tvLog('telafs service stopped: ' + msg);
-    refreshTelafsServiceStatus();
-  }).catch(function (err) {
-    tvLog('Stop telafs service failed: ' + err);
+    tvLog('Stop mount failed: ' + err);
   });
 }
 
@@ -3968,7 +4023,7 @@ function refreshClientSettings() {
   // Installed tools
   refreshClientToolVersions();
   refreshServiceStatus();
-  refreshTelafsServiceStatus();
+  refreshMountStatus();
 }
 
 function refreshClientToolVersions() {
@@ -3976,21 +4031,25 @@ function refreshClientToolVersions() {
     var el = document.getElementById('cs-bin-status');
     if (!el || !bins) return;
     goApp.GetVersion().then(function (ver) {
-      var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Version</th><th>Status</th><th></th></tr></thead><tbody>';
+      var latest = (bins.length > 0 && bins[0].latest) ? bins[0].latest : '';
+      var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Installed</th><th>Available</th><th></th></tr></thead><tbody>';
       // TelaVisor itself
+      var tvUpToDate = !latest || ver === latest;
       html += '<tr><td><span class="bin-dot bin-dot-ok"></span>TelaVisor</td>'
         + '<td class="tools-version">' + escHtml(ver || 'dev') + '</td>'
-        + '<td class="tools-status-ok">installed</td><td></td></tr>';
+        + '<td class="tools-version ' + (tvUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(latest || ver || 'dev') + '</td>'
+        + '<td></td></tr>';
       bins.forEach(function (b) {
         var dotClass = b.found ? 'bin-dot-ok' : 'bin-dot-missing';
-        var status = b.found ? (b.upToDate ? 'up to date' : 'update available') : 'missing';
-        var statusClass = b.found ? (b.upToDate ? 'tools-status-ok' : 'tools-status-warn') : 'tools-status-warn';
+        var installedText = b.found ? (b.version || 'unknown') : 'not found';
+        var installedClass = b.found ? '' : ' tools-status-warn';
+        var availClass = b.found ? (b.upToDate ? 'tools-status-ok' : 'tools-status-warn') : 'tools-status-warn';
         var action = b.found
           ? (b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>')
           : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
         html += '<tr><td><span class="bin-dot ' + dotClass + '"></span>' + escHtml(b.name) + '</td>'
-          + '<td class="tools-version">' + escHtml(b.version || 'not found') + '</td>'
-          + '<td class="' + statusClass + '">' + status + '</td>'
+          + '<td class="tools-version' + installedClass + '">' + escHtml(installedText) + '</td>'
+          + '<td class="tools-version ' + availClass + '">' + escHtml(b.latest || '?') + '</td>'
           + '<td>' + action + '</td></tr>';
       });
       html += '</tbody></table>';

@@ -136,6 +136,8 @@ export function IsAttached():Promise<boolean>;
 
 export function IsConnected():Promise<boolean>;
 
+export function IsMountRunning():Promise<boolean>;
+
 export function IsPackageManaged():Promise<boolean>;
 
 export function IsQuitting():Promise<boolean>;
@@ -195,6 +197,10 @@ export function SetVerbose(arg1:boolean):Promise<void>;
 export function ShouldAutoConnect():Promise<boolean>;
 
 export function ShowWindow():Promise<void>;
+
+export function StartMount():Promise<string>;
+
+export function StopMount():Promise<void>;
 
 export function SwitchProfile(arg1:string):Promise<void>;
 

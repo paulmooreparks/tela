@@ -156,6 +156,8 @@ func main() {
 		cmdPair(os.Args[2:])
 	case "admin":
 		cmdAdmin(os.Args[2:])
+	case "mount":
+		cmdMount(os.Args[2:])
 	case "service":
 		handleServiceCommand()
 	case "version", "--version":
@@ -181,6 +183,7 @@ Commands:
   services  List services on a specific machine
   status    Show hub status summary
   files     File operations on connected machines (ls, get, put, rm, mkdir, rename, mv, info)
+  mount     Start a WebDAV server for file shares (mount as a local drive)
   profile   Manage connection profiles (list, show, create, delete)
   remote    Manage hub directory remotes (add, remove, list)
   login     Store hub credentials in the credential store

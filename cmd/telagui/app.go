@@ -49,6 +49,9 @@ type App struct {
 	connected   bool
 	attached    bool // true when attached to external tela (not launched by TV)
 
+	// mount child process (tela mount)
+	mountProcess *os.Process
+
 	// Self-update state
 	updatePending bool
 	updateVersion string
@@ -2451,7 +2454,7 @@ func (a *App) GetBinStatus() []BinaryInfo {
 	latest, _ := a.latestRelease()
 
 	var results []BinaryInfo
-	for _, name := range []string{"tela", "telad", "telahubd", "telafs"} {
+	for _, name := range []string{"tela", "telad", "telahubd"} {
 		bin := name
 		if runtime.GOOS == "windows" {
 			bin += ".exe"
@@ -3172,85 +3175,84 @@ func (a *App) ServiceStop() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// ── telafs service management ─────────────────────────────────────
+// ── Mount (WebDAV) child process management ──────────────────────
 
-// InstallTelafsService installs telafs as an OS service.
-func (a *App) InstallTelafsService() (string, error) {
-	telafsPath := a.findTool("telafs")
-	if telafsPath == "" {
-		return "", fmt.Errorf("telafs binary not found")
+// StartMount launches "tela mount" as a child process and streams its output.
+func (a *App) StartMount() (string, error) {
+	a.mu.Lock()
+	if a.mountProcess != nil {
+		a.mu.Unlock()
+		return "", fmt.Errorf("mount is already running")
 	}
-	cmd := exec.Command(telafsPath, "service", "install")
+	a.mu.Unlock()
+
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+
+	cmd := exec.Command(telaPath, "mount")
 	hideConsoleWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s: %s", err, string(out))
+
+	outPipe, _ := cmd.StdoutPipe()
+	cmd.Stderr = cmd.Stdout
+
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("failed to start mount: %w", err)
 	}
-	a.logCommand("Install telafs service", telafsPath+" service install")
-	return strings.TrimSpace(string(out)), nil
+
+	pid := cmd.Process.Pid
+
+	a.mu.Lock()
+	a.mountProcess = cmd.Process
+	a.mu.Unlock()
+
+	a.logCommand("Start mount", telaPath+" mount")
+
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := outPipe.Read(buf)
+			if n > 0 {
+				chunk := string(buf[:n])
+				if a.ctx != nil {
+					wailsRuntime.EventsEmit(a.ctx, "mount:output", chunk)
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		cmd.Wait()
+		a.mu.Lock()
+		a.mountProcess = nil
+		a.mu.Unlock()
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "mount:stopped", "")
+		}
+	}()
+
+	return fmt.Sprintf("mount started (pid %d)", pid), nil
 }
 
-// UninstallTelafsService removes the telafs OS service.
-func (a *App) UninstallTelafsService() (string, error) {
-	telafsPath := a.findTool("telafs")
-	if telafsPath == "" {
-		return "", fmt.Errorf("telafs binary not found")
+// StopMount stops the mount child process.
+func (a *App) StopMount() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mountProcess == nil {
+		return nil
 	}
-	cmd := exec.Command(telafsPath, "service", "uninstall")
-	hideConsoleWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s: %s", err, string(out))
-	}
-	a.logCommand("Uninstall telafs service", telafsPath+" service uninstall")
-	return strings.TrimSpace(string(out)), nil
+	killProcessTree(a.mountProcess.Pid)
+	a.mountProcess.Kill()
+	a.mountProcess = nil
+	return nil
 }
 
-// GetTelafsServiceStatus returns the telafs service status.
-func (a *App) GetTelafsServiceStatus() string {
-	telafsPath := a.findTool("telafs")
-	if telafsPath == "" {
-		return "not installed"
-	}
-	cmd := exec.Command(telafsPath, "service", "status")
-	hideConsoleWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "not installed"
-	}
-	return strings.TrimSpace(string(out))
-}
-
-// TelafsServiceStart starts the telafs OS service.
-func (a *App) TelafsServiceStart() (string, error) {
-	telafsPath := a.findTool("telafs")
-	if telafsPath == "" {
-		return "", fmt.Errorf("telafs binary not found")
-	}
-	cmd := exec.Command(telafsPath, "service", "start")
-	hideConsoleWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s: %s", err, string(out))
-	}
-	a.logCommand("Start telafs service", telafsPath+" service start")
-	return strings.TrimSpace(string(out)), nil
-}
-
-// TelafsServiceStop stops the telafs OS service.
-func (a *App) TelafsServiceStop() (string, error) {
-	telafsPath := a.findTool("telafs")
-	if telafsPath == "" {
-		return "", fmt.Errorf("telafs binary not found")
-	}
-	cmd := exec.Command(telafsPath, "service", "stop")
-	hideConsoleWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s: %s", err, string(out))
-	}
-	a.logCommand("Stop telafs service", telafsPath+" service stop")
-	return strings.TrimSpace(string(out)), nil
+// IsMountRunning returns true if mount was launched by TV and is still running.
+func (a *App) IsMountRunning() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.mountProcess != nil
 }
 
 // GetProfileMTU returns the MTU override for the current profile (0 = use default).
