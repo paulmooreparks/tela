@@ -1467,6 +1467,14 @@ body {
 .fh-type { width: 110px; cursor: pointer; padding: 0 4px; }
 .fh-size { width: 80px; text-align: right; cursor: pointer; padding: 0 8px 0 4px; }
 .fh-col:hover { color: var(--text); }
+.mount-config-form { font-size: 13px; }
+.mount-config-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mount-config-label { width: 90px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; }
+.mount-config-input { flex: 1; padding: 4px 8px; font-size: 12px; font-family: var(--mono); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
+.mount-config-input:focus { border-color: var(--accent); outline: none; }
+.mount-config-port { max-width: 80px; }
+.mount-config-check { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; width: auto; }
+.mount-config-actions { display: flex; gap: 6px; margin-top: 4px; }
 .fh-arrow { font-size: 8px; opacity: 0.6; }
 .fh-col:hover .fh-arrow.hidden { display: inline; opacity: 0.3; }
 .files-scroll { flex: 1; overflow-y: auto; }

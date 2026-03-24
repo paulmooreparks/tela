@@ -359,37 +359,6 @@
     </div>
   </div>
 
-  <!-- Mount Config Dialog -->
-  <div class="modal-overlay hidden" id="mount-config-dialog" onclick="if(event.target===this)closeMountConfigDialog()">
-    <div class="modal-dialog modal-settings">
-      <div class="modal-header">
-        <h3>Mount Configuration</h3>
-        <button class="modal-close" onclick="closeMountConfigDialog()">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-body-padded">
-          <p class="mtu-explanation">Mount file shares as a local drive via WebDAV. On Windows, use a drive letter like <code>T:</code> to map a new drive, or a path like <code>C:\tela</code> to mount to a directory. On macOS and Linux, use a directory path like <code>~/tela</code>.</p>
-          <p class="mtu-explanation">Leave the mount point empty to start the WebDAV server without mounting. You can then mount manually using your OS tools.</p>
-          <div class="mtu-form">
-            <div class="mtu-form-row">
-              <label for="mount-config-point">Mount point</label>
-              <input type="text" id="mount-config-point" placeholder="T: or ~/tela" title="Drive letter or directory path" class="settings-full-control">
-            </div>
-            <div class="mtu-form-row">
-              <label for="mount-config-port">WebDAV port</label>
-              <input type="number" id="mount-config-port" min="1024" max="65535" step="1" value="18080" title="WebDAV port">
-            </div>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="clearMountConfig()">Clear</button>
-            <button type="button" class="btn-secondary" onclick="closeMountConfigDialog()">Cancel</button>
-            <button type="button" class="btn-primary" onclick="saveMountConfigDialog()">Save</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Generic Dialog (reusable confirm/prompt) -->
   <div class="modal-overlay hidden" id="generic-dialog-overlay">
     <div class="modal-dialog modal-confirm">

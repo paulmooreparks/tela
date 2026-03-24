@@ -848,45 +848,31 @@ function saveMTUDialog() {
   });
 }
 
-var mountConfigMachine = ''; // machine being edited in mount config dialog
-
-function openMountConfigDialog(machine) {
-  mountConfigMachine = machine;
-  goApp.GetMountConfig(machine).then(function (mc) {
-    var pointInput = document.getElementById('mount-config-point');
-    var portInput = document.getElementById('mount-config-port');
-    if (pointInput) pointInput.value = mc.mount || '';
-    if (portInput) portInput.value = mc.port || 18080;
-    document.getElementById('mount-config-dialog').classList.remove('hidden');
-  });
-}
-
-function closeMountConfigDialog() {
-  document.getElementById('mount-config-dialog').classList.add('hidden');
-}
-
-function saveMountConfigDialog() {
-  var point = (document.getElementById('mount-config-point').value || '').trim();
-  var port = parseInt(document.getElementById('mount-config-port').value) || 18080;
-  goApp.SetMountConfig(mountConfigMachine, {mount: point, port: port}).then(function () {
-    closeMountConfigDialog();
+function saveMountCard(machine) {
+  var point = (document.getElementById('mc-point-' + machine).value || '').trim();
+  var port = parseInt(document.getElementById('mc-port-' + machine).value) || 18080;
+  var auto = document.getElementById('mc-auto-' + machine).checked;
+  // If auto-mount is unchecked but a mount point is set, still save the point
+  // (user can mount manually via the topbar button)
+  var mountValue = auto ? point : '';
+  goApp.SetMountConfig(machine, {mount: point, port: port}).then(function () {
     updateMountButtonState();
-    // Re-render the machine detail if still selected
-    if (selectedMachineId === mountConfigMachine) {
-      refreshAll();
-    }
+    markProfileDirty();
   }).catch(function (err) {
-    tvLog('Set mount config failed: ' + err);
+    tvLog('Save mount config failed: ' + err);
   });
 }
 
-function clearMountConfig() {
-  goApp.SetMountConfig(mountConfigMachine, {mount: '', port: 0}).then(function () {
-    closeMountConfigDialog();
+function clearMountCard(machine) {
+  goApp.SetMountConfig(machine, {mount: '', port: 0}).then(function () {
+    var pointEl = document.getElementById('mc-point-' + machine);
+    var portEl = document.getElementById('mc-port-' + machine);
+    var autoEl = document.getElementById('mc-auto-' + machine);
+    if (pointEl) pointEl.value = '';
+    if (portEl) portEl.value = 18080;
+    if (autoEl) autoEl.checked = false;
     updateMountButtonState();
-    if (selectedMachineId === mountConfigMachine) {
-      refreshAll();
-    }
+    markProfileDirty();
   }).catch(function (err) {
     tvLog('Clear mount config failed: ' + err);
   });
@@ -1328,36 +1314,37 @@ function renderMachineDetail(hub, machine) {
     var fs = caps.fileShare || caps.FileShare;
     if (fs && fs.enabled) {
       goApp.GetMountConfig(machineId).then(function (mc) {
+        var mid = escAttr(machineId);
+        var placeholder = navigator.userAgent.indexOf('Win') !== -1 ? 'T:' : '~/tela';
         var mountHtml = '<div class="settings-group" style="margin-top:16px;">'
-          + '<div class="settings-group-header">Mount</div>';
-
-        // Show file share capabilities
-        var capTags = '<div class="cap-tags" style="margin:8px 0;">';
-        capTags += fs.writable
+          + '<div class="settings-group-header">Mount</div>'
+          + '<div class="cap-tags" style="margin:6px 0 10px;">';
+        mountHtml += fs.writable
           ? '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>'
           : '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> Read only</span>';
         if (fs.writable && fs.allowDelete) {
-          capTags += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Delete</span>';
+          mountHtml += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Delete</span>';
         } else if (fs.writable) {
-          capTags += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> No delete</span>';
+          mountHtml += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> No delete</span>';
         }
-        capTags += '</div>';
-        mountHtml += capTags;
-
-        // Show mount config or prompt
-        if (mc.mount) {
-          mountHtml += '<div class="cap-tags" style="margin:4px 0 8px;">'
-            + '<span class="cap-tag cap-tag-info">Mount: ' + escHtml(mc.mount) + '</span>';
-          if (mc.port && mc.port !== 18080) {
-            mountHtml += '<span class="cap-tag cap-tag-info">Port: ' + mc.port + '</span>';
-          }
-          mountHtml += '</div>';
-        }
-
-        mountHtml += '<button type="button" class="tb-btn" style="margin-top:4px;" '
-          + 'onclick="openMountConfigDialog(\'' + escAttr(machineId) + '\')">'
-          + (mc.mount ? 'Change...' : 'Configure...') + '</button>'
-          + '</div>';
+        mountHtml += '</div>'
+          + '<div class="mount-config-form">'
+          + '<div class="mount-config-row">'
+          + '<label class="mount-config-label" for="mc-point-' + mid + '">Mount point</label>'
+          + '<input type="text" id="mc-point-' + mid + '" class="mount-config-input" placeholder="' + placeholder + '" value="' + escAttr(mc.mount || '') + '" title="Drive letter (T:) or directory path">'
+          + '</div>'
+          + '<div class="mount-config-row">'
+          + '<label class="mount-config-label" for="mc-port-' + mid + '">Port</label>'
+          + '<input type="number" id="mc-port-' + mid + '" class="mount-config-input mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '" title="WebDAV listen port">'
+          + '</div>'
+          + '<div class="mount-config-row">'
+          + '<label class="mount-config-label mount-config-check"><input type="checkbox" id="mc-auto-' + mid + '"' + (mc.mount ? ' checked' : '') + '> Auto-mount on connect</label>'
+          + '</div>'
+          + '<div class="mount-config-actions">'
+          + '<button type="button" class="tb-btn" onclick="saveMountCard(\'' + mid + '\')">Save</button>'
+          + '<button type="button" class="tb-btn" onclick="clearMountCard(\'' + mid + '\')">Clear</button>'
+          + '</div>'
+          + '</div></div>';
         pane.innerHTML += mountHtml;
       });
     }
