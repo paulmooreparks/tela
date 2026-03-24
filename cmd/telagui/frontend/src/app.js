@@ -1323,25 +1323,29 @@ function renderMachineDetail(hub, machine) {
 
     pane.innerHTML = html;
 
-    // Append mount config card (async, after initial render)
-    goApp.GetMountConfig(machineId).then(function (mc) {
-      var mountHtml = '<div class="settings-group" style="margin-top:16px;">'
-        + '<div class="settings-group-header">Mount</div>';
-      if (mc.mount) {
-        mountHtml += '<div class="cap-tags" style="margin:8px 0;">'
-          + '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> ' + escHtml(mc.mount) + '</span>';
-        if (mc.port && mc.port !== 18080) {
-          mountHtml += '<span class="cap-tag cap-tag-info">port ' + mc.port + '</span>';
+    // Append mount config card if machine has file sharing
+    var caps = machine.capabilities || {};
+    var fs = caps.fileShare || caps.FileShare;
+    if (fs && fs.enabled) {
+      goApp.GetMountConfig(machineId).then(function (mc) {
+        var mountHtml = '<div class="settings-group" style="margin-top:16px;">'
+          + '<div class="settings-group-header">Mount</div>';
+        if (mc.mount) {
+          mountHtml += '<div class="cap-tags" style="margin:8px 0;">'
+            + '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> ' + escHtml(mc.mount) + '</span>';
+          if (mc.port && mc.port !== 18080) {
+            mountHtml += '<span class="cap-tag cap-tag-info">port ' + mc.port + '</span>';
+          }
+          mountHtml += '</div>';
+        } else {
+          mountHtml += '<p class="empty-hint" style="margin:8px 0;font-size:12px;">File sharing available. Configure a mount point to access files in Explorer.</p>';
         }
-        mountHtml += '</div>';
-      } else {
-        mountHtml += '<p class="empty-hint" style="margin:8px 0;font-size:12px;">Not configured</p>';
-      }
-      mountHtml += '<button type="button" class="tb-btn" style="margin-top:4px;" '
-        + 'onclick="openMountConfigDialog(\'' + escAttr(machineId) + '\')">Configure...</button>'
-        + '</div>';
-      pane.innerHTML += mountHtml;
-    });
+        mountHtml += '<button type="button" class="tb-btn" style="margin-top:4px;" '
+          + 'onclick="openMountConfigDialog(\'' + escAttr(machineId) + '\')">Configure...</button>'
+          + '</div>';
+        pane.innerHTML += mountHtml;
+      });
+    }
   });
 }
 

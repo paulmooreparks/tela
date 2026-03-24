@@ -90,13 +90,14 @@ type HubStatus struct {
 
 // MachineStatus is the status of a machine on a hub.
 type MachineStatus struct {
-	ID             string        `json:"id"`
-	Hostname       string        `json:"hostname"`
-	OS             string        `json:"os"`
-	AgentConnected bool          `json:"agentConnected"`
-	SessionCount   int           `json:"sessionCount"`
-	LastSeen       string        `json:"lastSeen"`
-	Services       []ServiceInfo `json:"services"`
+	ID             string                 `json:"id"`
+	Hostname       string                 `json:"hostname"`
+	OS             string                 `json:"os"`
+	AgentConnected bool                   `json:"agentConnected"`
+	SessionCount   int                    `json:"sessionCount"`
+	LastSeen       string                 `json:"lastSeen"`
+	Services       []ServiceInfo          `json:"services"`
+	Capabilities   map[string]interface{} `json:"capabilities,omitempty"`
 }
 
 // ServiceInfo describes a service on a machine.
@@ -881,17 +882,18 @@ func (a *App) GetHubStatus(hubURL string) HubStatus {
 	var raw struct {
 		HubName  string `json:"hubName"`
 		Machines []struct {
-			ID             string `json:"id"`
-			Hostname       string `json:"hostname"`
-			OS             string `json:"os"`
-			AgentConnected bool   `json:"agentConnected"`
-			SessionCount   int    `json:"sessionCount"`
-			LastSeen       string `json:"lastSeen"`
+			ID             string                 `json:"id"`
+			Hostname       string                 `json:"hostname"`
+			OS             string                 `json:"os"`
+			AgentConnected bool                   `json:"agentConnected"`
+			SessionCount   int                    `json:"sessionCount"`
+			LastSeen       string                 `json:"lastSeen"`
 			Services       []struct {
 				Name  string `json:"name"`
 				Port  int    `json:"port"`
 				Proto string `json:"proto"`
 			} `json:"services"`
+			Capabilities map[string]interface{} `json:"capabilities"`
 		} `json:"machines"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
@@ -910,6 +912,7 @@ func (a *App) GetHubStatus(hubURL string) HubStatus {
 			AgentConnected: m.AgentConnected,
 			SessionCount:   m.SessionCount,
 			LastSeen:       m.LastSeen,
+			Capabilities:   m.Capabilities,
 		}
 		for _, s := range m.Services {
 			ms.Services = append(ms.Services, ServiceInfo{
