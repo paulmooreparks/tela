@@ -274,9 +274,6 @@
           <button class="log-panel-tab" onclick="switchLogTab(this, 'log-tela')">
             <span class="log-dot log-dot-idle" id="log-tela-dot"></span>tela
           </button>
-          <button class="log-panel-tab" onclick="switchLogTab(this, 'log-mount')">
-            <span class="log-dot log-dot-idle" id="log-mount-dot"></span>mount
-          </button>
           <button class="log-panel-tab" onclick="switchLogTab(this, 'log-commands')">
             <span class="log-dot log-dot-cmd"></span>Commands
           </button>
@@ -294,7 +291,6 @@
       </div>
       <pre class="log-panel-output" id="log-tv"></pre>
       <pre class="log-panel-output hidden" id="log-tela">Not connected.</pre>
-      <pre class="log-panel-output hidden" id="log-mount">Not running.</pre>
       <div class="log-panel-output hidden" id="log-commands">
         <div class="cmd-filter-bar">
           <input class="cmd-filter-input" placeholder="Filter..." oninput="filterCommands(this.value)" title="Filter commands">

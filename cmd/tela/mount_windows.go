@@ -1,0 +1,100 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+var (
+	mpr                    = windows.NewLazySystemDLL("mpr.dll")
+	procWNetAddConnection2 = mpr.NewProc("WNetAddConnection2W")
+	procWNetCancelConn2    = mpr.NewProc("WNetCancelConnection2W")
+)
+
+const (
+	resourceTypeDisk = 0x1
+	resourceConnected = 0x1
+)
+
+// NETRESOURCE for WNetAddConnection2W
+type netResource struct {
+	Scope       uint32
+	Type        uint32
+	DisplayType uint32
+	Usage       uint32
+	LocalName   *uint16
+	RemoteName  *uint16
+	Comment     *uint16
+	Provider    *uint16
+}
+
+func validateMountPoint(mountArg string) error {
+	vol := filepath.VolumeName(mountArg)
+	if vol == "" || vol != mountArg {
+		return fmt.Errorf("on Windows, mount point must be a drive letter (e.g., T:), not a directory path")
+	}
+	if _, err := os.Stat(mountArg + `\`); err == nil {
+		return fmt.Errorf("drive %s is already in use", mountArg)
+	}
+	return nil
+}
+
+func platformMount(mountArg, addr string) error {
+	localName, err := windows.UTF16PtrFromString(strings.ToUpper(mountArg))
+	if err != nil {
+		return fmt.Errorf("invalid drive letter: %w", err)
+	}
+
+	remoteName, err := windows.UTF16PtrFromString(`\\localhost@` + strings.Split(addr, ":")[1] + `\DavWWWRoot`)
+	if err != nil {
+		return fmt.Errorf("invalid remote path: %w", err)
+	}
+
+	nr := netResource{
+		Type:       resourceTypeDisk,
+		LocalName:  localName,
+		RemoteName: remoteName,
+	}
+
+	log.Printf("mapping drive %s via WNetAddConnection2", mountArg)
+
+	ret, _, _ := procWNetAddConnection2.Call(
+		uintptr(unsafe.Pointer(&nr)),
+		0, // no password
+		0, // no username
+		0, // no flags
+	)
+
+	if ret != 0 {
+		return fmt.Errorf("WNetAddConnection2 failed for %s: Windows error %d (ensure the WebClient service is running: sc start WebClient)", mountArg, ret)
+	}
+
+	log.Printf("drive %s mapped", mountArg)
+	return nil
+}
+
+func platformUnmount(mountArg string) {
+	name, err := windows.UTF16PtrFromString(strings.ToUpper(mountArg))
+	if err != nil {
+		log.Printf("unmount: invalid drive letter: %v", err)
+		return
+	}
+
+	log.Printf("unmapping drive %s", mountArg)
+
+	ret, _, _ := procWNetCancelConn2.Call(
+		uintptr(unsafe.Pointer(name)),
+		0,              // no flags
+		1,              // force disconnect
+	)
+
+	if ret != 0 {
+		log.Printf("WNetCancelConnection2 failed: Windows error %d", ret)
+	}
+}

@@ -424,26 +424,6 @@ if (window.runtime) {
     if (dot) dot.className = 'log-dot log-dot-live';
   });
 
-  window.runtime.EventsOn('mount:output', function (chunk) {
-    if (!chunk) return;
-    var el = document.getElementById('log-mount');
-    if (!el) return;
-    if (el.textContent === 'Not running.') el.textContent = '';
-    el.textContent += chunk;
-    if (!logPanelFrozen) el.scrollTop = el.scrollHeight;
-    var dot = document.getElementById('log-mount-dot');
-    if (dot) dot.className = 'log-dot log-dot-live';
-    refreshMountStatus();
-  });
-
-  window.runtime.EventsOn('mount:stopped', function () {
-    var dot = document.getElementById('log-mount-dot');
-    if (dot) dot.className = 'log-dot log-dot-idle';
-    var el = document.getElementById('log-mount');
-    if (el) el.textContent += '\n[mount stopped]\n';
-    refreshMountStatus();
-  });
-
   window.runtime.EventsOn('tela:attached', function () {
     tvLog('Attached to running tela');
     connAttached = true;
@@ -848,34 +828,43 @@ function saveMTUDialog() {
   });
 }
 
-function saveMountCard(machine) {
-  var point = (document.getElementById('mc-point-' + machine).value || '').trim();
-  var port = parseInt(document.getElementById('mc-port-' + machine).value) || 18080;
-  var auto = document.getElementById('mc-auto-' + machine).checked;
-  // If auto-mount is unchecked but a mount point is set, still save the point
-  // (user can mount manually via the topbar button)
-  var mountValue = auto ? point : '';
-  goApp.SetMountConfig(machine, {mount: point, port: port}).then(function () {
-    updateMountButtonState();
-    markProfileDirty();
-  }).catch(function (err) {
-    tvLog('Save mount config failed: ' + err);
+function onMountEnableToggle(machine, checked) {
+  var fields = ['mc-point-', 'mc-port-', 'mc-auto-'];
+  fields.forEach(function (prefix) {
+    var el = document.getElementById(prefix + machine);
+    if (el) el.disabled = !checked;
   });
+  if (!checked) {
+    clearFieldError('mc-point-' + machine);
+    goApp.SetMountConfig(machine, {mount: '', port: 0}).then(function () {
+      updateMountButtonState();
+    });
+  } else {
+    // Validate immediately so the user sees the required field
+    validateMountPoint(machine);
+  }
+  markProfileDirty();
 }
 
-function clearMountCard(machine) {
-  goApp.SetMountConfig(machine, {mount: '', port: 0}).then(function () {
-    var pointEl = document.getElementById('mc-point-' + machine);
-    var portEl = document.getElementById('mc-port-' + machine);
-    var autoEl = document.getElementById('mc-auto-' + machine);
-    if (pointEl) pointEl.value = '';
-    if (portEl) portEl.value = 18080;
-    if (autoEl) autoEl.checked = false;
+function validateMountPoint(machine) {
+  var enabledEl = document.getElementById('mc-enabled-' + machine);
+  var pointId = 'mc-point-' + machine;
+  var point = (document.getElementById(pointId).value || '').trim();
+  if (enabledEl && enabledEl.checked && !point) {
+    setFieldError(pointId, 'Mount point is required when mount is enabled');
+  } else {
+    clearFieldError(pointId);
+  }
+}
+
+function onMountFieldChange(machine) {
+  var point = (document.getElementById('mc-point-' + machine).value || '').trim();
+  var port = parseInt(document.getElementById('mc-port-' + machine).value) || 18080;
+  clearFieldError('mc-point-' + machine);
+  goApp.SetMountConfig(machine, {mount: point, port: port}).then(function () {
     updateMountButtonState();
-    markProfileDirty();
-  }).catch(function (err) {
-    tvLog('Clear mount config failed: ' + err);
   });
+  markProfileDirty();
 }
 
 // Update mount button enabled state based on connection + any mount config.
@@ -1246,7 +1235,7 @@ function renderMachineDetail(hub, machine) {
     var hubName = hub.name || hubNameFromURL(hub.url);
 
     var html = '<h2 style="font-size:18px;font-weight:700;margin-bottom:4px;">' + escHtml(machineId) + '</h2>'
-      + '<p class="section-desc">' + (machine.agentConnected ? 'Online' : 'Offline')
+      + '<p class="section-desc" style="margin-bottom:16px;">' + (machine.agentConnected ? 'Online' : 'Offline')
       + ' on ' + escHtml(hubName) + '</p>';
 
     if (machine.unreachable) {
@@ -1315,10 +1304,13 @@ function renderMachineDetail(hub, machine) {
     if (fs && fs.enabled) {
       goApp.GetMountConfig(machineId).then(function (mc) {
         var mid = escAttr(machineId);
-        var placeholder = navigator.userAgent.indexOf('Win') !== -1 ? 'T:' : '~/tela';
-        var mountHtml = '<div class="settings-group" style="margin-top:16px;">'
+        var placeholder = '';
+        var enabled = !!mc.mount;
+        var dis = enabled ? '' : ' disabled';
+        var mountHtml = '<div class="settings-group">'
           + '<div class="settings-group-header">Mount</div>'
-          + '<div class="cap-tags" style="margin:6px 0 10px;">';
+          + '<div class="settings-group-body">'
+          + '<div class="cap-tags">';
         mountHtml += fs.writable
           ? '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>'
           : '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> Read only</span>';
@@ -1330,21 +1322,20 @@ function renderMachineDetail(hub, machine) {
         mountHtml += '</div>'
           + '<div class="mount-config-form">'
           + '<div class="mount-config-row">'
+          + '<label class="mount-config-label mount-config-check"><input type="checkbox" id="mc-enabled-' + mid + '"' + (enabled ? ' checked' : '') + ' onchange="onMountEnableToggle(\'' + mid + '\', this.checked)"> Enable</label>'
+          + '</div>'
+          + '<div class="mount-config-row">'
           + '<label class="mount-config-label" for="mc-point-' + mid + '">Mount point</label>'
-          + '<input type="text" id="mc-point-' + mid + '" class="mount-config-input" placeholder="' + placeholder + '" value="' + escAttr(mc.mount || '') + '" title="Drive letter (T:) or directory path">'
+          + '<input type="text" id="mc-point-' + mid + '" class="form-input mono" value="' + escAttr(mc.mount || '') + '" title="Drive letter or directory path" data-required="Mount point is required when mount is enabled"' + dis + ' onchange="onMountFieldChange(\'' + mid + '\')" onblur="validateMountPoint(\'' + mid + '\')">'
           + '</div>'
           + '<div class="mount-config-row">'
           + '<label class="mount-config-label" for="mc-port-' + mid + '">Port</label>'
-          + '<input type="number" id="mc-port-' + mid + '" class="mount-config-input mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '" title="WebDAV listen port">'
+          + '<input type="number" id="mc-port-' + mid + '" class="form-input mono mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '" title="WebDAV listen port"' + dis + ' onchange="onMountFieldChange(\'' + mid + '\')">'
           + '</div>'
           + '<div class="mount-config-row">'
-          + '<label class="mount-config-label mount-config-check"><input type="checkbox" id="mc-auto-' + mid + '"' + (mc.mount ? ' checked' : '') + '> Auto-mount on connect</label>'
+          + '<label class="mount-config-label mount-config-check"><input type="checkbox" id="mc-auto-' + mid + '"' + (mc.mount ? ' checked' : '') + dis + ' onchange="onMountFieldChange(\'' + mid + '\')"> Auto-mount on connect</label>'
           + '</div>'
-          + '<div class="mount-config-actions">'
-          + '<button type="button" class="tb-btn" onclick="saveMountCard(\'' + mid + '\')">Save</button>'
-          + '<button type="button" class="tb-btn" onclick="clearMountCard(\'' + mid + '\')">Clear</button>'
-          + '</div>'
-          + '</div></div>';
+          + '</div></div></div>';
         pane.innerHTML += mountHtml;
       });
     }
@@ -1430,6 +1421,11 @@ function checkDirty() {
   updateSaveButton();
 }
 
+function markProfileDirty() {
+  profileDirty = true;
+  updateSaveButton();
+}
+
 function takeSnapshot() {
   savedFingerprint = selectionFingerprint();
   savedServicesJSON = JSON.stringify(selectedServices);
@@ -1446,6 +1442,12 @@ function updateSaveButton() {
 }
 
 function saveSelections() {
+  // Validate all required fields in the detail pane
+  var detailPane = document.getElementById('detail-pane');
+  if (detailPane && !validateRequiredFields(detailPane)) {
+    showError('Fix the highlighted fields before saving');
+    return;
+  }
   var connections = buildConnections();
   goApp.SaveProfile(JSON.stringify(connections)).then(function () {
     takeSnapshot();
@@ -4295,6 +4297,51 @@ function showError(msg) {
     el.classList.remove('hidden');
     setTimeout(function () { el.classList.add('hidden'); }, 5000);
   }
+}
+
+// ── Field validation ──────────────────────────────────────────────
+
+// Mark a field as invalid with a dismissable error message.
+function setFieldError(inputId, message) {
+  var input = document.getElementById(inputId);
+  if (!input) return;
+  input.classList.add('invalid');
+  // Remove any existing error for this field
+  clearFieldError(inputId);
+  // Insert error element after the input
+  var err = document.createElement('div');
+  err.className = 'field-error';
+  err.id = inputId + '-error';
+  err.innerHTML = '<span>' + escHtml(message) + '</span>'
+    + '<span class="field-error-dismiss" onclick="clearFieldError(\'' + escAttr(inputId) + '\')">&times;</span>';
+  input.parentNode.insertBefore(err, input.nextSibling);
+}
+
+// Clear the error state from a field.
+function clearFieldError(inputId) {
+  var input = document.getElementById(inputId);
+  if (input) input.classList.remove('invalid');
+  var err = document.getElementById(inputId + '-error');
+  if (err) err.remove();
+}
+
+// Validate all fields with data-required when their parent form is saved.
+// Returns true if all valid, false if any errors.
+function validateRequiredFields(containerEl) {
+  var valid = true;
+  var inputs = containerEl.querySelectorAll('[data-required]');
+  for (var i = 0; i < inputs.length; i++) {
+    var input = inputs[i];
+    if (input.disabled) continue;
+    var val = (input.value || '').trim();
+    if (!val) {
+      setFieldError(input.id, input.getAttribute('data-required'));
+      valid = false;
+    } else {
+      clearFieldError(input.id);
+    }
+  }
+  return valid;
 }
 
 // ── Themed dialog system (replaces alert/confirm/prompt) ──

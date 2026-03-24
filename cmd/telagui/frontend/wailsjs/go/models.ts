@@ -72,6 +72,20 @@ export namespace main {
 	        this.command = source["command"];
 	    }
 	}
+	export class ProfileMount {
+	    mount: string;
+	    port: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfileMount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mount = source["mount"];
+	        this.port = source["port"];
+	    }
+	}
 	export class ProfileService {
 	    name: string;
 	    local: number;
@@ -93,6 +107,7 @@ export namespace main {
 	    machine: string;
 	    token?: string;
 	    services: ProfileService[];
+	    mount: ProfileMount;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileConnection(source);
@@ -104,6 +119,7 @@ export namespace main {
 	        this.machine = source["machine"];
 	        this.token = source["token"];
 	        this.services = this.convertValues(source["services"], ProfileService);
+	        this.mount = this.convertValues(source["mount"], ProfileMount);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -200,6 +216,7 @@ export namespace main {
 	    sessionCount: number;
 	    lastSeen: string;
 	    services: ServiceInfo[];
+	    capabilities?: Record<string, any>;
 	
 	    static createFrom(source: any = {}) {
 	        return new MachineStatus(source);
@@ -214,6 +231,7 @@ export namespace main {
 	        this.sessionCount = source["sessionCount"];
 	        this.lastSeen = source["lastSeen"];
 	        this.services = this.convertValues(source["services"], ServiceInfo);
+	        this.capabilities = source["capabilities"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -303,6 +321,7 @@ export namespace main {
 	        this.localPort = source["localPort"];
 	    }
 	}
+	
 	
 	
 	export class RemoteInfo {

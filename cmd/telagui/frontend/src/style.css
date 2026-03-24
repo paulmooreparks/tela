@@ -59,6 +59,34 @@ body {
 
 .hidden { display: none !important; }
 
+/* --- Global disabled state --- */
+input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0.4; cursor: default; }
+
+/* --- Base form input --- */
+.form-input {
+  padding: 6px 10px; font-size: 13px; font-family: var(--font);
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text);
+}
+.form-input:focus { border-color: var(--accent); outline: none; }
+.form-input.mono { font-family: var(--mono); font-size: 12px; }
+.form-input.invalid { border-color: var(--danger); }
+.form-input.invalid:focus { border-color: var(--danger); }
+
+/* --- Field validation --- */
+.field-error {
+  font-size: 11px; color: var(--danger); margin-top: 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.field-error-dismiss {
+  cursor: pointer; opacity: 0.6; font-size: 13px; line-height: 1;
+}
+.field-error-dismiss:hover { opacity: 1; }
+
+/* --- Text utilities --- */
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.text-mono { font-family: var(--mono); font-size: 12px; }
+
 /* --- Topbar --- */
 .topbar {
   display: flex;
@@ -84,7 +112,6 @@ body {
 .topbar-power-btn.connecting { animation: pulse-border 1.2s ease-in-out infinite; color: #f39c12; border-color: #f39c12; }
 
 .topbar-mount-btn { transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; }
-.topbar-mount-btn:disabled { opacity: 0.3; cursor: default; }
 .topbar-mount-btn:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
 .topbar-mount-btn.mounted { border-color: var(--accent); color: var(--accent); background: rgba(94,232,158,0.1); }
 .topbar-mount-btn.mounted:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
@@ -148,7 +175,7 @@ body {
 }
 
 .topbar-update-btn { font-size: 16px; font-weight: 400; }
-.topbar-update-btn:disabled { color: var(--text-muted); border-color: var(--border); opacity: 0.4; cursor: default; }
+.topbar-update-btn:disabled { color: var(--text-muted); border-color: var(--border); }
 .topbar-update-btn:disabled:hover { background: none; }
 .topbar-update-btn:not(:disabled) { color: #f39c12; border-color: #f39c12; }
 .topbar-update-btn:not(:disabled):hover { background: #f39c12; color: #fff; }
@@ -503,7 +530,9 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
+.detail-pane > * { flex-shrink: 0; }
 .detail-pane > .settings-group.yaml-card {
   flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
 }
@@ -1262,6 +1291,7 @@ body {
   padding: 12px 16px; background: var(--surface-alt); border-bottom: 1px solid var(--border);
   font-weight: 600; font-size: 13px;
 }
+.settings-group-body { padding: 12px 16px; }
 .settings-row {
   display: flex; align-items: center; padding: 12px 16px;
   border-bottom: 1px solid var(--surface-alt); font-size: 13px;
@@ -1309,7 +1339,6 @@ body {
   width: 100px; padding: 6px 10px; font-size: 13px; border: 1px solid var(--border);
   border-radius: 4px; font-family: var(--font); background: var(--surface); color: var(--text);
 }
-.mtu-form-row input[type="number"]:disabled { opacity: 0.4; }
 .mtu-check-label { display: flex; align-items: center; gap: 6px; font-weight: 500 !important; cursor: pointer; }
 .mtu-check-label input { accent-color: var(--accent); }
 [data-theme="dark"] .mtu-form-row input[type="number"] { background: var(--bg); color: var(--text); border-color: var(--border); }
@@ -1467,11 +1496,11 @@ body {
 .fh-type { width: 110px; cursor: pointer; padding: 0 4px; }
 .fh-size { width: 80px; text-align: right; cursor: pointer; padding: 0 8px 0 4px; }
 .fh-col:hover { color: var(--text); }
+.settings-group-body .cap-tags { margin-bottom: 12px; }
 .mount-config-form { font-size: 13px; }
 .mount-config-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .mount-config-label { width: 90px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; }
-.mount-config-input { flex: 1; padding: 4px 8px; font-size: 12px; font-family: var(--mono); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
-.mount-config-input:focus { border-color: var(--accent); outline: none; }
+.mount-config-row .form-input { flex: 1; padding: 4px 8px; }
 .mount-config-port { max-width: 80px; }
 .mount-config-check { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; width: auto; }
 .mount-config-actions { display: flex; gap: 6px; margin-top: 4px; }

@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -224,10 +223,14 @@ func cmdMount(args []string) {
 		}
 	}()
 
-	// Perform OS mount if requested
-	var mountCmd *exec.Cmd
+	// Validate and perform OS mount if requested
 	if *mountPoint != "" {
-		mountCmd = platformMount(*mountPoint, addr)
+		if err := validateMountPoint(*mountPoint); err != nil {
+			log.Fatalf("invalid mount point %q: %v", *mountPoint, err)
+		}
+		if err := platformMount(*mountPoint, addr); err != nil {
+			log.Fatalf("mount failed: %v", err)
+		}
 	} else {
 		log.Printf("No -mount specified. Map manually:")
 		if runtime.GOOS == "windows" {
@@ -245,132 +248,6 @@ func cmdMount(args []string) {
 
 	if *mountPoint != "" {
 		platformUnmount(*mountPoint)
-	}
-	_ = mountCmd
-}
-
-// ── Platform mount/unmount ───────────────────────────────────────
-
-func platformMount(mountArg, addr string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		return platformMountWindows(mountArg, addr)
-	}
-	return platformMountUnix(mountArg, addr)
-}
-
-func platformMountWindows(mountArg, addr string) *exec.Cmd {
-	vol := filepath.VolumeName(mountArg)
-
-	if vol != "" && vol == mountArg {
-		// Drive letter mapping: "T:" exactly
-		log.Printf("mapping drive %s", mountArg)
-		cmd := exec.Command("net", "use", mountArg, "http://"+addr+"/")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Printf("net use failed: %v", err)
-			log.Printf("Ensure the WebClient service is running: sc start WebClient")
-		} else {
-			log.Printf("drive %s mapped", mountArg)
-		}
-		return cmd
-	}
-
-	// Directory mount point
-	absPath, err := filepath.Abs(mountArg)
-	if err != nil {
-		log.Printf("invalid mount path: %v", err)
-		return nil
-	}
-	log.Printf("mounting to %s", absPath)
-	uncPath := fmt.Sprintf("\\\\localhost@%s\\DavWWWRoot", strings.Split(addr, ":")[1])
-	cmd := exec.Command("mklink", "/d", absPath, uncPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Printf("mklink failed: %v (you may need to run as Administrator)", err)
-	} else {
-		log.Printf("mounted at %s", absPath)
-	}
-	return cmd
-}
-
-func platformMountUnix(mountArg, addr string) *exec.Cmd {
-	absPath, err := filepath.Abs(mountArg)
-	if err != nil {
-		log.Printf("invalid mount path: %v", err)
-		return nil
-	}
-
-	// Create mount point if needed
-	if err := os.MkdirAll(absPath, 0755); err != nil {
-		log.Printf("cannot create mount point: %v", err)
-		return nil
-	}
-
-	davURL := "http://" + addr + "/"
-
-	if runtime.GOOS == "darwin" {
-		log.Printf("mounting to %s", absPath)
-		cmd := exec.Command("mount_webdav", davURL, absPath)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Printf("mount_webdav failed: %v", err)
-		} else {
-			log.Printf("mounted at %s", absPath)
-		}
-		return cmd
-	}
-
-	// Linux: try gio mount first (no root needed), fall back to mount -t davfs
-	log.Printf("mounting to %s", absPath)
-	gioPath, _ := exec.LookPath("gio")
-	if gioPath != "" {
-		cmd := exec.Command("gio", "mount", "dav://"+addr+"/")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err == nil {
-			log.Printf("mounted via gio at dav://%s/", addr)
-			return cmd
-		}
-		log.Printf("gio mount failed, trying mount -t davfs")
-	}
-
-	cmd := exec.Command("mount", "-t", "davfs", davURL, absPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Printf("mount failed: %v (you may need root or davfs2 installed)", err)
-	} else {
-		log.Printf("mounted at %s", absPath)
-	}
-	return cmd
-}
-
-func platformUnmount(mountArg string) {
-	if runtime.GOOS == "windows" {
-		vol := filepath.VolumeName(mountArg)
-		if vol != "" && vol == mountArg {
-			log.Printf("unmapping drive %s", mountArg)
-			cmd := exec.Command("net", "use", mountArg, "/delete", "/y")
-			cmd.Run()
-			return
-		}
-		// Directory symlink: remove it
-		absPath, _ := filepath.Abs(mountArg)
-		log.Printf("removing mount point %s", absPath)
-		os.Remove(absPath)
-		return
-	}
-
-	absPath, _ := filepath.Abs(mountArg)
-	if runtime.GOOS == "darwin" {
-		log.Printf("unmounting %s", absPath)
-		exec.Command("umount", absPath).Run()
-	} else {
-		log.Printf("unmounting %s", absPath)
-		exec.Command("umount", absPath).Run()
 	}
 }
 
@@ -522,10 +399,10 @@ type mountRootDir struct {
 	pos     int
 }
 
-func (d *mountRootDir) Close() error                                   { return nil }
-func (d *mountRootDir) Write(p []byte) (int, error)                    { return 0, os.ErrPermission }
-func (d *mountRootDir) Read(p []byte) (int, error)                     { return 0, io.EOF }
-func (d *mountRootDir) Seek(offset int64, whence int) (int64, error)   { return 0, nil }
+func (d *mountRootDir) Close() error                                 { return nil }
+func (d *mountRootDir) Write(p []byte) (int, error)                  { return 0, os.ErrPermission }
+func (d *mountRootDir) Read(p []byte) (int, error)                   { return 0, io.EOF }
+func (d *mountRootDir) Seek(offset int64, whence int) (int64, error) { return 0, nil }
 func (d *mountRootDir) Stat() (os.FileInfo, error) {
 	return &mountDirInfo{name: "/", modTime: time.Now()}, nil
 }
@@ -549,10 +426,10 @@ type mountMachineDir struct {
 	pos     int
 }
 
-func (d *mountMachineDir) Close() error                                   { return nil }
-func (d *mountMachineDir) Write(p []byte) (int, error)                    { return 0, os.ErrPermission }
-func (d *mountMachineDir) Read(p []byte) (int, error)                     { return 0, io.EOF }
-func (d *mountMachineDir) Seek(offset int64, whence int) (int64, error)   { return 0, nil }
+func (d *mountMachineDir) Close() error                                 { return nil }
+func (d *mountMachineDir) Write(p []byte) (int, error)                  { return 0, os.ErrPermission }
+func (d *mountMachineDir) Read(p []byte) (int, error)                   { return 0, io.EOF }
+func (d *mountMachineDir) Seek(offset int64, whence int) (int64, error) { return 0, nil }
 
 func (d *mountMachineDir) Stat() (os.FileInfo, error) {
 	name := d.machine
@@ -593,11 +470,11 @@ type mountTelaFile struct {
 	flag    int
 }
 
-func (f *mountTelaFile) Close() error                                   { return nil }
-func (f *mountTelaFile) Write(p []byte) (int, error)                    { return 0, os.ErrPermission }
-func (f *mountTelaFile) Read(p []byte) (int, error)                     { return 0, io.EOF }
-func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error)   { return 0, nil }
-func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error)       { return nil, os.ErrInvalid }
+func (f *mountTelaFile) Close() error                                 { return nil }
+func (f *mountTelaFile) Write(p []byte) (int, error)                  { return 0, os.ErrPermission }
+func (f *mountTelaFile) Read(p []byte) (int, error)                   { return 0, io.EOF }
+func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) { return 0, nil }
+func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error)     { return nil, os.ErrInvalid }
 
 func (f *mountTelaFile) Stat() (os.FileInfo, error) {
 	parentPath := filepath.Dir(f.path)
@@ -632,12 +509,12 @@ type mountDirInfo struct {
 	modTime time.Time
 }
 
-func (i *mountDirInfo) Name() string        { return i.name }
-func (i *mountDirInfo) Size() int64         { return 0 }
-func (i *mountDirInfo) Mode() os.FileMode   { return os.ModeDir | 0755 }
-func (i *mountDirInfo) ModTime() time.Time  { return i.modTime }
-func (i *mountDirInfo) IsDir() bool         { return true }
-func (i *mountDirInfo) Sys() interface{}    { return nil }
+func (i *mountDirInfo) Name() string       { return i.name }
+func (i *mountDirInfo) Size() int64        { return 0 }
+func (i *mountDirInfo) Mode() os.FileMode  { return os.ModeDir | 0755 }
+func (i *mountDirInfo) ModTime() time.Time { return i.modTime }
+func (i *mountDirInfo) IsDir() bool        { return true }
+func (i *mountDirInfo) Sys() interface{}   { return nil }
 
 type mountFileInfo struct {
 	name    string
@@ -645,12 +522,12 @@ type mountFileInfo struct {
 	modTime time.Time
 }
 
-func (i *mountFileInfo) Name() string        { return i.name }
-func (i *mountFileInfo) Size() int64         { return i.size }
-func (i *mountFileInfo) Mode() os.FileMode   { return 0644 }
-func (i *mountFileInfo) ModTime() time.Time  { return i.modTime }
-func (i *mountFileInfo) IsDir() bool         { return false }
-func (i *mountFileInfo) Sys() interface{}    { return nil }
+func (i *mountFileInfo) Name() string       { return i.name }
+func (i *mountFileInfo) Size() int64        { return i.size }
+func (i *mountFileInfo) Mode() os.FileMode  { return 0644 }
+func (i *mountFileInfo) ModTime() time.Time { return i.modTime }
+func (i *mountFileInfo) IsDir() bool        { return false }
+func (i *mountFileInfo) Sys() interface{}   { return nil }
 
 // ── Shared Readdir helper ────────────────────────────────────────
 

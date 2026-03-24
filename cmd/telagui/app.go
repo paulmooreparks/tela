@@ -1378,12 +1378,25 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 		connections[i].Token = ""
 	}
 
-	// Preserve MTU from existing profile if any
+	// Preserve MTU and per-connection mount configs from existing profile
 	existingMTU := 0
+	existingMounts := map[string]ProfileMount{}
 	if existingData, err := os.ReadFile(profilePath()); err == nil {
 		var existing Profile
 		if yaml.Unmarshal(existingData, &existing) == nil {
 			existingMTU = existing.MTU
+			for _, conn := range existing.Connections {
+				if conn.Mount.Mount != "" {
+					existingMounts[conn.Machine] = conn.Mount
+				}
+			}
+		}
+	}
+
+	// Restore mount configs to connections
+	for i := range connections {
+		if mc, ok := existingMounts[connections[i].Machine]; ok {
+			connections[i].Mount = mc
 		}
 	}
 
@@ -3240,7 +3253,7 @@ func (a *App) StartMount() (string, error) {
 			if n > 0 {
 				chunk := string(buf[:n])
 				if a.ctx != nil {
-					wailsRuntime.EventsEmit(a.ctx, "mount:output", chunk)
+					wailsRuntime.EventsEmit(a.ctx, "tela:output", chunk)
 				}
 			}
 			if err != nil {
@@ -3252,7 +3265,7 @@ func (a *App) StartMount() (string, error) {
 		a.mountProcess = nil
 		a.mu.Unlock()
 		if a.ctx != nil {
-			wailsRuntime.EventsEmit(a.ctx, "mount:stopped", "")
+			wailsRuntime.EventsEmit(a.ctx, "tela:output", "[mount] stopped\n")
 		}
 	}()
 
