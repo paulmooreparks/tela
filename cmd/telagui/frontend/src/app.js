@@ -1330,18 +1330,33 @@ function renderMachineDetail(hub, machine) {
       goApp.GetMountConfig(machineId).then(function (mc) {
         var mountHtml = '<div class="settings-group" style="margin-top:16px;">'
           + '<div class="settings-group-header">Mount</div>';
+
+        // Show file share capabilities
+        var capTags = '<div class="cap-tags" style="margin:8px 0;">';
+        capTags += fs.writable
+          ? '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>'
+          : '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> Read only</span>';
+        if (fs.writable && fs.allowDelete) {
+          capTags += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Delete</span>';
+        } else if (fs.writable) {
+          capTags += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> No delete</span>';
+        }
+        capTags += '</div>';
+        mountHtml += capTags;
+
+        // Show mount config or prompt
         if (mc.mount) {
-          mountHtml += '<div class="cap-tags" style="margin:8px 0;">'
-            + '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> ' + escHtml(mc.mount) + '</span>';
+          mountHtml += '<div class="cap-tags" style="margin:4px 0 8px;">'
+            + '<span class="cap-tag cap-tag-info">Mount: ' + escHtml(mc.mount) + '</span>';
           if (mc.port && mc.port !== 18080) {
-            mountHtml += '<span class="cap-tag cap-tag-info">port ' + mc.port + '</span>';
+            mountHtml += '<span class="cap-tag cap-tag-info">Port: ' + mc.port + '</span>';
           }
           mountHtml += '</div>';
-        } else {
-          mountHtml += '<p class="empty-hint" style="margin:8px 0;font-size:12px;">File sharing available. Configure a mount point to access files in Explorer.</p>';
         }
+
         mountHtml += '<button type="button" class="tb-btn" style="margin-top:4px;" '
-          + 'onclick="openMountConfigDialog(\'' + escAttr(machineId) + '\')">Configure...</button>'
+          + 'onclick="openMountConfigDialog(\'' + escAttr(machineId) + '\')">'
+          + (mc.mount ? 'Change...' : 'Configure...') + '</button>'
           + '</div>';
         pane.innerHTML += mountHtml;
       });
