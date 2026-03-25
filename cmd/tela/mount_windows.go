@@ -35,12 +35,18 @@ type netResource struct {
 	Provider    *uint16
 }
 
+const (
+	errorNoNetwork       = 1222 // ERROR_NO_NETWORK
+	errorConnectionUnavail = 1201 // ERROR_CONNECTION_UNAVAIL (remembered but not connected)
+)
+
 // driveRemotePath returns the UNC remote path for a mapped drive letter,
 // or empty string if the drive is not a network mapping.
-func driveRemotePath(drive string) string {
+// remembered is true if the drive has a persistent mapping (even if not currently connected).
+func driveRemotePath(drive string) (remote string, remembered bool) {
 	localName, err := windows.UTF16PtrFromString(strings.ToUpper(drive))
 	if err != nil {
-		return ""
+		return "", false
 	}
 	buf := make([]uint16, 260)
 	bufLen := uint32(len(buf))
@@ -49,10 +55,18 @@ func driveRemotePath(drive string) string {
 		uintptr(unsafe.Pointer(&buf[0])),
 		uintptr(unsafe.Pointer(&bufLen)),
 	)
-	if ret != 0 {
-		return ""
+	if ret == 0 {
+		return windows.UTF16ToString(buf[:bufLen]), false
 	}
-	return windows.UTF16ToString(buf[:bufLen])
+	if ret == errorConnectionUnavail {
+		// Drive has a remembered mapping but is not currently connected.
+		// The buffer may contain the remote name even on this error code.
+		if bufLen > 0 {
+			return windows.UTF16ToString(buf[:bufLen]), true
+		}
+		return "(remembered)", true
+	}
+	return "", false
 }
 
 // expectedRemotePath returns the UNC path that tela mount would map to.
@@ -60,34 +74,54 @@ func expectedRemotePath(addr string) string {
 	return `\\localhost@` + strings.Split(addr, ":")[1] + `\DavWWWRoot`
 }
 
+// normalizeDriveLetter ensures a drive argument has a trailing colon.
+// "T" becomes "T:", "T:" stays "T:". Anything else is returned as-is.
+func normalizeDriveLetter(mountArg string) string {
+	if len(mountArg) == 1 && ((mountArg[0] >= 'A' && mountArg[0] <= 'Z') || (mountArg[0] >= 'a' && mountArg[0] <= 'z')) {
+		return strings.ToUpper(mountArg) + ":"
+	}
+	return mountArg
+}
+
 func validateMountPoint(mountArg string) error {
+	mountArg = normalizeDriveLetter(mountArg)
 	vol := filepath.VolumeName(mountArg)
 	if vol == "" || vol != mountArg {
-		return fmt.Errorf("on Windows, mount point must be a drive letter (e.g., T:), not a directory path")
+		return fmt.Errorf("on Windows, mount point must be a drive letter (e.g., T: or T), not a directory path")
 	}
 	// Drive exists -- check if it's already ours (will be verified in platformMount)
 	// or something else entirely
 	if _, err := os.Stat(mountArg + `\`); err == nil {
-		remote := driveRemotePath(mountArg)
+		remote, _ := driveRemotePath(mountArg)
 		if remote == "" {
 			// It's a local drive, not a network mapping
 			return fmt.Errorf("drive %s is a local drive, not available for mapping", mountArg)
 		}
 		// It's a network drive -- platformMount will check if it's ours
+	} else {
+		// Drive doesn't exist as a filesystem path -- check for remembered mappings
+		_, remembered := driveRemotePath(mountArg)
+		if remembered {
+			// Persistent mapping exists but isn't connected -- safe to reuse
+		}
 	}
 	return nil
 }
 
 func platformMount(mountArg, addr string) error {
+	mountArg = normalizeDriveLetter(mountArg)
 	target := expectedRemotePath(addr)
 
-	// Check if already mapped to our target
-	existing := driveRemotePath(mountArg)
+	// Check if already mapped (active or remembered) to our target
+	existing, remembered := driveRemotePath(mountArg)
 	if strings.EqualFold(existing, target) {
-		log.Printf("drive %s already mapped to %s", mountArg, target)
-		return nil
-	}
-	if existing != "" {
+		if remembered {
+			log.Printf("drive %s has remembered mapping to %s, reconnecting", mountArg, target)
+		} else {
+			log.Printf("drive %s already mapped to %s", mountArg, target)
+			return nil
+		}
+	} else if existing != "" {
 		return fmt.Errorf("drive %s is already mapped to %s (expected %s)", mountArg, existing, target)
 	}
 
@@ -117,7 +151,7 @@ func platformMount(mountArg, addr string) error {
 	)
 
 	if ret != 0 {
-		return fmt.Errorf("WNetAddConnection2 failed for %s: Windows error %d (ensure the WebClient service is running: sc start WebClient)", mountArg, ret)
+		return fmt.Errorf("WNetAddConnection2 failed for %s -- Windows error %d (ensure the WebClient service is running: sc start WebClient)", mountArg, ret)
 	}
 
 	log.Printf("drive %s mapped", mountArg)
@@ -125,6 +159,7 @@ func platformMount(mountArg, addr string) error {
 }
 
 func platformUnmount(mountArg string) {
+	mountArg = normalizeDriveLetter(mountArg)
 	name, err := windows.UTF16PtrFromString(strings.ToUpper(mountArg))
 	if err != nil {
 		log.Printf("unmount: invalid drive letter: %v", err)
