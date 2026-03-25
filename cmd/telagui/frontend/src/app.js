@@ -78,8 +78,13 @@ function switchLogTab(btn, id) {
 function toggleLogPanel() {
   var panel = document.getElementById('log-panel');
   panel.classList.toggle('collapsed');
+  var collapsed = panel.classList.contains('collapsed');
   var toggle = panel.querySelector('.log-panel-toggle');
-  toggle.innerHTML = panel.classList.contains('collapsed') ? '&#x25B2;' : '&#x25BC;';
+  toggle.innerHTML = collapsed ? '&#x25B2;' : '&#x25BC;';
+  goApp.GetSettings().then(function (s) {
+    s.logPanelCollapsed = collapsed;
+    goApp.SaveSettings(JSON.stringify(s));
+  });
 }
 
 function tvLog(msg) {
@@ -558,6 +563,23 @@ initSidebarResize('hubs-sidebar-resize', 'hubs-sidebar', 220, 400, 'hubsSidebarW
       dragging = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      // Save log panel height
+      goApp.GetSettings().then(function (s) {
+        s.logPanelHeight = parseInt(panel.style.height) || 0;
+        goApp.SaveSettings(JSON.stringify(s));
+      });
+    }
+  });
+
+  // Restore saved height and collapsed state
+  goApp.GetSettings().then(function (s) {
+    if (s.logPanelHeight > 0) {
+      panel.style.height = s.logPanelHeight + 'px';
+    }
+    if (s.logPanelCollapsed) {
+      panel.classList.add('collapsed');
+      var toggle = panel.querySelector('.log-panel-toggle');
+      if (toggle) toggle.innerHTML = '&#x25B2;';
     }
   });
 })();
@@ -1679,6 +1701,8 @@ function onConnectionChanged() {
   agentsRefresh();
   if (connPhase === 'connected') {
     refreshFilesTab();
+    // Re-check mount state after auto-mount has had time to start
+    setTimeout(updateMountButtonState, 3000);
   } else {
     filesShowMachineList();
   }
@@ -3592,7 +3616,7 @@ function hubNameFromUrl(url) {
 }
 
 function clearSelection() {
-  document.querySelectorAll('.hub-item, .machine-item').forEach(function (e) {
+  document.querySelectorAll('.hub-item, .machine-item, .profile-root, .profile-hub-header').forEach(function (e) {
     e.classList.remove('selected');
   });
 }

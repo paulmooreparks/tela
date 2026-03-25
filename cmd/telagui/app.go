@@ -212,6 +212,14 @@ func (a *App) startup(ctx context.Context) {
 	}
 	profileMu.Unlock()
 
+	// Restore window position and size
+	if settings.WindowWidth > 0 && settings.WindowHeight > 0 {
+		wailsRuntime.WindowSetSize(ctx, settings.WindowWidth, settings.WindowHeight)
+	}
+	if settings.WindowX > 0 || settings.WindowY > 0 {
+		wailsRuntime.WindowSetPosition(ctx, settings.WindowX, settings.WindowY)
+	}
+
 	// Check for updates
 	if settings.AutoCheckUpdates {
 		go a.checkForUpdates()
@@ -566,9 +574,27 @@ func (a *App) downloadSelfUpdate(ver string) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	// Save window position and size
+	if a.ctx != nil {
+		w, h := wailsRuntime.WindowGetSize(a.ctx)
+		x, y := wailsRuntime.WindowGetPosition(a.ctx)
+		s := a.GetSettings()
+		s.WindowWidth = w
+		s.WindowHeight = h
+		s.WindowX = x
+		s.WindowY = y
+		if data, err := json.Marshal(s); err == nil {
+			a.SaveSettings(string(data))
+		}
+	}
+
 	a.DisconnectControlWS()
 
 	a.mu.Lock()
+	if a.mountProcess != nil {
+		killProcessTree(a.mountProcess.Pid)
+		a.mountProcess = nil
+	}
 	if a.telaProcess != nil {
 		killProcessTree(a.telaProcess.Pid)
 		a.telaProcess = nil
@@ -636,9 +662,13 @@ func (a *App) QuitApp() {
 	}()
 }
 
-// ForceQuit kills the tela process tree and exits immediately.
+// ForceQuit kills the tela and mount process trees and exits immediately.
 func (a *App) ForceQuit() {
 	a.mu.Lock()
+	if a.mountProcess != nil {
+		killProcessTree(a.mountProcess.Pid)
+		a.mountProcess = nil
+	}
 	if a.telaProcess != nil {
 		killProcessTree(a.telaProcess.Pid)
 		a.telaProcess.Kill()
@@ -2807,6 +2837,12 @@ type Settings struct {
 	ConnectTooltipDismissed  bool   `yaml:"connectTooltipDismissed" json:"connectTooltipDismissed"`
 	Theme                   string `yaml:"theme" json:"theme"`
 	HideDotfiles            *bool  `yaml:"hideDotfiles,omitempty" json:"hideDotfiles"`
+	LogPanelHeight          int    `yaml:"logPanelHeight,omitempty" json:"logPanelHeight"`
+	LogPanelCollapsed       bool   `yaml:"logPanelCollapsed,omitempty" json:"logPanelCollapsed"`
+	WindowX                 int    `yaml:"windowX,omitempty" json:"windowX"`
+	WindowY                 int    `yaml:"windowY,omitempty" json:"windowY"`
+	WindowWidth             int    `yaml:"windowWidth,omitempty" json:"windowWidth"`
+	WindowHeight            int    `yaml:"windowHeight,omitempty" json:"windowHeight"`
 }
 
 func defaultSettings() Settings {
@@ -3283,9 +3319,27 @@ func (a *App) StopMount() error {
 
 // IsMountRunning returns true if mount was launched by TV and is still running.
 func (a *App) IsMountRunning() bool {
+	// Check if TV launched the mount process
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.mountProcess != nil
+	tvManaged := a.mountProcess != nil
+	a.mu.Unlock()
+	if tvManaged {
+		return true
+	}
+
+	// Check if mount is running externally (e.g., auto-mount from tela connect)
+	// by probing the WebDAV port
+	mc := a.GetMountConfig()
+	port := mc.Port
+	if port == 0 {
+		port = 18080
+	}
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // GetProfileMTU returns the MTU override for the current profile (0 = use default).

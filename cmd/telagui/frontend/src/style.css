@@ -1844,6 +1844,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   border-left: 3px solid transparent;
 }
 .profile-hub-header:hover { background: var(--sidebar-hover); }
+.profile-hub-header.selected { background: var(--sidebar-hover); border-left-color: var(--accent); }
 .profile-hub-header input[type="checkbox"] {
   width: 14px;
   height: 14px;

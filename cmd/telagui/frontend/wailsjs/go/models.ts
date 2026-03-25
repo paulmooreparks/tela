@@ -354,6 +354,12 @@ export namespace main {
 	    connectTooltipDismissed: boolean;
 	    theme: string;
 	    hideDotfiles?: boolean;
+	    logPanelHeight: number;
+	    logPanelCollapsed: boolean;
+	    windowX: number;
+	    windowY: number;
+	    windowWidth: number;
+	    windowHeight: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -376,6 +382,12 @@ export namespace main {
 	        this.connectTooltipDismissed = source["connectTooltipDismissed"];
 	        this.theme = source["theme"];
 	        this.hideDotfiles = source["hideDotfiles"];
+	        this.logPanelHeight = source["logPanelHeight"];
+	        this.logPanelCollapsed = source["logPanelCollapsed"];
+	        this.windowX = source["windowX"];
+	        this.windowY = source["windowY"];
+	        this.windowWidth = source["windowWidth"];
+	        this.windowHeight = source["windowHeight"];
 	    }
 	}
 	export class ToolVersions {
