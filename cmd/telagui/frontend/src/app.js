@@ -922,8 +922,9 @@ function copyProfileCLI() {
 function showProfileOverview() {
   selectedHubURL = null;
   selectedMachineId = null;
-  clearSelection();
-  showProfileYaml();
+  currentDetailView = 'profile';
+  refreshAll();
+  renderProfileSettings();
 }
 
 function showProfileYaml() {
@@ -1225,6 +1226,8 @@ function selectHub(hub, el) {
 
 function renderProfileSettings() {
   var pane = document.getElementById('detail-pane');
+  var locked = connPhase === 'connected' || connPhase === 'connecting';
+
   goApp.GetMountConfig().then(function (mc) {
     goApp.GetProfileMTU().then(function (mtu) {
       var isDefault = !mtu || mtu === 0;
@@ -1233,29 +1236,31 @@ function renderProfileSettings() {
       goApp.GetSettings().then(function (s) {
         var profileName = s.defaultProfile || '';
 
-        var enabled = !!mc.mount;
-        var dis = enabled ? '' : ' disabled';
+        var mountEnabled = !!mc.mount;
+        // Mount fields disabled if: locked OR mount not enabled
+        var mountFieldDis = (locked || !mountEnabled) ? ' disabled' : '';
+        var allDis = locked ? ' disabled' : '';
 
         var html = '<div class="settings-group">'
           + '<div class="settings-group-header">Name</div>'
           + '<div class="settings-group-body">'
-          + '<input type="text" id="ps-name" class="form-input full-width" value="' + escAttr(profileName) + '" title="Profile name" onchange="onProfileNameChange()">'
+          + '<input type="text" id="ps-name" class="form-input full-width" value="' + escAttr(profileName) + '" title="Profile name"' + allDis + ' onchange="onProfileNameChange()">'
           + '</div></div>';
 
         html += '<div class="settings-group">'
           + '<div class="settings-group-header">Mount</div>'
           + '<div class="settings-group-body"><div class="mount-config-form">'
-          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-enable"' + (enabled ? ' checked' : '') + ' onchange="onPsMountEnableToggle(this.checked)"> Enable</label></div>'
-          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-point">Mount point:</label><input type="text" id="ps-mount-point" class="form-input mono" value="' + escAttr(mc.mount || '') + '" data-required="Mount point is required when mount is enabled"' + dis + ' onchange="onPsMountChange()" onblur="validatePsMount()"></div>'
-          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-port">Port:</label><input type="number" id="ps-mount-port" class="form-input mono mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '"' + dis + ' onchange="onPsMountChange()"></div>'
-          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-auto"' + (mc.auto ? ' checked' : '') + dis + ' onchange="onPsMountChange()"> Auto-mount on connect</label></div>'
+          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-enable"' + (mountEnabled ? ' checked' : '') + allDis + ' onchange="onPsMountEnableToggle(this.checked)"> Enable</label></div>'
+          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-point">Mount point:</label><input type="text" id="ps-mount-point" class="form-input mono" value="' + escAttr(mc.mount || '') + '" data-required="Mount point is required when mount is enabled"' + mountFieldDis + ' onchange="onPsMountChange()" onblur="validatePsMount()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-port">Port:</label><input type="number" id="ps-mount-port" class="form-input mono mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '"' + mountFieldDis + ' onchange="onPsMountChange()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-auto"' + (mc.auto ? ' checked' : '') + mountFieldDis + ' onchange="onPsMountChange()"> Auto-mount on connect</label></div>'
           + '</div></div></div>';
 
         html += '<div class="settings-group">'
           + '<div class="settings-group-header">MTU</div>'
           + '<div class="settings-group-body"><div class="mount-config-form">'
-          + '<div class="mount-config-row"><input type="number" id="ps-mtu" class="form-input mono mount-config-port" value="' + mtuVal + '" title="Tunnel MTU"' + (isDefault ? ' disabled' : '') + ' onchange="onPsMtuChange()"></div>'
-          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mtu-default"' + (isDefault ? ' checked' : '') + ' onchange="onPsMtuDefaultToggle(this.checked)"> Use default (1100)</label></div>'
+          + '<div class="mount-config-row"><input type="number" id="ps-mtu" class="form-input mono mount-config-port" value="' + mtuVal + '" title="Tunnel MTU"' + ((isDefault || locked) ? ' disabled' : '') + ' onchange="onPsMtuChange()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mtu-default"' + (isDefault ? ' checked' : '') + allDis + ' onchange="onPsMtuDefaultToggle(this.checked)"> Use default (1100)</label></div>'
           + '</div></div></div>';
 
         pane.innerHTML = html;
