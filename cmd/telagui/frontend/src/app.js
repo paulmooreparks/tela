@@ -2344,31 +2344,43 @@ function filesListDir(machine, path) {
   var listEl = document.getElementById('files-content');
   listEl.innerHTML = '<div class="files-empty">Loading...</div>';
 
-  var req = JSON.stringify({op: 'list', path: path});
-  goApp.FileShareRequest(machine, req).then(function (respJSON) {
-    if (gen !== filesListGeneration) return; // stale response, discard
-    try {
-      var resp = JSON.parse(respJSON);
-    } catch (e) {
-      tvLog('Invalid file list response: ' + String(respJSON).substring(0, 200));
-      listEl.innerHTML = '<div class="files-empty">Invalid response from server. The tunnel may not be ready yet. Try clicking Refresh.</div>';
-      return;
-    }
-    if (!resp.ok) {
-      listEl.innerHTML = '<div class="files-empty">' + escHtml(resp.error) + '</div>';
-      return;
-    }
+  var pageSize = 50;
+  function fetchPage(offset, accumulated) {
+    var req = JSON.stringify({op: 'list', path: path, offset: offset, limit: pageSize});
+    goApp.FileShareRequest(machine, req).then(function (respJSON) {
+      if (gen !== filesListGeneration) return;
+      try {
+        var resp = JSON.parse(respJSON);
+      } catch (e) {
+        tvLog('Invalid file list response: ' + String(respJSON).substring(0, 200));
+        listEl.innerHTML = '<div class="files-empty">Invalid response from server. The tunnel may not be ready yet. Try clicking Refresh.</div>';
+        return;
+      }
+      if (!resp.ok) {
+        listEl.innerHTML = '<div class="files-empty">' + escHtml(resp.error) + '</div>';
+        return;
+      }
 
-    filesCurrentPath = path;
-    filesCurrentEntries = (resp.entries || []).slice();
-    filesSortEntries();
-    filesRenderEntries();
-    filesUpdateStatusBar();
-    filesUpdateActionButtons();
-  }).catch(function (err) {
-    if (gen !== filesListGeneration) return;
-    listEl.innerHTML = '<div class="files-empty">' + escHtml(String(err)) + '</div>';
-  });
+      var entries = accumulated.concat(resp.entries || []);
+      var total = resp.total || 0;
+      if (total > 0 && entries.length < total) {
+        // More pages to fetch
+        fetchPage(offset + (resp.entries || []).length, entries);
+        return;
+      }
+
+      filesCurrentPath = path;
+      filesCurrentEntries = entries;
+      filesSortEntries();
+      filesRenderEntries();
+      filesUpdateStatusBar();
+      filesUpdateActionButtons();
+    }).catch(function (err) {
+      if (gen !== filesListGeneration) return;
+      listEl.innerHTML = '<div class="files-empty">' + escHtml(String(err)) + '</div>';
+    });
+  }
+  fetchPage(0, []);
 }
 
 function filesSortEntries() {

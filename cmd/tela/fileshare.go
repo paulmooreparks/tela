@@ -270,6 +270,8 @@ type fsRequest struct {
 	Checksum string `json:"checksum,omitempty"`
 	NewName  string `json:"newName,omitempty"`
 	NewPath  string `json:"newPath,omitempty"`
+	Offset   int    `json:"offset,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
 }
 
 type fsResponse struct {
@@ -279,6 +281,7 @@ type fsResponse struct {
 	Size     int64     `json:"size,omitempty"`
 	ModTime  string    `json:"modTime,omitempty"`
 	Checksum string    `json:"checksum,omitempty"`
+	Total    int       `json:"total,omitempty"`
 }
 
 type fsEntry struct {

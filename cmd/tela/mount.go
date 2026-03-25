@@ -41,6 +41,8 @@ var (
 	mountDirCacheMu sync.Mutex
 )
 
+const mountPageSize = 50
+
 func mountCachedList(machine, path string) (*mountFsResponse, error) {
 	key := machine + ":" + path
 	mountDirCacheMu.Lock()
@@ -50,18 +52,31 @@ func mountCachedList(machine, path string) (*mountFsResponse, error) {
 	}
 	mountDirCacheMu.Unlock()
 
-	resp, err := mountFileShareRequest(machine, mountFsRequest{Op: "list", Path: path})
-	if err != nil {
-		return nil, err
-	}
-	if !resp.OK {
-		return nil, fmt.Errorf("%s", resp.Error)
+	// Fetch in pages to keep individual responses small over the tunnel
+	var allEntries []mountFsEntry
+	offset := 0
+	for {
+		resp, err := mountFileShareRequest(machine, mountFsRequest{
+			Op: "list", Path: path, Offset: offset, Limit: mountPageSize,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !resp.OK {
+			return nil, fmt.Errorf("%s", resp.Error)
+		}
+		allEntries = append(allEntries, resp.Entries...)
+		if resp.Total == 0 || offset+len(resp.Entries) >= resp.Total {
+			break
+		}
+		offset += len(resp.Entries)
 	}
 
+	combined := &mountFsResponse{OK: true, Entries: allEntries, Total: len(allEntries)}
 	mountDirCacheMu.Lock()
-	mountDirCache[key] = &mountCacheEntry{resp: resp, fetched: time.Now()}
+	mountDirCache[key] = &mountCacheEntry{resp: combined, fetched: time.Now()}
 	mountDirCacheMu.Unlock()
-	return resp, nil
+	return combined, nil
 }
 
 func mountInvalidateCache(machine, path string) {
@@ -83,6 +98,8 @@ type mountFsRequest struct {
 	NewName string `json:"newName,omitempty"`
 	NewPath string `json:"newPath,omitempty"`
 	Size    int64  `json:"size,omitempty"`
+	Offset  int    `json:"offset,omitempty"`
+	Limit   int    `json:"limit,omitempty"`
 }
 
 type mountFsResponse struct {
@@ -90,6 +107,7 @@ type mountFsResponse struct {
 	Error   string         `json:"error,omitempty"`
 	Entries []mountFsEntry `json:"entries,omitempty"`
 	Size    int64          `json:"size,omitempty"`
+	Total   int            `json:"total,omitempty"`
 }
 
 type mountFsEntry struct {

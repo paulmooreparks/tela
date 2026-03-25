@@ -349,15 +349,18 @@ type fsRequest struct {
 	Checksum string `json:"checksum,omitempty"`
 	NewName  string `json:"newName,omitempty"` // for rename
 	NewPath  string `json:"newPath,omitempty"` // for move
+	Offset   int    `json:"offset,omitempty"`  // pagination: skip N entries
+	Limit    int    `json:"limit,omitempty"`   // pagination: return at most N entries (0 = all)
 }
 
 type fsResponse struct {
-	OK       bool        `json:"ok"`
-	Error    string      `json:"error,omitempty"`
-	Entries  []fsEntry   `json:"entries,omitempty"`
-	Size     int64       `json:"size,omitempty"`
-	ModTime  string      `json:"modTime,omitempty"`
-	Checksum string      `json:"checksum,omitempty"`
+	OK       bool      `json:"ok"`
+	Error    string    `json:"error,omitempty"`
+	Entries  []fsEntry `json:"entries,omitempty"`
+	Size     int64     `json:"size,omitempty"`
+	ModTime  string    `json:"modTime,omitempty"`
+	Checksum string    `json:"checksum,omitempty"`
+	Total    int       `json:"total,omitempty"` // total entry count before pagination
 }
 
 type fsEntry struct {
@@ -512,8 +515,22 @@ func handleList(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req f
 		})
 	}
 
-	lg.Printf("[fileshare] list %q: %d entries", req.Path, len(result))
-	writeResponse(conn, fsResponse{OK: true, Entries: result})
+	total := len(result)
+
+	// Apply pagination
+	if req.Offset > 0 {
+		if req.Offset >= len(result) {
+			result = nil
+		} else {
+			result = result[req.Offset:]
+		}
+	}
+	if req.Limit > 0 && len(result) > req.Limit {
+		result = result[:req.Limit]
+	}
+
+	lg.Printf("[fileshare] list %q: %d entries (total %d, offset %d, limit %d)", req.Path, len(result), total, req.Offset, req.Limit)
+	writeResponse(conn, fsResponse{OK: true, Entries: result, Total: total})
 }
 
 // ── READ ────────────────────────────────────────────────────────────
