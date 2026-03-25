@@ -78,8 +78,6 @@ export function ForceQuit():Promise<void>;
 
 export function GetAgentList():Promise<Array<main.AgentInfo>>;
 
-export function GetAllMountConfigs():Promise<Record<string, main.ProfileMount>>;
-
 export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
 
 export function GetCLIPath():Promise<string>;
@@ -106,11 +104,13 @@ export function GetKnownHubs():Promise<Array<main.KnownHub>>;
 
 export function GetMachineCapabilities():Promise<Record<string, Record<string, any>>>;
 
-export function GetMountConfig(arg1:string):Promise<main.ProfileMount>;
+export function GetMountConfig():Promise<main.ProfileMount>;
 
 export function GetProfileMTU():Promise<number>;
 
 export function GetProfilePath():Promise<string>;
+
+export function GetProfileYAML():Promise<string>;
 
 export function GetServiceStatus():Promise<string>;
 
@@ -194,7 +194,7 @@ export function ServiceStart():Promise<string>;
 
 export function ServiceStop():Promise<string>;
 
-export function SetMountConfig(arg1:string,arg2:main.ProfileMount):Promise<void>;
+export function SetMountConfig(arg1:main.ProfileMount):Promise<void>;
 
 export function SetProfileMTU(arg1:number):Promise<void>;
 

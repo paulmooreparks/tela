@@ -161,7 +161,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   font-family: var(--font); line-height: 1; transition: all 0.15s;
 }
-.topbar-icon-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); }
+.topbar-icon-btn:not(:disabled):hover { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); }
 /* Connection status icon */
 .topbar-conn-btn { color: #94a3b8; border-color: rgba(255,255,255,0.2); }
 .topbar-conn-btn.disconnected { color: #94a3b8; }
@@ -504,6 +504,39 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .machine-item:hover { background: var(--sidebar-hover); }
 .machine-item.selected { background: var(--sidebar-hover); border-left-color: var(--accent); color: var(--text); }
+.profile-root {
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.profile-root:hover { background: var(--sidebar-hover); }
+.profile-root.selected { background: var(--sidebar-hover); border-left-color: var(--accent); }
+.profile-root-icon { font-size: 14px; opacity: 0.6; }
+
+/* Preview info rows */
+.preview-info-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid var(--surface-alt); font-size: 13px;
+}
+.preview-info-row:last-child { border-bottom: none; }
+.preview-info-label { flex-shrink: 0; font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.preview-info-value {
+  min-width: 0; font-family: var(--mono); font-size: 12px;
+  color: var(--text); background: var(--surface-alt); padding: 6px 10px;
+  border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.copy-btn {
+  flex-shrink: 0; width: 28px; height: 28px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--text-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.copy-btn:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+.yaml-preview {
+  padding: 12px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  color: var(--text-muted); margin: 0; white-space: pre-wrap; word-break: break-all;
+  overflow-y: auto;
+}
 .machine-item input[type="checkbox"] {
   width: 13px;
   height: 13px;
@@ -1485,6 +1518,8 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .files-action-btn:hover:not(:disabled) { background: var(--surface-alt); color: var(--text); }
 .files-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .files-action-btn.danger:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+.files-dotfiles-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+.files-dotfiles-toggle input { accent-color: var(--accent); }
 .files-header {
   display: flex; align-items: center; padding: 0 16px; height: 28px;
   border-bottom: 1px solid var(--border); font-size: 11px;

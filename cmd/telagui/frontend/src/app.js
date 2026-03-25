@@ -7,6 +7,7 @@ var selectedServices = {};
 var pollIntervalId = null;
 var selectedHubURL = null;
 var selectedMachineId = null;
+var currentDetailView = 'profile'; // 'profile', 'machine', 'hub', 'preview'
 var activeTunnels = {}; // "machine:localPort" -> connection count
 var verboseMode = false;
 var savedFingerprint = ''; // fingerprint of selections at last save/load
@@ -591,6 +592,12 @@ loadSavedSelections().then(function () {
     }
     // Apply saved theme
     applyTelaTheme(s.theme || 'system');
+    // Restore dotfiles preference
+    if (s.hideDotfiles === false) {
+      filesHideDotfiles = false;
+      var cb = document.getElementById('files-hide-dotfiles');
+      if (cb) cb.checked = false;
+    }
   }).catch(function () {});
 
   // Version stamp
@@ -878,17 +885,16 @@ function updateMountButtonState() {
     return;
   }
 
-  goApp.GetAllMountConfigs().then(function (configs) {
+  goApp.GetMountConfig().then(function (mc) {
     goApp.IsMountRunning().then(function (running) {
       if (running) {
         mountBtn.disabled = false;
         mountBtn.classList.add('mounted');
         mountBtn.title = 'Unmount file shares';
-      } else if (configs && Object.keys(configs).length > 0) {
+      } else if (mc && mc.mount) {
         mountBtn.disabled = false;
         mountBtn.classList.remove('mounted');
-        var first = configs[Object.keys(configs)[0]];
-        mountBtn.title = 'Mount file shares (' + first.mount + ')';
+        mountBtn.title = 'Mount file shares (' + mc.mount + ')';
       } else {
         mountBtn.disabled = true;
         mountBtn.classList.remove('mounted');
@@ -1078,9 +1084,24 @@ function refreshAll() {
     }
 
     content.innerHTML = '';
+
+    // Profile Settings root node
+    var rootNode = document.createElement('div');
+    rootNode.className = 'profile-root' + (!selectedHubURL && !selectedMachineId && currentDetailView === 'profile' ? ' selected' : '');
+    rootNode.innerHTML = '<span class="profile-root-icon">&#x2699;</span> Profile Settings';
+    rootNode.onclick = function () { selectProfileSettings(rootNode); };
+    content.appendChild(rootNode);
+
     hubs.forEach(function (hub) {
       renderHubInSidebar(content, hub, connectedAtRefresh);
     });
+
+    // Preview node
+    var previewNode = document.createElement('div');
+    previewNode.className = 'profile-root' + (currentDetailView === 'preview' ? ' selected' : '');
+    previewNode.innerHTML = '<span class="profile-root-icon">&#x2B9A;</span> Preview';
+    previewNode.onclick = function () { selectPreviewNode(previewNode); };
+    content.appendChild(previewNode);
 
     updateConnectButton();
   });
@@ -1177,12 +1198,171 @@ function renderHubInSidebar(content, hub, isConnected) {
 
 // --- Detail Pane: Hub View ---
 
+function selectProfileSettings(el) {
+  clearSelection();
+  el.classList.add('selected');
+  selectedHubURL = null;
+  selectedMachineId = null;
+  currentDetailView = 'profile';
+  renderProfileSettings();
+}
+
+function selectPreviewNode(el) {
+  clearSelection();
+  el.classList.add('selected');
+  currentDetailView = 'preview';
+  renderPreview();
+}
+
 function selectHub(hub, el) {
   clearSelection();
   el.classList.add('selected');
   selectedHubURL = hub.url;
   selectedMachineId = null;
+  currentDetailView = 'hub';
   renderHubDetail(hub);
+}
+
+function renderProfileSettings() {
+  var pane = document.getElementById('detail-pane');
+  goApp.GetMountConfig().then(function (mc) {
+    goApp.GetProfileMTU().then(function (mtu) {
+      var isDefault = !mtu || mtu === 0;
+      var mtuVal = isDefault ? 1100 : mtu;
+
+      goApp.GetSettings().then(function (s) {
+        var profileName = s.defaultProfile || '';
+
+        var enabled = !!mc.mount;
+        var dis = enabled ? '' : ' disabled';
+
+        var html = '<div class="settings-group">'
+          + '<div class="settings-group-header">Name</div>'
+          + '<div class="settings-group-body">'
+          + '<input type="text" id="ps-name" class="form-input full-width" value="' + escAttr(profileName) + '" title="Profile name" onchange="onProfileNameChange()">'
+          + '</div></div>';
+
+        html += '<div class="settings-group">'
+          + '<div class="settings-group-header">Mount</div>'
+          + '<div class="settings-group-body"><div class="mount-config-form">'
+          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-enable"' + (enabled ? ' checked' : '') + ' onchange="onPsMountEnableToggle(this.checked)"> Enable</label></div>'
+          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-point">Mount point:</label><input type="text" id="ps-mount-point" class="form-input mono" value="' + escAttr(mc.mount || '') + '" data-required="Mount point is required when mount is enabled"' + dis + ' onchange="onPsMountChange()" onblur="validatePsMount()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-port">Port:</label><input type="number" id="ps-mount-port" class="form-input mono mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '"' + dis + ' onchange="onPsMountChange()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-auto"' + (mc.auto ? ' checked' : '') + dis + ' onchange="onPsMountChange()"> Auto-mount on connect</label></div>'
+          + '</div></div></div>';
+
+        html += '<div class="settings-group">'
+          + '<div class="settings-group-header">MTU</div>'
+          + '<div class="settings-group-body"><div class="mount-config-form">'
+          + '<div class="mount-config-row"><input type="number" id="ps-mtu" class="form-input mono mount-config-port" value="' + mtuVal + '" title="Tunnel MTU"' + (isDefault ? ' disabled' : '') + ' onchange="onPsMtuChange()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mtu-default"' + (isDefault ? ' checked' : '') + ' onchange="onPsMtuDefaultToggle(this.checked)"> Use default (1100)</label></div>'
+          + '</div></div></div>';
+
+        pane.innerHTML = html;
+      });
+    });
+  });
+}
+
+function renderPreview() {
+  var pane = document.getElementById('detail-pane');
+  goApp.GetProfilePath().then(function (path) {
+    goApp.GetSettings().then(function (s) {
+      var profileName = s.defaultProfile || '';
+      var cli = 'tela connect -profile "' + profileName + '"';
+
+      var html = '<div class="settings-group">'
+        + '<div class="settings-group-header">Profile</div>'
+        + '<div class="preview-info-row">'
+        + '<span class="preview-info-label">File:</span>'
+        + '<code class="preview-info-value" id="preview-path">' + escHtml(path) + '</code>'
+        + '<button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById(\'preview-path\').textContent)" title="Copy path">&#x2398;</button>'
+        + '</div>'
+        + '<div class="preview-info-row">'
+        + '<span class="preview-info-label">CLI:</span>'
+        + '<code class="preview-info-value" id="preview-cli">' + escHtml(cli) + '</code>'
+        + '<button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById(\'preview-cli\').textContent)" title="Copy command">&#x2398;</button>'
+        + '</div>'
+        + '</div>';
+
+      html += '<div class="settings-group">'
+        + '<div class="settings-group-header">YAML</div>'
+        + '<pre class="yaml-preview" id="preview-yaml">Loading...</pre>'
+        + '</div>';
+
+      pane.innerHTML = html;
+
+      // Load YAML content
+      goApp.GetProfileYAML().then(function (yaml) {
+        var el = document.getElementById('preview-yaml');
+        if (el) el.textContent = yaml || '(empty)';
+      });
+    });
+  });
+}
+
+// --- Profile Settings handlers ---
+
+function onProfileNameChange() {
+  var newName = (document.getElementById('ps-name').value || '').trim();
+  if (!newName) return;
+  goApp.GetCurrentProfile().then(function (oldName) {
+    if (oldName === newName) return;
+    goApp.RenameProfile(oldName, newName).then(function () {
+      refreshAll();
+    }).catch(function (err) {
+      tvLog('Rename failed: ' + err);
+    });
+  });
+}
+
+function onPsMountEnableToggle(checked) {
+  ['ps-mount-point', 'ps-mount-port', 'ps-mount-auto'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.disabled = !checked;
+  });
+  if (!checked) {
+    clearFieldError('ps-mount-point');
+    goApp.SetMountConfig({mount: '', port: 0, auto: false}).then(function () {
+      updateMountButtonState();
+    });
+  }
+  markProfileDirty();
+}
+
+function validatePsMount() {
+  var enabled = document.getElementById('ps-mount-enable');
+  var point = (document.getElementById('ps-mount-point').value || '').trim();
+  if (enabled && enabled.checked && !point) {
+    setFieldError('ps-mount-point', 'Mount point is required when mount is enabled');
+  } else {
+    clearFieldError('ps-mount-point');
+  }
+}
+
+function onPsMountChange() {
+  var point = (document.getElementById('ps-mount-point').value || '').trim();
+  var port = parseInt(document.getElementById('ps-mount-port').value) || 18080;
+  var auto = document.getElementById('ps-mount-auto').checked;
+  clearFieldError('ps-mount-point');
+  goApp.SetMountConfig({mount: point, port: port, auto: auto}).then(function () {
+    updateMountButtonState();
+  });
+  markProfileDirty();
+}
+
+function onPsMtuDefaultToggle(checked) {
+  document.getElementById('ps-mtu').disabled = checked;
+  if (checked) {
+    goApp.SetProfileMTU(0);
+  }
+  markProfileDirty();
+}
+
+function onPsMtuChange() {
+  var mtu = parseInt(document.getElementById('ps-mtu').value) || 1100;
+  goApp.SetProfileMTU(mtu);
+  markProfileDirty();
 }
 
 function renderHubDetail(hub) {
@@ -1222,6 +1402,7 @@ function selectMachine(hub, machine, el) {
   el.classList.add('selected');
   selectedHubURL = hub.url;
   selectedMachineId = machine.id || machine.hostname;
+  currentDetailView = 'machine';
   renderMachineDetail(hub, machine);
 }
 
@@ -1297,48 +1478,6 @@ function renderMachineDetail(hub, machine) {
     }
 
     pane.innerHTML = html;
-
-    // Append mount config card if machine has file sharing
-    var caps = machine.capabilities || {};
-    var fs = caps.fileShare || caps.FileShare;
-    if (fs && fs.enabled) {
-      goApp.GetMountConfig(machineId).then(function (mc) {
-        var mid = escAttr(machineId);
-        var placeholder = '';
-        var enabled = !!mc.mount;
-        var dis = enabled ? '' : ' disabled';
-        var mountHtml = '<div class="settings-group">'
-          + '<div class="settings-group-header">Mount</div>'
-          + '<div class="settings-group-body">'
-          + '<div class="cap-tags">';
-        mountHtml += fs.writable
-          ? '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>'
-          : '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> Read only</span>';
-        if (fs.writable && fs.allowDelete) {
-          mountHtml += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Delete</span>';
-        } else if (fs.writable) {
-          mountHtml += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> No delete</span>';
-        }
-        mountHtml += '</div>'
-          + '<div class="mount-config-form">'
-          + '<div class="mount-config-row">'
-          + '<label class="mount-config-label mount-config-check"><input type="checkbox" id="mc-enabled-' + mid + '"' + (enabled ? ' checked' : '') + ' onchange="onMountEnableToggle(\'' + mid + '\', this.checked)"> Enable</label>'
-          + '</div>'
-          + '<div class="mount-config-row">'
-          + '<label class="mount-config-label" for="mc-point-' + mid + '">Mount point</label>'
-          + '<input type="text" id="mc-point-' + mid + '" class="form-input mono" value="' + escAttr(mc.mount || '') + '" title="Drive letter or directory path" data-required="Mount point is required when mount is enabled"' + dis + ' onchange="onMountFieldChange(\'' + mid + '\')" onblur="validateMountPoint(\'' + mid + '\')">'
-          + '</div>'
-          + '<div class="mount-config-row">'
-          + '<label class="mount-config-label" for="mc-port-' + mid + '">Port</label>'
-          + '<input type="number" id="mc-port-' + mid + '" class="form-input mono mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '" title="WebDAV listen port"' + dis + ' onchange="onMountFieldChange(\'' + mid + '\')">'
-          + '</div>'
-          + '<div class="mount-config-row">'
-          + '<label class="mount-config-label mount-config-check"><input type="checkbox" id="mc-auto-' + mid + '"' + (mc.mount ? ' checked' : '') + dis + ' onchange="onMountFieldChange(\'' + mid + '\')"> Auto-mount on connect</label>'
-          + '</div>'
-          + '</div></div></div>';
-        pane.innerHTML += mountHtml;
-      });
-    }
   });
 }
 
@@ -1986,6 +2125,7 @@ var filesNavHistory = [];
 var filesSelectedIndices = new Set();
 var filesLastClickedIndex = -1;
 var filesCurrentEntries = [];
+var filesHideDotfiles = true;
 var filesSortCol = 'name';        // current sort column: name, modified, type, size
 var filesSortAsc = true;          // sort direction
 var filesListGeneration = 0;      // guards against stale async responses
@@ -2001,6 +2141,17 @@ function refreshFilesTab() {
 }
 
 // ── Machine list view ──
+
+function toggleHideDotfiles(hide) {
+  filesHideDotfiles = hide;
+  goApp.GetSettings().then(function (s) {
+    s.hideDotfiles = hide;
+    goApp.SaveSettings(JSON.stringify(s));
+  });
+  if (filesView === 'files') {
+    filesRenderEntries();
+  }
+}
 
 function filesShowMachineList() {
   filesView = 'machines';
@@ -2256,6 +2407,7 @@ function filesRenderEntries() {
   }
 
   filesCurrentEntries.forEach(function (entry, idx) {
+    if (filesHideDotfiles && entry.name.charAt(0) === '.') return;
     var selClass = filesSelectedIndices.has(idx) ? ' selected' : '';
     var dirClass = entry.isDir ? ' files-entry-dir' : '';
     var dragAttr = canDrag ? ' draggable="true" ondragstart="filesDragStart(event, ' + idx + ')"' : '';
@@ -4287,6 +4439,12 @@ function escAttr(s) {
 
 function hubNameFromURL(url) {
   return hubNameFromUrl(url);
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text);
+  }
 }
 
 function showError(msg) {

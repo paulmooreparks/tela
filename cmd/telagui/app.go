@@ -113,7 +113,6 @@ type ProfileConnection struct {
 	Machine  string           `yaml:"machine" json:"machine"`
 	Token    string           `yaml:"token,omitempty" json:"token,omitempty"`
 	Services []ProfileService `yaml:"services" json:"services"`
-	Mount    ProfileMount     `yaml:"mount,omitempty" json:"mount"`
 }
 
 // ProfileService represents one service in a profile connection.
@@ -127,12 +126,14 @@ type ProfileService struct {
 type ProfileMount struct {
 	Mount string `yaml:"mount,omitempty" json:"mount"`
 	Port  int    `yaml:"port,omitempty" json:"port"`
+	Auto  bool   `yaml:"auto,omitempty" json:"auto"`
 }
 
 // Profile is the top-level profile YAML structure.
 type Profile struct {
 	Connections []ProfileConnection `yaml:"connections" json:"connections"`
 	MTU         int                 `yaml:"mtu,omitempty" json:"mtu,omitempty"`
+	Mount       ProfileMount        `yaml:"mount,omitempty" json:"mount"`
 }
 
 // ConnectionState is the current connection state returned to the frontend.
@@ -1378,29 +1379,18 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 		connections[i].Token = ""
 	}
 
-	// Preserve MTU and per-connection mount configs from existing profile
+	// Preserve MTU and mount config from existing profile
 	existingMTU := 0
-	existingMounts := map[string]ProfileMount{}
+	existingMount := ProfileMount{}
 	if existingData, err := os.ReadFile(profilePath()); err == nil {
 		var existing Profile
 		if yaml.Unmarshal(existingData, &existing) == nil {
 			existingMTU = existing.MTU
-			for _, conn := range existing.Connections {
-				if conn.Mount.Mount != "" {
-					existingMounts[conn.Machine] = conn.Mount
-				}
-			}
+			existingMount = existing.Mount
 		}
 	}
 
-	// Restore mount configs to connections
-	for i := range connections {
-		if mc, ok := existingMounts[connections[i].Machine]; ok {
-			connections[i].Mount = mc
-		}
-	}
-
-	profile := Profile{Connections: connections, MTU: existingMTU}
+	profile := Profile{Connections: connections, MTU: existingMTU, Mount: existingMount}
 
 	data, err := yaml.Marshal(profile)
 	if err != nil {
@@ -2692,6 +2682,15 @@ func (a *App) GetProfilePath() string {
 	return profilePath()
 }
 
+// GetProfileYAML returns the raw YAML content of the current profile.
+func (a *App) GetProfileYAML() string {
+	data, err := os.ReadFile(profilePath())
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
 // GetCurrentProfile returns the active profile name.
 func (a *App) GetCurrentProfile() string {
 	profileMu.RLock()
@@ -2807,6 +2806,7 @@ type Settings struct {
 	BinPath                  string `yaml:"binPath" json:"binPath"`
 	ConnectTooltipDismissed  bool   `yaml:"connectTooltipDismissed" json:"connectTooltipDismissed"`
 	Theme                   string `yaml:"theme" json:"theme"`
+	HideDotfiles            *bool  `yaml:"hideDotfiles,omitempty" json:"hideDotfiles"`
 }
 
 func defaultSettings() Settings {
@@ -3215,17 +3215,13 @@ func (a *App) StartMount() (string, error) {
 		return "", fmt.Errorf("tela binary not found")
 	}
 
-	// Use the first connection's mount config
-	mounts := a.GetAllMountConfigs()
+	mc := a.GetMountConfig()
 	args := []string{"mount"}
-	for _, mc := range mounts {
-		if mc.Port > 0 {
-			args = append(args, "-port", fmt.Sprintf("%d", mc.Port))
-		}
-		if mc.Mount != "" {
-			args = append(args, "-mount", mc.Mount)
-		}
-		break // use the first configured mount
+	if mc.Port > 0 {
+		args = append(args, "-port", fmt.Sprintf("%d", mc.Port))
+	}
+	if mc.Mount != "" {
+		args = append(args, "-mount", mc.Mount)
 	}
 
 	cmd := exec.Command(telaPath, args...)
@@ -3323,8 +3319,8 @@ func (a *App) SetProfileMTU(mtu int) error {
 	return os.WriteFile(profilePath(), out, 0600)
 }
 
-// GetMountConfig returns the mount configuration for a specific machine in the current profile.
-func (a *App) GetMountConfig(machine string) ProfileMount {
+// GetMountConfig returns the profile-level mount configuration.
+func (a *App) GetMountConfig() ProfileMount {
 	data, err := os.ReadFile(profilePath())
 	if err != nil {
 		return ProfileMount{}
@@ -3333,16 +3329,11 @@ func (a *App) GetMountConfig(machine string) ProfileMount {
 	if yaml.Unmarshal(data, &profile) != nil {
 		return ProfileMount{}
 	}
-	for _, conn := range profile.Connections {
-		if conn.Machine == machine {
-			return conn.Mount
-		}
-	}
-	return ProfileMount{}
+	return profile.Mount
 }
 
-// SetMountConfig saves the mount configuration for a specific machine in the current profile.
-func (a *App) SetMountConfig(machine string, mount ProfileMount) error {
+// SetMountConfig saves the profile-level mount configuration.
+func (a *App) SetMountConfig(mount ProfileMount) error {
 	data, err := os.ReadFile(profilePath())
 	if err != nil {
 		return err
@@ -3351,41 +3342,12 @@ func (a *App) SetMountConfig(machine string, mount ProfileMount) error {
 	if yaml.Unmarshal(data, &profile) != nil {
 		return fmt.Errorf("invalid profile")
 	}
-	found := false
-	for i, conn := range profile.Connections {
-		if conn.Machine == machine {
-			profile.Connections[i].Mount = mount
-			found = true
-			break
-		}
-	}
-	if !found {
-		return fmt.Errorf("machine %q not found in profile", machine)
-	}
+	profile.Mount = mount
 	out, err := yaml.Marshal(profile)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(profilePath(), out, 0600)
-}
-
-// GetAllMountConfigs returns mount configs for all connections that have one configured.
-func (a *App) GetAllMountConfigs() map[string]ProfileMount {
-	data, err := os.ReadFile(profilePath())
-	if err != nil {
-		return nil
-	}
-	var profile Profile
-	if yaml.Unmarshal(data, &profile) != nil {
-		return nil
-	}
-	result := map[string]ProfileMount{}
-	for _, conn := range profile.Connections {
-		if conn.Mount.Mount != "" {
-			result[conn.Machine] = conn.Mount
-		}
-	}
-	return result
 }
 
 // IsAttached returns true if TV is attached to an external tela process.

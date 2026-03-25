@@ -824,6 +824,13 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	machinesMu.Unlock()
 
 	entry.mu.Lock()
+	// Close the old control WebSocket if the agent is reconnecting.
+	// This forces the old goroutine to exit and prevents handleDisconnect
+	// from racing with the new registration.
+	if entry.ControlWS != nil && entry.ControlWS != ws {
+		oldWS := entry.ControlWS
+		go oldWS.Close()
+	}
 	entry.ControlWS = ws
 	entry.Token = msg.Token
 	entry.Ports = msg.Ports
@@ -1113,10 +1120,14 @@ func handleDisconnect(ws *websocket.Conn) {
 
 	switch state.Role {
 	case "agent":
-		// Agent control WS disconnected -- close ALL sessions for this machine
+		// Agent control WS disconnected -- only clear if this is still the active
+		// connection. If the agent reconnected before this disconnect fires, a new
+		// ControlWS is already set and we must not overwrite it.
 		entry.mu.Lock()
-		entry.ControlWS = nil
-		entry.LastSeen = time.Now()
+		if entry.ControlWS == ws {
+			entry.ControlWS = nil
+			entry.LastSeen = time.Now()
+		}
 		sessions := make(map[string]*clientSession, len(entry.Sessions))
 		for k, v := range entry.Sessions {
 			sessions[k] = v

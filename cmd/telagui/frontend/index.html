@@ -54,16 +54,10 @@
       <button class="tb-btn tb-save-btn" id="save-btn" disabled onclick="saveSelections()" title="Save">Save</button>
       <span class="tb-sep"></span>
       <button class="tb-btn" onclick="newProfile()" title="New profile">New</button>
-      <button class="tb-btn" onclick="renameCurrentProfile()" title="Rename profile">Rename</button>
       <button class="tb-btn tb-delete-btn" onclick="deleteCurrentProfile()" title="Delete profile">Delete</button>
       <span class="tb-sep"></span>
       <button class="tb-btn" onclick="importProfile()" title="Import profile">Import</button>
       <button class="tb-btn" onclick="exportProfile()" title="Export profile">Export</button>
-      <span class="tb-sep"></span>
-      <button class="tb-btn" onclick="showProfileOverview()" title="Preview profile YAML">Preview</button>
-      <button class="tb-btn" onclick="copyProfileCLI()" title="Copy tela connect command to clipboard">Copy CLI</button>
-      <span class="tb-sep"></span>
-      <button class="tb-btn" onclick="openMTUDialog()" title="Set tunnel MTU">Set MTU...</button>
     </div>
 
     <!-- Infrastructure mode tab bar -->
@@ -118,6 +112,7 @@
           <button type="button" class="files-action-btn" id="files-btn-download" onclick="filesDownloadSelected()" disabled>Download</button>
           <button type="button" class="files-action-btn danger" id="files-btn-delete" onclick="filesDeleteSelected()" disabled>Delete</button>
           <div class="tab-bar-spacer"></div>
+          <label class="files-dotfiles-toggle" title="Show or hide dotfiles and dot directories"><input type="checkbox" id="files-hide-dotfiles" checked onchange="toggleHideDotfiles(this.checked)"> Hide dotfiles</label>
           <span id="files-selection-info" style="font-size: 11px; color: var(--text-muted);"></span>
         </div>
         <div class="files-header" id="files-header" style="display: none;">
@@ -227,15 +222,6 @@
           </div>
         </div>
 
-        <div class="settings-card-block">
-          <h3>Explorer Integration</h3>
-          <p class="settings-card-desc">Mount file shares as a local drive via WebDAV (<code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela mount</code>).</p>
-          <div class="service-status-row">Status: <strong id="mount-status">not running</strong></div>
-          <div class="settings-service-actions">
-            <button type="button" class="tb-btn" id="mount-start-btn" onclick="startMountProcess()">Start</button>
-            <button type="button" class="tb-btn" id="mount-stop-btn" onclick="stopMountProcess()" disabled>Stop</button>
-          </div>
-        </div>
       </div>
     </div>
 

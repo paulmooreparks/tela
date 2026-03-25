@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profiles Tab - Mount Config Mockup</title>
+<style>
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --surface-alt: #f0f1f4;
+  --text: #1a1a2e; --text-muted: #6b7280; --accent: #2ecc71;
+  --accent-hover: #27ae60; --topbar-bg: #1b2636; --border: #e2e5ea;
+  --danger: #e74c3c; --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+[data-theme="dark"] {
+  --bg: #111827; --surface: #1f2937; --surface-alt: #1a2332;
+  --text: #e5e7eb; --text-muted: #9ca3af; --border: #374151;
+  --topbar-bg: #0f172a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+
+/* Topbar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--topbar-bg); color: #e0e0e0; padding: 0 16px; height: 44px; flex-shrink: 0;
+}
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar-logo { font-size: 16px; font-weight: 700; color: var(--accent); }
+.topbar-version { font-size: 11px; color: var(--text-muted); }
+.topbar-icon-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2);
+  background: transparent; color: rgba(255,255,255,0.6); cursor: pointer; font-size: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* Tab bar */
+.tab-bar { display: flex; gap: 0; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; padding: 0 16px; }
+.tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Toolbar */
+.toolbar { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--surface-alt); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+.toolbar select { padding: 4px 8px; font-size: 13px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
+.tb-btn { padding: 4px 10px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; }
+.tb-btn:hover { border-color: var(--accent); }
+.tb-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tb-sep { width: 1px; height: 20px; background: var(--border); }
+
+/* Main content */
+.main-content { flex: 1; display: flex; min-height: 0; }
+
+/* Sidebar */
+.sidebar { width: 280px; border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; flex-shrink: 0; }
+.hub-group { }
+.hub-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.hub-header:hover { background: var(--surface-alt); }
+.hub-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.machine-item { display: flex; align-items: center; gap: 8px; padding: 8px 16px 8px 40px; font-size: 13px; cursor: pointer; border-left: 3px solid transparent; }
+.machine-item:hover { background: var(--surface-alt); }
+.machine-item.selected { background: var(--surface-alt); border-left-color: var(--accent); }
+.machine-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.profile-root {
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.profile-root:hover { background: var(--surface-alt); }
+.profile-root.selected { background: var(--surface-alt); border-left-color: var(--accent); }
+.profile-root-icon { font-size: 16px; }
+
+/* Detail + mount split */
+.detail-area { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.detail-pane { flex: 1; padding: 24px; overflow-y: auto; }
+.detail-pane h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.detail-pane .section-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+
+/* Settings group (cards) */
+.settings-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+.settings-group-header { padding: 12px 16px; background: var(--surface-alt); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13px; }
+.profile-svc-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--surface-alt); font-size: 13px; }
+.profile-svc-row:last-child { border-bottom: none; }
+.profile-svc-name { font-weight: 500; width: 120px; }
+.profile-svc-port { font-family: var(--mono); font-size: 12px; color: var(--text-muted); width: 80px; }
+.profile-svc-proto { font-size: 12px; color: var(--text-muted); width: 60px; }
+.profile-svc-local { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-left: auto; }
+
+/* Settings group body */
+.settings-group-body { padding: 12px 16px; }
+.hidden { display: none !important; }
+
+/* Form layout (reusable) */
+.mount-config-form { font-size: 13px; }
+.mount-config-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mount-config-row:last-child { margin-bottom: 0; }
+.mount-config-label { flex-shrink: 0; color: var(--text-muted); font-size: 12px; }
+.mount-config-input {
+  padding: 4px 8px; font-size: 12px; font-family: var(--mono);
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text);
+}
+.mount-config-input:focus { border-color: var(--accent); outline: none; }
+.mount-config-port { max-width: 80px; }
+.full-width { width: 100%; }
+.push-right { margin-left: auto; }
+.mount-config-check { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; }
+.mount-config-check input { accent-color: var(--accent); }
+input:disabled { opacity: 0.4; cursor: default; }
+
+/* Preview info rows */
+.preview-info-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid var(--surface-alt); font-size: 13px;
+}
+.preview-info-row:last-child { border-bottom: none; }
+.preview-info-label { flex-shrink: 0; font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.preview-info-value {
+  flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px;
+  color: var(--text); background: var(--surface-alt); padding: 6px 10px;
+  border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.copy-btn {
+  flex-shrink: 0; width: 28px; height: 28px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--text-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* YAML preview */
+.yaml-card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.yaml-card .yaml-preview { flex: 1; }
+.yaml-preview {
+  padding: 12px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  color: var(--text-muted); background: var(--surface-alt); margin: 0;
+  white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto;
+}
+
+/* Log panel stub */
+.log-panel { height: 100px; border-top: 1px solid var(--border); background: var(--topbar-bg); color: #9ca3af; font-size: 12px; padding: 8px 16px; flex-shrink: 0; overflow-y: auto; font-family: var(--mono); }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">TelaVisor</span>
+    <span class="topbar-version">v0.3.58</span>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-icon-btn" title="Connect">&#x23FB;</button>
+    <button class="topbar-icon-btn" title="Mount" style="opacity:0.3" disabled>
+      <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 3V12H15V3H7L5.5 1H1V3Z"/></svg>
+    </button>
+    <button class="topbar-icon-btn" title="Updates">&#x26A0;</button>
+    <button class="topbar-icon-btn" title="About">i</button>
+    <button class="topbar-icon-btn" title="Settings">&#x2699;</button>
+    <button class="topbar-icon-btn" title="Quit" style="color:#e74c3c;">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab">Status</button>
+  <button class="tab active">Profiles</button>
+  <button class="tab">Files</button>
+  <button class="tab">Client Settings</button>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <select><option>Home Cloud</option></select>
+  <button class="tb-btn" disabled>&#x21B6;</button>
+  <button class="tb-btn" disabled>Save</button>
+  <button class="tb-btn">New</button>
+  <button class="tb-btn">Delete</button>
+  <span class="tb-sep"></span>
+  <button class="tb-btn">Import</button>
+  <button class="tb-btn">Export</button>
+</div>
+
+<!-- Main content: sidebar + detail area -->
+<div class="main-content">
+  <div class="sidebar">
+    <div class="profile-root selected" onclick="selectRoot(this)">
+      <span class="profile-root-icon">&#x2699;</span>
+      Profile Settings
+    </div>
+    <div class="hub-group">
+      <div class="hub-header">
+        <input type="checkbox" checked>
+        <span class="hub-dot"></span>
+        gohub.parkscomputing.com
+      </div>
+      <div class="machine-item" onclick="selectMachine(this)">
+        <span class="machine-dot"></span>
+        gohub
+      </div>
+      <div class="machine-item" onclick="selectMachine(this)">
+        <span class="machine-dot"></span>
+        barn
+      </div>
+    </div>
+    <div class="hub-group">
+      <div class="hub-header" style="opacity:0.5;">
+        <input type="checkbox">
+        <span class="hub-dot" style="background:var(--text-muted);"></span>
+        devhub.awansaya.net
+      </div>
+    </div>
+    <div class="profile-root" onclick="selectPreview(this)">
+      <span class="profile-root-icon">&#x2B9A;</span>
+      Preview
+    </div>
+  </div>
+
+  <div class="detail-area">
+    <!-- Profile root detail (shown when root node selected) -->
+    <div class="detail-pane" id="detail-profile">
+      <div class="settings-group">
+        <div class="settings-group-header">Name</div>
+        <div class="settings-group-body">
+          <input type="text" id="profile-name" class="mount-config-input full-width" value="Home Cloud" title="Profile name">
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-header">Mount</div>
+        <div class="settings-group-body">
+          <div class="mount-config-form">
+            <div class="mount-config-row">
+              <label class="mount-config-check"><input type="checkbox" id="mount-enable" checked onchange="toggleMountFields(this.checked)"> Enable</label>
+            </div>
+            <div class="mount-config-row">
+              <label class="mount-config-label" for="mount-point">Mount point:</label>
+              <input type="text" id="mount-point" class="mount-config-input" value="T:">
+            </div>
+            <div class="mount-config-row">
+              <label class="mount-config-label" for="mount-port">Port:</label>
+              <input type="number" id="mount-port" class="mount-config-input mount-config-port" value="18080">
+            </div>
+            <div class="mount-config-row">
+              <label class="mount-config-check"><input type="checkbox" id="mount-auto" checked> Auto-mount on connect</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-header">MTU</div>
+        <div class="settings-group-body">
+          <div class="mount-config-form">
+            <div class="mount-config-row">
+              <input type="number" id="profile-mtu" class="mount-config-input mount-config-port" value="1100" title="Tunnel MTU" disabled>
+            </div>
+            <div class="mount-config-row">
+              <label class="mount-config-check"><input type="checkbox" id="mtu-default" checked onchange="document.getElementById('profile-mtu').disabled = this.checked"> Use default (1100)</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Machine detail (shown when a machine is selected) -->
+    <div class="detail-pane hidden" id="detail-machine">
+      <h2>barn</h2>
+      <p class="section-desc">Online on gohub.parkscomputing.com</p>
+
+      <div class="settings-group">
+        <div class="settings-group-header">Services</div>
+        <div class="profile-svc-row">
+          <input type="checkbox" checked>
+          <div class="profile-svc-name">SSH</div>
+          <div class="profile-svc-port">:22</div>
+          <div class="profile-svc-proto">tcp</div>
+          <div class="profile-svc-local">localhost:10023</div>
+        </div>
+        <div class="profile-svc-row">
+          <input type="checkbox" checked>
+          <div class="profile-svc-name">RDP</div>
+          <div class="profile-svc-port">:3389</div>
+          <div class="profile-svc-proto">tcp</div>
+          <div class="profile-svc-local">localhost:13389</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview detail (shown when Preview node selected) -->
+    <div class="detail-pane hidden" id="detail-preview">
+      <div class="settings-group">
+        <div class="settings-group-header">Profile</div>
+        <div class="preview-info-row">
+          <span class="preview-info-label">File:</span>
+          <code class="preview-info-value" id="profile-path-display">C:\Users\paul\AppData\Roaming\tela\profiles\Home Cloud.yaml</code>
+          <button type="button" class="copy-btn" onclick="copyText('profile-path-display')" title="Copy path">&#x2398;</button>
+        </div>
+        <div class="preview-info-row">
+          <span class="preview-info-label">CLI:</span>
+          <code class="preview-info-value" id="profile-cli-display">tela connect -profile "Home Cloud"</code>
+          <button type="button" class="copy-btn" onclick="copyText('profile-cli-display')" title="Copy command">&#x2398;</button>
+        </div>
+      </div>
+
+      <div class="settings-group yaml-card">
+        <div class="settings-group-header">YAML</div>
+        <pre class="yaml-preview" id="yaml-preview"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log panel stub -->
+<div class="log-panel">
+2026-03-24T13:01:26Z TelaVisor started<br>
+2026-03-24T13:01:26Z Profile loaded
+</div>
+
+<script>
+function toggleMountFields(enabled) {
+  document.getElementById('mount-point').disabled = !enabled;
+  document.getElementById('mount-port').disabled = !enabled;
+  document.getElementById('mount-auto').disabled = !enabled;
+}
+
+function clearSelection() {
+  document.querySelectorAll('.profile-root, .machine-item').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+}
+
+function selectRoot(el) {
+  clearSelection();
+  el.classList.add('selected');
+  document.getElementById('detail-profile').classList.remove('hidden');
+  document.getElementById('detail-machine').classList.add('hidden');
+  document.getElementById('detail-preview').classList.add('hidden');
+}
+
+function selectMachine(el) {
+  clearSelection();
+  el.classList.add('selected');
+  document.getElementById('detail-profile').classList.add('hidden');
+  document.getElementById('detail-machine').classList.remove('hidden');
+  document.getElementById('detail-preview').classList.add('hidden');
+}
+
+function selectPreview(el) {
+  clearSelection();
+  el.classList.add('selected');
+  document.getElementById('detail-profile').classList.add('hidden');
+  document.getElementById('detail-machine').classList.add('hidden');
+  document.getElementById('detail-preview').classList.remove('hidden');
+  updateYamlPreview();
+}
+
+function copyText(id) {
+  var el = document.getElementById(id);
+  if (el) navigator.clipboard.writeText(el.textContent);
+}
+
+function updateYamlPreview() {
+  var name = document.getElementById('profile-name').value || 'Untitled';
+  var mountEnabled = document.getElementById('mount-enable').checked;
+  var mountPoint = document.getElementById('mount-point').value;
+  var mountPort = parseInt(document.getElementById('mount-port').value) || 18080;
+  var mountAuto = document.getElementById('mount-auto').checked;
+  var mtuDefault = document.getElementById('mtu-default').checked;
+  var mtu = parseInt(document.getElementById('profile-mtu').value) || 1100;
+
+  var yaml = 'connections:\n';
+  yaml += '  - hub: wss://gohub.parkscomputing.com\n';
+  yaml += '    machine: gohub\n';
+  yaml += '    services:\n';
+  yaml += '      - remote: 22\n';
+  yaml += '  - hub: wss://gohub.parkscomputing.com\n';
+  yaml += '    machine: barn\n';
+  yaml += '    services:\n';
+  yaml += '      - remote: 22\n';
+  yaml += '      - remote: 3389\n';
+  if (mountEnabled && mountPoint) {
+    yaml += 'mount:\n';
+    yaml += '  mount: ' + mountPoint + '\n';
+    if (mountPort !== 18080) {
+      yaml += '  port: ' + mountPort + '\n';
+    }
+    if (mountAuto) {
+      yaml += '  auto: true\n';
+    }
+  }
+  if (!mtuDefault && mtu !== 1100) {
+    yaml += 'mtu: ' + mtu + '\n';
+  }
+
+  document.getElementById('yaml-preview').textContent = yaml;
+
+  // Update CLI and path
+  document.getElementById('profile-cli-display').textContent = 'tela connect -profile "' + name + '"';
+  document.getElementById('profile-path-display').textContent =
+    'C:\\Users\\paul\\AppData\\Roaming\\tela\\profiles\\' + name + '.yaml';
+}
+
+// No initial render -- preview refreshes when its node is selected
+</script>
+
+</body>
+</html>

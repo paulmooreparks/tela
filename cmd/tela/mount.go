@@ -169,12 +169,22 @@ func mountListMachines() ([]string, error) {
 	}
 	json.NewDecoder(resp.Body).Decode(&services)
 
+	// Collect unique machines, then probe each for file share support
 	seen := map[string]bool{}
-	var machines []string
+	var candidates []string
 	for _, s := range services {
 		if !seen[s.Machine] {
 			seen[s.Machine] = true
-			machines = append(machines, s.Machine)
+			candidates = append(candidates, s.Machine)
+		}
+	}
+
+	var machines []string
+	for _, m := range candidates {
+		// A successful list request means file sharing is enabled
+		_, err := mountFileShareRequest(m, mountFsRequest{Op: "list", Path: ""})
+		if err == nil {
+			machines = append(machines, m)
 		}
 	}
 	return machines, nil

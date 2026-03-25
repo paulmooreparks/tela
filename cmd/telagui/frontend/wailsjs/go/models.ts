@@ -72,20 +72,6 @@ export namespace main {
 	        this.command = source["command"];
 	    }
 	}
-	export class ProfileMount {
-	    mount: string;
-	    port: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new ProfileMount(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.mount = source["mount"];
-	        this.port = source["port"];
-	    }
-	}
 	export class ProfileService {
 	    name: string;
 	    local: number;
@@ -107,7 +93,6 @@ export namespace main {
 	    machine: string;
 	    token?: string;
 	    services: ProfileService[];
-	    mount: ProfileMount;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileConnection(source);
@@ -119,7 +104,6 @@ export namespace main {
 	        this.machine = source["machine"];
 	        this.token = source["token"];
 	        this.services = this.convertValues(source["services"], ProfileService);
-	        this.mount = this.convertValues(source["mount"], ProfileMount);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -322,7 +306,22 @@ export namespace main {
 	    }
 	}
 	
+	export class ProfileMount {
+	    mount: string;
+	    port: number;
+	    auto: boolean;
 	
+	    static createFrom(source: any = {}) {
+	        return new ProfileMount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mount = source["mount"];
+	        this.port = source["port"];
+	        this.auto = source["auto"];
+	    }
+	}
 	
 	export class RemoteInfo {
 	    name: string;
@@ -354,6 +353,7 @@ export namespace main {
 	    binPath: string;
 	    connectTooltipDismissed: boolean;
 	    theme: string;
+	    hideDotfiles?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -375,6 +375,7 @@ export namespace main {
 	        this.binPath = source["binPath"];
 	        this.connectTooltipDismissed = source["connectTooltipDismissed"];
 	        this.theme = source["theme"];
+	        this.hideDotfiles = source["hideDotfiles"];
 	    }
 	}
 	export class ToolVersions {

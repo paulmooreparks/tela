@@ -15,6 +15,7 @@ var (
 	mpr                    = windows.NewLazySystemDLL("mpr.dll")
 	procWNetAddConnection2 = mpr.NewProc("WNetAddConnection2W")
 	procWNetCancelConn2    = mpr.NewProc("WNetCancelConnection2W")
+	procWNetGetConnection  = mpr.NewProc("WNetGetConnectionW")
 )
 
 const (
@@ -34,24 +35,68 @@ type netResource struct {
 	Provider    *uint16
 }
 
+// driveRemotePath returns the UNC remote path for a mapped drive letter,
+// or empty string if the drive is not a network mapping.
+func driveRemotePath(drive string) string {
+	localName, err := windows.UTF16PtrFromString(strings.ToUpper(drive))
+	if err != nil {
+		return ""
+	}
+	buf := make([]uint16, 260)
+	bufLen := uint32(len(buf))
+	ret, _, _ := procWNetGetConnection.Call(
+		uintptr(unsafe.Pointer(localName)),
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(unsafe.Pointer(&bufLen)),
+	)
+	if ret != 0 {
+		return ""
+	}
+	return windows.UTF16ToString(buf[:bufLen])
+}
+
+// expectedRemotePath returns the UNC path that tela mount would map to.
+func expectedRemotePath(addr string) string {
+	return `\\localhost@` + strings.Split(addr, ":")[1] + `\DavWWWRoot`
+}
+
 func validateMountPoint(mountArg string) error {
 	vol := filepath.VolumeName(mountArg)
 	if vol == "" || vol != mountArg {
 		return fmt.Errorf("on Windows, mount point must be a drive letter (e.g., T:), not a directory path")
 	}
+	// Drive exists -- check if it's already ours (will be verified in platformMount)
+	// or something else entirely
 	if _, err := os.Stat(mountArg + `\`); err == nil {
-		return fmt.Errorf("drive %s is already in use", mountArg)
+		remote := driveRemotePath(mountArg)
+		if remote == "" {
+			// It's a local drive, not a network mapping
+			return fmt.Errorf("drive %s is a local drive, not available for mapping", mountArg)
+		}
+		// It's a network drive -- platformMount will check if it's ours
 	}
 	return nil
 }
 
 func platformMount(mountArg, addr string) error {
+	target := expectedRemotePath(addr)
+
+	// Check if already mapped to our target
+	existing := driveRemotePath(mountArg)
+	if strings.EqualFold(existing, target) {
+		log.Printf("drive %s already mapped to %s", mountArg, target)
+		return nil
+	}
+	if existing != "" {
+		return fmt.Errorf("drive %s is already mapped to %s (expected %s)", mountArg, existing, target)
+	}
+
 	localName, err := windows.UTF16PtrFromString(strings.ToUpper(mountArg))
 	if err != nil {
 		return fmt.Errorf("invalid drive letter: %w", err)
 	}
 
-	remoteName, err := windows.UTF16PtrFromString(`\\localhost@` + strings.Split(addr, ":")[1] + `\DavWWWRoot`)
+	remoteName, err := windows.UTF16PtrFromString(target)
 	if err != nil {
 		return fmt.Errorf("invalid remote path: %w", err)
 	}
