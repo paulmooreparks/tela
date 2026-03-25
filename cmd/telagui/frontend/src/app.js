@@ -1682,6 +1682,12 @@ function onConnectionChanged() {
   } else {
     filesShowMachineList();
   }
+  // Re-render current detail pane to update disabled states
+  if (currentDetailView === 'profile') {
+    renderProfileSettings();
+  } else if (currentDetailView === 'preview') {
+    renderPreview();
+  }
 }
 
 // Legacy compatibility: called from places that used to call updateConnectButton.
