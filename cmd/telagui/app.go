@@ -590,6 +590,9 @@ func (a *App) shutdown(ctx context.Context) {
 
 	a.DisconnectControlWS()
 
+	mc := a.GetMountConfig()
+	platformUnmountDrive(mc.Mount)
+
 	a.mu.Lock()
 	if a.mountProcess != nil {
 		killProcessTree(a.mountProcess.Pid)
@@ -664,6 +667,9 @@ func (a *App) QuitApp() {
 
 // ForceQuit kills the tela and mount process trees and exits immediately.
 func (a *App) ForceQuit() {
+	mc := a.GetMountConfig()
+	platformUnmountDrive(mc.Mount)
+
 	a.mu.Lock()
 	if a.mountProcess != nil {
 		killProcessTree(a.mountProcess.Pid)
@@ -3306,6 +3312,10 @@ func (a *App) StartMount() (string, error) {
 
 // StopMount stops the mount child process.
 func (a *App) StopMount() error {
+	// Unmap the drive before killing the process to prevent orphaned mappings
+	mc := a.GetMountConfig()
+	platformUnmountDrive(mc.Mount)
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.mountProcess == nil {
