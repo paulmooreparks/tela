@@ -1585,6 +1585,13 @@ persistent_keepalive_interval=25
 		wsReader(wsConn, bind, hubURL)
 	}()
 
+	// Send periodic data-frame keepalive to prevent proxy idle timeouts
+	// (e.g., Cloudflare). Once UDP relay is active, no data frames flow
+	// over the WebSocket, and some proxies kill connections that only
+	// have ping/pong control frames.
+	stopDataKeepalive := bind.StartDataKeepalive(30 * time.Second)
+	defer stopDataKeepalive()
+
 	// Attempt UDP relay upgrade (if hub offered it)
 	if udpTokenHex != "" && udpPort > 0 {
 		tryUDPUpgrade(bind, hubURL, udpTokenHex, udpPort, udpHost)

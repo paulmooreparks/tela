@@ -549,6 +549,34 @@ func (b *Bind) SendText(data []byte) error {
 	return b.ws.WriteMessage(websocket.TextMessage, data)
 }
 
+// StartDataKeepalive sends a periodic text-frame keepalive over the
+// WebSocket to prevent intermediate proxies (e.g., Cloudflare) from
+// closing the connection due to inactivity. When the tunnel upgrades
+// to UDP relay, no data frames flow over the WebSocket, and some
+// proxies do not count ping/pong control frames as activity.
+// The keepalive message is a small JSON text frame that the hub relays
+// to the peer, where it is silently ignored.
+// Returns a stop function to cancel the keepalive goroutine.
+func (b *Bind) StartDataKeepalive(interval time.Duration) func() {
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		msg := []byte(`{"type":"keepalive"}`)
+		for {
+			select {
+			case <-ticker.C:
+				if err := b.SendText(msg); err != nil {
+					return // WebSocket closed
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return func() { close(stop) }
+}
+
 // endpoint is a trivial implementation -- one peer per bind.
 type endpoint struct{}
 

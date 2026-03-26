@@ -780,8 +780,11 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// If paired, relay to peer
+		// If paired, relay to peer (absorb keepalive frames)
 		if state.Paired {
+			if msgType == websocket.TextMessage && len(data) < 64 && bytes.Contains(data, []byte(`"keepalive"`)) {
+				continue // proxy keepalive; do not relay
+			}
 			wsStatesMu.RLock()
 			peer := state.Peer
 			wsStatesMu.RUnlock()

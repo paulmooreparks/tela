@@ -1169,6 +1169,10 @@ persistent_keepalive_interval=25
 		wsReader(lg, ws, bind, hubURL, sessionEnded)
 	}()
 
+	// Send periodic data-frame keepalive to prevent proxy idle timeouts
+	stopDataKeepalive := bind.StartDataKeepalive(30 * time.Second)
+	defer stopDataKeepalive()
+
 	// Listen on each port inside netstack
 	var listeners []net.Listener
 	for _, port := range ports {
