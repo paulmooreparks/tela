@@ -838,11 +838,11 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
     }
 
     function authFetch(url) {
+      var opts = {};
       if (window.TELA_CONSOLE_TOKEN) {
-        var sep = url.indexOf('?') === -1 ? '?' : '&';
-        url += sep + 'token=' + encodeURIComponent(window.TELA_CONSOLE_TOKEN);
+        opts.headers = { 'Authorization': 'Bearer ' + window.TELA_CONSOLE_TOKEN };
       }
-      return fetch(url);
+      return fetch(url, opts);
     }
 
     // ── Refresh button state ─────────────────────────────────────────
@@ -1141,10 +1141,11 @@ tela status   -hub &lt;hub-url&gt;                            # hub status summa
       // We use GET /api/admin/tokens which requires owner/admin auth.
       function checkAdminAccess() {
         var url = '/api/admin/tokens';
+        var opts = {};
         if (window.TELA_CONSOLE_TOKEN) {
-          url += '?token=' + encodeURIComponent(window.TELA_CONSOLE_TOKEN);
+          opts.headers = { 'Authorization': 'Bearer ' + window.TELA_CONSOLE_TOKEN };
         }
-        fetch(url).then(function (r) {
+        fetch(url, opts).then(function (r) {
           if (r.status === 200) {
             pairingCard.classList.remove('hidden');
             pairingSubnav.classList.remove('hidden');

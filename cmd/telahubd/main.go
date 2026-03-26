@@ -173,8 +173,8 @@ var (
 type clientSession struct {
 	SessionID  string
 	SessionIdx int
-	ClientWS   *websocket.Conn
-	AgentWS    *websocket.Conn // agent's per-session WS (opened via session-join)
+	ClientWS   *safeConn
+	AgentWS    *safeConn // agent's per-session WS (opened via session-join)
 	UDPTokens  []string
 }
 
@@ -182,9 +182,10 @@ type clientSession struct {
 type machineEntry struct {
 	mu sync.Mutex
 
-	ControlWS *websocket.Conn            // agent's registration/signaling channel
-	Sessions  map[string]*clientSession   // sessionID → active session
-	NextIdx   int                         // monotonically incrementing session index
+	ControlWS  *safeConn                   // agent's registration/signaling channel
+	ControlGen uint64                       // incremented on each new ControlWS; used to avoid stale disconnect races
+	Sessions   map[string]*clientSession    // sessionID → active session
+	NextIdx    int                          // monotonically incrementing session index
 
 	// Metadata from registration
 	Ports        []int
@@ -223,8 +224,13 @@ type wsState struct {
 	MachineID string
 	SessionID string // non-empty for session-specific connections
 	Paired    bool
-	Peer      *websocket.Conn
+	Peer      *safeConn
 	WGPubKey  string // client's WireGuard public key
+
+	// ControlGen is set on agent registration to the machineEntry's ControlGen
+	// at that time. handleDisconnect uses it to avoid clearing a newer
+	// ControlWS when a stale connection's goroutine finally exits.
+	ControlGen uint64
 
 	// RequestedPorts is an optional hint from the client about which service
 	// ports it intends to use (e.g., when tela connect uses -port/-target-port).
@@ -239,10 +245,36 @@ type wsState struct {
 // udpSession tracks one side of a UDP relay pair.
 type udpSession struct {
 	PeerTokenHex string
-	PeerWS       *websocket.Conn // fallback: peer's WebSocket
+	PeerWS       *safeConn    // fallback: peer's WebSocket (write-safe)
 	Role         string
 	Addr         *net.UDPAddr // learned from first UDP message
 	MachineID    string
+}
+
+// ── Synchronized WebSocket writer ──────────────────────────────────
+
+// safeConn wraps a websocket.Conn with a mutex to serialize all writes.
+// gorilla/websocket is not safe for concurrent WriteMessage/WriteControl
+// calls, so every write to a connection must go through this wrapper.
+type safeConn struct {
+	*websocket.Conn
+	writeMu sync.Mutex
+}
+
+func newSafeConn(ws *websocket.Conn) *safeConn {
+	return &safeConn{Conn: ws}
+}
+
+func (sc *safeConn) WriteMessage(messageType int, data []byte) error {
+	sc.writeMu.Lock()
+	defer sc.writeMu.Unlock()
+	return sc.Conn.WriteMessage(messageType, data)
+}
+
+func (sc *safeConn) WriteControl(messageType int, data []byte, deadline time.Time) error {
+	sc.writeMu.Lock()
+	defer sc.writeMu.Unlock()
+	return sc.Conn.WriteControl(messageType, data, deadline)
 }
 
 // ── Global state ───────────────────────────────────────────────────
@@ -710,6 +742,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[hub] ws upgrade failed: %v", err)
 		return
 	}
+	sc := newSafeConn(ws)
 
 	state := &wsState{}
 	wsStatesMu.Lock()
@@ -732,7 +765,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	})
 
 	defer func() {
-		handleDisconnect(ws)
+		handleDisconnect(sc)
 		wsStatesMu.Lock()
 		delete(wsStates, ws)
 		wsStatesMu.Unlock()
@@ -756,7 +789,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				} else if verbose {
 					peerRole := "?"
 					wsStatesMu.RLock()
-					if ps, ok := wsStates[peer]; ok {
+					if ps, ok := wsStates[peer.Conn]; ok {
 						peerRole = ps.Role
 					}
 					wsStatesMu.RUnlock()
@@ -768,34 +801,34 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 		// First message must be JSON signaling
 		if msgType != websocket.TextMessage {
-			ws.WriteMessage(websocket.CloseMessage,
+			sc.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseProtocolError, "Expected JSON for first message"))
 			return
 		}
 
 		var msg signalingMsg
 		if err := json.Unmarshal(data, &msg); err != nil {
-			ws.WriteMessage(websocket.CloseMessage,
+			sc.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseProtocolError, "Expected JSON for first message"))
 			return
 		}
 
 		switch msg.Type {
 		case "register":
-			handleRegister(ws, state, &msg)
+			handleRegister(sc, state, &msg)
 		case "connect":
-			handleConnect(ws, state, &msg)
+			handleConnect(sc, state, &msg)
 		case "session-join":
-			handleSessionJoin(ws, state, &msg)
+			handleSessionJoin(sc, state, &msg)
 		default:
-			ws.WriteMessage(websocket.CloseMessage,
+			sc.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseProtocolError, "Unknown message type"))
 			return
 		}
 	}
 }
 
-func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
+func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	machineID := msg.MachineID
 	state.Role = "agent"
 	state.MachineID = machineID
@@ -825,13 +858,16 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 
 	entry.mu.Lock()
 	// Close the old control WebSocket if the agent is reconnecting.
-	// This forces the old goroutine to exit and prevents handleDisconnect
-	// from racing with the new registration.
+	// This forces the old goroutine to exit. The generation counter
+	// ensures that when the old goroutine's handleDisconnect fires,
+	// it will not clear the new ControlWS (see handleDisconnect).
 	if entry.ControlWS != nil && entry.ControlWS != ws {
 		oldWS := entry.ControlWS
 		go oldWS.Close()
 	}
 	entry.ControlWS = ws
+	entry.ControlGen++
+	state.ControlGen = entry.ControlGen
 	entry.Token = msg.Token
 	entry.Ports = msg.Ports
 	entry.Services = msg.Services
@@ -881,7 +917,7 @@ func handleRegister(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	ws.WriteMessage(websocket.TextMessage, reply)
 }
 
-func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
+func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 	machineID := msg.MachineID
 	state.Role = "client"
 	state.MachineID = machineID
@@ -944,6 +980,11 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	if entry.Sessions == nil {
 		entry.Sessions = make(map[string]*clientSession)
 	}
+	if entry.NextIdx >= 254 {
+		entry.mu.Unlock()
+		sendError(ws, "Too many sessions for this machine (max 254)")
+		return
+	}
 	entry.Sessions[sessionID] = session
 	entry.NextIdx++
 	sessionIdx := entry.NextIdx
@@ -963,7 +1004,7 @@ func handleConnect(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
 	controlWS.WriteMessage(websocket.TextMessage, data)
 }
 
-func handleSessionJoin(ws *websocket.Conn, state *wsState, msg *signalingMsg) {
+func handleSessionJoin(ws *safeConn, state *wsState, msg *signalingMsg) {
 	machineID := msg.MachineID
 	sessionID := msg.SessionID
 	state.Role = "agent-session"
@@ -1007,8 +1048,8 @@ func pairSession(machineID string, entry *machineEntry, session *clientSession) 
 
 	// Cross-link peers
 	wsStatesMu.Lock()
-	agentState := wsStates[agentWS]
-	clientState := wsStates[clientWS]
+	agentState := wsStates[agentWS.Conn]
+	clientState := wsStates[clientWS.Conn]
 	if agentState != nil {
 		agentState.Paired = true
 		agentState.Peer = clientWS
@@ -1033,7 +1074,7 @@ func pairSession(machineID string, entry *machineEntry, session *clientSession) 
 	log.Printf("[hub] paired agent <-> client for: %s session=%s", machineID, session.SessionID[:8])
 	ss := ""
 	wsStatesMu.RLock()
-	if cs := wsStates[clientWS]; cs != nil {
+	if cs := wsStates[clientWS.Conn]; cs != nil {
 		ss = cs.SessionDetail
 	}
 	wsStatesMu.RUnlock()
@@ -1096,9 +1137,9 @@ func pairSession(machineID string, entry *machineEntry, session *clientSession) 
 	log.Printf("[hub] sent udp-offer to both sides for: %s session=%s (port %d)", machineID, session.SessionID[:8], udpPort)
 }
 
-func handleDisconnect(ws *websocket.Conn) {
+func handleDisconnect(ws *safeConn) {
 	wsStatesMu.RLock()
-	state, ok := wsStates[ws]
+	state, ok := wsStates[ws.Conn]
 	wsStatesMu.RUnlock()
 	if !ok || state.MachineID == "" {
 		return
@@ -1120,20 +1161,32 @@ func handleDisconnect(ws *websocket.Conn) {
 
 	switch state.Role {
 	case "agent":
-		// Agent control WS disconnected -- only clear if this is still the active
-		// connection. If the agent reconnected before this disconnect fires, a new
-		// ControlWS is already set and we must not overwrite it.
+		// Agent control WS disconnected. Use the generation counter to
+		// determine whether this is still the active connection. If the
+		// agent already reconnected with a newer ControlWS, the new
+		// registration bumped ControlGen, so this stale disconnect must
+		// not touch the entry's ControlWS or sessions.
 		entry.mu.Lock()
-		if entry.ControlWS == ws {
+		stale := state.ControlGen != entry.ControlGen
+		if !stale {
 			entry.ControlWS = nil
 			entry.LastSeen = time.Now()
 		}
-		sessions := make(map[string]*clientSession, len(entry.Sessions))
-		for k, v := range entry.Sessions {
-			sessions[k] = v
+		var sessions map[string]*clientSession
+		if !stale {
+			sessions = make(map[string]*clientSession, len(entry.Sessions))
+			for k, v := range entry.Sessions {
+				sessions[k] = v
+			}
+			entry.Sessions = make(map[string]*clientSession)
 		}
-		entry.Sessions = make(map[string]*clientSession)
 		entry.mu.Unlock()
+
+		if stale {
+			log.Printf("[hub] ignoring stale agent disconnect for %s (gen %d, current %d)",
+				state.MachineID, state.ControlGen, entry.ControlGen)
+			return
+		}
 
 		for _, sess := range sessions {
 			cleanupSession(state.MachineID, sess)
@@ -1196,13 +1249,13 @@ func cleanupSession(machineID string, sess *clientSession) {
 
 	wsStatesMu.Lock()
 	if sess.AgentWS != nil {
-		if as, ok := wsStates[sess.AgentWS]; ok {
+		if as, ok := wsStates[sess.AgentWS.Conn]; ok {
 			as.Paired = false
 			as.Peer = nil
 		}
 	}
 	if sess.ClientWS != nil {
-		if cs, ok := wsStates[sess.ClientWS]; ok {
+		if cs, ok := wsStates[sess.ClientWS.Conn]; ok {
 			cs.Paired = false
 			cs.Peer = nil
 		}
@@ -1210,7 +1263,7 @@ func cleanupSession(machineID string, sess *clientSession) {
 	wsStatesMu.Unlock()
 }
 
-func sendError(ws *websocket.Conn, message string) {
+func sendError(ws *safeConn, message string) {
 	log.Printf("[hub] error: %s", message)
 	errMsg, _ := json.Marshal(map[string]string{"type": "error", "message": message})
 	ws.WriteMessage(websocket.TextMessage, errMsg)

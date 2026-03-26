@@ -472,9 +472,6 @@ func resolveServiceNames(servicesFlag, hubURL, machineID, token string) ([]portM
 // fetchHubStatusWithToken queries /api/status with an optional auth token.
 func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 	apiURL := wsToHTTP(hubURL) + "/api/status"
-	if token != "" {
-		apiURL += "?token=" + url.QueryEscape(token)
-	}
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -482,7 +479,14 @@ func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 			TLSClientConfig: &tls.Config{},
 		},
 	}
-	resp, err := client.Get(apiURL)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create request: %w", err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("could not reach hub: %w", err)
 	}
