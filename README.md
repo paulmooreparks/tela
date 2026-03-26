@@ -71,19 +71,19 @@ All three binaries are single-file executables with no runtime dependencies. The
 
 TelaVisor wraps the `tela` CLI in a graphical interface. It manages hub credentials, connection profiles, and real-time tunnel status without requiring terminal access. You select which services to connect to, click Connect, and monitor tunnel state as it updates live.
 
-![TelaVisor Status tab, connected](screens/telavisor04.png)
+![TelaVisor Status tab, connected](screens/telavisor-status-connected.png)
 
-TelaVisor uses a three-mode layout that mirrors the three Tela binaries. Clients mode manages connections. Agents mode (coming soon) will manage telad instances. Hubs mode provides full hub administration including token management, ACL configuration, and machine monitoring.
+TelaVisor uses a two-mode layout. Clients mode manages connections, profiles, files, and client settings. Infrastructure mode provides hub administration (tokens, ACLs, history), agent monitoring, remote management, and credential storage.
 
-![TelaVisor Hubs, Tokens](screens/telavisor10.png)
+![TelaVisor Hubs, Tokens](screens/telavisor-hub-tokens.png)
 
 The Files tab provides a built-in file browser for machines with file sharing enabled. You can upload, download, rename, move, and delete files on remote machines through the encrypted tunnel. The file list updates in real time as changes happen on the remote machine.
 
-![TelaVisor Files tab](screens/telavisor-files.png)
+![TelaVisor Files tab](screens/telavisor-files-browse.png)
 
-A persistent log panel at the bottom of the window shows application events, live tela output, and a filterable command log that displays every API call and CLI command with copy-to-clipboard support.
+The Agents tab lists all agents across your hubs, showing version, services, file share configuration, and management controls.
 
-![TelaVisor log panel](screens/telavisor13.png)
+![TelaVisor Agents tab](screens/telavisor-agents.png)
 
 See [TelaVisor.md](TelaVisor.md) for full documentation.
 
