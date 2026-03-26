@@ -185,20 +185,28 @@
     <!-- Client Settings tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-client-settings">
       <div class="status-pane">
-        <h1 style="margin-bottom:4px;">Client Settings</h1>
-        <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Configuration for how tela runs on this machine.</p>
+        <div class="cs-header-row">
+          <div>
+            <h1 style="margin-bottom:4px;">Client Settings</h1>
+            <p class="section-desc" style="margin-bottom:0;color:var(--text-muted);font-size:0.9rem;">Configuration for how tela runs on this machine.</p>
+          </div>
+          <div class="cs-toolbar">
+            <button class="icon-btn" id="cs-undo-btn" onclick="undoClientSettings()" title="Undo changes" disabled>&#x21B6;</button>
+            <button class="tb-btn tb-save-btn" id="cs-save-btn" onclick="saveClientSettings()" disabled>Save</button>
+          </div>
+        </div>
 
         <div class="settings-card-block">
           <h3>Default Profile</h3>
           <p class="settings-card-desc">The profile loaded on startup and used by the system service.</p>
-          <select id="cs-default-profile" title="Default profile" class="settings-full-control" onchange="markSettingsDirty()"></select>
+          <select id="cs-default-profile" title="Default profile" class="settings-full-control" onchange="markCSDirty()"></select>
         </div>
 
         <div class="settings-card-block">
           <h3>Binary Location</h3>
           <p class="settings-card-desc">Folder containing tela binaries.</p>
           <div class="settings-path-row">
-            <input type="text" id="cs-binPath" class="settings-full-control settings-path-input" title="Binary folder" onchange="markSettingsDirty();refreshBinStatus()">
+            <input type="text" id="cs-binPath" class="settings-full-control settings-path-input" title="Binary folder" onchange="markCSDirty();refreshBinStatus()">
             <button class="icon-btn" onclick="browseBinPath()" title="Browse">Browse</button>
             <button class="icon-btn" onclick="restoreDefaultBinPath()" title="Restore default">Restore Default</button>
           </div>
@@ -393,7 +401,6 @@
           <div class="modal-actions update-actions">
             <button type="button" class="btn-secondary" onclick="ignoreUpdateForever()">Skip This Version</button>
             <button type="button" class="btn-secondary" onclick="ignoreUpdateSession()">Remind Later</button>
-            <button type="button" class="btn-primary" id="update-apply-btn" onclick="applyUpdate()">Update Now</button>
           </div>
         </div>
       </div>
@@ -408,8 +415,9 @@
         <button class="modal-close" onclick="closeSettings()">&times;</button>
       </div>
       <div class="settings-toolbar">
-        <button class="tb-btn tb-save-btn" id="settings-save-btn" onclick="saveSettingsWithValidation()" disabled>Save</button>
+        <button class="tb-btn tb-save-btn" id="settings-apply-btn" onclick="applySettings()" disabled>Apply</button>
         <button class="tb-btn" onclick="closeSettings()">Close</button>
+        <button class="tb-btn" onclick="cancelSettings()">Cancel</button>
       </div>
       <div class="modal-body">
         <div class="modal-body-padded">

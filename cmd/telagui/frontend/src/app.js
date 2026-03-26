@@ -667,6 +667,7 @@ function checkForUpdate() {
   });
 }
 
+// Shared: install or update a single binary and refresh all tool displays.
 function refreshSingleBinary(name, btn) {
   btn.disabled = true;
   btn.textContent = 'Installing...';
@@ -674,6 +675,7 @@ function refreshSingleBinary(name, btn) {
     btn.textContent = 'Done';
     refreshBinStatus();
     refreshClientToolVersions();
+    refreshUpdateTable();
     checkForUpdate();
   }).catch(function (err) {
     btn.disabled = false;
@@ -682,36 +684,58 @@ function refreshSingleBinary(name, btn) {
   });
 }
 
-function toggleUpdateOverlay() {
-  var el = document.getElementById('update-overlay');
-  el.classList.toggle('hidden');
-  if (!el.classList.contains('hidden') && updateInfo) {
-    var container = document.getElementById('update-table-container');
-    goApp.GetBinStatus().then(function (bins) {
-      var latest = updateInfo.version || ((bins && bins.length > 0) ? bins[0].latest : '?');
-      var guiVer = updateInfo.gui || 'dev';
-      var guiUpToDate = guiVer === latest;
+// Shared: render a tools table with optional per-binary action buttons.
+// container: DOM element to fill. showActions: if true, show Update/Install buttons.
+// onDone: optional callback after rendering.
+function renderToolsTable(container, showActions, onDone) {
+  goApp.GetBinStatus().then(function (bins) {
+    goApp.GetVersion().then(function (guiVer) {
+      var latest = (bins && bins.length > 0 && bins[0].latest) ? bins[0].latest : '';
+      if (updateInfo && updateInfo.version) latest = updateInfo.version;
+      var tvUpToDate = !latest || guiVer === latest;
 
-      var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Installed</th><th>Available</th></tr></thead><tbody>';
+      var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Installed</th><th>Available</th>';
+      if (showActions) html += '<th></th>';
+      html += '</tr></thead><tbody>';
+
       // TelaVisor
-      html += '<tr><td>TelaVisor</td>'
-        + '<td class="tools-version">' + escHtml(guiVer) + '</td>'
-        + '<td class="tools-version ' + (guiUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(latest) + '</td></tr>';
-      // All managed binaries
+      html += '<tr><td>' + (showActions ? '<span class="bin-dot bin-dot-ok"></span>' : '') + 'TelaVisor</td>'
+        + '<td class="tools-version">' + escHtml(guiVer || 'dev') + '</td>'
+        + '<td class="tools-version ' + (tvUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(latest || guiVer || 'dev') + '</td>';
+      if (showActions) html += '<td></td>';
+      html += '</tr>';
+
+      // Managed binaries
       if (bins) {
         bins.forEach(function (b) {
+          var dotClass = b.found ? 'bin-dot-ok' : 'bin-dot-missing';
           var installedText = b.found ? (b.version || 'unknown') : 'not found';
           var installedClass = b.found ? '' : ' tools-status-warn';
           var availClass = b.found ? (b.upToDate ? 'tools-status-ok' : 'tools-status-warn') : 'tools-status-warn';
-          html += '<tr><td>' + escHtml(b.name) + '</td>'
+          html += '<tr><td>' + (showActions ? '<span class="bin-dot ' + dotClass + '"></span>' : '') + escHtml(b.name) + '</td>'
             + '<td class="tools-version' + installedClass + '">' + escHtml(installedText) + '</td>'
-            + '<td class="tools-version ' + availClass + '">' + escHtml(b.latest || '?') + '</td></tr>';
+            + '<td class="tools-version ' + availClass + '">' + escHtml(b.latest || '?') + '</td>';
+          if (showActions) {
+            var action = b.found
+              ? (b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>')
+              : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
+            html += '<td>' + action + '</td>';
+          }
+          html += '</tr>';
         });
       }
       html += '</tbody></table>';
       container.innerHTML = html;
+      if (onDone) onDone();
     });
+  });
+}
 
+function toggleUpdateOverlay() {
+  var el = document.getElementById('update-overlay');
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden') && updateInfo) {
+    refreshUpdateTable();
     var notes = [];
     if (updateInfo.guiBehind) notes.push('TelaVisor is out of date.');
     if (updateInfo.cliBehind) notes.push('tela CLI is out of date.');
@@ -720,24 +744,9 @@ function toggleUpdateOverlay() {
   }
 }
 
-function applyUpdate() {
-  var applyBtn = document.getElementById('update-apply-btn');
-  applyBtn.textContent = 'Updating...';
-  applyBtn.disabled = true;
-  goApp.RestartToUpdate().then(function () {
-    // If we're still here, it was a CLI-only update
-    document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
-    toggleUpdateOverlay();
-    applyBtn.textContent = 'Update Now';
-    applyBtn.disabled = false;
-    refreshVersionDisplay();
-  }).catch(function () {
-    applyBtn.textContent = 'Update Failed';
-    applyBtn.disabled = false;
-    setTimeout(function () {
-      applyBtn.textContent = 'Update Now';
-    }, 3000);
-  });
+function refreshUpdateTable() {
+  var container = document.getElementById('update-table-container');
+  if (container) renderToolsTable(container, true);
 }
 
 function ignoreUpdateSession() {
@@ -3902,7 +3911,8 @@ function gatherSettings() {
   };
 }
 
-function saveSettingsWithValidation() {
+// Apply: save settings, disable Apply button, stay in dialog.
+function applySettings() {
   var s = gatherSettings();
   var errEl = document.getElementById('settings-error');
   errEl.classList.add('hidden');
@@ -3910,9 +3920,8 @@ function saveSettingsWithValidation() {
 
   goApp.SaveSettings(JSON.stringify(s)).then(function () {
       settingsDirty = false;
-      var btn = document.getElementById('settings-save-btn');
+      var btn = document.getElementById('settings-apply-btn');
       if (btn) btn.disabled = true;
-      // Clear update warning and re-check with new settings
       document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
       updateDismissedForSession = false;
       updateSkippedVersion = '';
@@ -3921,11 +3930,14 @@ function saveSettingsWithValidation() {
     });
 }
 
+// Backward-compat alias
+function saveSettingsWithValidation() { applySettings(); }
+
 var settingsDirty = false;
 
 function markSettingsDirty() {
   settingsDirty = true;
-  var btn = document.getElementById('settings-save-btn');
+  var btn = document.getElementById('settings-apply-btn');
   if (btn) btn.disabled = false;
 
   // Apply theme immediately on change (live preview)
@@ -3953,7 +3965,34 @@ try {
   });
 } catch (e) {}
 
+// Close: validate, save if dirty, then close the dialog.
 function closeSettings() {
+  if (settingsDirty) {
+    var s = gatherSettings();
+    var errEl = document.getElementById('settings-error');
+    errEl.classList.add('hidden');
+    errEl.textContent = '';
+    goApp.SaveSettings(JSON.stringify(s)).then(function () {
+      settingsDirty = false;
+      var btn = document.getElementById('settings-apply-btn');
+      if (btn) btn.disabled = true;
+      document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
+      updateDismissedForSession = false;
+      updateSkippedVersion = '';
+      checkForUpdate();
+      refreshVersionDisplay();
+      toggleSettingsOverlay();
+    }).catch(function (err) {
+      errEl.textContent = 'Save failed: ' + err;
+      errEl.classList.remove('hidden');
+    });
+  } else {
+    toggleSettingsOverlay();
+  }
+}
+
+// Cancel: prompt if changes were made, discard and close on confirm.
+function cancelSettings() {
   if (settingsDirty) {
     showConfirmDialog('Unsaved Changes', 'You have unsaved settings changes. Discard them?', 'Discard').then(function (yes) {
       if (!yes) return;
@@ -3967,7 +4006,7 @@ function closeSettings() {
 function discardAndClose() {
   refreshSettings();
   settingsDirty = false;
-  var btn = document.getElementById('settings-save-btn');
+  var btn = document.getElementById('settings-apply-btn');
   if (btn) btn.disabled = true;
   var errEl = document.getElementById('settings-error');
   if (errEl) { errEl.classList.add('hidden'); errEl.textContent = ''; }
@@ -3978,7 +4017,7 @@ function discardAndClose() {
 
 // Keep saveSetting for backward compat (browse/restore call it)
 function saveSetting() {
-  saveSettingsWithValidation();
+  applySettings();
 }
 
 function getBinPathValue() {
@@ -4324,6 +4363,36 @@ function stopMountProcess() {
 
 // ── Client Settings tab ────────────────────────────────────────────
 
+var csDirty = false;
+
+function markCSDirty() {
+  csDirty = true;
+  var undoBtn = document.getElementById('cs-undo-btn');
+  var saveBtn = document.getElementById('cs-save-btn');
+  if (undoBtn) undoBtn.disabled = false;
+  if (saveBtn) saveBtn.disabled = false;
+  // Also mark the settings dialog dirty so Close/Cancel know
+  markSettingsDirty();
+}
+
+function clearCSDirty() {
+  csDirty = false;
+  var undoBtn = document.getElementById('cs-undo-btn');
+  var saveBtn = document.getElementById('cs-save-btn');
+  if (undoBtn) undoBtn.disabled = true;
+  if (saveBtn) saveBtn.disabled = true;
+}
+
+function undoClientSettings() {
+  refreshClientSettings();
+  clearCSDirty();
+}
+
+function saveClientSettings() {
+  applySettings();
+  clearCSDirty();
+}
+
 function refreshClientSettings() {
   // Populate default profile dropdown
   goApp.GetSettings().then(function (s) {
@@ -4360,35 +4429,8 @@ function refreshClientSettings() {
 }
 
 function refreshClientToolVersions() {
-  goApp.GetBinStatus().then(function (bins) {
-    var el = document.getElementById('cs-bin-status');
-    if (!el || !bins) return;
-    goApp.GetVersion().then(function (ver) {
-      var latest = (bins.length > 0 && bins[0].latest) ? bins[0].latest : '';
-      var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Installed</th><th>Available</th><th></th></tr></thead><tbody>';
-      // TelaVisor itself
-      var tvUpToDate = !latest || ver === latest;
-      html += '<tr><td><span class="bin-dot bin-dot-ok"></span>TelaVisor</td>'
-        + '<td class="tools-version">' + escHtml(ver || 'dev') + '</td>'
-        + '<td class="tools-version ' + (tvUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(latest || ver || 'dev') + '</td>'
-        + '<td></td></tr>';
-      bins.forEach(function (b) {
-        var dotClass = b.found ? 'bin-dot-ok' : 'bin-dot-missing';
-        var installedText = b.found ? (b.version || 'unknown') : 'not found';
-        var installedClass = b.found ? '' : ' tools-status-warn';
-        var availClass = b.found ? (b.upToDate ? 'tools-status-ok' : 'tools-status-warn') : 'tools-status-warn';
-        var action = b.found
-          ? (b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>')
-          : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
-        html += '<tr><td><span class="bin-dot ' + dotClass + '"></span>' + escHtml(b.name) + '</td>'
-          + '<td class="tools-version' + installedClass + '">' + escHtml(installedText) + '</td>'
-          + '<td class="tools-version ' + availClass + '">' + escHtml(b.latest || '?') + '</td>'
-          + '<td>' + action + '</td></tr>';
-      });
-      html += '</tbody></table>';
-      el.innerHTML = html;
-    });
-  });
+  var el = document.getElementById('cs-bin-status');
+  if (el) renderToolsTable(el, true);
 }
 
 function importProfile() {

@@ -1404,6 +1404,13 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-style: italic;
 }
 .hubs-admin-nav-sep { height: 1px; background: var(--border); margin: 6px 12px; }
+.cs-header-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.cs-toolbar {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
 .settings-card-block {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px; margin-bottom: 16px; max-width: 600px;
