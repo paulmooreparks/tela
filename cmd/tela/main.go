@@ -86,6 +86,7 @@ const (
 	wsPingInterval = 20 * time.Second
 	wsPongWait     = 45 * time.Second
 	wsWriteWait    = 5 * time.Second
+	wsDialTimeout  = 15 * time.Second
 )
 
 type controlMessage struct {
@@ -306,10 +307,20 @@ func cmdConnect(args []string) {
 		close(stopCh)
 	}()
 
+	// Create persistent listeners that survive session reconnects.
+	// When mappings are known upfront, listeners route through the
+	// tunnel bridge; new connections block until a tunnel is available.
+	var bridge *tunnelBridge
+	if len(mappings) > 0 {
+		bridge = newTunnelBridge()
+		closeListeners := bindPersistentListeners(mappings, *machineID, *hubURL, bridge, stopCh)
+		defer closeListeners()
+	}
+
 	const maxDelay = 5 * time.Minute
 	attempt := 0
 	for {
-		err := runSession(*hubURL, *machineID, *token, mappings)
+		err := runSession(*hubURL, *machineID, *token, mappings, bridge)
 		if errors.Is(err, errFatal) {
 			os.Exit(1)
 		}
@@ -687,10 +698,18 @@ func runProfile(name string) {
 		go func(idx int, hub, mach, tok string, maps []portMapping) {
 			defer wg.Done()
 			log.Printf("[profile:%d] connecting to %s → %s", idx, hub, mach)
+
+			var bridge *tunnelBridge
+			if len(maps) > 0 {
+				bridge = newTunnelBridge()
+				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopCh)
+				defer closeListeners()
+			}
+
 			const maxDelay = 5 * time.Minute
 			attempt := 0
 			for {
-				err := runSession(hub, mach, tok, maps)
+				err := runSession(hub, mach, tok, maps, bridge)
 				if errors.Is(err, errFatal) {
 					log.Printf("[profile:%d] fatal error, stopping", idx)
 					return
@@ -1184,11 +1203,208 @@ func reconnectDelay(attempt int, maxDelay time.Duration) time.Duration {
 	return d
 }
 
-func runSession(hubURL, machineID, token string, overrideMappings []portMapping) error {
+// tunnelBridge holds a swappable reference to the active netstack tunnel.
+// Local listeners use the bridge to dial through whatever tunnel is currently
+// active. When a session dies and reconnects, the bridge is updated with the
+// new tunnel; the local listeners never close.
+type tunnelBridge struct {
+	mu      sync.RWMutex
+	tnet    *netstack.Net
+	agentIP string
+	ready   chan struct{} // closed when a tunnel is available
+}
+
+func newTunnelBridge() *tunnelBridge {
+	return &tunnelBridge{ready: make(chan struct{})}
+}
+
+// SetTunnel installs a new tunnel. Any goroutines blocked in DialContext
+// will unblock and dial through the new tunnel.
+func (tb *tunnelBridge) SetTunnel(tnet *netstack.Net, agentIP string) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.tnet = tnet
+	tb.agentIP = agentIP
+	// Signal all waiters that a tunnel is available.
+	select {
+	case <-tb.ready:
+		// Already closed (shouldn't happen), make a new closed channel.
+		ch := make(chan struct{})
+		close(ch)
+		tb.ready = ch
+	default:
+		close(tb.ready)
+	}
+}
+
+// ClearTunnel removes the active tunnel. New DialContext calls will block
+// until SetTunnel is called again.
+func (tb *tunnelBridge) ClearTunnel() {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.tnet = nil
+	tb.agentIP = ""
+	tb.ready = make(chan struct{}) // new open channel; waiters block
+}
+
+// DialContext dials through the active tunnel. If no tunnel is available,
+// it blocks until one appears or the context is cancelled.
+func (tb *tunnelBridge) DialContext(ctx context.Context, remotePort int) (net.Conn, error) {
+	for {
+		tb.mu.RLock()
+		tnet := tb.tnet
+		agentIP := tb.agentIP
+		readyCh := tb.ready
+		tb.mu.RUnlock()
+
+		if tnet != nil {
+			addr := netip.AddrPortFrom(netip.MustParseAddr(agentIP), uint16(remotePort))
+			conn, err := tnet.DialContextTCPAddrPort(ctx, addr)
+			if err != nil {
+				// If the tunnel just died, clear and wait for next one.
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				// Tunnel may have been torn down between our check and dial.
+				// Wait for the next tunnel.
+				tb.mu.RLock()
+				readyCh = tb.ready
+				tb.mu.RUnlock()
+				select {
+				case <-readyCh:
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			return conn, nil
+		}
+
+		// No tunnel available; wait for one.
+		select {
+		case <-readyCh:
+			continue // tunnel appeared, retry
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+// bindPersistentListeners creates TCP listeners for the given port mappings
+// and starts accept goroutines that route through the tunnel bridge. The
+// listeners survive session reconnects. Returns a cleanup function that
+// closes all listeners (call on intentional shutdown).
+func bindPersistentListeners(mappings []portMapping, machineID, hubURL string, bridge *tunnelBridge, stopCh <-chan struct{}) func() {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-stopCh
+		cancel()
+	}()
+
+	var listeners []net.Listener
+	log.Println("Services available:")
+	for _, m := range mappings {
+		listenAddr := fmt.Sprintf("127.0.0.1:%d", m.local)
+		listener, err := net.Listen("tcp", listenAddr)
+		if err != nil {
+			alt := m.local + 10000
+			listenAddr = fmt.Sprintf("127.0.0.1:%d", alt)
+			listener, err = net.Listen("tcp", listenAddr)
+			if err != nil {
+				log.Printf("  SKIP port %d (could not bind: %v)", m.local, err)
+				continue
+			}
+			log.Printf("  localhost:%-5d → %s (port %d in use, remapped)", alt, portLabel(m.remote), m.remote)
+		} else {
+			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
+		}
+		listeners = append(listeners, listener)
+		addBoundService(BoundService{
+			Name:    portLabel(m.remote),
+			Local:   int(m.local),
+			Remote:  int(m.remote),
+			Machine: machineID,
+			Hub:     hubURL,
+		})
+		go func(l net.Listener, remote uint16, local uint16, machine string) {
+			for {
+				localConn, err := l.Accept()
+				if err != nil {
+					return // listener closed
+				}
+				if tc, ok := localConn.(*net.TCPConn); ok {
+					tc.SetNoDelay(true)
+				}
+				go handleBridgedClient(ctx, bridge, localConn, int(remote), machine, int(local))
+			}
+		}(listener, m.remote, m.local, machineID)
+	}
+
+	return func() {
+		cancel()
+		for _, l := range listeners {
+			l.Close()
+		}
+	}
+}
+
+// handleBridgedClient proxies a local connection through the tunnel bridge.
+// Blocks on bridge.DialContext until a tunnel is available or ctx is cancelled.
+func handleBridgedClient(ctx context.Context, bridge *tunnelBridge, localConn net.Conn, targetPort int, machine string, localPort int) {
+	defer localConn.Close()
+
+	tunnelConn, err := bridge.DialContext(ctx, targetPort)
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Printf("tunnel dial failed (%s:%d): %v", machine, targetPort, err)
+		}
+		return
+	}
+	defer tunnelConn.Close()
+
+	log.Printf("tunnel connected to %s:%d", machine, targetPort)
+	emitEvent(struct {
+		Type      string `json:"type"`
+		Machine   string `json:"machine"`
+		LocalPort int    `json:"localPort"`
+		Remote    int    `json:"remote"`
+		Active    bool   `json:"active"`
+	}{Type: "tunnel_activity", Machine: machine, LocalPort: localPort, Remote: targetPort, Active: true})
+
+	var inactiveOnce sync.Once
+	emitInactive := func() {
+		inactiveOnce.Do(func() {
+			emitEvent(struct {
+				Type      string `json:"type"`
+				Machine   string `json:"machine"`
+				LocalPort int    `json:"localPort"`
+				Remote    int    `json:"remote"`
+				Active    bool   `json:"active"`
+			}{Type: "tunnel_activity", Machine: machine, LocalPort: localPort, Remote: targetPort, Active: false})
+		})
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		io.Copy(tunnelConn, localConn)
+		emitInactive()
+	}()
+	go func() {
+		defer wg.Done()
+		io.Copy(localConn, tunnelConn)
+		emitInactive()
+	}()
+	wg.Wait()
+}
+
+func runSession(hubURL, machineID, token string, overrideMappings []portMapping, bridge *tunnelBridge) error {
 	log.Printf("connecting to hub: %s", hubURL)
 
 	// Connect to Hub via WebSocket
-	wsConn, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
+	dialer := websocket.Dialer{HandshakeTimeout: wsDialTimeout}
+	wsConn, _, err := dialer.Dial(hubURL, nil)
 	if err != nil {
 		log.Printf("websocket dial failed: %v", err)
 		return err
@@ -1347,6 +1563,15 @@ persistent_keepalive_interval=25
 	registerTunnel(machineID, tnet, sessionAgentIP)
 	defer unregisterTunnel(machineID)
 
+	// If a tunnel bridge is provided, install the new tunnel so that
+	// persistent listeners (created by the caller) can route through it.
+	// When this session ends, clear the bridge so new connections block
+	// until the next session.
+	if bridge != nil {
+		bridge.SetTunnel(tnet, sessionAgentIP)
+		defer bridge.ClearTunnel()
+	}
+
 	// Subscribe to file change events from this machine (best-effort).
 	// Runs in background; closes when stopFileEvents is closed.
 	stopFileEvents := make(chan struct{})
@@ -1370,7 +1595,23 @@ persistent_keepalive_interval=25
 		go tryDirectUpgrade(bind, hubURL)
 	}
 
-	// Determine port mappings
+	// When a bridge is provided, the caller owns the listeners -- skip
+	// listener creation/cleanup here. The persistent listeners route
+	// through the bridge, which now points at this session's tunnel.
+	if bridge != nil {
+		select {
+		case <-done:
+		case <-stopCh:
+			wsConn.Close()
+			<-done
+		}
+		log.Println("session ended -- cleaning up")
+		dev.Close()
+		return nil
+	}
+
+	// Legacy path: no bridge, create ephemeral listeners (for backward
+	// compatibility with callers that do not use persistent listeners).
 	mappings := overrideMappings
 	if len(mappings) == 0 && len(agentPorts) > 0 {
 		for _, p := range agentPorts {
@@ -1383,14 +1624,12 @@ persistent_keepalive_interval=25
 		return nil
 	}
 
-	// Bind local listeners
 	var listeners []net.Listener
 	log.Println("Services available:")
 	for _, m := range mappings {
 		listenAddr := fmt.Sprintf("127.0.0.1:%d", m.local)
 		listener, err := net.Listen("tcp", listenAddr)
 		if err != nil {
-			// Port conflict -- try local + 10000
 			alt := m.local + 10000
 			listenAddr = fmt.Sprintf("127.0.0.1:%d", alt)
 			listener, err = net.Listen("tcp", listenAddr)
@@ -1403,7 +1642,6 @@ persistent_keepalive_interval=25
 			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
 		}
 		listeners = append(listeners, listener)
-		// Record bound service for the control API
 		addBoundService(BoundService{
 			Name:    portLabel(m.remote),
 			Local:   int(m.local),
@@ -1431,11 +1669,9 @@ persistent_keepalive_interval=25
 		return nil
 	}
 
-	// Wait for WebSocket to close (session end) or shutdown signal
 	select {
 	case <-done:
 	case <-stopCh:
-		// Shutdown signaled -- close WebSocket to unblock the reader
 		wsConn.Close()
 		<-done
 	}
@@ -1868,10 +2104,18 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 		go func(idx int, hub, mach, tok string, maps []portMapping) {
 			defer wg.Done()
 			log.Printf("[svc:%d] connecting to %s -> %s", idx, hub, mach)
+
+			var bridge *tunnelBridge
+			if len(maps) > 0 {
+				bridge = newTunnelBridge()
+				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopCh)
+				defer closeListeners()
+			}
+
 			const maxDelay = 5 * time.Minute
 			attempt := 0
 			for {
-				err := runSession(hub, mach, tok, maps)
+				err := runSession(hub, mach, tok, maps, bridge)
 				if errors.Is(err, errFatal) {
 					log.Printf("[svc:%d] fatal error, stopping", idx)
 					return

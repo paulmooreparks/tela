@@ -139,37 +139,59 @@ func mountFileShareRequest(machine string, op interface{}) (*mountFsResponse, er
 	reqBody, _ := json.Marshal(op)
 	reqBody = append(reqBody, '\n')
 
-	url := mountControlBase + "/files/" + machine
-	req, _ := http.NewRequest("POST", url, strings.NewReader(string(reqBody)))
-	req.Header.Set("Authorization", "Bearer "+mountControlToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		var errResp struct{ Error string `json:"error"` }
-		json.Unmarshal(body, &errResp)
-		if errResp.Error != "" {
-			return nil, fmt.Errorf("%s", errResp.Error)
+	// Retry with backoff when the tunnel is temporarily down (e.g., during
+	// a reconnect cycle after network change or laptop wake from sleep).
+	// The tela connect process has its own reconnect loop; we just need to
+	// wait long enough for it to re-establish the session.
+	delays := []time.Duration{0, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
+	var lastErr error
+	for _, delay := range delays {
+		if delay > 0 {
+			time.Sleep(delay)
 		}
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
 
-	lines := strings.SplitN(string(body), "\n", 2)
-	var fsResp mountFsResponse
-	if err := json.Unmarshal([]byte(lines[0]), &fsResp); err != nil {
-		return nil, err
+		url := mountControlBase + "/files/" + machine
+		req, _ := http.NewRequest("POST", url, strings.NewReader(string(reqBody)))
+		req.Header.Set("Authorization", "Bearer "+mountControlToken)
+		req.Header.Set("Content-Type", "application/json")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		req = req.WithContext(ctx)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			cancel()
+			lastErr = err
+			continue // control API unreachable, retry
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		cancel()
+
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			// 503 means tunnel is down but control API is alive.
+			// This is the reconnect window; keep retrying.
+			lastErr = fmt.Errorf("tunnel unavailable (reconnecting)")
+			continue
+		}
+
+		if resp.StatusCode != 200 {
+			var errResp struct{ Error string `json:"error"` }
+			json.Unmarshal(body, &errResp)
+			if errResp.Error != "" {
+				return nil, fmt.Errorf("%s", errResp.Error)
+			}
+			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+
+		lines := strings.SplitN(string(body), "\n", 2)
+		var fsResp mountFsResponse
+		if err := json.Unmarshal([]byte(lines[0]), &fsResp); err != nil {
+			return nil, err
+		}
+		return &fsResp, nil
 	}
-	return &fsResp, nil
+	return nil, lastErr
 }
 
 func mountListMachines() ([]string, error) {

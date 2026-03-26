@@ -63,6 +63,16 @@ func registerTunnel(machine string, tnet *netstack.Net, agentIP string) {
 	tunnelRegistryMu.Lock()
 	defer tunnelRegistryMu.Unlock()
 	tunnelRegistry[machine] = &tunnelInfo{tnet: tnet, agentIP: agentIP}
+
+	// Flush the mount directory cache so stale entries from the
+	// previous session are not served after a reconnect.
+	mountDirCacheMu.Lock()
+	for k := range mountDirCache {
+		if strings.HasPrefix(k, machine+":") {
+			delete(mountDirCache, k)
+		}
+	}
+	mountDirCacheMu.Unlock()
 }
 
 func unregisterTunnel(machine string) {
