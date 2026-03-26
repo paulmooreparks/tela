@@ -47,7 +47,7 @@
     </div>
 
     <!-- Profile toolbar (visible only on Profiles tab) -->
-    <div class="profile-toolbar hidden" id="profile-toolbar">
+    <div class="pane-toolbar profile-toolbar hidden" id="profile-toolbar">
       <select id="profile-select" class="profile-toolbar-select" onchange="switchProfile(this.value)" title="Current profile"></select>
       <span class="tb-sep"></span>
       <button class="tb-btn" id="undo-btn" disabled onclick="undoSelections()" title="Undo">&#x21B6;</button>
@@ -105,7 +105,7 @@
           <div class="files-path" id="files-path"></div>
           <button type="button" class="files-nav-btn" onclick="filesRefresh()" title="Refresh">&#x21BB;</button>
         </div>
-        <div class="files-actionbar" id="files-actionbar" style="display: none;">
+        <div class="pane-toolbar files-actionbar" id="files-actionbar" style="display: none;">
           <button type="button" class="files-action-btn" id="files-btn-upload" onclick="filesUpload()" disabled>Upload</button>
           <button type="button" class="files-action-btn" id="files-btn-newfolder" onclick="filesNewFolder()" disabled>New Folder</button>
           <button type="button" class="files-action-btn" id="files-btn-rename" onclick="filesRenameSelected()" disabled>Rename</button>
@@ -184,17 +184,13 @@
 
     <!-- Client Settings tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-client-settings">
+      <div class="pane-toolbar" id="cs-toolbar">
+        <button type="button" class="tb-btn" id="cs-undo-btn" onclick="undoClientSettings()" title="Undo changes" disabled>&#x21B6;</button>
+        <button type="button" class="tb-btn tb-save-btn" id="cs-save-btn" onclick="saveClientSettings()" disabled>Save</button>
+      </div>
       <div class="status-pane">
-        <div class="cs-header-row">
-          <div>
-            <h1 style="margin-bottom:4px;">Client Settings</h1>
-            <p class="section-desc" style="margin-bottom:0;color:var(--text-muted);font-size:0.9rem;">Configuration for how tela runs on this machine.</p>
-          </div>
-          <div class="cs-toolbar">
-            <button class="icon-btn" id="cs-undo-btn" onclick="undoClientSettings()" title="Undo changes" disabled>&#x21B6;</button>
-            <button class="tb-btn tb-save-btn" id="cs-save-btn" onclick="saveClientSettings()" disabled>Save</button>
-          </div>
-        </div>
+        <h1 style="margin-bottom:4px;">Client Settings</h1>
+        <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Configuration for how tela runs on this machine.</p>
 
         <div class="settings-card-block">
           <h3>Default Profile</h3>
@@ -408,16 +404,16 @@
   </div>
 
   <!-- Settings Overlay -->
-  <div class="modal-overlay hidden" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="modal-overlay hidden" id="settings-overlay" onclick="if(event.target===this)cancelSettings()">
     <div class="modal-dialog modal-settings">
       <div class="modal-header">
         <h3>Settings</h3>
-        <button class="modal-close" onclick="closeSettings()">&times;</button>
+        <button class="modal-close" onclick="cancelSettings()">&times;</button>
       </div>
       <div class="settings-toolbar">
-        <button class="tb-btn tb-save-btn" id="settings-apply-btn" onclick="applySettings()" disabled>Apply</button>
-        <button class="tb-btn" onclick="closeSettings()">Close</button>
-        <button class="tb-btn" onclick="cancelSettings()">Cancel</button>
+        <button type="button" class="tb-btn tb-save-btn" id="settings-apply-btn" onclick="applySettings()" disabled>Apply</button>
+        <button type="button" class="tb-btn tb-save-btn" id="settings-applyclose-btn" onclick="closeSettings()" disabled>Apply &amp; Close</button>
+        <button type="button" class="tb-btn" onclick="cancelSettings()">Cancel</button>
       </div>
       <div class="modal-body">
         <div class="modal-body-padded">
@@ -450,6 +446,10 @@
           <div class="settings-group">
             <div class="settings-group-header">Logging</div>
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-verboseDefault" title="Verbose by default" onchange="markSettingsDirty()"></div><div class="settings-label">Verbose by default</div></div>
+            <div class="settings-stacked-row">
+              <div class="settings-stacked-label">Max log lines per pane</div>
+              <input type="number" id="setting-logMaxLines" class="settings-short-input" min="100" max="100000" step="100" title="Maximum lines to keep in each log pane" onchange="markSettingsDirty()">
+            </div>
           </div>
           <div id="settings-error" class="settings-error-msg hidden"></div>
         </div>

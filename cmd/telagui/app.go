@@ -2845,6 +2845,7 @@ type Settings struct {
 	HideDotfiles            *bool  `yaml:"hideDotfiles,omitempty" json:"hideDotfiles"`
 	LogPanelHeight          int    `yaml:"logPanelHeight,omitempty" json:"logPanelHeight"`
 	LogPanelCollapsed       bool   `yaml:"logPanelCollapsed,omitempty" json:"logPanelCollapsed"`
+	LogMaxLines             int    `yaml:"logMaxLines,omitempty" json:"logMaxLines"`
 	WindowX                 int    `yaml:"windowX,omitempty" json:"windowX"`
 	WindowY                 int    `yaml:"windowY,omitempty" json:"windowY"`
 	WindowWidth             int    `yaml:"windowWidth,omitempty" json:"windowWidth"`
@@ -2862,6 +2863,7 @@ func defaultSettings() Settings {
 		VerboseDefault:    false,
 		ConfirmDisconnect: true,
 		Theme:             "system",
+		LogMaxLines:       5000,
 	}
 }
 

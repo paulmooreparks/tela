@@ -72,7 +72,13 @@ function switchLogTab(btn, id) {
   btn.classList.add('active');
   document.querySelectorAll('.log-panel-output').forEach(function (o) { o.classList.add('hidden'); });
   var el = document.getElementById(id);
-  if (el) el.classList.remove('hidden');
+  if (el) {
+    el.classList.remove('hidden');
+    // Scroll to bottom on tab switch unless user has explicitly scrolled up
+    if (!logUserScrolledUp[id]) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }
 }
 
 function toggleLogPanel() {
@@ -87,20 +93,63 @@ function toggleLogPanel() {
   });
 }
 
+// Track whether user has scrolled up in each pane (keyed by element ID).
+// When true, auto-scroll is suppressed so the user can read history.
+var logUserScrolledUp = {};
+var logMaxLines = 5000; // default; overridden from settings on load
+
+// Detect user scroll: if scrolled to bottom (within 5px), auto-scroll is active.
+// If scrolled up, suppress auto-scroll until user scrolls back to bottom.
+function initLogScrollTracking(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  logUserScrolledUp[id] = false;
+  el.addEventListener('scroll', function () {
+    var atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 5;
+    logUserScrolledUp[id] = !atBottom;
+  });
+}
+
+function logAutoScroll(el) {
+  if (!logUserScrolledUp[el.id]) {
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+// Trim a <pre> element to at most maxLines text nodes.
+function trimLogPre(el, maxLines) {
+  if (maxLines <= 0) return;
+  while (el.childNodes.length > maxLines) {
+    el.removeChild(el.firstChild);
+  }
+}
+
+// Trim a text-content-based element by newline count.
+function trimLogText(el, maxLines) {
+  if (maxLines <= 0) return;
+  var text = el.textContent;
+  var lines = text.split('\n');
+  if (lines.length > maxLines + 1) {
+    el.textContent = lines.slice(lines.length - maxLines - 1).join('\n');
+  }
+}
+
 function tvLog(msg) {
   var el = document.getElementById('log-tv');
   if (!el) return;
   var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   var line = document.createTextNode(now + ' ' + msg + '\n');
   el.appendChild(line);
-  if (!logPanelFrozen) el.scrollTop = el.scrollHeight;
+  trimLogPre(el, logMaxLines);
+  logAutoScroll(el);
 }
 
 function appendTelaLog(text) {
   var el = document.getElementById('log-tela');
   if (!el) return;
   el.textContent += text;
-  el.scrollTop = el.scrollHeight;
+  trimLogText(el, logMaxLines);
+  logAutoScroll(el);
 }
 
 function copyLogPanel() {
@@ -158,7 +207,13 @@ function addCommandEntry(method, desc, fullCmd) {
     + '<span class="' + methodClass + '">' + methodLabel + '</span> '
     + escHtml(oneLine);
   list.appendChild(line);
-  list.scrollTop = list.scrollHeight;
+  // Trim old entries
+  if (logMaxLines > 0) {
+    while (list.children.length > logMaxLines) {
+      list.removeChild(list.firstChild);
+    }
+  }
+  logAutoScroll(list);
   applyFilters();
 }
 
@@ -424,7 +479,8 @@ if (window.runtime) {
     // Clear the "Not connected." placeholder on first output
     if (el.textContent === 'Not connected.') el.textContent = '';
     el.textContent += chunk;
-    if (!logPanelFrozen) el.scrollTop = el.scrollHeight;
+    trimLogText(el, logMaxLines);
+    logAutoScroll(el);
     // Update tela dot to live
     var dot = document.getElementById('log-tela-dot');
     if (dot) dot.className = 'log-dot log-dot-live';
@@ -583,6 +639,16 @@ initSidebarResize('hubs-sidebar-resize', 'hubs-sidebar', 220, 400, 'hubsSidebarW
     }
   });
 })();
+
+// --- Log scroll tracking init ---
+initLogScrollTracking('log-tv');
+initLogScrollTracking('log-tela');
+initLogScrollTracking('cmd-list');
+
+// Load log max lines from settings
+goApp.GetSettings().then(function (s) {
+  if (s.logMaxLines && s.logMaxLines > 0) logMaxLines = s.logMaxLines;
+});
 
 // --- Startup ---
 tvLog('TelaVisor started');
@@ -3781,16 +3847,6 @@ function dockerAddHub() {
 
 // --- Terminal ---
 
-var logPanelFrozen = false;
-
-function freezeLogPanel() {
-  logPanelFrozen = true;
-}
-
-function unfreezeLogPanel() {
-  logPanelFrozen = false;
-}
-
 function copyTerminal() {
   var text = document.getElementById('log-tela').textContent;
   if (navigator.clipboard) navigator.clipboard.writeText(text);
@@ -3839,23 +3895,15 @@ function refreshTerminal() {
   });
 }
 
-// Set up scroll freeze and auto-copy on all log panel outputs
+// Auto-copy selected text on mouseup in log panes
 (function () {
   setTimeout(function () {
     var outputs = document.querySelectorAll('.log-panel-output, .cmd-list');
     outputs.forEach(function (el) {
-      el.addEventListener('mousedown', function () {
-        freezeLogPanel();
-      });
-
       el.addEventListener('mouseup', function () {
         var sel = window.getSelection();
         if (sel && sel.toString().length > 0) {
           navigator.clipboard.writeText(sel.toString()).catch(function () {});
-          // Keep frozen briefly so the selection remains visible
-          setTimeout(unfreezeLogPanel, 1500);
-        } else {
-          unfreezeLogPanel();
         }
       });
     });
@@ -3873,6 +3921,9 @@ function refreshSettings() {
     document.getElementById('setting-minimizeOnClose').checked = s.minimizeOnClose;
     document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
+
+    var logInput = document.getElementById('setting-logMaxLines');
+    if (logInput) logInput.value = s.logMaxLines || 5000;
 
     // Theme radio
     var themeVal = s.theme || 'system';
@@ -3896,6 +3947,10 @@ function gatherSettings() {
       existing.binPath = val === def ? '' : val;
     }
   } catch (e) {}
+  var logInput = document.getElementById('setting-logMaxLines');
+  var logVal = logInput ? parseInt(logInput.value, 10) : 5000;
+  if (isNaN(logVal) || logVal < 100) logVal = 100;
+
   return {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
@@ -3907,11 +3962,12 @@ function gatherSettings() {
     verboseDefault: document.getElementById('setting-verboseDefault').checked,
     defaultProfile: existing.defaultProfile || '',
     binPath: existing.binPath || '',
-    theme: themeRadio ? themeRadio.value : 'system'
+    theme: themeRadio ? themeRadio.value : 'system',
+    logMaxLines: logVal
   };
 }
 
-// Apply: save settings, disable Apply button, stay in dialog.
+// Apply: save settings, disable Apply buttons, stay in dialog.
 function applySettings() {
   var s = gatherSettings();
   var errEl = document.getElementById('settings-error');
@@ -3920,14 +3976,21 @@ function applySettings() {
 
   goApp.SaveSettings(JSON.stringify(s)).then(function () {
       settingsDirty = false;
-      var btn = document.getElementById('settings-apply-btn');
-      if (btn) btn.disabled = true;
+      setSettingsButtonsDisabled(true);
+      if (s.logMaxLines) logMaxLines = s.logMaxLines;
       document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
       updateDismissedForSession = false;
       updateSkippedVersion = '';
       checkForUpdate();
       refreshVersionDisplay();
     });
+}
+
+function setSettingsButtonsDisabled(disabled) {
+  var apply = document.getElementById('settings-apply-btn');
+  var applyClose = document.getElementById('settings-applyclose-btn');
+  if (apply) apply.disabled = disabled;
+  if (applyClose) applyClose.disabled = disabled;
 }
 
 // Backward-compat alias
@@ -3937,8 +4000,7 @@ var settingsDirty = false;
 
 function markSettingsDirty() {
   settingsDirty = true;
-  var btn = document.getElementById('settings-apply-btn');
-  if (btn) btn.disabled = false;
+  setSettingsButtonsDisabled(false);
 
   // Apply theme immediately on change (live preview)
   var themeRadio = document.querySelector('input[name="setting-theme"]:checked');
@@ -3965,30 +4027,26 @@ try {
   });
 } catch (e) {}
 
-// Close: validate, save if dirty, then close the dialog.
+// Apply & Close: save changes and close the dialog.
+// Button is only enabled when dirty, so we always save here.
 function closeSettings() {
-  if (settingsDirty) {
-    var s = gatherSettings();
-    var errEl = document.getElementById('settings-error');
-    errEl.classList.add('hidden');
-    errEl.textContent = '';
-    goApp.SaveSettings(JSON.stringify(s)).then(function () {
-      settingsDirty = false;
-      var btn = document.getElementById('settings-apply-btn');
-      if (btn) btn.disabled = true;
-      document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
-      updateDismissedForSession = false;
-      updateSkippedVersion = '';
-      checkForUpdate();
-      refreshVersionDisplay();
-      toggleSettingsOverlay();
-    }).catch(function (err) {
-      errEl.textContent = 'Save failed: ' + err;
-      errEl.classList.remove('hidden');
-    });
-  } else {
+  var s = gatherSettings();
+  var errEl = document.getElementById('settings-error');
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+  goApp.SaveSettings(JSON.stringify(s)).then(function () {
+    settingsDirty = false;
+    setSettingsButtonsDisabled(true);
+    document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
+    updateDismissedForSession = false;
+    updateSkippedVersion = '';
+    checkForUpdate();
+    refreshVersionDisplay();
     toggleSettingsOverlay();
-  }
+  }).catch(function (err) {
+    errEl.textContent = 'Save failed: ' + err;
+    errEl.classList.remove('hidden');
+  });
 }
 
 // Cancel: prompt if changes were made, discard and close on confirm.
@@ -4006,8 +4064,7 @@ function cancelSettings() {
 function discardAndClose() {
   refreshSettings();
   settingsDirty = false;
-  var btn = document.getElementById('settings-apply-btn');
-  if (btn) btn.disabled = true;
+  setSettingsButtonsDisabled(true);
   var errEl = document.getElementById('settings-error');
   if (errEl) { errEl.classList.add('hidden'); errEl.textContent = ''; }
   var pathInput = document.getElementById('setting-binPath');

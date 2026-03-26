@@ -356,6 +356,7 @@ export namespace main {
 	    hideDotfiles?: boolean;
 	    logPanelHeight: number;
 	    logPanelCollapsed: boolean;
+	    logMaxLines: number;
 	    windowX: number;
 	    windowY: number;
 	    windowWidth: number;
@@ -384,6 +385,7 @@ export namespace main {
 	        this.hideDotfiles = source["hideDotfiles"];
 	        this.logPanelHeight = source["logPanelHeight"];
 	        this.logPanelCollapsed = source["logPanelCollapsed"];
+	        this.logMaxLines = source["logMaxLines"];
 	        this.windowX = source["windowX"];
 	        this.windowY = source["windowY"];
 	        this.windowWidth = source["windowWidth"];

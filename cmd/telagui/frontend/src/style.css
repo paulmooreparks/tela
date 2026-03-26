@@ -268,12 +268,14 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .tab-icon-btn:hover { color: var(--text); border-color: var(--text-muted); background: rgba(0,0,0,0.04); }
 .tab-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
-/* Profile toolbar */
-.profile-toolbar {
+/* Common pane toolbar: shared across profile, files, and client-settings toolbars */
+.pane-toolbar {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 16px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+/* Profile toolbar */
+.profile-toolbar {}
 .profile-toolbar-select {
   padding: 4px 8px; font-size: 13px; font-weight: 600;
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -1349,6 +1351,11 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .settings-stacked-label {
   font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px;
 }
+.settings-short-input {
+  width: 100px; padding: 4px 8px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font); background: var(--surface); color: var(--text);
+}
 .settings-stacked-label-row {
   display: flex; align-items: center; justify-content: space-between;
   font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px;
@@ -1404,13 +1411,6 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-style: italic;
 }
 .hubs-admin-nav-sep { height: 1px; background: var(--border); margin: 6px 12px; }
-.cs-header-row {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  margin-bottom: 20px;
-}
-.cs-toolbar {
-  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-}
 .settings-card-block {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px; margin-bottom: 16px; max-width: 600px;
@@ -1514,8 +1514,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .files-path-seg.root { font-weight: 600; }
 .files-path-sep { color: var(--text-muted); font-size: 11px; margin: 0 1px; flex-shrink: 0; pointer-events: none; }
 .files-actionbar {
-  display: flex; align-items: center; gap: 4px; padding: 4px 12px;
-  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  gap: 4px; padding: 4px 12px;
 }
 .files-action-btn {
   background: none; border: 1px solid var(--border); padding: 3px 10px;
