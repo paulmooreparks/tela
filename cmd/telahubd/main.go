@@ -176,6 +176,7 @@ type clientSession struct {
 	ClientWS   *safeConn
 	AgentWS    *safeConn // agent's per-session WS (opened via session-join)
 	UDPTokens  []string
+	CreatedAt  time.Time // for session-request timeout detection
 }
 
 // machineEntry stores the state of a registered machine.
@@ -249,6 +250,7 @@ type udpSession struct {
 	Role         string
 	Addr         *net.UDPAddr // learned from first UDP message
 	MachineID    string
+	CreatedAt    time.Time
 }
 
 // ── Synchronized WebSocket writer ──────────────────────────────────
@@ -975,6 +977,7 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 	session := &clientSession{
 		SessionID: sessionID,
 		ClientWS:  ws,
+		CreatedAt: time.Now(),
 	}
 	entry.mu.Lock()
 	if entry.Sessions == nil {
@@ -1002,6 +1005,28 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 	}
 	data, _ := json.Marshal(req)
 	controlWS.WriteMessage(websocket.TextMessage, data)
+
+	// Start a timeout: if the agent does not join within 30 seconds,
+	// clean up the dangling session so it does not leak.
+	go func() {
+		time.Sleep(30 * time.Second)
+		entry.mu.Lock()
+		sess, ok := entry.Sessions[sessionID]
+		if !ok || sess.AgentWS != nil {
+			// Session was joined or already cleaned up.
+			entry.mu.Unlock()
+			return
+		}
+		delete(entry.Sessions, sessionID)
+		entry.mu.Unlock()
+		log.Printf("[hub] session %s timed out waiting for agent join (%s)", sessionID[:8], machineID)
+		cleanupSession(machineID, sess)
+		if sess.ClientWS != nil {
+			sess.ClientWS.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseGoingAway, "agent did not join session"))
+			sess.ClientWS.Close()
+		}
+	}()
 }
 
 func handleSessionJoin(ws *safeConn, state *wsState, msg *signalingMsg) {
@@ -1101,18 +1126,21 @@ func pairSession(machineID string, entry *machineEntry, session *clientSession) 
 	agentTokenHex := hex.EncodeToString(agentToken)
 	clientTokenHex := hex.EncodeToString(clientToken)
 
+	now := time.Now()
 	udpSessionsMu.Lock()
 	udpSessions[agentTokenHex] = &udpSession{
 		PeerTokenHex: clientTokenHex,
 		PeerWS:       clientWS,
 		Role:         "agent",
 		MachineID:    machineID,
+		CreatedAt:    now,
 	}
 	udpSessions[clientTokenHex] = &udpSession{
 		PeerTokenHex: agentTokenHex,
 		PeerWS:       agentWS,
 		Role:         "client",
 		MachineID:    machineID,
+		CreatedAt:    now,
 	}
 	udpSessionsMu.Unlock()
 
@@ -1384,6 +1412,25 @@ func runKeepalive() {
 	}
 }
 
+// runUDPSessionReaper periodically removes stale UDP session entries
+// that were not cleaned up by normal session teardown (e.g., if a
+// session was created but the agent or client disconnected before
+// pairing completed and cleanupSession never ran).
+func runUDPSessionReaper() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		cutoff := time.Now().Add(-5 * time.Minute)
+		udpSessionsMu.Lock()
+		for token, sess := range udpSessions {
+			if sess.CreatedAt.Before(cutoff) {
+				delete(udpSessions, token)
+			}
+		}
+		udpSessionsMu.Unlock()
+	}
+}
+
 // ── Main ───────────────────────────────────────────────────────────
 
 func printHubUsage() {
@@ -1584,6 +1631,9 @@ func runHub(stopCh <-chan struct{}) {
 
 	// Start keepalive pinger
 	go runKeepalive()
+
+	// Start stale UDP session reaper
+	go runUDPSessionReaper()
 
 	// Clean up expired pairing codes every minute
 	go func() {

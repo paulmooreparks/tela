@@ -23,6 +23,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/hex"
@@ -65,7 +66,15 @@ const (
 	wsPingInterval = 20 * time.Second
 	wsPongWait     = 45 * time.Second
 	wsWriteWait    = 5 * time.Second
+	wsDialTimeout  = 15 * time.Second
 )
+
+// hubDialer is used for all WebSocket connections to the hub.
+// It sets an explicit handshake timeout to avoid hanging on
+// unreachable hosts or silent network failures.
+var hubDialer = websocket.Dialer{
+	HandshakeTimeout: wsDialTimeout,
+}
 
 var version = "dev"
 
@@ -784,8 +793,12 @@ func runSingleMachine(hubURL string, reg registration, targetHost string) {
 	const maxDelay = 5 * time.Minute
 	attempt := 0
 	for {
-		wasRegistered := runAgent(logger, hubURL, reg, targetHost)
-		if wasRegistered {
+		result := runAgent(logger, hubURL, reg, targetHost)
+		if result == agentAuthRejected {
+			logger.Printf("hub rejected authentication, stopping reconnect")
+			return
+		}
+		if result == agentRegistered {
 			attempt = 0 // was registered -- reset backoff
 		}
 
@@ -914,17 +927,35 @@ func startWSKeepalive(ws *websocket.Conn) func() {
 	}
 }
 
-func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string) bool {
+// runAgent return values.
+const (
+	agentDisconnected = iota // transient disconnect, should reconnect
+	agentRegistered          // was registered at some point, reset backoff
+	agentAuthRejected        // hub explicitly rejected auth, stop retrying
+)
+
+func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string) int {
 	lg.Printf("connecting to hub: %s", hubURL)
 
-	ws, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
+	ws, _, err := hubDialer.Dial(hubURL, nil)
 	if err != nil {
 		lg.Printf("dial failed: %v", err)
-		return false
+		return agentDisconnected
 	}
 	defer ws.Close()
 	stopKeepalive := startWSKeepalive(ws)
 	defer stopKeepalive()
+
+	// sessionCtx is cancelled when this agent invocation returns,
+	// signalling all session workers spawned by this connection to
+	// shut down. This prevents orphaned session goroutines from
+	// accumulating across reconnect cycles.
+	sessionCtx, sessionCancel := context.WithCancel(context.Background())
+	var sessionWg sync.WaitGroup
+	defer func() {
+		sessionCancel()
+		sessionWg.Wait()
+	}()
 
 	// Close the WebSocket when shutdown is signalled so the blocking
 	// ReadMessage loop below unblocks promptly instead of waiting for
@@ -953,16 +984,16 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	}
 	if err := ws.WriteJSON(&regMsg); err != nil {
 		lg.Printf("register failed: %v", err)
-		return false
+		return agentDisconnected
 	}
 
 	// Read control messages on the control WS
-	registered := false
+	result := agentDisconnected
 	for {
 		_, raw, err := ws.ReadMessage()
 		if err != nil {
 			lg.Printf("hub read error: %v", err)
-			return registered
+			return result
 		}
 
 		var msg controlMessage
@@ -972,24 +1003,41 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 
 		switch msg.Type {
 		case "registered":
-			registered = true
+			result = agentRegistered
 			lg.Printf("registered as: %s -- waiting for sessions", msg.MachineID)
+
+		case "error":
+			m := msg.Message
+			if m == "" {
+				m = "unknown error"
+			}
+			lg.Printf("hub error: %s", m)
+			if strings.Contains(strings.ToLower(m), "access denied") ||
+				strings.Contains(strings.ToLower(m), "invalid token") {
+				return agentAuthRejected
+			}
 
 		case "session-request":
 			sessionID := msg.SessionID
 			sessionIdx := msg.SessionIdx
 			wgPubKey := msg.WGPubKey
 			lg.Printf("session-request: session=%s idx=%d", sessionID[:8], sessionIdx)
-			go runSessionWorker(lg, hubURL, reg, targetHost, sessionID, sessionIdx, wgPubKey)
+			sessionWg.Add(1)
+			go func() {
+				defer sessionWg.Done()
+				runSessionWorker(sessionCtx, lg, hubURL, reg, targetHost, sessionID, sessionIdx, wgPubKey)
+			}()
 		}
 	}
 }
 
 // runSessionWorker opens a dedicated WebSocket for one client session.
-func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHost string, sessionID string, sessionIdx int, helperPubKey string) {
+// The ctx is cancelled when the parent agent connection returns, which
+// signals this worker to tear down promptly.
+func runSessionWorker(ctx context.Context, lg *log.Logger, hubURL string, reg registration, targetHost string, sessionID string, sessionIdx int, helperPubKey string) {
 	lg.Printf("[session %s] dialing hub for session WS", sessionID[:8])
 
-	ws, _, err := websocket.DefaultDialer.Dial(hubURL, nil)
+	ws, _, err := hubDialer.Dial(hubURL, nil)
 	if err != nil {
 		lg.Printf("[session %s] dial failed: %v", sessionID[:8], err)
 		return
@@ -997,6 +1045,13 @@ func runSessionWorker(lg *log.Logger, hubURL string, reg registration, targetHos
 	defer ws.Close()
 	stopKeepalive := startWSKeepalive(ws)
 	defer stopKeepalive()
+
+	// Close the session WebSocket when the parent agent context is
+	// cancelled (reconnect or shutdown), unblocking any pending reads.
+	go func() {
+		<-ctx.Done()
+		ws.Close()
+	}()
 
 	// Send session-join to associate this WS with the session
 	joinMsg := controlMessage{
