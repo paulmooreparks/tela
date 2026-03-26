@@ -1884,7 +1884,17 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   flex-shrink: 0;
   transition: height 0.15s;
 }
-.log-panel.collapsed { height: 36px; overflow: hidden; }
+.log-panel.collapsed { height: 26px; overflow: hidden; }
+.log-panel.collapsed .log-panel-resize { display: none; }
+.log-panel.collapsed .log-panel-header { height: 26px; }
+.log-panel.collapsed .log-panel-tabs { display: none; }
+.log-panel.collapsed .log-panel-actions .term-btn { display: none; }
+.log-panel.collapsed .log-panel-actions .verbose-btn { display: none; }
+.log-panel.collapsed .log-panel-collapsed-title { display: block; }
+.log-panel-collapsed-title {
+  display: none; font-size: 11px; color: #94a3b8; font-weight: 500;
+  padding-left: 4px; white-space: nowrap;
+}
 .log-panel-resize {
   height: 4px; cursor: row-resize; flex-shrink: 0;
 }
@@ -1923,6 +1933,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .log-panel-toggle {
   background: none; border: none; color: #94a3b8; font-size: 14px;
   cursor: pointer; padding: 0 6px; font-family: var(--font); line-height: 1;
+  display: inline-flex; align-items: center; align-self: center;
 }
 .log-panel-toggle:hover { color: #e2e8f0; }
 .log-panel-output {

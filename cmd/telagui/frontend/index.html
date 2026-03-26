@@ -276,6 +276,7 @@
           <button class="term-btn" onclick="copyLogPanel()">Copy</button>
           <button class="term-btn" onclick="saveLogPanel()">Save</button>
           <button class="term-btn" onclick="clearLogPanel()">Clear</button>
+          <span class="log-panel-collapsed-title">Logs</span>
           <button class="log-panel-toggle" onclick="toggleLogPanel()" title="Toggle panel">&#x25BC;</button>
         </div>
       </div>
@@ -407,7 +408,7 @@
   <div class="modal-overlay hidden" id="settings-overlay" onclick="if(event.target===this)cancelSettings()">
     <div class="modal-dialog modal-settings">
       <div class="modal-header">
-        <h3>Settings</h3>
+        <h3>Application Settings</h3>
         <button class="modal-close" onclick="cancelSettings()">&times;</button>
       </div>
       <div class="settings-toolbar">

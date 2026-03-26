@@ -357,6 +357,7 @@ export namespace main {
 	    logPanelHeight: number;
 	    logPanelCollapsed: boolean;
 	    logMaxLines: number;
+	    windowSaved: boolean;
 	    windowX: number;
 	    windowY: number;
 	    windowWidth: number;
@@ -386,6 +387,7 @@ export namespace main {
 	        this.logPanelHeight = source["logPanelHeight"];
 	        this.logPanelCollapsed = source["logPanelCollapsed"];
 	        this.logMaxLines = source["logMaxLines"];
+	        this.windowSaved = source["windowSaved"];
 	        this.windowX = source["windowX"];
 	        this.windowY = source["windowY"];
 	        this.windowWidth = source["windowWidth"];

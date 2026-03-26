@@ -30,6 +30,9 @@ func main() {
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		OnBeforeClose: func(ctx context.Context) bool {
+			// Always save window geometry while the window is still alive.
+			app.saveWindowGeometry()
+
 			if app.IsQuitting() {
 				return false // already confirmed, allow close
 			}

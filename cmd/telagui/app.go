@@ -213,10 +213,10 @@ func (a *App) startup(ctx context.Context) {
 	profileMu.Unlock()
 
 	// Restore window position and size
-	if settings.WindowWidth > 0 && settings.WindowHeight > 0 {
-		wailsRuntime.WindowSetSize(ctx, settings.WindowWidth, settings.WindowHeight)
-	}
-	if settings.WindowX > 0 || settings.WindowY > 0 {
+	if settings.WindowSaved {
+		if settings.WindowWidth > 0 && settings.WindowHeight > 0 {
+			wailsRuntime.WindowSetSize(ctx, settings.WindowWidth, settings.WindowHeight)
+		}
 		wailsRuntime.WindowSetPosition(ctx, settings.WindowX, settings.WindowY)
 	}
 
@@ -573,20 +573,29 @@ func (a *App) downloadSelfUpdate(ver string) {
 	}
 }
 
-func (a *App) shutdown(ctx context.Context) {
-	// Save window position and size
-	if a.ctx != nil {
-		w, h := wailsRuntime.WindowGetSize(a.ctx)
-		x, y := wailsRuntime.WindowGetPosition(a.ctx)
-		s := a.GetSettings()
-		s.WindowWidth = w
-		s.WindowHeight = h
-		s.WindowX = x
-		s.WindowY = y
-		if data, err := json.Marshal(s); err == nil {
-			a.SaveSettings(string(data))
-		}
+// saveWindowGeometry persists the current window position and size.
+// Must be called while the window is still alive (e.g., from OnBeforeClose).
+func (a *App) saveWindowGeometry() {
+	if a.ctx == nil {
+		return
 	}
+	w, h := wailsRuntime.WindowGetSize(a.ctx)
+	x, y := wailsRuntime.WindowGetPosition(a.ctx)
+	if w <= 0 || h <= 0 {
+		return
+	}
+	s := a.GetSettings()
+	s.WindowSaved = true
+	s.WindowWidth = w
+	s.WindowHeight = h
+	s.WindowX = x
+	s.WindowY = y
+	if data, err := json.Marshal(s); err == nil {
+		a.SaveSettings(string(data))
+	}
+}
+
+func (a *App) shutdown(ctx context.Context) {
 
 	a.DisconnectControlWS()
 
@@ -2846,10 +2855,11 @@ type Settings struct {
 	LogPanelHeight          int    `yaml:"logPanelHeight,omitempty" json:"logPanelHeight"`
 	LogPanelCollapsed       bool   `yaml:"logPanelCollapsed,omitempty" json:"logPanelCollapsed"`
 	LogMaxLines             int    `yaml:"logMaxLines,omitempty" json:"logMaxLines"`
-	WindowX                 int    `yaml:"windowX,omitempty" json:"windowX"`
-	WindowY                 int    `yaml:"windowY,omitempty" json:"windowY"`
-	WindowWidth             int    `yaml:"windowWidth,omitempty" json:"windowWidth"`
-	WindowHeight            int    `yaml:"windowHeight,omitempty" json:"windowHeight"`
+	WindowSaved             bool   `yaml:"windowSaved,omitempty" json:"windowSaved"`
+	WindowX                 int    `yaml:"windowX" json:"windowX"`
+	WindowY                 int    `yaml:"windowY" json:"windowY"`
+	WindowWidth             int    `yaml:"windowWidth" json:"windowWidth"`
+	WindowHeight            int    `yaml:"windowHeight" json:"windowHeight"`
 }
 
 func defaultSettings() Settings {
