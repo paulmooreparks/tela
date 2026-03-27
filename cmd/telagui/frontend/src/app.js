@@ -2028,6 +2028,7 @@ function stopConnectionPoll() {
 
 var agentsData = [];
 var agentsSelectedId = '';
+var agentsSelectedHub = '';
 
 function agentsRefresh() {
   goApp.GetConnectionState().then(function (state) {
@@ -2081,107 +2082,98 @@ function agentsSelect(id) {
 
 function agentsShowDetail(a) {
   var isOnline = a.online;
-  var statusClass = isOnline ? 'online' : 'offline';
-  var statusText = isOnline ? 'Online' : 'Offline';
-  var dis = isOnline ? '' : ' disabled';
+  var hasMgmt = a.capabilities && a.capabilities.management;
+  var canManage = isOnline && hasMgmt;
 
-  var html = '<div class="agent-detail-header">'
-    + '<div class="agent-detail-title">' + escHtml(a.id) + '</div>'
-    + '<span class="agent-detail-status ' + statusClass + '">' + statusText + '</span>'
+  // Enable/disable toolbar buttons
+  document.getElementById('agents-restart-btn').disabled = !canManage;
+  document.getElementById('agents-logs-btn').disabled = !canManage;
+
+  // Store hub for toolbar actions
+  agentsSelectedHub = a.hub;
+
+  var html = '<div class="detail-header">'
+    + '<div class="detail-title">' + escHtml(a.id)
+    + ' <span class="' + (isOnline ? 'badge-online' : 'badge-offline') + '">'
+    + (isOnline ? 'Online' : 'Offline') + '</span></div>'
+    + '<div class="detail-subtitle">On ' + escHtml(a.hub) + '</div>'
     + '</div>';
 
-  // Agent Info card
-  html += agentCard('Agent Info',
-    agentRow('Version', agentMono(a.version || 'unknown'))
-    + agentRow('Hub', escHtml(a.hub))
-    + agentRow('Hostname', agentMono(a.hostname || '-'))
-    + agentRow('Platform', agentMono(a.os || '-'))
-    + agentRow('Last seen', agentMono(a.lastSeen ? agentFormatDate(a.lastSeen) : '-'))
-    + agentRow('Active sessions', agentMono(a.sessionCount))
-  );
+  // Agent Info (read-only kv-table)
+  html += '<div class="setting-card"><div class="setting-card-title">Agent Info</div>'
+    + '<div class="setting-card-desc">Read-only metadata reported by the agent at registration.</div>'
+    + '<table class="kv-table">'
+    + '<tr><td>Version</td><td>' + escHtml(a.version || 'unknown') + '</td></tr>'
+    + '<tr><td>Hub</td><td>' + escHtml(a.hub) + '</td></tr>'
+    + '<tr><td>Hostname</td><td>' + escHtml(a.hostname || '-') + '</td></tr>'
+    + '<tr><td>Platform</td><td>' + escHtml(a.os || '-') + '</td></tr>'
+    + '<tr><td>Last seen</td><td>' + escHtml(a.lastSeen ? agentFormatDate(a.lastSeen) : '-') + '</td></tr>'
+    + '<tr><td>Active sessions</td><td>' + String(a.sessionCount || 0) + '</td></tr>'
+    + '</table></div>';
 
-  // Services card
-  var svcHtml = '<div class="agent-svc-tags">';
+  // Services
+  html += '<div class="setting-card"><div class="setting-card-title">Services</div>'
+    + '<div class="setting-card-desc">TCP services exposed through the tunnel.</div>';
   if (a.services && a.services.length > 0) {
     a.services.forEach(function (s) {
-      var label = (s.name || '') + ' :' + (s.port || '');
-      svcHtml += '<span class="agent-svc-tag">' + escHtml(label) + '</span>';
+      html += '<div class="setting-list-item"><div>'
+        + '<strong>' + escHtml(s.name || 'unnamed') + '</strong> '
+        + '<span class="chip">:' + (s.port || '') + '</span>'
+        + (s.proto ? ' <span class="chip">' + escHtml(s.proto) + '</span>' : '')
+        + '</div></div>';
     });
   } else {
-    svcHtml += '<span style="padding:0 16px;color:var(--text-muted);font-size:12px;">No services</span>';
+    html += '<div class="setting-card-desc">No services configured.</div>';
   }
-  svcHtml += '</div>';
-  html += agentCard('Services', svcHtml);
+  html += '</div>';
 
-  // File Share card
+  // File Share
   var fs = a.capabilities && a.capabilities.fileShare;
+  html += '<div class="setting-card"><div class="setting-card-title">File Share</div>'
+    + '<div class="setting-card-desc">Sandboxed directory access through the encrypted tunnel.</div>';
   if (fs && fs.enabled) {
-    var rows = '';
-    rows += agentRow('Status', '<span class="cap-yes">Enabled</span>');
-    rows += agentRow('Access', fs.writable ? '<span class="cap-yes">Read and write</span>' : 'Read only');
+    html += '<table class="kv-table">'
+      + '<tr><td>Status</td><td><span class="cap-yes">Enabled</span></td></tr>'
+      + '<tr><td>Access</td><td>' + (fs.writable ? '<span class="cap-yes">Read and write</span>' : 'Read only') + '</td></tr>';
     if (fs.writable) {
-      rows += agentRow('Delete', fs.allowDelete ? '<span class="cap-yes">Allowed</span>' : '<span class="cap-no">Not allowed</span>');
+      html += '<tr><td>Delete</td><td>' + (fs.allowDelete ? '<span class="cap-yes">Allowed</span>' : '<span class="cap-no">Not allowed</span>') + '</td></tr>';
     }
     if (fs.maxFileSize) {
-      rows += agentRow('Max file size', agentFormatBytes(fs.maxFileSize));
+      html += '<tr><td>Max file size</td><td>' + agentFormatBytes(fs.maxFileSize) + '</td></tr>';
     }
     if (fs.blockedExtensions && fs.blockedExtensions.length > 0) {
-      rows += agentRow('Blocked types', escHtml(fs.blockedExtensions.join(', ')));
+      html += '<tr><td>Blocked types</td><td>' + escHtml(fs.blockedExtensions.join(', ')) + '</td></tr>';
     }
-    if (fs.allowedExtensions && fs.allowedExtensions.length > 0) {
-      rows += agentRow('Allowed types', escHtml(fs.allowedExtensions.join(', ')));
-    }
-    html += agentCard('File Share', rows);
+    html += '</table>';
   } else {
-    html += agentCard('File Share',
-      agentRow('Status', '<span style="color:var(--text-muted)">Not configured</span>')
-    );
+    html += '<table class="kv-table"><tr><td>Status</td><td>Not configured</td></tr></table>';
   }
+  html += '</div>';
 
-  // Update card
-  var latestVersion = '';
-  if (typeof updateInfo === 'object' && updateInfo && updateInfo.version) {
-    latestVersion = updateInfo.version;
-  }
-  var isOutdated = latestVersion && a.version && a.version !== latestVersion;
-  var updateContent = '<div class="agent-update-row">'
-    + '<span class="agent-update-current">' + escHtml(a.version || '?') + '</span>';
-  if (isOutdated) {
-    updateContent += '<span class="agent-update-arrow">&#x2192;</span>'
-      + '<span class="agent-update-latest">' + escHtml(latestVersion) + '</span>'
-      + '<span class="agent-update-note">Update available</span>'
-      + '<button type="button" class="tb-btn" disabled title="Agent update not yet implemented">Update</button>';
+  // Management (kv-table with action buttons)
+  html += '<div class="setting-card"><div class="setting-card-title">Management</div>'
+    + '<div class="setting-card-desc">Remote agent lifecycle controls.</div>'
+    + '<table class="kv-table">';
+  if (canManage) {
+    html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\')">View Config</button></td></tr>'
+      + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\')">View Logs</button></td></tr>'
+      + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\')">Restart</button></td></tr>';
   } else {
-    updateContent += '<span class="agent-update-note">Up to date</span>';
+    html += '<tr><td colspan="2">Agent ' + (isOnline ? 'does not support remote management. Update telad to enable.' : 'is offline.') + '</td></tr>';
   }
-  updateContent += '</div>';
-  html += agentCard('Update', updateContent);
+  html += '</table></div>';
 
-  // Management card
-  var hasMgmt = a.capabilities && a.capabilities.management;
-  var mgmtDis = (isOnline && hasMgmt) ? '' : ' disabled';
-  var mgmtTitle = (isOnline && hasMgmt) ? '' : ' title="Agent offline or does not support management"';
-  html += agentCard('Management',
-    agentRow('Configuration', '<span class="danger-desc">View the agent config through the hub.</span>'
-      + '<button type="button" class="tb-btn"' + mgmtDis + mgmtTitle + ' onclick="agentsViewConfig(\'' + escAttr(a.id) + '\', \'' + escAttr(a.hub) + '\')">View Config</button>')
-    + agentRow('Agent log', '<span class="danger-desc">View recent agent log output.</span>'
-      + '<button type="button" class="tb-btn"' + mgmtDis + mgmtTitle + ' onclick="agentsViewLogs(\'' + escAttr(a.id) + '\', \'' + escAttr(a.hub) + '\')">View Logs</button>')
-    + agentRow('Restart', '<span class="danger-desc">Restart the telad process on this machine.</span>'
-      + '<button type="button" class="tb-btn"' + mgmtDis + mgmtTitle + ' onclick="agentsRestart(\'' + escAttr(a.id) + '\', \'' + escAttr(a.hub) + '\')">Restart</button>')
-  );
-
-  // Danger Zone (matches Hubs mode style)
-  html += '<div class="settings-group danger-zone"><div class="settings-group-header">Danger Zone</div>'
-    + '<div class="settings-row"><div class="settings-label">Stop agent</div>'
-    + '<div class="settings-value danger-value">'
-    + '<span class="danger-desc">Stop the telad service on this machine. Users will lose connectivity.</span>'
-    + '<button class="btn-danger btn-sm" disabled title="Coming soon">Stop Agent</button>'
-    + '</div></div>'
-    + '<div class="settings-row"><div class="settings-label">Unregister</div>'
-    + '<div class="settings-value danger-value">'
-    + '<span class="danger-desc">Remove this machine from the hub. The agent will need to re-register.</span>'
-    + '<button class="btn-danger btn-sm" disabled title="Coming soon">Unregister</button>'
-    + '</div></div></div>';
+  // Danger Zone
+  html += '<div class="setting-card setting-card-danger"><div class="setting-card-title">Danger Zone</div>'
+    + '<div class="danger-row"><div class="danger-row-text">'
+    + '<div class="danger-row-label">Force disconnect</div>'
+    + '<div class="danger-row-desc">Close all active sessions for this agent.</div>'
+    + '</div><button type="button" class="btn-danger btn-sm" disabled>Disconnect</button></div>'
+    + '<div class="danger-row"><div class="danger-row-text">'
+    + '<div class="danger-row-label">Remove machine</div>'
+    + '<div class="danger-row-desc">Remove this machine from the hub. The agent will re-register.</div>'
+    + '</div><button type="button" class="btn-danger btn-sm" disabled>Remove</button></div>'
+    + '</div>';
 
   document.getElementById('agents-detail').innerHTML = html;
 }
@@ -2212,24 +2204,131 @@ function agentsPairAgent() {
   }).catch(function () {});
 }
 
+function agentsRestartSelected() {
+  if (agentsSelectedId && agentsSelectedHub) agentsRestart(agentsSelectedId, agentsSelectedHub);
+}
+
+function agentsViewLogsSelected() {
+  if (agentsSelectedId && agentsSelectedHub) agentsViewLogs(agentsSelectedId, agentsSelectedHub);
+}
+
+function agentsUndo() {
+  // Re-render the current agent detail from cached data (discards unsaved edits)
+  var agent = agentsData.find(function (a) { return a.id === agentsSelectedId; });
+  if (agent) agentsShowDetail(agent);
+  document.getElementById('agents-undo-btn').disabled = true;
+  document.getElementById('agents-save-btn').disabled = true;
+}
+
+function agentsSaveConfig() {
+  // Placeholder for config push -- will be wired when editable fields are added
+  tvLog('Agent config save not yet implemented for live editing');
+}
+
 function agentsViewConfig(machineId, hub) {
   var wsHub = toWSURL(hub);
   goApp.GetAgentConfig(wsHub, machineId).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
     if (data.error) { showError('Config error: ' + data.error); return; }
     var pretty = JSON.stringify(data, null, 2);
-    showPromptDialog('Agent Config: ' + machineId, '', pretty, 'Close');
+    showTextViewDialog('Agent Config: ' + machineId, pretty);
   }).catch(function (err) { showError('Failed: ' + err); });
 }
 
+// Show a read-only text viewer dialog (monospace, scrollable).
+function showTextViewDialog(title, text) {
+  var overlay = document.getElementById('generic-dialog-overlay');
+  document.getElementById('generic-dialog-title').textContent = title;
+  document.getElementById('generic-dialog-message').style.display = 'none';
+  var input = document.getElementById('generic-dialog-input');
+  input.classList.add('hidden');
+
+  var pre = document.createElement('pre');
+  pre.className = 'text-view-content';
+  pre.textContent = text;
+  input.parentNode.insertBefore(pre, input);
+
+  var okBtn = document.getElementById('generic-dialog-ok');
+  okBtn.textContent = 'Close';
+  okBtn.className = 'btn-primary';
+  overlay.classList.remove('hidden');
+
+  _dialogResolve = function () {
+    overlay.classList.add('hidden');
+    pre.remove();
+    _dialogResolve = null;
+  };
+  _dialogMode = 'confirm';
+}
+
 function agentsViewLogs(machineId, hub) {
+  var paneId = 'log-agent-' + machineId;
+  var existing = document.getElementById(paneId);
+
+  // Create the tab and pane if they don't exist yet
+  if (!existing) {
+    // Add tab button before the "+" button
+    var tabBar = document.querySelector('.log-panel-tabs');
+    var addBtn = tabBar.querySelector('.log-panel-tab-add');
+    var tab = document.createElement('button');
+    tab.className = 'log-panel-tab';
+    tab.onclick = function () { switchLogTab(tab, paneId); };
+    tab.innerHTML = '<span class="log-dot log-dot-idle" id="' + paneId + '-dot"></span>'
+      + escHtml(machineId)
+      + '<span class="log-tab-close" onclick="event.stopPropagation();removeAgentLogTab(\'' + escAttr(paneId) + '\',this.parentNode)" title="Close">&times;</span>';
+    tabBar.insertBefore(tab, addBtn);
+
+    // Add pane
+    var pre = document.createElement('pre');
+    pre.className = 'log-panel-output hidden';
+    pre.id = paneId;
+    pre.textContent = 'Loading logs for ' + machineId + '...\n';
+    var logPanel = document.getElementById('log-panel');
+    logPanel.appendChild(pre);
+
+    // Init scroll tracking
+    initLogScrollTracking(paneId);
+  }
+
+  // Switch to the tab
+  var tabBtn = document.querySelector('.log-panel-tabs').querySelector('[onclick*="' + paneId + '"]')
+    || document.querySelector('.log-panel-tab:last-of-type');
+  if (tabBtn) switchLogTab(tabBtn, paneId);
+
+  // Expand the log panel if collapsed
+  var panel = document.getElementById('log-panel');
+  if (panel.classList.contains('collapsed')) toggleLogPanel();
+
+  // Fetch logs
   var wsHub = toWSURL(hub);
-  goApp.GetAgentLogs(wsHub, machineId, 200).then(function (resp) {
-    try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
-    if (data.error) { showError('Logs error: ' + data.error); return; }
+  var dot = document.getElementById(paneId + '-dot');
+  if (dot) dot.className = 'log-dot log-dot-warn';
+
+  goApp.GetAgentLogs(wsHub, machineId, 500).then(function (resp) {
+    try { var data = JSON.parse(resp); } catch (e) { return; }
+    if (data.error) {
+      document.getElementById(paneId).textContent = 'Error: ' + data.error + '\n';
+      if (dot) dot.className = 'log-dot log-dot-idle';
+      return;
+    }
     var lines = data.lines || [];
-    showPromptDialog('Agent Logs: ' + machineId, '', lines.join('\n'), 'Close');
-  }).catch(function (err) { showError('Failed: ' + err); });
+    var el = document.getElementById(paneId);
+    el.textContent = lines.join('\n') + '\n';
+    logAutoScroll(el);
+    if (dot) dot.className = 'log-dot log-dot-live';
+  }).catch(function (err) {
+    document.getElementById(paneId).textContent = 'Failed: ' + err + '\n';
+    if (dot) dot.className = 'log-dot log-dot-idle';
+  });
+}
+
+function removeAgentLogTab(paneId, tabBtn) {
+  var pane = document.getElementById(paneId);
+  if (pane) pane.remove();
+  if (tabBtn) tabBtn.remove();
+  // Switch back to TelaVisor tab
+  var tvTab = document.querySelector('.log-panel-tab');
+  if (tvTab) switchLogTab(tvTab, 'log-tv');
 }
 
 function agentsRestart(machineId, hub) {
@@ -2244,17 +2343,7 @@ function agentsRestart(machineId, hub) {
   });
 }
 
-function agentCard(title, content) {
-  return '<div class="settings-group"><div class="settings-group-header">' + title + '</div>' + content + '</div>';
-}
-
-function agentRow(label, value) {
-  return '<div class="settings-row"><div class="settings-label">' + label + '</div><div class="settings-value">' + value + '</div></div>';
-}
-
-function agentMono(v) {
-  return '<span style="font-family:var(--mono);font-size:12px;">' + escHtml(String(v)) + '</span>';
-}
+// Legacy helpers removed -- agentsShowDetail now uses setting-card classes directly.
 
 function agentFormatDate(iso) {
   try {

@@ -150,8 +150,16 @@ export function ForceQuit() {
   return window['go']['main']['App']['ForceQuit']();
 }
 
+export function GetAgentConfig(arg1, arg2) {
+  return window['go']['main']['App']['GetAgentConfig'](arg1, arg2);
+}
+
 export function GetAgentList() {
   return window['go']['main']['App']['GetAgentList']();
+}
+
+export function GetAgentLogs(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetAgentLogs'](arg1, arg2, arg3);
 }
 
 export function GetBinStatus() {
@@ -200,6 +208,10 @@ export function GetHubStatus(arg1) {
 
 export function GetKnownHubs() {
   return window['go']['main']['App']['GetKnownHubs']();
+}
+
+export function GetLocalInstances() {
+  return window['go']['main']['App']['GetLocalInstances']();
 }
 
 export function GetMachineCapabilities() {
@@ -346,6 +358,10 @@ export function ResolveAllPorts(arg1) {
   return window['go']['main']['App']['ResolveAllPorts'](arg1);
 }
 
+export function RestartAgent(arg1, arg2) {
+  return window['go']['main']['App']['RestartAgent'](arg1, arg2);
+}
+
 export function RestartToUpdate() {
   return window['go']['main']['App']['RestartToUpdate']();
 }
@@ -384,6 +400,10 @@ export function ServiceStart() {
 
 export function ServiceStop() {
   return window['go']['main']['App']['ServiceStop']();
+}
+
+export function SetAgentConfig(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetAgentConfig'](arg1, arg2, arg3);
 }
 
 export function SetMountConfig(arg1) {

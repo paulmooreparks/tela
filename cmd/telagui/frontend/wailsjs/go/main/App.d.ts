@@ -76,7 +76,11 @@ export function FileShareUpload(arg1:string,arg2:string,arg3:string):Promise<str
 
 export function ForceQuit():Promise<void>;
 
+export function GetAgentConfig(arg1:string,arg2:string):Promise<string>;
+
 export function GetAgentList():Promise<Array<main.AgentInfo>>;
+
+export function GetAgentLogs(arg1:string,arg2:string,arg3:number):Promise<string>;
 
 export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
 
@@ -101,6 +105,8 @@ export function GetHubInfo(arg1:string):Promise<string>;
 export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
+
+export function GetLocalInstances():Promise<Array<main.LocalInstance>>;
 
 export function GetMachineCapabilities():Promise<Record<string, Record<string, any>>>;
 
@@ -174,6 +180,8 @@ export function RenameProfile(arg1:string,arg2:string):Promise<void>;
 
 export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>;
 
+export function RestartAgent(arg1:string,arg2:string):Promise<string>;
+
 export function RestartToUpdate():Promise<void>;
 
 export function SaveFileDialog(arg1:string):Promise<string>;
@@ -193,6 +201,8 @@ export function SendControlCommand(arg1:string):Promise<void>;
 export function ServiceStart():Promise<string>;
 
 export function ServiceStop():Promise<string>;
+
+export function SetAgentConfig(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function SetMountConfig(arg1:main.ProfileMount):Promise<void>;
 

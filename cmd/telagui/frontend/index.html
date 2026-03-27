@@ -137,17 +137,24 @@
 
     <!-- Agents tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-agents">
+      <div class="pane-toolbar" id="agents-toolbar">
+        <button type="button" class="tb-btn" id="agents-undo-btn" onclick="agentsUndo()" title="Undo changes" disabled>&#x21B6;</button>
+        <button type="button" class="tb-btn tb-save-btn" id="agents-save-btn" onclick="agentsSaveConfig()" title="Save changes" disabled>Save</button>
+        <span class="tb-sep"></span>
+        <button type="button" class="tb-btn" id="agents-restart-btn" onclick="agentsRestartSelected()" title="Restart agent" disabled>Restart</button>
+        <button type="button" class="tb-btn" id="agents-logs-btn" onclick="agentsViewLogsSelected()" title="View logs" disabled>Logs</button>
+      </div>
       <div class="agents-layout">
         <div class="agents-sidebar">
           <div class="agents-sidebar-header">
             <span>Agents</span>
-            <button type="button" class="files-nav-btn" onclick="agentsRefresh()" title="Refresh" style="width:22px;height:22px;font-size:12px;">&#x21BB;</button>
+            <button type="button" class="tb-btn" onclick="agentsRefresh()" title="Refresh">&#x21BB;</button>
           </div>
           <div class="agents-sidebar-list" id="agents-sidebar-list">
-            <p class="empty-hint" style="padding:16px;">Connect to view agents.</p>
+            <p class="empty-hint agents-empty-hint">Connect to view agents.</p>
           </div>
           <div class="agents-sidebar-footer">
-            <button type="button" class="tb-btn" style="flex:1;" id="agents-pair-btn" onclick="agentsPairAgent()" disabled>Pair Agent</button>
+            <button type="button" class="btn-primary" id="agents-pair-btn" onclick="agentsPairAgent()" disabled>Pair Agent</button>
           </div>
         </div>
         <div class="agents-detail" id="agents-detail">

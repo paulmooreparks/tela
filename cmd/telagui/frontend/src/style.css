@@ -1411,9 +1411,80 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-style: italic;
 }
 .hubs-admin-nav-sep { height: 1px; background: var(--border); margin: 6px 12px; }
+
+/* ── Shared setting-card pattern ───────────────────────────────── */
+/* Cards with title, optional description, then controls.
+   Checkboxes: label right. Other controls: label above.
+   Read-only values: inline kv-table rows. */
+.setting-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 16px; max-width: 720px;
+}
+.setting-card-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
+.setting-card-title-row {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;
+}
+.setting-card-desc { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px; }
+.setting-field { margin-bottom: 14px; }
+.setting-field:last-child { margin-bottom: 0; }
+.setting-label { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+.setting-input {
+  display: block; width: 100%; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: 4px; font-size: 13px; font-family: var(--font);
+  background: var(--bg); color: var(--text);
+}
+.setting-input:focus { outline: none; border-color: var(--accent); }
+.setting-input-short { width: 120px; }
+.setting-check {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px;
+}
+.setting-check:last-child { margin-bottom: 0; }
+.setting-check input { accent-color: var(--accent); margin: 0; }
+.kv-table { width: 100%; border-collapse: collapse; }
+.kv-table td { padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.kv-table tr:last-child td { border-bottom: none; }
+.kv-table td:first-child { color: var(--text-muted); width: 140px; }
+.kv-table td:last-child { font-family: var(--mono); font-size: 12px; }
+.setting-list-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.setting-list-item:last-child { border-bottom: none; }
+.setting-card-danger { border-color: var(--danger); background: rgba(231, 76, 60, 0.05); }
+.setting-card-danger .setting-card-title { color: var(--danger); }
+.danger-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border); gap: 16px;
+}
+.danger-row:last-child { border-bottom: none; }
+.danger-row-text { flex: 1; }
+.danger-row-label { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.danger-row-desc { font-size: 12px; color: var(--text-muted); }
+.chip {
+  display: inline-block; padding: 3px 10px; border: 1px solid var(--border);
+  border-radius: 4px; font-size: 12px; font-family: var(--mono); margin: 2px 4px 2px 0;
+}
+.log-tab-close {
+  margin-left: 6px; font-size: 14px; line-height: 1; opacity: 0.5; cursor: pointer;
+}
+.log-tab-close:hover { opacity: 1; color: var(--danger); }
+.log-dot-warn { background: var(--warn); }
+.text-view-content {
+  max-height: 400px; overflow: auto; padding: 12px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.4;
+  white-space: pre-wrap; word-break: break-all; color: var(--text); margin-bottom: 12px;
+}
+.detail-header { margin-bottom: 24px; }
+.detail-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+.detail-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.badge-online { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: var(--accent); color: #fff; }
+.badge-offline { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: var(--text-muted); color: #fff; }
+
+/* Legacy settings-card-block (used by Client Settings, to be migrated) */
 .settings-card-block {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 20px; margin-bottom: 16px; max-width: 600px;
+  border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
 }
 .settings-card-block h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
 .settings-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
