@@ -290,6 +290,30 @@ export namespace main {
 	        this.source = source["source"];
 	    }
 	}
+	export class LocalInstance {
+	    binary: string;
+	    pid: number;
+	    machines?: string[];
+	    hub?: string;
+	    configPath?: string;
+	    port?: number;
+	    name?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LocalInstance(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.binary = source["binary"];
+	        this.pid = source["pid"];
+	        this.machines = source["machines"];
+	        this.hub = source["hub"];
+	        this.configPath = source["configPath"];
+	        this.port = source["port"];
+	        this.name = source["name"];
+	    }
+	}
 	
 	export class PortAssignment {
 	    key: string;

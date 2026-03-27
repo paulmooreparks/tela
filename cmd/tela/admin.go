@@ -774,9 +774,11 @@ func cmdAdminAgent(args []string) {
 		fmt.Fprintf(os.Stderr, `tela admin agent -- remote agent management
 
 Usage:
+  tela admin agent list     -hub <url> -token <tok>
   tela admin agent config   -hub <url> -token <tok> -machine <id>
   tela admin agent set      -hub <url> -token <tok> -machine <id> <json-fields>
-  tela admin agent list     -hub <url> -token <tok>
+  tela admin agent logs     -hub <url> -token <tok> -machine <id> [-n 100]
+  tela admin agent restart  -hub <url> -token <tok> -machine <id>
 `)
 		os.Exit(1)
 	}
@@ -788,6 +790,10 @@ Usage:
 		cmdAdminAgentSet(args[1:])
 	case "list":
 		cmdAdminAgentList(args[1:])
+	case "logs":
+		cmdAdminAgentLogs(args[1:])
+	case "restart":
+		cmdAdminAgentRestart(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown agent command: %s\n", args[0])
 		os.Exit(1)
@@ -923,4 +929,68 @@ func cmdAdminAgentList(args []string) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", id, online, ver, svcs)
 	}
 	w.Flush()
+}
+
+func cmdAdminAgentLogs(args []string) {
+	fs := flag.NewFlagSet("admin agent logs", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", envOrDefault("TELA_OWNER_TOKEN", envOrDefault("TELA_TOKEN", "")), "Auth token")
+	machine := fs.String("machine", "", "Machine ID")
+	n := fs.Int("n", 100, "Number of log lines to retrieve")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub := mustResolveHub(*hubURL)
+	tok := *token
+	if tok == "" {
+		tok = credstore.LookupToken(hub)
+	}
+	if hub == "" || tok == "" || *machine == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub, -token, and -machine are required")
+		os.Exit(1)
+	}
+
+	payload := map[string]int{"lines": *n}
+	status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(*machine)+"/logs", tok, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	if lines, ok := result["lines"].([]interface{}); ok {
+		for _, line := range lines {
+			if s, ok := line.(string); ok {
+				fmt.Println(s)
+			}
+		}
+	}
+}
+
+func cmdAdminAgentRestart(args []string) {
+	fs := flag.NewFlagSet("admin agent restart", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", envOrDefault("TELA_OWNER_TOKEN", envOrDefault("TELA_TOKEN", "")), "Auth token")
+	machine := fs.String("machine", "", "Machine ID")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub := mustResolveHub(*hubURL)
+	tok := *token
+	if tok == "" {
+		tok = credstore.LookupToken(hub)
+	}
+	if hub == "" || tok == "" || *machine == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub, -token, and -machine are required")
+		os.Exit(1)
+	}
+
+	status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(*machine)+"/restart", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Printf("Restart requested for '%s'.\n", *machine)
 }

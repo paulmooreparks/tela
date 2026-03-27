@@ -2157,15 +2157,17 @@ function agentsShowDetail(a) {
   updateContent += '</div>';
   html += agentCard('Update', updateContent);
 
-  // Management card (actions not yet implemented)
+  // Management card
+  var hasMgmt = a.capabilities && a.capabilities.management;
+  var mgmtDis = (isOnline && hasMgmt) ? '' : ' disabled';
+  var mgmtTitle = (isOnline && hasMgmt) ? '' : ' title="Agent offline or does not support management"';
   html += agentCard('Management',
-    agentRow('Configuration', '<span class="danger-desc">Pull or push the agent config file through the tunnel.</span>'
-      + '<button type="button" class="tb-btn" disabled title="Coming soon">Pull</button>'
-      + '<button type="button" class="tb-btn" disabled title="Coming soon">Push</button>')
-    + agentRow('Agent log', '<span class="danger-desc">View or download the agent log output.</span>'
-      + '<button type="button" class="tb-btn" disabled title="Coming soon">View Log</button>')
-    + agentRow('Restart', '<span class="danger-desc">Restart the telad service on this machine.</span>'
-      + '<button type="button" class="tb-btn" disabled title="Coming soon">Restart</button>')
+    agentRow('Configuration', '<span class="danger-desc">View the agent config through the hub.</span>'
+      + '<button type="button" class="tb-btn"' + mgmtDis + mgmtTitle + ' onclick="agentsViewConfig(\'' + escAttr(a.id) + '\', \'' + escAttr(a.hub) + '\')">View Config</button>')
+    + agentRow('Agent log', '<span class="danger-desc">View recent agent log output.</span>'
+      + '<button type="button" class="tb-btn"' + mgmtDis + mgmtTitle + ' onclick="agentsViewLogs(\'' + escAttr(a.id) + '\', \'' + escAttr(a.hub) + '\')">View Logs</button>')
+    + agentRow('Restart', '<span class="danger-desc">Restart the telad process on this machine.</span>'
+      + '<button type="button" class="tb-btn"' + mgmtDis + mgmtTitle + ' onclick="agentsRestart(\'' + escAttr(a.id) + '\', \'' + escAttr(a.hub) + '\')">Restart</button>')
   );
 
   // Danger Zone (matches Hubs mode style)
@@ -2208,6 +2210,38 @@ function agentsPairAgent() {
         }
       }).catch(function (err) { showError('Pair failed: ' + err); });
   }).catch(function () {});
+}
+
+function agentsViewConfig(machineId, hub) {
+  var wsHub = toWSURL(hub);
+  goApp.GetAgentConfig(wsHub, machineId).then(function (resp) {
+    try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
+    if (data.error) { showError('Config error: ' + data.error); return; }
+    var pretty = JSON.stringify(data, null, 2);
+    showPromptDialog('Agent Config: ' + machineId, '', pretty, 'Close');
+  }).catch(function (err) { showError('Failed: ' + err); });
+}
+
+function agentsViewLogs(machineId, hub) {
+  var wsHub = toWSURL(hub);
+  goApp.GetAgentLogs(wsHub, machineId, 200).then(function (resp) {
+    try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
+    if (data.error) { showError('Logs error: ' + data.error); return; }
+    var lines = data.lines || [];
+    showPromptDialog('Agent Logs: ' + machineId, '', lines.join('\n'), 'Close');
+  }).catch(function (err) { showError('Failed: ' + err); });
+}
+
+function agentsRestart(machineId, hub) {
+  showConfirmDialog('Restart Agent', 'Restart telad on ' + machineId + '? Active sessions will be interrupted.', 'Restart').then(function (yes) {
+    if (!yes) return;
+    var wsHub = toWSURL(hub);
+    goApp.RestartAgent(wsHub, machineId).then(function (resp) {
+      try { var data = JSON.parse(resp); } catch (e) {}
+      if (data && data.error) { showError('Restart failed: ' + data.error); return; }
+      tvLog('Restart requested for ' + machineId);
+    }).catch(function (err) { showError('Restart failed: ' + err); });
+  });
 }
 
 function agentCard(title, content) {

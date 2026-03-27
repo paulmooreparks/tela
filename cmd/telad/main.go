@@ -23,6 +23,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
@@ -38,6 +39,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -222,6 +224,61 @@ var tunnelMTU = defaultMTU
 // stopCh is closed to signal graceful shutdown (used in service mode).
 var stopCh chan struct{}
 
+// ── Log ring buffer ───────────────────────────────────────────────
+
+const logRingSize = 1000
+
+var (
+	logRing    [logRingSize]string
+	logRingPos int
+	logRingLen int
+	logRingMu  sync.Mutex
+)
+
+// logRingWriter is an io.Writer that captures log output into the ring buffer
+// while also forwarding to the original writer.
+type logRingWriter struct {
+	original io.Writer
+	buf      []byte // partial line buffer
+}
+
+func (w *logRingWriter) Write(p []byte) (int, error) {
+	n, err := w.original.Write(p)
+	// Buffer and split into lines for the ring
+	w.buf = append(w.buf, p[:n]...)
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			break
+		}
+		line := string(w.buf[:idx])
+		w.buf = w.buf[idx+1:]
+		logRingMu.Lock()
+		logRing[logRingPos] = line
+		logRingPos = (logRingPos + 1) % logRingSize
+		if logRingLen < logRingSize {
+			logRingLen++
+		}
+		logRingMu.Unlock()
+	}
+	return n, err
+}
+
+// snapshotLogRing returns the last n lines from the log ring buffer.
+func snapshotLogRing(n int) []string {
+	logRingMu.Lock()
+	defer logRingMu.Unlock()
+	if n <= 0 || n > logRingLen {
+		n = logRingLen
+	}
+	lines := make([]string, n)
+	start := (logRingPos - n + logRingSize) % logRingSize
+	for i := 0; i < n; i++ {
+		lines[i] = logRing[(start+i)%logRingSize]
+	}
+	return lines
+}
+
 // activeConfig holds the currently loaded config for management queries.
 var (
 	activeConfig   *configFile
@@ -376,6 +433,52 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		resp, _ := json.Marshal(controlMessage{
 			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
 		})
+		return resp
+
+	case "logs":
+		var req struct {
+			Lines int `json:"lines"`
+		}
+		if msg.Payload != nil {
+			json.Unmarshal(msg.Payload, &req)
+		}
+		n := req.Lines
+		if n <= 0 {
+			n = 100
+		}
+		lines := snapshotLogRing(n)
+		payload, _ := json.Marshal(map[string]interface{}{
+			"lines": lines,
+		})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		lg.Printf("mgmt: logs n=%d (requestId=%s)", len(lines), msg.RequestID)
+		return resp
+
+	case "restart":
+		lg.Printf("mgmt: restart requested (requestId=%s)", msg.RequestID)
+		// Send response before restarting
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Message: "restarting",
+		})
+		// Schedule restart after response is sent
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			exe, err := os.Executable()
+			if err != nil {
+				log.Printf("mgmt: restart failed: cannot find executable: %v", err)
+				return
+			}
+			log.Printf("mgmt: restarting telad via %s", exe)
+			cmd := exec.Command(exe, os.Args[1:]...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Start()
+			os.Exit(0)
+		}()
 		return resp
 
 	default:

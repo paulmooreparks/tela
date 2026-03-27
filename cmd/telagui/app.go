@@ -2174,6 +2174,47 @@ func (a *App) GetAgentList() []AgentInfo {
 	return result
 }
 
+// GetAgentConfig retrieves an agent's running configuration via the hub management API.
+func (a *App) GetAgentConfig(hubURL, machineID string) string {
+	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/agents/"+url.QueryEscape(machineID)+"/config-get", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// SetAgentConfig pushes a config update to an agent via the hub management API.
+func (a *App) SetAgentConfig(hubURL, machineID, fieldsJSON string) string {
+	payload := json.RawMessage(`{"machine":"` + machineID + `","fields":` + fieldsJSON + `}`)
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/config-set", payload)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// GetAgentLogs retrieves recent log lines from an agent via the hub management API.
+func (a *App) GetAgentLogs(hubURL, machineID string, lines int) string {
+	if lines <= 0 {
+		lines = 100
+	}
+	payload := json.RawMessage(fmt.Sprintf(`{"lines":%d}`, lines))
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/logs", payload)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// RestartAgent requests a remote agent restart via the hub management API.
+func (a *App) RestartAgent(hubURL, machineID string) string {
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/restart", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
 // hubNameFromURLGo extracts a short hub name from a URL (Go-side equivalent).
 func hubNameFromURLGo(u string) string {
 	u = strings.TrimPrefix(u, "wss://")
