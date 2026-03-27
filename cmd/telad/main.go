@@ -57,6 +57,53 @@ import (
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
 
+// telaConfigDir returns the user's tela configuration directory.
+func telaConfigDir() string {
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "tela")
+		}
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".tela")
+}
+
+// writeControlFile writes telad's control file so TelaVisor can detect
+// the running instance. Returns a cleanup function that removes the file.
+func writeControlFile(cfg *configFile, configPath string) func() {
+	machines := make([]string, len(cfg.Machines))
+	for i, m := range cfg.Machines {
+		machines[i] = m.Name
+	}
+
+	info := map[string]interface{}{
+		"pid":        os.Getpid(),
+		"machines":   machines,
+		"hub":        cfg.Hub,
+		"configPath": configPath,
+	}
+
+	runDir := filepath.Join(telaConfigDir(), "run")
+	if err := os.MkdirAll(runDir, 0700); err != nil {
+		log.Printf("[telad] failed to create run directory: %v", err)
+		return func() {}
+	}
+
+	controlPath := filepath.Join(runDir, "telad.json")
+	data, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		return func() {}
+	}
+	if err := os.WriteFile(controlPath, data, 0600); err != nil {
+		log.Printf("[telad] failed to write control file: %v", err)
+		return func() {}
+	}
+
+	return func() {
+		os.Remove(controlPath)
+	}
+}
+
 const (
 	// Default WireGuard MTU. Must match the client (tela) default.
 	// See cmd/tela/main.go for the rationale behind 1100.
@@ -82,7 +129,8 @@ var version = "dev"
 // capabilities is an optional field in control messages that advertises
 // features supported by the agent for this machine.
 type capabilities struct {
-	FileShare *fileShareCapability `json:"fileShare,omitempty"`
+	FileShare  *fileShareCapability `json:"fileShare,omitempty"`
+	Management bool                 `json:"management,omitempty"`
 }
 
 type controlMessage struct {
@@ -105,6 +153,12 @@ type controlMessage struct {
 	SessionID  string `json:"sessionId,omitempty"`
 	SessionIdx int    `json:"sessionIdx,omitempty"`
 	Capabilities *capabilities `json:"capabilities,omitempty"`
+
+	// Management protocol fields (mgmt-request / mgmt-response)
+	RequestID string          `json:"requestId,omitempty"`
+	Action    string          `json:"action,omitempty"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
+	OK        *bool           `json:"ok,omitempty"`
 }
 
 type serviceDescriptor struct {
@@ -167,6 +221,171 @@ var tunnelMTU = defaultMTU
 
 // stopCh is closed to signal graceful shutdown (used in service mode).
 var stopCh chan struct{}
+
+// activeConfig holds the currently loaded config for management queries.
+var (
+	activeConfig   *configFile
+	activeConfigMu sync.RWMutex
+	activeConfigPath string
+)
+
+func setActiveConfig(cfg *configFile, path string) {
+	activeConfigMu.Lock()
+	activeConfig = cfg
+	activeConfigPath = path
+	activeConfigMu.Unlock()
+}
+
+// handleMgmtRequest processes a management message from the hub and
+// returns a JSON response to send back.
+func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
+	ok := true
+	notOK := false
+
+	switch msg.Action {
+	case "config-get":
+		activeConfigMu.RLock()
+		cfg := activeConfig
+		cfgPath := activeConfigPath
+		activeConfigMu.RUnlock()
+
+		if cfg == nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no active config",
+			})
+			return resp
+		}
+
+		// Build a redacted copy (no tokens)
+		type redactedMachine struct {
+			Name        string              `json:"name"`
+			DisplayName string              `json:"displayName,omitempty"`
+			Hostname    string              `json:"hostname,omitempty"`
+			OS          string              `json:"os,omitempty"`
+			Tags        []string            `json:"tags,omitempty"`
+			Location    string              `json:"location,omitempty"`
+			Owner       string              `json:"owner,omitempty"`
+			Ports       []uint16            `json:"ports,omitempty"`
+			Services    []serviceDescriptor `json:"services,omitempty"`
+			Target      string              `json:"target,omitempty"`
+			FileShare   fileShareConfig     `json:"fileShare,omitempty"`
+			Gateway     *gatewayConfig      `json:"gateway,omitempty"`
+			Upstreams   []upstreamConfig    `json:"upstreams,omitempty"`
+		}
+		machines := make([]redactedMachine, len(cfg.Machines))
+		for i, m := range cfg.Machines {
+			machines[i] = redactedMachine{
+				Name: m.Name, DisplayName: m.DisplayName,
+				Hostname: m.Hostname, OS: m.OS,
+				Tags: m.Tags, Location: m.Location, Owner: m.Owner,
+				Ports: m.Ports, Services: m.Services, Target: m.Target,
+				FileShare: m.FileShare, Gateway: m.Gateway, Upstreams: m.Upstreams,
+			}
+		}
+
+		payload, _ := json.Marshal(map[string]interface{}{
+			"hub":        cfg.Hub,
+			"configPath": cfgPath,
+			"machines":   machines,
+		})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		lg.Printf("mgmt: config-get (requestId=%s)", msg.RequestID)
+		return resp
+
+	case "config-set":
+		// Phase 2: accept partial config updates
+		activeConfigMu.RLock()
+		cfg := activeConfig
+		cfgPath := activeConfigPath
+		activeConfigMu.RUnlock()
+
+		if cfg == nil || cfgPath == "" {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no config file to update",
+			})
+			return resp
+		}
+
+		// Parse the update payload
+		var update struct {
+			Machine string          `json:"machine"`
+			Fields  json.RawMessage `json:"fields"`
+		}
+		if err := json.Unmarshal(msg.Payload, &update); err != nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "invalid payload: " + err.Error(),
+			})
+			return resp
+		}
+
+		// Find the target machine
+		activeConfigMu.Lock()
+		var target *machineConfig
+		for i := range activeConfig.Machines {
+			if activeConfig.Machines[i].Name == update.Machine {
+				target = &activeConfig.Machines[i]
+				break
+			}
+		}
+		if target == nil {
+			activeConfigMu.Unlock()
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "machine not found: " + update.Machine,
+			})
+			return resp
+		}
+
+		// Apply fields to the machine config
+		if err := json.Unmarshal(update.Fields, target); err != nil {
+			activeConfigMu.Unlock()
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "invalid fields: " + err.Error(),
+			})
+			return resp
+		}
+
+		// Persist to disk
+		data, err := yaml.Marshal(activeConfig)
+		if err != nil {
+			activeConfigMu.Unlock()
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "marshal failed: " + err.Error(),
+			})
+			return resp
+		}
+		activeConfigMu.Unlock()
+
+		if err := os.WriteFile(cfgPath, data, 0600); err != nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "write failed: " + err.Error(),
+			})
+			return resp
+		}
+
+		lg.Printf("mgmt: config-set machine=%s (requestId=%s)", update.Machine, msg.RequestID)
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+		})
+		return resp
+
+	default:
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+			Message: "unknown action: " + msg.Action,
+		})
+		return resp
+	}
+}
 
 func printUsage() {
 	fmt.Fprintf(os.Stderr, `telad -- Tela Daemon
@@ -290,6 +509,9 @@ func main() {
 			log.Fatalf("config: %v", err)
 		}
 		log.Printf("loaded config from %s", absPath)
+		setActiveConfig(cfg, absPath)
+		removeControl := writeControlFile(cfg, absPath)
+		defer removeControl()
 		runMultiMachine(cfg)
 		return
 	}
@@ -1027,6 +1249,12 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 				defer sessionWg.Done()
 				runSessionWorker(sessionCtx, lg, hubURL, reg, targetHost, sessionID, sessionIdx, wgPubKey)
 			}()
+
+		case "mgmt-request":
+			resp := handleMgmtRequest(lg, &msg)
+			if err := ws.WriteMessage(websocket.TextMessage, resp); err != nil {
+				lg.Printf("mgmt-response write failed: %v", err)
+			}
 		}
 	}
 }

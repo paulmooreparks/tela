@@ -55,6 +55,12 @@ func cmdAdmin(args []string) {
 		cmdAdminAddPortal(rest)
 	case "remove-portal":
 		cmdAdminRemovePortal(rest)
+	case "grant-manage":
+		cmdAdminGrantManage(rest)
+	case "revoke-manage":
+		cmdAdminRevokeManage(rest)
+	case "agent":
+		cmdAdminAgent(rest)
 	case "help", "-h", "--help":
 		printAdminUsage()
 	default:
@@ -696,4 +702,225 @@ func cmdAdminRemovePortal(args []string) {
 
 	fmt.Printf("Removed portal '%s'.\n", name)
 	fmt.Println("Change is already active (no hub restart needed).")
+}
+
+// ── Manage ACL ────────────────────────────────────────────────────
+
+func cmdAdminGrantManage(args []string) {
+	fs := flag.NewFlagSet("admin grant-manage", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin grant-manage <id> <machineId> -hub <hub> -token <token>")
+		os.Exit(1)
+	}
+	id := fs.Arg(0)
+	machineID := fs.Arg(1)
+	hub, tok := adminParseHubAndToken(fs)
+
+	body := map[string]string{"id": id, "machineId": machineID}
+	status, result, err := adminHTTP("POST", hub, "/api/admin/grant-manage", tok, body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	st, _ := result["status"].(string)
+	if st == "already_granted" {
+		fmt.Printf("Identity '%s' already has manage access to '%s'.\n", id, machineID)
+	} else {
+		fmt.Printf("Granted '%s' manage access to '%s'.\n", id, machineID)
+		fmt.Println("Change is already active (no hub restart needed).")
+	}
+}
+
+func cmdAdminRevokeManage(args []string) {
+	fs := flag.NewFlagSet("admin revoke-manage", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin revoke-manage <id> <machineId> -hub <hub> -token <token>")
+		os.Exit(1)
+	}
+	id := fs.Arg(0)
+	machineID := fs.Arg(1)
+	hub, tok := adminParseHubAndToken(fs)
+
+	body := map[string]string{"id": id, "machineId": machineID}
+	status, result, err := adminHTTP("POST", hub, "/api/admin/revoke-manage", tok, body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Printf("Revoked '%s' manage access to '%s'.\n", id, machineID)
+	fmt.Println("Change is already active (no hub restart needed).")
+}
+
+// ── Agent management ──────────────────────────────────────────────
+
+func cmdAdminAgent(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, `tela admin agent -- remote agent management
+
+Usage:
+  tela admin agent config   -hub <url> -token <tok> -machine <id>
+  tela admin agent set      -hub <url> -token <tok> -machine <id> <json-fields>
+  tela admin agent list     -hub <url> -token <tok>
+`)
+		os.Exit(1)
+	}
+
+	switch args[0] {
+	case "config":
+		cmdAdminAgentConfig(args[1:])
+	case "set":
+		cmdAdminAgentSet(args[1:])
+	case "list":
+		cmdAdminAgentList(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown agent command: %s\n", args[0])
+		os.Exit(1)
+	}
+}
+
+func cmdAdminAgentConfig(args []string) {
+	fs := flag.NewFlagSet("admin agent config", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", envOrDefault("TELA_OWNER_TOKEN", envOrDefault("TELA_TOKEN", "")), "Auth token")
+	machine := fs.String("machine", "", "Machine ID")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub := mustResolveHub(*hubURL)
+	tok := *token
+	if tok == "" {
+		tok = credstore.LookupToken(hub)
+	}
+	if hub == "" || tok == "" || *machine == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub, -token, and -machine are required")
+		os.Exit(1)
+	}
+
+	status, result, err := adminHTTP("GET", hub, "/api/admin/agents/"+url.QueryEscape(*machine)+"/config-get", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	// Pretty-print the response
+	data, _ := json.MarshalIndent(result, "", "  ")
+	fmt.Println(string(data))
+}
+
+func cmdAdminAgentSet(args []string) {
+	fs := flag.NewFlagSet("admin agent set", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", envOrDefault("TELA_OWNER_TOKEN", envOrDefault("TELA_TOKEN", "")), "Auth token")
+	machine := fs.String("machine", "", "Machine ID")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub := mustResolveHub(*hubURL)
+	tok := *token
+	if tok == "" {
+		tok = credstore.LookupToken(hub)
+	}
+	if hub == "" || tok == "" || *machine == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub, -token, and -machine are required")
+		os.Exit(1)
+	}
+
+	// Remaining args after flags are the JSON fields payload
+	remaining := fs.Args()
+	if len(remaining) < 1 {
+		fmt.Fprintln(os.Stderr, "Error: provide JSON fields to update, e.g. '{\"displayName\":\"New Name\"}'")
+		os.Exit(1)
+	}
+
+	payload := map[string]interface{}{
+		"machine": *machine,
+		"fields":  json.RawMessage(remaining[0]),
+	}
+
+	status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(*machine)+"/config-set", tok, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Println("Config updated.")
+}
+
+func cmdAdminAgentList(args []string) {
+	fs := flag.NewFlagSet("admin agent list", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", envOrDefault("TELA_OWNER_TOKEN", envOrDefault("TELA_TOKEN", "")), "Auth token")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub := mustResolveHub(*hubURL)
+	tok := *token
+	if tok == "" {
+		tok = credstore.LookupToken(hub)
+	}
+	if hub == "" || tok == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub and -token are required")
+		os.Exit(1)
+	}
+
+	// Use the existing status endpoint to list machines (agents)
+	status, result, err := adminHTTP("GET", hub, "/api/status", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	machines, ok := result["machines"].([]interface{})
+	if !ok || len(machines) == 0 {
+		fmt.Println("No agents registered.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "MACHINE\tSTATUS\tVERSION\tSERVICES")
+	for _, m := range machines {
+		mm, ok := m.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id, _ := mm["id"].(string)
+		online := "offline"
+		if c, ok := mm["agentConnected"].(bool); ok && c {
+			online = "online"
+		}
+		ver, _ := mm["agentVersion"].(string)
+		svcs := ""
+		if ss, ok := mm["services"].([]interface{}); ok {
+			names := make([]string, 0, len(ss))
+			for _, s := range ss {
+				if sm, ok := s.(map[string]interface{}); ok {
+					if n, ok := sm["name"].(string); ok {
+						names = append(names, n)
+					}
+				}
+			}
+			svcs = strings.Join(names, ", ")
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", id, online, ver, svcs)
+	}
+	w.Flush()
 }

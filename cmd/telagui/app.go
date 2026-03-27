@@ -815,6 +815,73 @@ func (a *App) logCommandWithMethod(method, description, command string) {
 	}
 }
 
+// --- Local Instance Detection ---
+
+// LocalInstance describes a locally running tela binary detected via its control file.
+type LocalInstance struct {
+	Binary     string   `json:"binary"`     // "telad" or "telahubd"
+	PID        int      `json:"pid"`
+	Machines   []string `json:"machines,omitempty"`   // telad only
+	Hub        string   `json:"hub,omitempty"`        // telad only
+	ConfigPath string   `json:"configPath,omitempty"` // telad only
+	Port       int      `json:"port,omitempty"`       // telahubd only
+	Name       string   `json:"name,omitempty"`       // telahubd only
+}
+
+// GetLocalInstances checks for locally running telad and telahubd instances
+// by reading their control files. Returns instances that are alive (PID exists).
+func (a *App) GetLocalInstances() []LocalInstance {
+	var instances []LocalInstance
+	runDir := filepath.Join(telaConfigDir(), "run")
+
+	// Check telad
+	if data, err := os.ReadFile(filepath.Join(runDir, "telad.json")); err == nil {
+		var info struct {
+			PID        int      `json:"pid"`
+			Machines   []string `json:"machines"`
+			Hub        string   `json:"hub"`
+			ConfigPath string   `json:"configPath"`
+		}
+		if json.Unmarshal(data, &info) == nil && info.PID > 0 && processAlive(info.PID) {
+			instances = append(instances, LocalInstance{
+				Binary: "telad", PID: info.PID,
+				Machines: info.Machines, Hub: info.Hub, ConfigPath: info.ConfigPath,
+			})
+		}
+	}
+
+	// Check telahubd
+	if data, err := os.ReadFile(filepath.Join(runDir, "telahubd.json")); err == nil {
+		var info struct {
+			PID  int    `json:"pid"`
+			Port int    `json:"port"`
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(data, &info) == nil && info.PID > 0 && processAlive(info.PID) {
+			instances = append(instances, LocalInstance{
+				Binary: "telahubd", PID: info.PID,
+				Port: info.Port, Name: info.Name,
+			})
+		}
+	}
+
+	return instances
+}
+
+// processAlive checks whether a process with the given PID is running.
+// On Windows, uses exec to query the process. On Unix, checks /proc.
+func processAlive(pid int) bool {
+	if runtime.GOOS == "windows" {
+		// tasklist exits 0 if the PID exists
+		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH")
+		out, err := cmd.Output()
+		return err == nil && strings.Contains(string(out), fmt.Sprintf("%d", pid))
+	}
+	// Unix: /proc/{pid} exists if the process is alive
+	_, err := os.Stat(fmt.Sprintf("/proc/%d", pid))
+	return err == nil
+}
+
 // --- Local Registry ---
 
 func telaConfigDir() string {

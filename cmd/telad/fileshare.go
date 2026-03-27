@@ -104,22 +104,23 @@ type parsedFileShareConfig struct {
 // buildCapabilities returns a capabilities struct for control messages,
 // or nil if no capabilities are active.
 func buildCapabilities(fsCfg *parsedFileShareConfig) *capabilities {
-	if fsCfg == nil || !fsCfg.enabled {
-		return nil
+	c := &capabilities{Management: true}
+	if fsCfg != nil && fsCfg.enabled {
+		cap := &fileShareCapability{
+			Enabled:     true,
+			Writable:    fsCfg.writable,
+			AllowDelete: fsCfg.allowDelete,
+			MaxFileSize: fsCfg.maxFileSize,
+		}
+		for ext := range fsCfg.blockedExtensions {
+			cap.BlockedExtensions = append(cap.BlockedExtensions, ext)
+		}
+		for ext := range fsCfg.allowedExtensions {
+			cap.AllowedExtensions = append(cap.AllowedExtensions, ext)
+		}
+		c.FileShare = cap
 	}
-	cap := &fileShareCapability{
-		Enabled:     true,
-		Writable:    fsCfg.writable,
-		AllowDelete: fsCfg.allowDelete,
-		MaxFileSize: fsCfg.maxFileSize,
-	}
-	for ext := range fsCfg.blockedExtensions {
-		cap.BlockedExtensions = append(cap.BlockedExtensions, ext)
-	}
-	for ext := range fsCfg.allowedExtensions {
-		cap.AllowedExtensions = append(cap.AllowedExtensions, ext)
-	}
-	return &capabilities{FileShare: cap}
+	return c
 }
 
 // Default blocked extensions when none are configured.

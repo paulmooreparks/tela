@@ -31,6 +31,7 @@ type tokenEntry struct {
 type machineACL struct {
 	RegisterToken string   `yaml:"registerToken,omitempty"` // if set, only this token may (re)register
 	ConnectTokens []string `yaml:"connectTokens,omitempty"` // tokens permitted to connect
+	ManageTokens  []string `yaml:"manageTokens,omitempty"`  // tokens permitted to manage (config, restart, logs)
 }
 
 // ── Runtime auth store ──────────────────────────────────────────────────────
@@ -141,6 +142,29 @@ func (s *authStore) canConnect(token, machineID string) bool {
 		return true
 	}
 	if inTokenList(s.machines["*"].ConnectTokens, token) {
+		return true
+	}
+	return false
+}
+
+// canManage returns true when the token may send management commands to machineID.
+//   - Auth disabled: always true.
+//   - Hub owner/admin: always true.
+//   - Token in machine-specific manageTokens: true.
+//   - Token in wildcard "*" manageTokens: true.
+func (s *authStore) canManage(token, machineID string) bool {
+	if !s.enabled {
+		return true
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
+		return true
+	}
+	if inTokenList(s.machines[machineID].ManageTokens, token) {
+		return true
+	}
+	if inTokenList(s.machines["*"].ManageTokens, token) {
 		return true
 	}
 	return false

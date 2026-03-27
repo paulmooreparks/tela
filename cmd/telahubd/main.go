@@ -66,6 +66,48 @@ import (
 // version is set by -ldflags at build time.
 var version = "dev"
 
+// telaConfigDir returns the user's tela configuration directory.
+func telaConfigDir() string {
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "tela")
+		}
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".tela")
+}
+
+// writeControlFile writes telahubd's control file so TelaVisor can
+// detect the running instance. Returns a cleanup function.
+func writeHubControlFile() func() {
+	info := map[string]interface{}{
+		"pid":       os.Getpid(),
+		"port":      httpPort,
+		"name":      hubName,
+		"adminPort": httpPort,
+	}
+
+	runDir := filepath.Join(telaConfigDir(), "run")
+	if err := os.MkdirAll(runDir, 0700); err != nil {
+		log.Printf("[hub] failed to create run directory: %v", err)
+		return func() {}
+	}
+
+	controlPath := filepath.Join(runDir, "telahubd.json")
+	data, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		return func() {}
+	}
+	if err := os.WriteFile(controlPath, data, 0600); err != nil {
+		log.Printf("[hub] failed to write control file: %v", err)
+		return func() {}
+	}
+
+	return func() {
+		os.Remove(controlPath)
+	}
+}
+
 // ── Configuration ──────────────────────────────────────────────────
 
 // portalEntry stores a registered portal association.
@@ -298,6 +340,12 @@ var (
 	// UDP relay sessions, keyed by token hex.
 	udpSessions   = make(map[string]*udpSession)
 	udpSessionsMu sync.Mutex
+
+	// Pending management requests, keyed by requestId.
+	// The HTTP handler writes a request and blocks on the channel;
+	// the WebSocket handler delivers the response.
+	mgmtPending   = make(map[string]chan json.RawMessage)
+	mgmtPendingMu sync.Mutex
 )
 
 const maxHistory = 100
@@ -736,6 +784,11 @@ type signalingMsg struct {
 	// Forwarded through (peer-endpoint, wg-pubkey, etc.)
 	Message      string                 `json:"message,omitempty"`
 	Capabilities map[string]interface{} `json:"capabilities,omitempty"`
+
+	// Management protocol fields
+	RequestID string          `json:"requestId,omitempty"`
+	Action    string          `json:"action,omitempty"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
@@ -825,10 +878,21 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			handleConnect(sc, state, &msg)
 		case "session-join":
 			handleSessionJoin(sc, state, &msg)
+		case "mgmt-response":
+			// Deliver management response to the waiting HTTP handler
+			if msg.RequestID != "" {
+				mgmtPendingMu.Lock()
+				ch, ok := mgmtPending[msg.RequestID]
+				mgmtPendingMu.Unlock()
+				if ok {
+					ch <- data
+				}
+			}
 		default:
-			sc.WriteMessage(websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseProtocolError, "Unknown message type"))
-			return
+			// Ignore unknown message types (do not close the connection)
+			if verbose {
+				log.Printf("[hub] unknown message type %q from %s", msg.Type, state.MachineID)
+			}
 		}
 	}
 }
@@ -1620,6 +1684,106 @@ func main() {
 // runHub starts the hub server and blocks until shutdown.
 // If stopCh is non-nil, shutdown is triggered when it closes (service mode).
 // If stopCh is nil, shutdown is triggered by SIGINT/SIGTERM (interactive mode).
+// handleAdminAgents proxies management requests to agents through their
+// ControlWS. The URL pattern is /api/admin/agents/{machineId}/{action}.
+func handleAdminAgents(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Parse path first to get machineID for permission check
+	path := strings.TrimPrefix(r.URL.Path, "/api/admin/agents/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "expected /api/admin/agents/{machine}/{action}"})
+		return
+	}
+	machineID := parts[0]
+	action := parts[1]
+
+	// Check manage permission (owner/admin always allowed, or per-machine manageTokens)
+	callerToken := tokenFromRequest(r)
+	if !globalAuth.canManage(callerToken, machineID) {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusForbidden, map[string]string{"error": "manage permission required for " + machineID})
+		return
+	}
+
+	// Find the agent's ControlWS
+	machinesMu.RLock()
+	entry, exists := machines[machineID]
+	machinesMu.RUnlock()
+	if !exists {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "machine not found"})
+		return
+	}
+	entry.mu.Lock()
+	controlWS := entry.ControlWS
+	entry.mu.Unlock()
+	if controlWS == nil {
+		writeAdminJSON(w, r, http.StatusServiceUnavailable, map[string]string{"error": "agent not connected"})
+		return
+	}
+
+	// Read request payload (if POST/PUT)
+	var payload json.RawMessage
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		body, err := io.ReadAll(r.Body)
+		if err == nil && len(body) > 0 {
+			payload = body
+		}
+	}
+
+	// Generate request ID and create response channel
+	reqIDBytes := make([]byte, 8)
+	rand.Read(reqIDBytes)
+	reqID := hex.EncodeToString(reqIDBytes)
+
+	respCh := make(chan json.RawMessage, 1)
+	mgmtPendingMu.Lock()
+	mgmtPending[reqID] = respCh
+	mgmtPendingMu.Unlock()
+	defer func() {
+		mgmtPendingMu.Lock()
+		delete(mgmtPending, reqID)
+		mgmtPendingMu.Unlock()
+	}()
+
+	// Send mgmt-request to agent
+	req := map[string]interface{}{
+		"type":      "mgmt-request",
+		"requestId": reqID,
+		"action":    action,
+	}
+	if payload != nil {
+		req["payload"] = payload
+	}
+	data, _ := json.Marshal(req)
+	if err := controlWS.WriteMessage(websocket.TextMessage, data); err != nil {
+		writeAdminJSON(w, r, http.StatusBadGateway, map[string]string{"error": "failed to send to agent"})
+		return
+	}
+
+	// Wait for response with timeout
+	select {
+	case resp := <-respCh:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(resp)
+	case <-time.After(30 * time.Second):
+		writeAdminJSON(w, r, http.StatusGatewayTimeout, map[string]string{"error": "agent did not respond within 30 seconds"})
+	}
+}
+
+// writeAdminJSON is a helper for admin API JSON responses.
+func writeAdminJSON(w http.ResponseWriter, r *http.Request, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
 func runHub(stopCh <-chan struct{}) {
 	// Register HTTP handlers
 	mux := http.NewServeMux()
@@ -1634,7 +1798,10 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/admin/revoke-register", handleAdminRevokeRegister)
 	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate) // /api/admin/rotate/{id}
 	mux.HandleFunc("/api/admin/portals", handleAdminPortals)
+	mux.HandleFunc("/api/admin/grant-manage", handleAdminGrantManage)
+	mux.HandleFunc("/api/admin/revoke-manage", handleAdminRevokeManage)
 	mux.HandleFunc("/api/admin/pair-code", handleAdminPairCode)
+	mux.HandleFunc("/api/admin/agents/", handleAdminAgents)
 	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)
 
@@ -1700,6 +1867,8 @@ func runHub(stopCh <-chan struct{}) {
 	}
 
 	log.Printf("[hub] telahubd %s listening on http+ws://0.0.0.0:%d", version, httpPort)
+	removeControl := writeHubControlFile()
+	defer removeControl()
 	if !globalAuth.isEnabled() {
 		log.Println("[hub] WARNING *** Hub running in OPEN mode -- any client may connect and register ***")
 		log.Println("[hub] WARNING *** Set TELA_OWNER_TOKEN or use a config file to enable auth ***")
