@@ -1415,10 +1415,13 @@ func runKeepalive() {
 	}
 }
 
-// runUDPSessionReaper periodically removes stale UDP session entries
+// runUDPSessionReaper periodically removes orphaned UDP session entries
 // that were not cleaned up by normal session teardown (e.g., if a
 // session was created but the agent or client disconnected before
 // pairing completed and cleanupSession never ran).
+//
+// Only removes entries whose corresponding machine session no longer
+// exists in the machines map. Active sessions are never reaped.
 func runUDPSessionReaper() {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
@@ -1426,9 +1429,33 @@ func runUDPSessionReaper() {
 		cutoff := time.Now().Add(-5 * time.Minute)
 		udpSessionsMu.Lock()
 		for token, sess := range udpSessions {
-			if sess.CreatedAt.Before(cutoff) {
-				delete(udpSessions, token)
+			if sess.CreatedAt.After(cutoff) {
+				continue // too recent, skip
 			}
+			// Check if the machine still has an active session referencing this token
+			machinesMu.RLock()
+			entry, exists := machines[sess.MachineID]
+			machinesMu.RUnlock()
+			if exists {
+				entry.mu.Lock()
+				active := false
+				for _, cs := range entry.Sessions {
+					for _, t := range cs.UDPTokens {
+						if t == token {
+							active = true
+							break
+						}
+					}
+					if active {
+						break
+					}
+				}
+				entry.mu.Unlock()
+				if active {
+					continue // session still alive, do not reap
+				}
+			}
+			delete(udpSessions, token)
 		}
 		udpSessionsMu.Unlock()
 	}
