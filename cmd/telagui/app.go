@@ -1590,7 +1590,13 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 		cmd.Wait()
 		a.mu.Lock()
 		a.connected = false
+		a.telaProcess = nil
 		a.mu.Unlock()
+		// Notify frontend immediately so the UI updates without
+		// waiting for the next connection poll.
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "tela:exited")
+		}
 	}()
 
 	return fmt.Sprintf("Connected (pid %d)", pid), nil

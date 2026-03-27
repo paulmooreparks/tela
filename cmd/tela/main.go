@@ -675,29 +675,46 @@ func runProfile(name string) {
 			}
 		}
 
-		// Resolve service names to ports
-		if len(serviceNames) > 0 {
-			resolved, err := resolveServiceNames(strings.Join(serviceNames, ","), hubURL, machine, token)
-			if err != nil {
-				log.Printf("[profile:%d] %v", i+1, err)
-				continue
-			}
-			// Apply local port overrides from the profile.
-			// resolved is in the same order as serviceNames.
-			for j, name := range serviceNames {
-				if j < len(resolved) {
-					if override, ok := serviceLocalOverrides[name]; ok {
-						resolved[j].local = uint16(override)
-					}
-				}
-			}
-			mappings = append(mappings, resolved...)
-		}
-
 		wg.Add(1)
-		go func(idx int, hub, mach, tok string, maps []portMapping) {
+		go func(idx int, hub, mach, tok string, maps []portMapping, svcNames []string, svcOverrides map[string]int) {
 			defer wg.Done()
 			log.Printf("[profile:%d] connecting to %s → %s", idx, hub, mach)
+
+			// Resolve service names to ports. Retry with backoff if the
+			// hub is unreachable (e.g., DNS failure after laptop wake).
+			if len(svcNames) > 0 {
+				const maxResolveDelay = 5 * time.Minute
+				resolveAttempt := 0
+				for {
+					resolved, err := resolveServiceNames(strings.Join(svcNames, ","), hub, mach, tok)
+					if err == nil {
+						for j, name := range svcNames {
+							if j < len(resolved) {
+								if override, ok := svcOverrides[name]; ok {
+									resolved[j].local = uint16(override)
+								}
+							}
+						}
+						maps = append(maps, resolved...)
+						break
+					}
+					log.Printf("[profile:%d] %v", idx, err)
+					select {
+					case <-stopCh:
+						log.Printf("[profile:%d] shutdown during service resolution", idx)
+						return
+					default:
+					}
+					delay := reconnectDelay(resolveAttempt, maxResolveDelay)
+					log.Printf("[profile:%d] retrying service resolution in %s...", idx, delay.Round(time.Second))
+					select {
+					case <-time.After(delay):
+					case <-stopCh:
+						return
+					}
+					resolveAttempt++
+				}
+			}
 
 			var bridge *tunnelBridge
 			if len(maps) > 0 {
@@ -738,7 +755,7 @@ func runProfile(name string) {
 				}
 				attempt++
 			}
-		}(i+1, hubURL, machine, token, mappings)
+		}(i+1, hubURL, machine, token, mappings, serviceNames, serviceLocalOverrides)
 	}
 
 	wg.Wait()

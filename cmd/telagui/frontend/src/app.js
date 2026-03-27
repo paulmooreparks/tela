@@ -486,6 +486,18 @@ if (window.runtime) {
     if (dot) dot.className = 'log-dot log-dot-live';
   });
 
+  window.runtime.EventsOn('tela:exited', function () {
+    if (connPhase === 'connected' || connPhase === 'connecting') {
+      tvLog('tela process exited unexpectedly');
+      stopConnectionPoll();
+      goApp.DisconnectControlWS();
+      setConnPhase('disconnected');
+      connAttached = false;
+      boundServicesCache = null;
+      onConnectionChanged();
+    }
+  });
+
   window.runtime.EventsOn('tela:attached', function () {
     tvLog('Attached to running tela');
     connAttached = true;
