@@ -7,6 +7,10 @@ export namespace main {
 	    version: string;
 	    hostname: string;
 	    os: string;
+	    displayName: string;
+	    tags: string[];
+	    location: string;
+	    owner: string;
 	    sessionCount: number;
 	    registeredAt: string;
 	    lastSeen: string;
@@ -25,6 +29,10 @@ export namespace main {
 	        this.version = source["version"];
 	        this.hostname = source["hostname"];
 	        this.os = source["os"];
+	        this.displayName = source["displayName"];
+	        this.tags = source["tags"];
+	        this.location = source["location"];
+	        this.owner = source["owner"];
 	        this.sessionCount = source["sessionCount"];
 	        this.registeredAt = source["registeredAt"];
 	        this.lastSeen = source["lastSeen"];

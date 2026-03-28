@@ -16,6 +16,8 @@ export function AdminGeneratePairCode(arg1:string,arg2:string,arg3:string,arg4:s
 
 export function AdminGrantConnect(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function AdminGrantManage(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function AdminGrantRegister(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminListACLs(arg1:string):Promise<string>;
@@ -25,6 +27,8 @@ export function AdminListPortals(arg1:string):Promise<string>;
 export function AdminListTokens(arg1:string):Promise<string>;
 
 export function AdminRevokeConnect(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AdminRevokeManage(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminRevokeRegister(arg1:string,arg2:string,arg3:string):Promise<string>;
 

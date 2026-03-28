@@ -1246,6 +1246,24 @@ func (a *App) AdminGrantRegister(hubURL, id, machineId string) string {
 }
 
 // AdminRevokeRegister revokes register access from an identity for a machine.
+func (a *App) AdminGrantManage(hubURL, id, machineId string) string {
+	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/grant-manage", body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+func (a *App) AdminRevokeManage(hubURL, id, machineId string) string {
+	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/revoke-manage", body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
 func (a *App) AdminRevokeRegister(hubURL, id, machineId string) string {
 	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
 	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/revoke-register", body)
@@ -2103,6 +2121,10 @@ type AgentInfo struct {
 	Version        string                 `json:"version"`
 	Hostname       string                 `json:"hostname"`
 	OS             string                 `json:"os"`
+	DisplayName    string                 `json:"displayName"`
+	Tags           []string               `json:"tags"`
+	Location       string                 `json:"location"`
+	Owner          string                 `json:"owner"`
 	SessionCount   int                    `json:"sessionCount"`
 	RegisteredAt   string                 `json:"registeredAt"`
 	LastSeen       string                 `json:"lastSeen"`
@@ -2142,6 +2164,10 @@ func (a *App) GetAgentList() []AgentInfo {
 				AgentVersion   *string                `json:"agentVersion"`
 				Hostname       *string                `json:"hostname"`
 				OS             *string                `json:"os"`
+				DisplayName    *string                `json:"displayName"`
+				Tags           []string               `json:"tags"`
+				Location       *string                `json:"location"`
+				Owner          *string                `json:"owner"`
 				SessionCount   int                    `json:"sessionCount"`
 				RegisteredAt   *string                `json:"registeredAt"`
 				LastSeen       *string                `json:"lastSeen"`
@@ -2162,10 +2188,14 @@ func (a *App) GetAgentList() []AgentInfo {
 				SessionCount: m.SessionCount,
 				Services:     m.Services,
 				Capabilities: m.Capabilities,
+				Tags:         m.Tags,
 			}
 			if m.AgentVersion != nil { ai.Version = *m.AgentVersion }
 			if m.Hostname != nil { ai.Hostname = *m.Hostname }
 			if m.OS != nil { ai.OS = *m.OS }
+			if m.DisplayName != nil { ai.DisplayName = *m.DisplayName }
+			if m.Location != nil { ai.Location = *m.Location }
+			if m.Owner != nil { ai.Owner = *m.Owner }
 			if m.RegisteredAt != nil { ai.RegisteredAt = *m.RegisteredAt }
 			if m.LastSeen != nil { ai.LastSeen = *m.LastSeen }
 			result = append(result, ai)

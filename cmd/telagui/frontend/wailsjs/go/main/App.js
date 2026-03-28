@@ -30,6 +30,10 @@ export function AdminGrantConnect(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminGrantConnect'](arg1, arg2, arg3);
 }
 
+export function AdminGrantManage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AdminGrantManage'](arg1, arg2, arg3);
+}
+
 export function AdminGrantRegister(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminGrantRegister'](arg1, arg2, arg3);
 }
@@ -48,6 +52,10 @@ export function AdminListTokens(arg1) {
 
 export function AdminRevokeConnect(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminRevokeConnect'](arg1, arg2, arg3);
+}
+
+export function AdminRevokeManage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AdminRevokeManage'](arg1, arg2, arg3);
 }
 
 export function AdminRevokeRegister(arg1, arg2, arg3) {

@@ -426,6 +426,9 @@ If you need to override the embedded console with custom files, set `TELAHUBD_WW
 | `/api/admin/acls` | GET | owner/admin | List per-machine ACL rules |
 | `/api/admin/grant-register` | POST | owner/admin | Grant register access for a machine |
 | `/api/admin/revoke-register` | POST | owner/admin | Revoke register access |
+| `/api/admin/grant-manage` | POST | owner/admin | Grant manage access for a machine |
+| `/api/admin/revoke-manage` | POST | owner/admin | Revoke manage access |
+| `/api/admin/agents/{machine}/{action}` | GET/POST | manage+ | Proxy management request to agent |
 | `/api/admin/pair-code` | POST | owner/admin | Generate a pairing code |
 | `/api/pair` | POST | none | Exchange a pairing code for a token |
 | `/.well-known/tela` | GET | none | Hub directory discovery (RFC 8615) |
@@ -950,11 +953,19 @@ tela admin add-token <id> -hub <hub> [-token <token>]
 tela admin remove-token <id> -hub <hub> [-token <token>]
 tela admin grant <id> <machineId> -hub <hub> [-token <token>]
 tela admin revoke <id> <machineId> -hub <hub> [-token <token>]
+tela admin grant-manage <id> <machineId> -hub <hub> [-token <token>]
+tela admin revoke-manage <id> <machineId> -hub <hub> [-token <token>]
 tela admin rotate <id> -hub <hub> [-token <token>]
 
 tela admin list-portals -hub <hub> [-token <token>]
 tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> [-hub-url <url>] [-portal-token <token>]
 tela admin remove-portal <name> -hub <hub> [-token <token>]
+
+tela admin agent list     -hub <hub> [-token <token>]
+tela admin agent config   -hub <hub> [-token <token>] -machine <id>
+tela admin agent set      -hub <hub> [-token <token>] -machine <id> <json-fields>
+tela admin agent logs     -hub <hub> [-token <token>] -machine <id> [-n 100]
+tela admin agent restart  -hub <hub> [-token <token>] -machine <id>
 ```
 
 Token resolution for admin commands: `-token` flag, then `TELA_OWNER_TOKEN` env var, then `TELA_TOKEN` env var.

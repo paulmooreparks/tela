@@ -2080,16 +2080,26 @@ function agentsSelect(id) {
   if (agent) agentsShowDetail(agent);
 }
 
+var agentsConfigDirty = false;
+
+function agentsMarkDirty() {
+  agentsConfigDirty = true;
+  document.getElementById('agents-undo-btn').disabled = false;
+  document.getElementById('agents-save-btn').disabled = false;
+}
+
 function agentsShowDetail(a) {
   var isOnline = a.online;
   var hasMgmt = a.capabilities && a.capabilities.management;
   var canManage = isOnline && hasMgmt;
+  var eid = escAttr(a.id);
+  var ehub = escAttr(a.hub);
 
-  // Enable/disable toolbar buttons
+  agentsConfigDirty = false;
+  document.getElementById('agents-undo-btn').disabled = true;
+  document.getElementById('agents-save-btn').disabled = true;
   document.getElementById('agents-restart-btn').disabled = !canManage;
   document.getElementById('agents-logs-btn').disabled = !canManage;
-
-  // Store hub for toolbar actions
   agentsSelectedHub = a.hub;
 
   var html = '<div class="detail-header">'
@@ -2111,6 +2121,30 @@ function agentsShowDetail(a) {
     + '<tr><td>Active sessions</td><td>' + String(a.sessionCount || 0) + '</td></tr>'
     + '</table></div>';
 
+  // Display Name (editable)
+  var displayName = a.displayName || '';
+  html += '<div class="setting-card"><div class="setting-card-title">Display Name</div>'
+    + '<div class="setting-card-desc">Human-readable name shown in dashboards and portals.</div>'
+    + '<div class="setting-field">'
+    + '<input class="setting-input" type="text" id="agent-displayName" value="' + escAttr(displayName) + '" onchange="agentsMarkDirty()">'
+    + '</div></div>';
+
+  // Tags (editable)
+  var tags = (a.tags && a.tags.length) ? a.tags.join(', ') : '';
+  html += '<div class="setting-card"><div class="setting-card-title">Tags</div>'
+    + '<div class="setting-card-desc">Comma-separated metadata tags for filtering and organization.</div>'
+    + '<div class="setting-field">'
+    + '<input class="setting-input" type="text" id="agent-tags" value="' + escAttr(tags) + '" placeholder="e.g. production, us-east" onchange="agentsMarkDirty()">'
+    + '</div></div>';
+
+  // Location (editable)
+  var location = a.location || '';
+  html += '<div class="setting-card"><div class="setting-card-title">Location</div>'
+    + '<div class="setting-card-desc">Physical or logical location of this machine.</div>'
+    + '<div class="setting-field">'
+    + '<input class="setting-input" type="text" id="agent-location" value="' + escAttr(location) + '" placeholder="e.g. Building A, Rack 12" onchange="agentsMarkDirty()">'
+    + '</div></div>';
+
   // Services
   html += '<div class="setting-card"><div class="setting-card-title">Services</div>'
     + '<div class="setting-card-desc">TCP services exposed through the tunnel.</div>';
@@ -2127,37 +2161,31 @@ function agentsShowDetail(a) {
   }
   html += '</div>';
 
-  // File Share
+  // File Share (editable when management supported)
   var fs = a.capabilities && a.capabilities.fileShare;
   html += '<div class="setting-card"><div class="setting-card-title">File Share</div>'
     + '<div class="setting-card-desc">Sandboxed directory access through the encrypted tunnel.</div>';
   if (fs && fs.enabled) {
-    html += '<table class="kv-table">'
-      + '<tr><td>Status</td><td><span class="cap-yes">Enabled</span></td></tr>'
-      + '<tr><td>Access</td><td>' + (fs.writable ? '<span class="cap-yes">Read and write</span>' : 'Read only') + '</td></tr>';
-    if (fs.writable) {
-      html += '<tr><td>Delete</td><td>' + (fs.allowDelete ? '<span class="cap-yes">Allowed</span>' : '<span class="cap-no">Not allowed</span>') + '</td></tr>';
-    }
-    if (fs.maxFileSize) {
-      html += '<tr><td>Max file size</td><td>' + agentFormatBytes(fs.maxFileSize) + '</td></tr>';
-    }
-    if (fs.blockedExtensions && fs.blockedExtensions.length > 0) {
-      html += '<tr><td>Blocked types</td><td>' + escHtml(fs.blockedExtensions.join(', ')) + '</td></tr>';
-    }
-    html += '</table>';
+    html += '<div class="setting-check"><input type="checkbox" id="agent-fs-enabled" checked onchange="agentsMarkDirty()"> Enabled</div>'
+      + '<div class="setting-check"><input type="checkbox" id="agent-fs-writable"' + (fs.writable ? ' checked' : '') + ' onchange="agentsMarkDirty()"> Writable</div>'
+      + '<div class="setting-check"><input type="checkbox" id="agent-fs-allowDelete"' + (fs.allowDelete ? ' checked' : '') + ' onchange="agentsMarkDirty()"> Allow delete</div>'
+      + '<div class="setting-field"><div class="setting-label">Max file size</div>'
+      + '<input class="setting-input setting-input-short" type="text" id="agent-fs-maxFileSize" value="' + escAttr(fs.maxFileSize ? agentFormatBytes(fs.maxFileSize) : '') + '" onchange="agentsMarkDirty()"></div>'
+      + '<div class="setting-field"><div class="setting-label">Blocked extensions</div>'
+      + '<input class="setting-input" type="text" id="agent-fs-blocked" value="' + escAttr((fs.blockedExtensions || []).join(', ')) + '" onchange="agentsMarkDirty()"></div>';
   } else {
-    html += '<table class="kv-table"><tr><td>Status</td><td>Not configured</td></tr></table>';
+    html += '<div class="setting-check"><input type="checkbox" id="agent-fs-enabled" onchange="agentsMarkDirty()"> Enabled</div>';
   }
   html += '</div>';
 
-  // Management (kv-table with action buttons)
+  // Management
   html += '<div class="setting-card"><div class="setting-card-title">Management</div>'
     + '<div class="setting-card-desc">Remote agent lifecycle controls.</div>'
     + '<table class="kv-table">';
   if (canManage) {
-    html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\')">View Config</button></td></tr>'
-      + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\')">View Logs</button></td></tr>'
-      + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\')">Restart</button></td></tr>';
+    html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
+      + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
+      + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
   } else {
     html += '<tr><td colspan="2">Agent ' + (isOnline ? 'does not support remote management. Update telad to enable.' : 'is offline.') + '</td></tr>';
   }
@@ -2221,8 +2249,71 @@ function agentsUndo() {
 }
 
 function agentsSaveConfig() {
-  // Placeholder for config push -- will be wired when editable fields are added
-  tvLog('Agent config save not yet implemented for live editing');
+  if (!agentsSelectedId || !agentsSelectedHub) return;
+
+  // Gather editable fields
+  var fields = {};
+  var el;
+
+  el = document.getElementById('agent-displayName');
+  if (el) fields.displayName = el.value.trim();
+
+  el = document.getElementById('agent-tags');
+  if (el) {
+    var raw = el.value.trim();
+    fields.tags = raw ? raw.split(',').map(function (t) { return t.trim(); }).filter(Boolean) : [];
+  }
+
+  el = document.getElementById('agent-location');
+  if (el) fields.location = el.value.trim();
+
+  // File share fields
+  el = document.getElementById('agent-fs-enabled');
+  if (el) {
+    fields.fileShare = { enabled: el.checked };
+    var w = document.getElementById('agent-fs-writable');
+    var d = document.getElementById('agent-fs-allowDelete');
+    var m = document.getElementById('agent-fs-maxFileSize');
+    var b = document.getElementById('agent-fs-blocked');
+    if (w) fields.fileShare.writable = w.checked;
+    if (d) fields.fileShare.allowDelete = d.checked;
+    if (m && m.value.trim()) fields.fileShare.maxFileSize = m.value.trim();
+    if (b) {
+      var exts = b.value.trim();
+      fields.fileShare.blockedExtensions = exts ? exts.split(',').map(function (e) { return e.trim(); }).filter(Boolean) : [];
+    }
+  }
+
+  var wsHub = toWSURL(agentsSelectedHub);
+  var saveBtn = document.getElementById('agents-save-btn');
+  saveBtn.textContent = 'Saving...';
+  saveBtn.disabled = true;
+
+  goApp.SetAgentConfig(wsHub, agentsSelectedId, JSON.stringify(fields)).then(function (resp) {
+    try { var data = JSON.parse(resp); } catch (e) {}
+    if (data && data.error) {
+      tvLog('Save failed: ' + data.error);
+      saveBtn.textContent = 'Save';
+      saveBtn.disabled = false;
+      return;
+    }
+    tvLog('Agent config saved for ' + agentsSelectedId);
+    agentsConfigDirty = false;
+    saveBtn.textContent = 'Save';
+    document.getElementById('agents-undo-btn').disabled = true;
+    // Update the cached agent data with the saved values so the
+    // display stays consistent without waiting for re-registration.
+    var agent = agentsData.find(function (a) { return a.id === agentsSelectedId; });
+    if (agent) {
+      if (fields.displayName !== undefined) agent.displayName = fields.displayName;
+      if (fields.tags !== undefined) agent.tags = fields.tags;
+      if (fields.location !== undefined) agent.location = fields.location;
+    }
+  }).catch(function (err) {
+    tvLog('Save failed: ' + err);
+    saveBtn.textContent = 'Save';
+    saveBtn.disabled = false;
+  });
 }
 
 function agentsViewConfig(machineId, hub) {
@@ -3621,7 +3712,7 @@ function renderHubACLs(pane) {
       html += '<p class="empty-hint">No explicit ACL rules configured.</p>';
     } else {
       acls.forEach(function (acl) {
-        var ruleCount = (acl.registerId ? 1 : 0) + (acl.connectIds ? acl.connectIds.length : 0);
+        var ruleCount = (acl.registerId ? 1 : 0) + (acl.connectIds ? acl.connectIds.length : 0) + (acl.manageIds ? acl.manageIds.length : 0);
         var metaLabel = acl.machineId === '*' ? 'applies to all machines' : ruleCount + ' rule' + (ruleCount !== 1 ? 's' : '');
 
         html += '<div class="acl-card"><div class="acl-card-header"><div>'
@@ -3630,42 +3721,46 @@ function renderHubACLs(pane) {
           + '</div></div><div class="acl-card-body">';
 
         // Header row
-        html += '<div class="acl-perm-row" style="padding-bottom:8px;border-bottom:1px solid var(--border);">'
-          + '<div style="flex:1"></div>'
+        html += '<div class="acl-perm-row acl-perm-header">'
+          + '<div class="acl-identity-col"></div>'
           + '<div class="acl-checks">'
-          + '<span style="width:70px;text-align:center;font-weight:600;font-size:12px;color:var(--text-muted);">Register</span>'
-          + '<span style="width:70px;text-align:center;font-weight:600;font-size:12px;color:var(--text-muted);">Connect</span>'
+          + '<span class="acl-col-header">Register</span>'
+          + '<span class="acl-col-header">Connect</span>'
+          + '<span class="acl-col-header">Manage</span>'
           + '</div>'
-          + '<div style="width:70px"></div></div>';
+          + '<div class="acl-action-col"></div></div>';
 
-        // Register identity
-        if (acl.registerId) {
-          html += '<div class="acl-perm-row">'
-            + '<div class="acl-identity">' + escHtml(acl.registerId) + '</div>'
-            + '<div class="acl-checks">'
-            + '<div style="width:70px;text-align:center;">&#x2705;</div>'
-            + '<div style="width:70px;text-align:center;"></div>'
-            + '</div>'
-            + '<div style="width:70px;text-align:right;"><button class="icon-btn danger" onclick="revokeRegister(\'' + escAttr(acl.registerId) + '\',\'' + escAttr(acl.machineId) + '\')">Revoke</button></div>'
-            + '</div>';
-        }
-
-        // Connect identities
-        var connectIds = acl.connectIds || [];
-        connectIds.forEach(function (id) {
-          html += '<div class="acl-perm-row">'
-            + '<div class="acl-identity">' + escHtml(id) + '</div>'
-            + '<div class="acl-checks">'
-            + '<div style="width:70px;text-align:center;"></div>'
-            + '<div style="width:70px;text-align:center;">&#x2705;</div>'
-            + '</div>'
-            + '<div style="width:70px;text-align:right;"><button class="icon-btn danger" onclick="revokeConnect(\'' + escAttr(id) + '\',\'' + escAttr(acl.machineId) + '\')">Revoke</button></div>'
-            + '</div>';
+        // Collect all unique identities across all permission types
+        var identities = {};
+        if (acl.registerId) identities[acl.registerId] = { register: true };
+        (acl.connectIds || []).forEach(function (id) {
+          if (!identities[id]) identities[id] = {};
+          identities[id].connect = true;
+        });
+        (acl.manageIds || []).forEach(function (id) {
+          if (!identities[id]) identities[id] = {};
+          identities[id].manage = true;
         });
 
-        if (!acl.registerId && connectIds.length === 0) {
-          html += '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">No explicit rules.</p>';
+        var idKeys = Object.keys(identities);
+        if (idKeys.length === 0) {
+          html += '<p class="acl-empty-hint">No explicit rules.</p>';
         }
+        idKeys.forEach(function (id) {
+          var perms = identities[id];
+          html += '<div class="acl-perm-row">'
+            + '<div class="acl-identity-col"><strong>' + escHtml(id) + '</strong></div>'
+            + '<div class="acl-checks">'
+            + '<div class="acl-check-cell">' + (perms.register ? '&#x2705;' : '') + '</div>'
+            + '<div class="acl-check-cell">' + (perms.connect ? '&#x2705;' : '') + '</div>'
+            + '<div class="acl-check-cell">' + (perms.manage ? '&#x2705;' : '') + '</div>'
+            + '</div>'
+            + '<div class="acl-action-col">';
+          if (perms.register) html += '<button class="icon-btn danger" onclick="revokeRegister(\'' + escAttr(id) + '\',\'' + escAttr(acl.machineId) + '\')">Revoke</button>';
+          if (perms.connect) html += '<button class="icon-btn danger" onclick="revokeConnect(\'' + escAttr(id) + '\',\'' + escAttr(acl.machineId) + '\')">Revoke</button>';
+          if (perms.manage) html += '<button class="icon-btn danger" onclick="revokeManage(\'' + escAttr(id) + '\',\'' + escAttr(acl.machineId) + '\')">Revoke</button>';
+          html += '</div></div>';
+        });
 
         html += '</div></div>';
       });
@@ -3723,9 +3818,10 @@ function submitGrantAccess(event) {
   var type = document.getElementById('grant-type').value;
   if (!id) return;
 
-  var call = type === 'register'
-    ? goApp.AdminGrantRegister(currentAdminHub, id, machine)
-    : goApp.AdminGrantConnect(currentAdminHub, id, machine);
+  var call;
+  if (type === 'register') call = goApp.AdminGrantRegister(currentAdminHub, id, machine);
+  else if (type === 'manage') call = goApp.AdminGrantManage(currentAdminHub, id, machine);
+  else call = goApp.AdminGrantConnect(currentAdminHub, id, machine);
 
   call.then(function (raw) {
     var data;
@@ -3754,6 +3850,15 @@ function revokeRegister(id, machineId) {
   showConfirmDialog('Revoke Access', 'Revoke register access for "' + id + '" on "' + machineId + '"?', 'Revoke').then(function (yes) {
     if (!yes) return;
     goApp.AdminRevokeRegister(currentAdminHub, id, machineId).then(function () {
+      renderHubACLs(document.getElementById('hubs-admin-detail'));
+    });
+  });
+}
+
+function revokeManage(id, machineId) {
+  showConfirmDialog('Revoke Access', 'Revoke manage access for "' + id + '" on "' + machineId + '"?', 'Revoke').then(function (yes) {
+    if (!yes) return;
+    goApp.AdminRevokeManage(currentAdminHub, id, machineId).then(function () {
       renderHubACLs(document.getElementById('hubs-admin-detail'));
     });
   });

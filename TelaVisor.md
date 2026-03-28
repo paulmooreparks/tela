@@ -171,11 +171,11 @@ Token previews show the first 8 characters. Full tokens are only visible at crea
 
 #### ACLs
 
-The ACLs view lets you manage per-machine connect and register permissions. ACL rules are displayed as cards grouped by machine. Each card shows which identities have register or connect access, with Revoke buttons for each entry.
+The ACLs view lets you manage per-machine permissions. ACL rules are displayed as cards grouped by machine. Each card shows a table of identities with their Register, Connect, and Manage permissions, with per-permission Revoke buttons.
 
 ![ACLs view](screens/telavisor-hub-acls.png)
 
-A wildcard ACL (`*`) applies to all machines when present. Register access is single-assignment: only one identity can register a given machine. Granting register to a new identity replaces the previous one.
+The Grant Access dialog lets you grant Connect, Register, or Manage permissions to any identity on any machine. A wildcard ACL (`*`) applies to all machines when present. Register access is single-assignment: only one identity can register a given machine. Manage access controls who can view and edit agent configuration, view logs, and restart agents remotely.
 
 #### History
 
@@ -185,17 +185,22 @@ The History view shows recent session events on the selected hub (agent registra
 
 ### Agents
 
-The Agents tab lists all agents (telad instances) visible across your configured hubs. The sidebar shows each agent with its online status and version. Selecting an agent displays its details.
+The Agents tab lists all agents (telad instances) visible across your configured hubs. The sidebar shows each agent with its online status and version. Selecting an agent displays its details. A toolbar provides Undo, Save, Restart, and Logs buttons.
 
 ![Agents view](screens/telavisor-agents.png)
 
-The agent detail view shows:
+The agent detail view shows read-only info and editable settings:
 
-- **Agent Info** -- version, hub, hostname, platform, last seen time, and active session count
+- **Agent Info** -- read-only: version, hub, hostname, platform, last seen time, and active session count
+- **Display Name** -- editable: human-readable name shown in dashboards
+- **Tags** -- editable: comma-separated metadata tags for filtering
+- **Location** -- editable: physical or logical location
 - **Services** -- the ports and protocols the agent exposes (e.g., SSH :22, RDP :3389)
-- **File Share** -- file sharing configuration including status, access mode, delete permission, max file size, and blocked file types
-- **Management** -- configuration and log access controls, and a Restart button
+- **File Share** -- editable: enable/disable, writable, allow delete, max file size, blocked extensions
+- **Management** -- View Config (shows running config in a dialog), View Logs (opens a log panel tab), Restart (with confirmation). Requires manage permission on the machine.
 - **Danger Zone** -- force-disconnect the agent or remove the machine from the hub
+
+Editable fields are pushed to the agent through the hub-mediated management protocol when you click Save. The agent validates and persists changes to its config file. Manage permission is required (owner/admin roles have it by default; user-role tokens need an explicit manage grant via the ACLs view).
 
 ### Remotes
 

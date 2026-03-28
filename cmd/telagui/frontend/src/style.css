@@ -1418,7 +1418,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
    Read-only values: inline kv-table rows. */
 .setting-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 20px; margin-bottom: 16px; max-width: 720px;
+  border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
 }
 .setting-card-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
 .setting-card-title-row {
@@ -1820,8 +1820,13 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-size: 13px;
 }
 .acl-perm-row:last-child { border-bottom: none; }
-.acl-identity { flex: 1; font-weight: 500; }
-.acl-checks { display: flex; gap: 24px; }
+.acl-perm-header { padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.acl-identity-col { flex: 1; font-weight: 500; }
+.acl-checks { display: flex; gap: 0; }
+.acl-col-header { width: 70px; text-align: center; font-weight: 600; font-size: 12px; color: var(--text-muted); }
+.acl-check-cell { width: 70px; text-align: center; }
+.acl-action-col { width: 80px; text-align: right; }
+.acl-empty-hint { font-size: 13px; color: var(--text-muted); padding: 8px 0; }
 .wildcard-note {
   background: #fffbeb; border: 1px solid #fcd34d; border-radius: var(--radius);
   padding: 10px 14px; font-size: 12px; color: #92400e; margin-bottom: 16px;

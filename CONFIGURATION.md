@@ -293,10 +293,14 @@ auth:
       registerToken: <token> # only this token may register
       connectTokens:         # tokens allowed to connect
         - <token>
+      manageTokens:          # tokens allowed to manage (config, logs, restart)
+        - <token>
     barn:
       registerToken: <token>
       connectTokens:
         - <token>
+        - <token>
+      manageTokens:
         - <token>
 ```
 
@@ -326,8 +330,9 @@ When `auth:` is absent or has no tokens, the hub runs in **open mode** (no authe
 |-------|----------|-------------|
 | `registerToken` | no | If set, only this token may register (or re-register) this machine |
 | `connectTokens` | no | List of tokens allowed to connect to this machine |
+| `manageTokens` | no | List of tokens allowed to manage this machine (view/edit config, view logs, restart) |
 
-Use `"*"` as the machine key for a wildcard rule that applies to all machines.
+Use `"*"` as the machine key for a wildcard rule that applies to all machines. Owner and admin role tokens implicitly have manage access to all machines.
 
 ### Auth evaluation order
 
