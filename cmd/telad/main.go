@@ -295,6 +295,10 @@ func setActiveConfig(cfg *configFile, path string) {
 
 // handleMgmtRequest processes a management message from the hub and
 // returns a JSON response to send back.
+// reregisterNeeded is set by config-set to signal runAgent to
+// send an updated registration to the hub with the new metadata.
+var reregisterNeeded bool
+
 func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 	ok := true
 	notOK := false
@@ -430,6 +434,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		}
 
 		lg.Printf("mgmt: config-set machine=%s (requestId=%s)", update.Machine, msg.RequestID)
+		reregisterNeeded = true
 		resp, _ := json.Marshal(controlMessage{
 			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
 		})
@@ -1357,6 +1362,41 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 			resp := handleMgmtRequest(lg, &msg)
 			if err := ws.WriteMessage(websocket.TextMessage, resp); err != nil {
 				lg.Printf("mgmt-response write failed: %v", err)
+			}
+			// If config changed, re-register with the hub to push updated metadata
+			if reregisterNeeded {
+				reregisterNeeded = false
+				activeConfigMu.RLock()
+				cfg := activeConfig
+				activeConfigMu.RUnlock()
+				if cfg != nil {
+					// Find the machine config and send updated registration
+					for _, m := range cfg.Machines {
+						if m.Name == reg.MachineID {
+							regMsg := controlMessage{
+								Type:         "register",
+								MachineID:    m.Name,
+								DisplayName:  m.DisplayName,
+								Hostname:     reg.Hostname,
+								OS:           reg.OS,
+								AgentVersion: reg.AgentVersion,
+								Tags:         m.Tags,
+								Location:     m.Location,
+								Owner:        m.Owner,
+								Token:        reg.Token,
+								Ports:        reg.Ports,
+								Services:     reg.Services,
+								Capabilities: buildCapabilities(reg.FileShare),
+							}
+							if err := ws.WriteJSON(&regMsg); err != nil {
+								lg.Printf("re-register failed: %v", err)
+							} else {
+								lg.Printf("re-registered with updated metadata")
+							}
+							break
+						}
+					}
+				}
 			}
 		}
 	}
