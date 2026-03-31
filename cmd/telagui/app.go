@@ -2215,6 +2215,7 @@ func (a *App) GetAgentConfig(hubURL, machineID string) string {
 
 // SetAgentConfig pushes a config update to an agent via the hub management API.
 func (a *App) SetAgentConfig(hubURL, machineID, fieldsJSON string) string {
+	log.Printf("[telavisor] SetAgentConfig: machine=%q hub=%q fields=%s", machineID, hubURL, fieldsJSON)
 	payload := json.RawMessage(`{"machine":"` + machineID + `","fields":` + fieldsJSON + `}`)
 	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/config-set", payload)
 	if err != nil {

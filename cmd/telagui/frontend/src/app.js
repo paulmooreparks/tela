@@ -2396,13 +2396,18 @@ function agentsViewLogs(machineId, hub) {
   if (dot) dot.className = 'log-dot log-dot-warn';
 
   goApp.GetAgentLogs(wsHub, machineId, 500).then(function (resp) {
-    try { var data = JSON.parse(resp); } catch (e) { return; }
-    if (data.error) {
-      document.getElementById(paneId).textContent = 'Error: ' + data.error + '\n';
+    try { var data = JSON.parse(resp); } catch (e) {
+      document.getElementById(paneId).textContent = 'Error: invalid response\n';
       if (dot) dot.className = 'log-dot log-dot-idle';
       return;
     }
-    var lines = data.lines || [];
+    if (data.error || data.ok === false) {
+      document.getElementById(paneId).textContent = 'Error: ' + (data.error || data.message || 'unknown error') + '\n';
+      if (dot) dot.className = 'log-dot log-dot-idle';
+      return;
+    }
+    var payload = data.payload || data;
+    var lines = payload.lines || [];
     var el = document.getElementById(paneId);
     el.textContent = lines.join('\n') + '\n';
     logAutoScroll(el);

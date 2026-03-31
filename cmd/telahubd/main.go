@@ -1752,6 +1752,7 @@ func handleAdminAgents(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Send mgmt-request to agent
+	log.Printf("[hub] mgmt-request: machine=%s action=%s reqId=%s", machineID, action, reqID)
 	req := map[string]interface{}{
 		"type":      "mgmt-request",
 		"requestId": reqID,
