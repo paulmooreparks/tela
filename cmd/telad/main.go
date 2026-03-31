@@ -965,6 +965,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 			yamlPath, service.ConfigPath("telad"))
 	}
 
+	setActiveConfig(fileCfg, yamlPath)
 	go runMultiMachine(fileCfg)
 
 	<-svcStop

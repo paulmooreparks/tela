@@ -2291,8 +2291,8 @@ function agentsSaveConfig() {
 
   goApp.SetAgentConfig(wsHub, agentsSelectedId, JSON.stringify(fields)).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) {}
-    if (data && data.error) {
-      tvLog('Save failed: ' + data.error);
+    if (data && (data.error || data.ok === false)) {
+      tvLog('Save failed: ' + (data.error || data.message || 'unknown error'));
       saveBtn.textContent = 'Save';
       saveBtn.disabled = false;
       return;
