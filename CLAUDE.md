@@ -57,12 +57,36 @@ end-to-end between agent and client.
 Agents use userspace WireGuard via gVisor netstack. No admin/root privileges
 required for tunnel operation.
 
+## API Design
+
+All REST APIs must follow Fielding's original REST architectural style, not
+the colloquial "REST" that amounts to RPC-over-HTTP with JSON. Specifically:
+
+- Resources are nouns, not verbs. Use `/api/admin/access/{id}`, not
+  `/api/admin/grant-access`.
+- HTTP methods carry the semantics: GET reads, PUT replaces, PATCH updates,
+  DELETE removes, POST creates. Do not use POST for operations that map
+  naturally to other verbs.
+- Sub-resources model relationships: `/api/admin/access/{id}/machines/{m}`
+  represents the permissions for identity `{id}` on machine `{m}`.
+- PUT is idempotent and replaces the resource. PATCH is a partial update.
+- Responses should use appropriate status codes (201 Created, 404 Not Found,
+  409 Conflict, etc.), not 200 with an error field.
+- Avoid action-oriented endpoints like `/api/admin/rotate/{id}`. Prefer
+  PATCH or PUT on the resource with the intended state change in the body.
+
+Legacy endpoints that predate this convention (e.g., `/api/admin/grant`,
+`/api/admin/revoke`) remain for backward compatibility but should not be
+used as a pattern for new endpoints.
+
 ## Architecture Notes
 
 ### Auth model
 Token-based RBAC with four roles: `owner`, `admin`, `user` (default), `viewer`.
 Machine ACLs control per-machine register and connect permissions.
 Wildcard `*` ACL applies to all machines.
+The unified `/api/admin/access` endpoint joins tokens and ACLs into a single
+resource view. See `cmd/telahubd/admin_api.go`.
 
 ### Session addressing
 Each session gets a /24 subnet: `10.77.{idx}.1` (agent) / `10.77.{idx}.2` (client).
