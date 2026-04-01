@@ -1802,6 +1802,8 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/admin/grant-manage", handleAdminGrantManage)
 	mux.HandleFunc("/api/admin/revoke-manage", handleAdminRevokeManage)
 	mux.HandleFunc("/api/admin/pair-code", handleAdminPairCode)
+	mux.HandleFunc("/api/admin/access/", handleAdminAccess)
+	mux.HandleFunc("/api/admin/access", handleAdminAccess)
 	mux.HandleFunc("/api/admin/agents/", handleAdminAgents)
 	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)

@@ -4,7 +4,15 @@
 // Changes take effect immediately (hot-reload) and are persisted to the
 // YAML config file so they survive restarts.
 //
-// Endpoints:
+// Unified access API (RESTful):
+//   GET    /api/admin/access                           List all access entries (tokens + permissions joined)
+//   GET    /api/admin/access/{id}                      Get one access entry
+//   PATCH  /api/admin/access/{id}                      Update entry (rename: {"id":"new-name"})
+//   DELETE /api/admin/access/{id}                      Remove identity (token + all ACL refs)
+//   PUT    /api/admin/access/{id}/machines/{machineId} Set permissions  {"permissions":["connect","manage"]}
+//   DELETE /api/admin/access/{id}/machines/{machineId} Revoke all permissions on a machine
+//
+// Legacy endpoints (kept for backward compatibility):
 //   GET    /api/admin/tokens            List all token identities
 //   POST   /api/admin/tokens            Add a new token identity
 //   DELETE /api/admin/tokens?id=<id>    Remove a token identity
@@ -991,4 +999,359 @@ func handleAdminRevokeManage(w http.ResponseWriter, r *http.Request) {
 	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": req.ID, "machineId": req.MachineID})
+}
+
+// ── Unified Access API ───────────────────────────────────────────
+//
+// RESTful resource: an access entry joins a token identity with its
+// effective per-machine permissions.
+
+type accessEntry struct {
+	ID           string          `json:"id"`
+	Role         string          `json:"role"`
+	TokenPreview string          `json:"tokenPreview"`
+	Machines     []machineAccess `json:"machines"`
+}
+
+type machineAccess struct {
+	MachineID   string   `json:"machineId"`
+	Permissions []string `json:"permissions"`
+}
+
+// handleAdminAccess dispatches /api/admin/access and /api/admin/access/{id}...
+func handleAdminAccess(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if _, ok := requireOwnerOrAdmin(w, r); !ok {
+		return
+	}
+
+	// Parse path: "" = list, "{id}" = single, "{id}/machines/{machineId}" = sub-resource
+	path := strings.TrimPrefix(r.URL.Path, "/api/admin/access")
+	path = strings.TrimPrefix(path, "/")
+
+	if path == "" {
+		// GET /api/admin/access
+		if r.Method != http.MethodGet {
+			adminCorsHeaders(w, r)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		adminListAccess(w, r)
+		return
+	}
+
+	// Check for /machines/ sub-resource
+	parts := strings.SplitN(path, "/machines/", 2)
+	id := parts[0]
+
+	if len(parts) == 2 {
+		// /api/admin/access/{id}/machines/{machineId}
+		machineID := parts[1]
+		if machineID == "" {
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "machineId required"})
+			return
+		}
+		switch r.Method {
+		case http.MethodPut:
+			adminSetMachineAccess(w, r, id, machineID)
+		case http.MethodDelete:
+			adminRevokeMachineAccess(w, r, id, machineID)
+		default:
+			adminCorsHeaders(w, r)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
+	// /api/admin/access/{id}
+	switch r.Method {
+	case http.MethodGet:
+		adminGetAccess(w, r, id)
+	case http.MethodPatch:
+		adminPatchAccess(w, r, id)
+	case http.MethodDelete:
+		adminDeleteAccess(w, r, id)
+	default:
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+// buildAccessEntry creates an accessEntry for a given token entry by scanning all ACLs.
+// Caller must hold globalCfgMu.RLock.
+func buildAccessEntry(t tokenEntry) accessEntry {
+	role := t.HubRole
+	if role == "" {
+		role = "user"
+	}
+	preview := t.Token
+	if len(preview) > 8 {
+		preview = preview[:8] + "..."
+	}
+
+	entry := accessEntry{
+		ID:           t.ID,
+		Role:         role,
+		TokenPreview: preview,
+		Machines:     []machineAccess{},
+	}
+
+	// Owner/admin: implicit all-access
+	if role == "owner" || role == "admin" {
+		entry.Machines = append(entry.Machines, machineAccess{
+			MachineID:   "*",
+			Permissions: []string{"register", "connect", "manage"},
+		})
+		return entry
+	}
+
+	// Scan all machine ACLs for this token
+	for machineID, acl := range globalCfg.Auth.Machines {
+		var perms []string
+		if acl.RegisterToken == t.Token {
+			perms = append(perms, "register")
+		}
+		for _, ct := range acl.ConnectTokens {
+			if ct == t.Token {
+				perms = append(perms, "connect")
+				break
+			}
+		}
+		for _, mt := range acl.ManageTokens {
+			if mt == t.Token {
+				perms = append(perms, "manage")
+				break
+			}
+		}
+		if len(perms) > 0 {
+			entry.Machines = append(entry.Machines, machineAccess{
+				MachineID:   machineID,
+				Permissions: perms,
+			})
+		}
+	}
+
+	return entry
+}
+
+func adminListAccess(w http.ResponseWriter, r *http.Request) {
+	globalCfgMu.RLock()
+	defer globalCfgMu.RUnlock()
+
+	entries := make([]accessEntry, 0, len(globalCfg.Auth.Tokens))
+	for _, t := range globalCfg.Auth.Tokens {
+		entries = append(entries, buildAccessEntry(t))
+	}
+
+	adminCorsHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"access": entries})
+}
+
+func adminGetAccess(w http.ResponseWriter, r *http.Request, id string) {
+	globalCfgMu.RLock()
+	defer globalCfgMu.RUnlock()
+
+	for _, t := range globalCfg.Auth.Tokens {
+		if t.ID == id {
+			adminCorsHeaders(w, r)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(buildAccessEntry(t))
+			return
+		}
+	}
+
+	writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
+}
+
+func adminPatchAccess(w http.ResponseWriter, r *http.Request, id string) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
+	var patch struct {
+		ID string `json:"id"` // rename
+	}
+	if err := json.Unmarshal(body, &patch); err != nil || patch.ID == "" {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "id field required"})
+		return
+	}
+
+	globalCfgMu.Lock()
+	defer globalCfgMu.Unlock()
+
+	entry := findTokenEntryInCfg(id)
+	if entry == nil {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
+		return
+	}
+
+	if patch.ID != id {
+		// Check for conflict
+		if findTokenEntryInCfg(patch.ID) != nil {
+			writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "identity already exists: " + patch.ID})
+			return
+		}
+		oldID := entry.ID
+		entry.ID = patch.ID
+		if err := persistConfig(); err != nil {
+			log.Printf("[hub] admin: persist error: %v", err)
+		}
+		log.Printf("[hub] admin: renamed %q to %q", oldID, patch.ID)
+	}
+
+	adminCorsHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "updated", "id": patch.ID})
+}
+
+func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
+	globalCfgMu.Lock()
+	defer globalCfgMu.Unlock()
+
+	entry := findTokenEntryInCfg(id)
+	if entry == nil {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
+		return
+	}
+
+	token := entry.Token
+
+	// Remove from token list
+	filtered := globalCfg.Auth.Tokens[:0]
+	for _, t := range globalCfg.Auth.Tokens {
+		if t.ID != id {
+			filtered = append(filtered, t)
+		}
+	}
+	globalCfg.Auth.Tokens = filtered
+
+	// Scrub from all machine ACLs
+	for machineID, acl := range globalCfg.Auth.Machines {
+		if acl.RegisterToken == token {
+			acl.RegisterToken = ""
+		}
+		acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+		acl.ManageTokens = removeToken(acl.ManageTokens, token)
+		globalCfg.Auth.Machines[machineID] = acl
+	}
+
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	log.Printf("[hub] admin: removed access entry %q", id)
+
+	adminCorsHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "id": id})
+}
+
+func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID string) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
+	var req struct {
+		Permissions []string `json:"permissions"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	globalCfgMu.Lock()
+	defer globalCfgMu.Unlock()
+
+	entry := findTokenEntryInCfg(id)
+	if entry == nil {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
+		return
+	}
+
+	if globalCfg.Auth.Machines == nil {
+		globalCfg.Auth.Machines = make(map[string]machineACL)
+	}
+	acl := globalCfg.Auth.Machines[machineID]
+	token := entry.Token
+
+	// Remove all existing permissions for this token on this machine first
+	if acl.RegisterToken == token {
+		acl.RegisterToken = ""
+	}
+	acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+	acl.ManageTokens = removeToken(acl.ManageTokens, token)
+
+	// Apply requested permissions
+	for _, perm := range req.Permissions {
+		switch perm {
+		case "register":
+			acl.RegisterToken = token
+		case "connect":
+			acl.ConnectTokens = append(acl.ConnectTokens, token)
+		case "manage":
+			acl.ManageTokens = append(acl.ManageTokens, token)
+		}
+	}
+
+	globalCfg.Auth.Machines[machineID] = acl
+
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	log.Printf("[hub] admin: set %q permissions on %q to %v", id, machineID, req.Permissions)
+
+	adminCorsHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":      "updated",
+		"id":          id,
+		"machineId":   machineID,
+		"permissions": req.Permissions,
+	})
+}
+
+func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID string) {
+	globalCfgMu.Lock()
+	defer globalCfgMu.Unlock()
+
+	entry := findTokenEntryInCfg(id)
+	if entry == nil {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
+		return
+	}
+
+	acl, exists := globalCfg.Auth.Machines[machineID]
+	if !exists {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "no ACL for machine"})
+		return
+	}
+
+	token := entry.Token
+	if acl.RegisterToken == token {
+		acl.RegisterToken = ""
+	}
+	acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+	acl.ManageTokens = removeToken(acl.ManageTokens, token)
+	globalCfg.Auth.Machines[machineID] = acl
+
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	log.Printf("[hub] admin: revoked all %q permissions on %q", id, machineID)
+
+	adminCorsHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id, "machineId": machineID})
+}
+
+// removeToken returns a new slice with all occurrences of tok removed.
+func removeToken(tokens []string, tok string) []string {
+	out := tokens[:0]
+	for _, t := range tokens {
+		if t != tok {
+			out = append(out, t)
+		}
+	}
+	return out
 }

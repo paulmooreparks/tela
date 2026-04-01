@@ -59,6 +59,8 @@ func cmdAdmin(args []string) {
 		cmdAdminGrantManage(rest)
 	case "revoke-manage":
 		cmdAdminRevokeManage(rest)
+	case "access":
+		cmdAdminAccess(rest)
 	case "agent":
 		cmdAdminAgent(rest)
 	case "help", "-h", "--help":
@@ -76,7 +78,14 @@ func printAdminUsage() {
 Usage:
   tela admin <command> [options]
 
-Token commands:
+Access commands (unified view):
+  access          List all identities with their per-machine permissions
+  access grant    Grant permissions on a machine (connect,register,manage)
+  access revoke   Revoke all permissions on a machine
+  access rename   Rename an identity
+  access remove   Remove an identity and all its permissions
+
+Token commands (legacy):
   list-tokens    List all token identities on the hub
   add-token      Add a new token identity (returns the token once)
   remove-token   Remove a token identity
@@ -993,4 +1002,212 @@ func cmdAdminAgentRestart(args []string) {
 	adminCheckError(status, result)
 
 	fmt.Printf("Restart requested for '%s'.\n", *machine)
+}
+
+// ── tela admin access ──────────────────────────────────────────────
+
+func cmdAdminAccess(args []string) {
+	if len(args) > 0 {
+		switch args[0] {
+		case "grant":
+			cmdAdminAccessGrant(args[1:])
+			return
+		case "revoke":
+			cmdAdminAccessRevoke(args[1:])
+			return
+		case "rename":
+			cmdAdminAccessRename(args[1:])
+			return
+		case "remove":
+			cmdAdminAccessRemove(args[1:])
+			return
+		}
+	}
+
+	// Default: list
+	fs := flag.NewFlagSet("admin access", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("GET", hub, "/api/admin/access", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(result)
+		return
+	}
+
+	entries, _ := result["access"].([]any)
+	if len(entries) == 0 {
+		fmt.Println("No access entries configured.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "IDENTITY\tROLE\tMACHINES")
+	for _, e := range entries {
+		entry, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := entry["id"].(string)
+		role, _ := entry["role"].(string)
+		machines, _ := entry["machines"].([]any)
+
+		var machSummary string
+		if role == "owner" || role == "admin" {
+			machSummary = "* (all permissions)"
+		} else if role == "viewer" {
+			machSummary = "(view only)"
+		} else if len(machines) == 0 {
+			machSummary = "(no permissions)"
+		} else {
+			var parts []string
+			for _, m := range machines {
+				mach, ok := m.(map[string]any)
+				if !ok {
+					continue
+				}
+				mid, _ := mach["machineId"].(string)
+				perms, _ := mach["permissions"].([]any)
+				var permStrs []string
+				for _, p := range perms {
+					if s, ok := p.(string); ok {
+						permStrs = append(permStrs, s)
+					}
+				}
+				parts = append(parts, mid+": "+strings.Join(permStrs, ", "))
+			}
+			machSummary = strings.Join(parts, " | ")
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\n", id, role, machSummary)
+	}
+	w.Flush()
+}
+
+func cmdAdminAccessGrant(args []string) {
+	fs := flag.NewFlagSet("admin access grant", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 3 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin access grant <id> <machineId> <permissions>")
+		fmt.Fprintln(os.Stderr, "  permissions: comma-separated list of connect,register,manage")
+		fmt.Fprintln(os.Stderr, "  Example: tela admin access grant alice barn connect,manage")
+		os.Exit(1)
+	}
+	id := fs.Arg(0)
+	machineID := fs.Arg(1)
+	perms := strings.Split(fs.Arg(2), ",")
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	body := map[string]any{"permissions": perms}
+
+	status, result, err := adminHTTP("PUT", hub, "/api/admin/access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineID), tok, body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Printf("Set '%s' permissions on '%s' to [%s].\n", id, machineID, strings.Join(perms, ", "))
+}
+
+func cmdAdminAccessRevoke(args []string) {
+	fs := flag.NewFlagSet("admin access revoke", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin access revoke <id> <machineId>")
+		os.Exit(1)
+	}
+	id := fs.Arg(0)
+	machineID := fs.Arg(1)
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineID), tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Printf("Revoked all '%s' permissions on '%s'.\n", id, machineID)
+}
+
+func cmdAdminAccessRename(args []string) {
+	fs := flag.NewFlagSet("admin access rename", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin access rename <id> <newId>")
+		os.Exit(1)
+	}
+	id := fs.Arg(0)
+	newID := fs.Arg(1)
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	body := map[string]string{"id": newID}
+
+	status, result, err := adminHTTP("PATCH", hub, "/api/admin/access/"+url.PathEscape(id), tok, body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Printf("Renamed '%s' to '%s'.\n", id, newID)
+}
+
+func cmdAdminAccessRemove(args []string) {
+	fs := flag.NewFlagSet("admin access remove", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin access remove <id>")
+		os.Exit(1)
+	}
+	id := fs.Arg(0)
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/access/"+url.PathEscape(id), tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	fmt.Printf("Removed identity '%s' and all its permissions.\n", id)
 }
