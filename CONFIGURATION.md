@@ -375,18 +375,28 @@ In Docker deployments, the hub persists its YAML config at `/app/data/telahubd.y
 
 ### Admin REST API
 
-When auth is enabled, the hub exposes admin endpoints for remote token and ACL management. All admin endpoints require an owner or admin token.
+When auth is enabled, the hub exposes admin endpoints for remote management. All admin endpoints require an owner or admin token.
+
+**Unified access API** (recommended). Each access entry represents one identity and its per-machine permissions:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/admin/access` | List all identities with their per-machine permissions |
+| `GET` | `/api/admin/access/{id}` | Get one identity's access entry |
+| `PATCH` | `/api/admin/access/{id}` | Update identity (rename: `{"id":"new-name"}`) |
+| `DELETE` | `/api/admin/access/{id}` | Remove identity and scrub all ACL references |
+| `PUT` | `/api/admin/access/{id}/machines/{m}` | Set permissions: `{"permissions":["connect","manage"]}` |
+| `DELETE` | `/api/admin/access/{id}/machines/{m}` | Revoke all permissions on a machine |
+
+**Token management:**
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/admin/tokens` | List all token identities (token values are previewed, not exposed) |
 | `POST` | `/api/admin/tokens` | Add a new token identity (returns the full token once) |
-| `DELETE` | `/api/admin/tokens?id=<id>` | Remove a token identity and clean up its ACL references |
-| `POST` | `/api/admin/grant` | Grant a token connect access to a machine |
-| `POST` | `/api/admin/revoke` | Revoke a token's connect access to a machine |
-| `POST` | `/api/admin/rotate/<id>` | Regenerate a token (old token stops working immediately) |
+| `DELETE` | `/api/admin/tokens/{id}` | Remove a token identity and clean up its ACL references |
 
-Changes made through the admin API take effect immediately (hot-reload) with no hub restart needed. See the `tela admin` CLI section below for the corresponding client commands.
+Changes made through the admin API take effect immediately (hot-reload) with no hub restart needed. See the `tela admin access` CLI commands for the corresponding client interface.
 
 **Using a config file:**
 

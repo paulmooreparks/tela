@@ -696,13 +696,17 @@ Current hub endpoints:
 
 - `GET /api/status`: machine + hub status
 - `GET /api/history`: session event history
-- `GET /api/admin/tokens`: list token identities (owner/admin only)
+- `GET /api/admin/access`: unified view of identities + per-machine permissions
+- `GET /api/admin/access/{id}`: single access entry
+- `PATCH /api/admin/access/{id}`: rename identity
+- `DELETE /api/admin/access/{id}`: remove identity + scrub ACLs
+- `PUT /api/admin/access/{id}/machines/{m}`: set permissions
+- `DELETE /api/admin/access/{id}/machines/{m}`: revoke permissions on a machine
+- `GET /api/admin/tokens`: list token identities
 - `POST /api/admin/tokens`: add a token identity
-- `DELETE /api/admin/tokens?id=<id>`: remove a token identity
-- `POST /api/admin/grant`: grant connect access to a machine
-- `POST /api/admin/revoke`: revoke connect access
-- `POST /api/admin/rotate/<id>`: regenerate a token
+- `DELETE /api/admin/tokens/{id}`: remove a token identity
 
+Legacy grant/revoke/rotate endpoints remain for backward compatibility.
 Additive-only changes. 12-month deprecation window.
 
 ## **8.5 Portal Management**

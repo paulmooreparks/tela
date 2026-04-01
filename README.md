@@ -208,12 +208,12 @@ openssl rand -hex 32
 docker compose up --build -d
 
 # 4. Manage remotely from any workstation:
-tela admin list-tokens  -hub wss://your-hub -token <owner-token>
+tela admin access -hub wss://your-hub -token <owner-token>
 tela admin add-token bob -hub wss://your-hub -token <owner-token>
-tela admin grant bob barn -hub wss://your-hub -token <owner-token>
+tela admin access grant bob barn connect -hub wss://your-hub -token <owner-token>
 ```
 
-See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admin` reference.
+The `tela admin access` command shows a unified view of all identities and their per-machine permissions. See [CONFIGURATION.md](CONFIGURATION.md) for the full auth schema and `tela admin` reference.
 
 ## Authentication and security
 
@@ -221,9 +221,9 @@ Tela is designed to be secure by default. The hub auto-generates an owner token 
 
 **End-to-end encryption.** All traffic between the client and agent is encrypted with WireGuard using Curve25519 for key exchange and ChaCha20-Poly1305 for data encryption. The hub relays opaque ciphertext and cannot read tunnel contents.
 
-**Token-based access control.** The hub uses named token identities with four roles: owner, admin, user, and viewer. Per-machine ACLs control which tokens can register and connect to each machine. A wildcard ACL applies to all machines.
+**Token-based access control.** The hub uses named token identities with four roles: owner, admin, user, and viewer. The unified access API (`/api/admin/access`) joins tokens and their per-machine permissions (register, connect, manage) into a single resource. A wildcard ACL (`*`) applies to all machines. Owner and admin tokens have implicit access to all machines.
 
-**Remote management.** Owners and admins can manage tokens, ACLs, and portal registrations remotely using `tela admin`. No shell access to the hub is required.
+**Remote management.** Owners and admins can manage access remotely using `tela admin access` (unified view), `tela admin access grant` (set permissions), and `tela admin access revoke` (remove permissions). No shell access to the hub is required.
 
 **Credential storage.** The `tela login` and `telad login` commands store hub tokens in a local credential file (0600 permissions) so you do not need to pass tokens on every command.
 

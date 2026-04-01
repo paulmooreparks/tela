@@ -410,29 +410,59 @@ If you need to override the embedded console with custom files, set `TELAHUBD_WW
 
 ### Hub API endpoints
 
+**Unified access API (RESTful)**
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/admin/access` | GET | owner/admin | List all identities with per-machine permissions |
+| `/api/admin/access/{id}` | GET | owner/admin | Get one identity's access entry |
+| `/api/admin/access/{id}` | PATCH | owner/admin | Update identity (rename: `{"id":"new-name"}`) |
+| `/api/admin/access/{id}` | DELETE | owner/admin | Remove identity and scrub all ACL references |
+| `/api/admin/access/{id}/machines/{m}` | PUT | owner/admin | Set permissions: `{"permissions":["connect","manage"]}` |
+| `/api/admin/access/{id}/machines/{m}` | DELETE | owner/admin | Revoke all permissions on a machine |
+
+**Token and portal management**
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/admin/tokens` | GET | owner/admin | List all token identities |
+| `/api/admin/tokens` | POST | owner/admin | Add a token identity |
+| `/api/admin/tokens/{id}` | DELETE | owner/admin | Remove a token identity |
+| `/api/admin/portals` | GET | owner/admin | List portal registrations |
+| `/api/admin/portals` | POST | owner/admin | Add/update a portal registration |
+| `/api/admin/portals/{name}` | DELETE | owner/admin | Remove a portal registration |
+
+**Agent management and pairing**
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/admin/agents/{machine}/{action}` | GET/POST | manage+ | Proxy management request to agent |
+| `/api/admin/pair-code` | POST | owner/admin | Generate a pairing code |
+| `/api/pair` | POST | none | Exchange a pairing code for a token |
+
+**Public endpoints**
+
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/status` | GET | viewer+ | Current machines, services, and session status |
 | `/api/history` | GET | viewer+ | Recent connection events |
-| `/api/admin/tokens` | GET | owner/admin | List all token identities |
-| `/api/admin/tokens` | POST | owner/admin | Add a token identity |
-| `/api/admin/tokens?id=<id>` | DELETE | owner/admin | Remove a token identity |
-| `/api/admin/grant` | POST | owner/admin | Grant connect access to a machine |
-| `/api/admin/revoke` | POST | owner/admin | Revoke connect access |
-| `/api/admin/rotate/<id>` | POST | owner/admin | Regenerate a token |
-| `/api/admin/portals` | GET | owner/admin | List portal registrations |
-| `/api/admin/portals` | POST | owner/admin | Add/update a portal registration |
-| `/api/admin/portals?name=<n>` | DELETE | owner/admin | Remove a portal registration |
-| `/api/admin/acls` | GET | owner/admin | List per-machine ACL rules |
-| `/api/admin/grant-register` | POST | owner/admin | Grant register access for a machine |
-| `/api/admin/revoke-register` | POST | owner/admin | Revoke register access |
-| `/api/admin/grant-manage` | POST | owner/admin | Grant manage access for a machine |
-| `/api/admin/revoke-manage` | POST | owner/admin | Revoke manage access |
-| `/api/admin/agents/{machine}/{action}` | GET/POST | manage+ | Proxy management request to agent |
-| `/api/admin/pair-code` | POST | owner/admin | Generate a pairing code |
-| `/api/pair` | POST | none | Exchange a pairing code for a token |
 | `/.well-known/tela` | GET | none | Hub directory discovery (RFC 8615) |
 | `/api/hubs` | GET | viewer+ | Hub listing for portal/CLI resolution |
+
+**Legacy endpoints (backward compatibility)**
+
+The following endpoints predate the unified access API and remain for backward compatibility. New code should use the `/api/admin/access` endpoints instead.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/grant` | POST | Grant connect access (use PUT on `/access/{id}/machines/{m}`) |
+| `/api/admin/revoke` | POST | Revoke connect access (use DELETE on `/access/{id}/machines/{m}`) |
+| `/api/admin/grant-register` | POST | Grant register access |
+| `/api/admin/revoke-register` | POST | Revoke register access |
+| `/api/admin/grant-manage` | POST | Grant manage access |
+| `/api/admin/revoke-manage` | POST | Revoke manage access |
+| `/api/admin/rotate/{id}` | POST | Regenerate a token |
+| `/api/admin/acls` | GET | List per-machine ACL rules (use GET `/api/admin/access`) |
 
 ### Firewall requirements
 
@@ -945,18 +975,30 @@ tela pair -hub <hub-url> -code <code> # exchange a pairing code for a token
 
 #### tela admin
 
-Remote hub auth and portal management. Requires an owner or admin token.
+Remote hub management. Requires an owner or admin token.
+
+**Unified access management** (recommended for viewing and modifying permissions):
+
+```bash
+tela admin access                                        # list all identities + permissions
+tela admin access grant <id> <machineId> <perms>         # set permissions (connect,register,manage)
+tela admin access revoke <id> <machineId>                # revoke all permissions on a machine
+tela admin access rename <id> <newId>                    # rename an identity
+tela admin access remove <id>                            # delete identity entirely
+```
+
+**Token management:**
 
 ```bash
 tela admin list-tokens   -hub <hub> [-token <token>]
 tela admin add-token <id> -hub <hub> [-token <token>]
 tela admin remove-token <id> -hub <hub> [-token <token>]
-tela admin grant <id> <machineId> -hub <hub> [-token <token>]
-tela admin revoke <id> <machineId> -hub <hub> [-token <token>]
-tela admin grant-manage <id> <machineId> -hub <hub> [-token <token>]
-tela admin revoke-manage <id> <machineId> -hub <hub> [-token <token>]
 tela admin rotate <id> -hub <hub> [-token <token>]
+```
 
+**Portal management:**
+
+```bash
 tela admin list-portals -hub <hub> [-token <token>]
 tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> [-hub-url <url>] [-portal-token <token>]
 tela admin remove-portal <name> -hub <hub> [-token <token>]
@@ -1338,11 +1380,18 @@ telahubd user add alice
 # Output: a new token for alice
 ```
 
-Grant connect access:
+Grant connect access (local CLI, requires hub restart):
 
 ```bash
 telahubd user grant alice web01
 telahubd user grant alice db01
+```
+
+Or remotely via the API (takes effect immediately, no restart):
+
+```bash
+tela admin access grant alice web01 connect -hub <hub> -token <owner-token>
+tela admin access grant alice db01 connect -hub <hub> -token <owner-token>
 ```
 
 ### Step 3: Start telad on web01
@@ -1688,12 +1737,17 @@ tela profile list | show <name> | create <name> | delete <name>
 # Pairing
 tela pair -hub <hub-url> -code <code>
 
-# Remote hub auth management (owner/admin)
+# Unified access management (owner/admin) -- recommended
+tela admin access                                        # list all identities + permissions
+tela admin access grant <id> <machineId> <perms>         # perms: connect,register,manage
+tela admin access revoke <id> <machineId>                # revoke all on a machine
+tela admin access rename <id> <newId>                    # rename an identity
+tela admin access remove <id>                            # delete identity entirely
+
+# Token management (owner/admin)
 tela admin list-tokens   -hub <hub> [-token <token>]
 tela admin add-token <id> -hub <hub> [-token <token>]
 tela admin remove-token <id> -hub <hub> [-token <token>]
-tela admin grant <id> <machineId> -hub <hub> [-token <token>]
-tela admin revoke <id> <machineId> -hub <hub> [-token <token>]
 tela admin rotate <id> -hub <hub> [-token <token>]
 
 # Remote portal management (owner/admin)
