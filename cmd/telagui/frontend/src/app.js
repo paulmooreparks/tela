@@ -3703,45 +3703,41 @@ function renderHubAccess(pane) {
     } else {
       entries.forEach(function (entry) {
         var roleClass = entry.role === 'owner' ? 'owner' : entry.role === 'admin' ? 'admin' : '';
-        html += '<div class="acl-card"><div class="acl-card-header"><div>'
-          + '<strong>' + escHtml(entry.id) + '</strong>'
+        html += '<div class="setting-card"><div class="setting-card-title-row">'
+          + '<div><strong>' + escHtml(entry.id) + '</strong>'
           + ' <span class="pill ' + roleClass + '">' + escHtml(entry.role) + '</span>'
-          + ' <span style="color:var(--text-muted);font-size:11px;font-family:var(--mono);">' + escHtml(entry.tokenPreview || '') + '</span>'
-          + '</div>';
+          + ' <span class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</span></div>';
 
-        // Rename button for non-owner/admin
         if (entry.role !== 'owner') {
-          html += '<div><button class="icon-btn" onclick="accessRename(\'' + escAttr(entry.id) + '\')" title="Rename">&#x270F;</button></div>';
+          html += '<button type="button" class="tb-btn" onclick="accessRename(\'' + escAttr(entry.id) + '\')">Rename</button>';
         }
 
-        html += '</div><div class="acl-card-body">';
+        html += '</div>';
 
         if (entry.role === 'owner' || entry.role === 'admin') {
-          html += '<p style="color:var(--text-muted);font-size:13px;">All machines (implicit)</p>';
+          html += '<div class="setting-card-desc">All machines (implicit)</div>';
         } else if (entry.role === 'viewer') {
-          html += '<p style="color:var(--text-muted);font-size:13px;">View-only (no machine permissions)</p>';
+          html += '<div class="setting-card-desc">View-only (no machine permissions)</div>';
         } else if (!entry.machines || entry.machines.length === 0) {
-          html += '<p style="color:var(--text-muted);font-size:13px;">No machine permissions granted.</p>';
+          html += '<div class="setting-card-desc">No machine permissions granted.</div>';
         } else {
-          html += '<table class="admin-table" style="margin:0;"><thead><tr><th>Machine</th><th>Permissions</th><th></th></tr></thead><tbody>';
           entry.machines.forEach(function (m) {
-            html += '<tr><td><strong>' + escHtml(m.machineId) + '</strong></td><td>';
+            html += '<div class="access-machine-row">'
+              + '<strong>' + escHtml(m.machineId) + '</strong> ';
             (m.permissions || []).forEach(function (p) {
               html += '<span class="pill">' + escHtml(p) + '</span> ';
             });
-            html += '</td><td style="text-align:right;">';
-            html += '<button class="icon-btn danger" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
-            html += '</td></tr>';
+            html += '<button type="button" class="btn-danger btn-sm" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
+            html += '</div>';
           });
-          html += '</tbody></table>';
         }
 
-        html += '</div></div>';
+        html += '</div>';
       });
     }
 
     html += '<div style="margin-top:16px;">'
-      + '<button class="panel-action-button command" onclick="accessGrantModal()">Grant Access</button>'
+      + '<button type="button" class="btn-primary btn-sm" onclick="accessGrantModal()">Grant Access</button>'
       + '</div>';
 
     pane.innerHTML = html;
