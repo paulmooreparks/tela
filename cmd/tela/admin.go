@@ -370,7 +370,7 @@ func cmdAdminRemoveToken(args []string) {
 	id := fs.Arg(0)
 	hub, tok := adminParseHubAndToken(fs)
 
-	status, result, err := adminHTTP("DELETE", hub, "/api/admin/tokens?id="+url.QueryEscape(id), tok, nil)
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/tokens/"+url.PathEscape(id), tok, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -702,7 +702,7 @@ func cmdAdminRemovePortal(args []string) {
 	name := fs.Arg(0)
 	hub, tok := adminParseHubAndToken(fs)
 
-	status, result, err := adminHTTP("DELETE", hub, "/api/admin/portals?name="+url.QueryEscape(name), tok, nil)
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/portals/"+url.PathEscape(name), tok, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

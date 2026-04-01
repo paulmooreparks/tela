@@ -1190,7 +1190,7 @@ func (a *App) AdminCreateToken(hubURL, id, role string) string {
 
 // AdminDeleteToken removes a token identity from a hub.
 func (a *App) AdminDeleteToken(hubURL, id string) string {
-	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/tokens?id="+url.QueryEscape(id), nil)
+	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/tokens/"+url.PathEscape(id), nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}

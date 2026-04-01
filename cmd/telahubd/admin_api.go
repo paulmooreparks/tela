@@ -33,6 +33,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -103,6 +104,16 @@ func handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := requireOwnerOrAdmin(w, r); !ok {
 		return
+	}
+
+	// Support DELETE /api/admin/tokens/{id} (RESTful) alongside
+	// legacy DELETE /api/admin/tokens?id=<id> (query param).
+	pathID := strings.TrimPrefix(r.URL.Path, "/api/admin/tokens/")
+	if pathID == r.URL.Path || pathID == "" {
+		pathID = "" // no path-based ID
+	}
+	if r.Method == http.MethodDelete && pathID != "" {
+		r.URL.RawQuery = "id=" + url.QueryEscape(pathID)
 	}
 
 	switch r.Method {
@@ -725,6 +736,16 @@ func handleAdminPortals(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := requireOwnerOrAdmin(w, r); !ok {
 		return
+	}
+
+	// Support DELETE /api/admin/portals/{name} (RESTful) alongside
+	// legacy DELETE /api/admin/portals?name=<n> (query param).
+	pathName := strings.TrimPrefix(r.URL.Path, "/api/admin/portals/")
+	if pathName == r.URL.Path || pathName == "" {
+		pathName = ""
+	}
+	if r.Method == http.MethodDelete && pathName != "" {
+		r.URL.RawQuery = "name=" + url.QueryEscape(pathName)
 	}
 
 	switch r.Method {
