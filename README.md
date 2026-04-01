@@ -330,6 +330,7 @@ docker/            Dockerfile, docker-compose, Caddyfile
 
 - [TELA-DESIGN-LANGUAGE.md](TELA-DESIGN-LANGUAGE.md) -- Tela Design Language (visual language specification)
 - [TelaVisor.md](TelaVisor.md) -- Desktop client documentation
+- [ACCESS-MODEL.md](ACCESS-MODEL.md) -- How tokens, roles, and machine permissions work together
 - [REFERENCE.md](REFERENCE.md) -- Comprehensive reference for all three CLIs, configuration, and APIs
 - [CONFIGURATION.md](CONFIGURATION.md) -- Configuration file schemas for hubs.yaml, telad.yaml, telahubd.yaml, and portal config
 - [DESIGN.md](DESIGN.md) -- Architecture specification
