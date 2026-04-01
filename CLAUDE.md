@@ -83,10 +83,11 @@ used as a pattern for new endpoints.
 
 ### Auth model
 Token-based RBAC with four roles: `owner`, `admin`, `user` (default), `viewer`.
-Machine ACLs control per-machine register and connect permissions.
-Wildcard `*` ACL applies to all machines.
-The unified `/api/admin/access` endpoint joins tokens and ACLs into a single
-resource view. See `cmd/telahubd/admin_api.go`.
+Machine permissions (register, connect, manage) control per-machine access.
+Wildcard `*` applies to all machines. Owner/admin tokens bypass all permission checks.
+The unified `/api/admin/access` endpoint joins tokens and permissions into a single
+resource view. See [ACCESS-MODEL.md](ACCESS-MODEL.md) for the full explanation and
+`cmd/telahubd/admin_api.go` for the implementation.
 
 ### Session addressing
 Each session gets a /24 subnet: `10.77.{idx}.1` (agent) / `10.77.{idx}.2` (client).

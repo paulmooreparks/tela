@@ -314,6 +314,8 @@ auth:
 
 ### Auth block (`auth:`)
 
+For a conceptual overview of how tokens, roles, and machine permissions work together, see [ACCESS-MODEL.md](ACCESS-MODEL.md).
+
 When `auth:` is absent or has no tokens, the hub runs in **open mode** (no authentication, same behavior as before auth was added). When tokens are present, **every** register and connect request must carry a valid Bearer token.
 
 **`auth.tokens`**: list of token identities:
