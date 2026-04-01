@@ -1264,6 +1264,56 @@ func (a *App) AdminRevokeManage(hubURL, id, machineId string) string {
 	return string(data)
 }
 
+// ── Unified Access API ─────────────────────────────────────────────
+
+// AdminListAccess returns the unified access list (tokens + permissions joined).
+func (a *App) AdminListAccess(hubURL string) string {
+	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/access", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// AdminSetMachineAccess sets permissions for an identity on a machine.
+func (a *App) AdminSetMachineAccess(hubURL, id, machineId, permissions string) string {
+	perms := strings.Split(permissions, ",")
+	body, _ := json.Marshal(map[string]any{"permissions": perms})
+	data, err := a.adminAPICall(hubURL, "PUT", "/api/admin/access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// AdminRevokeMachineAccess revokes all permissions for an identity on a machine.
+func (a *App) AdminRevokeMachineAccess(hubURL, id, machineId string) string {
+	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// AdminRenameAccess renames a token identity.
+func (a *App) AdminRenameAccess(hubURL, id, newId string) string {
+	body, _ := json.Marshal(map[string]string{"id": newId})
+	data, err := a.adminAPICall(hubURL, "PATCH", "/api/admin/access/"+url.PathEscape(id), body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// AdminRemoveAccess removes a token identity and scrubs it from all ACLs.
+func (a *App) AdminRemoveAccess(hubURL, id string) string {
+	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/access/"+url.PathEscape(id), nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
 func (a *App) AdminRevokeRegister(hubURL, id, machineId string) string {
 	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
 	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/revoke-register", body)

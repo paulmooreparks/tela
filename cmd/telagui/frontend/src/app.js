@@ -3349,8 +3349,8 @@ function renderHubAdminDetail() {
   switch (currentAdminView) {
     case 'hub-settings': renderHubSettings(pane); break;
     case 'machines': renderHubMachines(pane); break;
+    case 'access': renderHubAccess(pane); break;
     case 'tokens': renderHubTokens(pane); break;
-    case 'acls': renderHubACLs(pane); break;
     case 'console': renderHubConsole(pane); break;
     case 'history': renderHubHistory(pane); break;
     default: pane.innerHTML = '';
@@ -3682,7 +3682,143 @@ function submitPairCode(event) {
   });
 }
 
-// --- ACLs View ---
+// --- Access View (unified tokens + permissions) ---
+
+function renderHubAccess(pane) {
+  var hub = currentAdminHub;
+  pane.innerHTML = '<h2>Access</h2><p class="empty-hint">Loading...</p>';
+
+  goApp.AdminListAccess(hub).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { pane.innerHTML = '<p class="empty-hint">Invalid response.</p>'; return; }
+    if (data.error) { pane.innerHTML = '<p class="empty-hint">' + escHtml(data.error) + '</p>'; return; }
+
+    var entries = data.access || [];
+
+    var html = '<h2>Access</h2>'
+      + '<p class="hint" style="margin-bottom:16px;">Each identity and its effective per-machine permissions. Owner and admin tokens have implicit access to all machines.</p>';
+
+    if (entries.length === 0) {
+      html += '<p class="empty-hint">No access entries.</p>';
+    } else {
+      entries.forEach(function (entry) {
+        var roleClass = entry.role === 'owner' ? 'owner' : entry.role === 'admin' ? 'admin' : '';
+        html += '<div class="acl-card"><div class="acl-card-header"><div>'
+          + '<strong>' + escHtml(entry.id) + '</strong>'
+          + ' <span class="pill ' + roleClass + '">' + escHtml(entry.role) + '</span>'
+          + ' <span style="color:var(--text-muted);font-size:11px;font-family:var(--mono);">' + escHtml(entry.tokenPreview || '') + '</span>'
+          + '</div>';
+
+        // Rename button for non-owner/admin
+        if (entry.role !== 'owner') {
+          html += '<div><button class="icon-btn" onclick="accessRename(\'' + escAttr(entry.id) + '\')" title="Rename">&#x270F;</button></div>';
+        }
+
+        html += '</div><div class="acl-card-body">';
+
+        if (entry.role === 'owner' || entry.role === 'admin') {
+          html += '<p style="color:var(--text-muted);font-size:13px;">All machines (implicit)</p>';
+        } else if (entry.role === 'viewer') {
+          html += '<p style="color:var(--text-muted);font-size:13px;">View-only (no machine permissions)</p>';
+        } else if (!entry.machines || entry.machines.length === 0) {
+          html += '<p style="color:var(--text-muted);font-size:13px;">No machine permissions granted.</p>';
+        } else {
+          html += '<table class="admin-table" style="margin:0;"><thead><tr><th>Machine</th><th>Permissions</th><th></th></tr></thead><tbody>';
+          entry.machines.forEach(function (m) {
+            html += '<tr><td><strong>' + escHtml(m.machineId) + '</strong></td><td>';
+            (m.permissions || []).forEach(function (p) {
+              html += '<span class="pill">' + escHtml(p) + '</span> ';
+            });
+            html += '</td><td style="text-align:right;">';
+            html += '<button class="icon-btn danger" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
+            html += '</td></tr>';
+          });
+          html += '</tbody></table>';
+        }
+
+        html += '</div></div>';
+      });
+    }
+
+    html += '<div style="margin-top:16px;">'
+      + '<button class="panel-action-button command" onclick="accessGrantModal()">Grant Access</button>'
+      + '</div>';
+
+    pane.innerHTML = html;
+  });
+}
+
+function accessRename(id) {
+  showPromptDialog('Rename Identity', 'Enter a new name for "' + id + '":', id, 'Rename').then(function (newId) {
+    if (!newId || newId === id) return;
+    goApp.AdminRenameAccess(currentAdminHub, id, newId).then(function (raw) {
+      var data; try { data = JSON.parse(raw); } catch (e) {}
+      if (data && data.error) { showError('Rename failed: ' + data.error); return; }
+      renderHubAccess(document.getElementById('hubs-admin-detail'));
+    });
+  });
+}
+
+function accessRevokeMachine(id, machineId) {
+  showConfirmDialog('Revoke Access', 'Revoke all permissions for "' + id + '" on "' + machineId + '"?', 'Revoke').then(function (yes) {
+    if (!yes) return;
+    goApp.AdminRevokeMachineAccess(currentAdminHub, id, machineId).then(function () {
+      renderHubAccess(document.getElementById('hubs-admin-detail'));
+    });
+  });
+}
+
+function accessGrantModal() {
+  // Load tokens and machines for dropdowns
+  Promise.all([
+    goApp.AdminListTokens(currentAdminHub).then(function (r) { try { return JSON.parse(r); } catch (e) { return {}; } }),
+    goApp.GetHubStatus(toWSURL(currentAdminHub)).then(function (s) { return s; })
+  ]).then(function (results) {
+    var tokenData = results[0];
+    var statusData = results[1];
+    var tokens = (tokenData.tokens || []).filter(function (t) { return t.role !== 'owner' && t.role !== 'admin'; });
+    var machines = (statusData.machines || []).map(function (m) { return m.id; });
+
+    var identityOpts = '<option value="">Select identity...</option>';
+    tokens.forEach(function (t) {
+      identityOpts += '<option value="' + escAttr(t.id) + '">' + escHtml(t.id) + ' (' + escHtml(t.role) + ')</option>';
+    });
+
+    var machineOpts = '<option value="*">* (all machines)</option>';
+    machines.forEach(function (m) {
+      machineOpts += '<option value="' + escAttr(m) + '">' + escHtml(m) + '</option>';
+    });
+
+    document.getElementById('grant-access-identity').innerHTML = identityOpts;
+    document.getElementById('grant-access-machine').innerHTML = machineOpts;
+    document.getElementById('grant-access-connect').checked = true;
+    document.getElementById('grant-access-register').checked = false;
+    document.getElementById('grant-access-manage').checked = false;
+    document.getElementById('grant-access-modal').classList.remove('hidden');
+  });
+}
+
+function submitAccessGrant(event) {
+  event.preventDefault();
+  var id = document.getElementById('grant-access-identity').value;
+  var machine = document.getElementById('grant-access-machine').value;
+  if (!id) return;
+
+  var perms = [];
+  if (document.getElementById('grant-access-connect').checked) perms.push('connect');
+  if (document.getElementById('grant-access-register').checked) perms.push('register');
+  if (document.getElementById('grant-access-manage').checked) perms.push('manage');
+  if (perms.length === 0) return;
+
+  goApp.AdminSetMachineAccess(currentAdminHub, id, machine, perms.join(',')).then(function (raw) {
+    var data; try { data = JSON.parse(raw); } catch (e) {}
+    if (data && data.error) { showError('Grant failed: ' + data.error); return; }
+    closeModal('grant-access-modal');
+    renderHubAccess(document.getElementById('hubs-admin-detail'));
+  });
+}
+
+// --- ACLs View (legacy) ---
 
 function renderHubACLs(pane) {
   var hub = currentAdminHub;
