@@ -379,6 +379,8 @@ func cmdMount(args []string) {
 		Logger: func(r *http.Request, err error) {
 			if err != nil {
 				log.Printf("%s %s -> %v", r.Method, r.URL.Path, err)
+			} else {
+				log.Printf("%s %s -> ok", r.Method, r.URL.Path)
 			}
 		},
 	}
@@ -454,6 +456,7 @@ func (fs *mountFS) Mkdir(ctx context.Context, name string, perm os.FileMode) err
 }
 
 func (fs *mountFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
+	log.Printf("[mount] OpenFile: name=%q flag=%d", name, flag)
 	machine, remotePath := mountParsePath(name)
 
 	if machine == "" {
