@@ -687,9 +687,14 @@ func (f *mountTelaFile) Write(p []byte) (int, error) {
 
 func (f *mountTelaFile) Read(p []byte) (int, error) {
 	if err := f.ensureLoaded(); err != nil {
+		log.Printf("[mount] Read %s/%s: ensureLoaded error: %v", f.machine, f.path, err)
 		return 0, err
 	}
-	return f.tmpFile.Read(p)
+	n, err := f.tmpFile.Read(p)
+	if err != nil && err != io.EOF {
+		log.Printf("[mount] Read %s/%s: read error: %v", f.machine, f.path, err)
+	}
+	return n, err
 }
 
 func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) {
@@ -697,9 +702,12 @@ func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) {
 		return 0, nil
 	}
 	if err := f.ensureLoaded(); err != nil {
+		log.Printf("[mount] Seek %s/%s: ensureLoaded error: %v", f.machine, f.path, err)
 		return 0, err
 	}
-	return f.tmpFile.Seek(offset, whence)
+	pos, err := f.tmpFile.Seek(offset, whence)
+	log.Printf("[mount] Seek %s/%s: offset=%d whence=%d -> pos=%d err=%v", f.machine, f.path, offset, whence, pos, err)
+	return pos, err
 }
 
 func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error) { return nil, os.ErrInvalid }
@@ -712,8 +720,11 @@ func (f *mountTelaFile) ensureLoaded() error {
 	}
 	f.loaded = true
 
+	log.Printf("[mount] ensureLoaded: downloading %s/%s", f.machine, f.path)
+
 	tmp, err := os.CreateTemp("", "tela-mount-read-*")
 	if err != nil {
+		log.Printf("[mount] ensureLoaded: temp file create failed: %v", err)
 		return err
 	}
 
@@ -724,6 +735,8 @@ func (f *mountTelaFile) ensureLoaded() error {
 		return err
 	}
 
+	size, _ := tmp.Seek(0, io.SeekEnd)
+	log.Printf("[mount] ensureLoaded: %s/%s downloaded %d bytes to %s", f.machine, f.path, size, tmp.Name())
 	tmp.Seek(0, io.SeekStart)
 	f.tmpFile = tmp
 	return nil
