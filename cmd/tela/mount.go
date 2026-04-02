@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,7 +33,7 @@ var (
 
 // ── Directory listing cache ──────────────────────────────────────
 
-const mountCacheTTL = 3 * time.Second
+const mountCacheTTL = 30 * time.Second
 
 type mountCacheEntry struct {
 	resp    *mountFsResponse
@@ -44,7 +45,7 @@ var (
 	mountDirCacheMu sync.Mutex
 )
 
-const mountPageSize = 50
+const mountPageSize = 500
 
 func mountCachedList(machine, path string) (*mountFsResponse, error) {
 	key := machine + ":" + path
@@ -389,7 +390,17 @@ func cmdMount(args []string) {
 
 	go func() {
 		log.Printf("WebDAV server listening on %s", addr)
-		if err := http.ListenAndServe(addr, handler); err != nil {
+		wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("[webdav] %s %s (Depth: %s)", r.Method, r.URL.Path, r.Header.Get("Depth"))
+			if r.Method == "GET" {
+				rw := &countingResponseWriter{ResponseWriter: w}
+				handler.ServeHTTP(rw, r)
+				log.Printf("[webdav] GET %s served %d bytes (Content-Length: %s)", r.URL.Path, rw.bytesWritten, w.Header().Get("Content-Length"))
+				return
+			}
+			handler.ServeHTTP(w, r)
+		})
+		if err := http.ListenAndServe(addr, wrapped); err != nil {
 			log.Fatalf("WebDAV server: %v", err)
 		}
 	}()
@@ -466,13 +477,26 @@ func (fs *mountFS) OpenFile(ctx context.Context, name string, flag int, perm os.
 		return &mountMachineDir{machine: machine, path: ""}, nil
 	}
 
-	if _, err := mountCachedList(machine, remotePath); err == nil {
-		return &mountMachineDir{machine: machine, path: remotePath}, nil
+	// Determine file vs directory from the parent directory listing.
+	// This avoids an API call per child entry (which would be N+1 calls
+	// just to browse a directory).
+	parentPath := filepath.Dir(remotePath)
+	if parentPath == "." {
+		parentPath = ""
+	}
+	baseName := filepath.Base(remotePath)
+	if parentResp, err := mountCachedList(machine, parentPath); err == nil {
+		for _, e := range parentResp.Entries {
+			if e.Name == baseName && e.IsDir {
+				return &mountMachineDir{machine: machine, path: remotePath}, nil
+			}
+		}
 	}
 
 	writable := flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) != 0
 	return &mountTelaFile{machine: machine, path: remotePath, flag: flag, writable: writable}, nil
 }
+
 
 func (fs *mountFS) RemoveAll(ctx context.Context, name string) error {
 	machine, remotePath := mountParsePath(name)
@@ -615,10 +639,17 @@ func (d *mountMachineDir) Readdir(count int) ([]os.FileInfo, error) {
 	if d.entries == nil {
 		resp, err := mountCachedList(d.machine, d.path)
 		if err != nil {
-			// Return empty listing instead of error to avoid breaking PROPFIND
 			return nil, io.EOF
 		}
+		log.Printf("[mount] Readdir %s/%s: %d entries", d.machine, d.path, len(resp.Entries))
 		for _, e := range resp.Entries {
+			// Skip entries with names containing characters invalid in XML 1.0
+			// (control chars 0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F). These break
+			// the WebDAV PROPFIND XML encoder.
+			if hasInvalidXMLChars(e.Name) {
+				log.Printf("[mount] Readdir: skipping %q (invalid XML chars)", e.Name)
+				continue
+			}
 			modTime := time.Now()
 			if e.ModTime != "" {
 				if t, err := time.Parse(time.RFC3339, e.ModTime); err == nil {
@@ -638,13 +669,14 @@ func (d *mountMachineDir) Readdir(count int) ([]os.FileInfo, error) {
 // ── File ─────────────────────────────────────────────────────────
 
 type mountTelaFile struct {
-	machine  string
-	path     string
-	flag     int
-	tmpFile  *os.File // lazy-loaded content spooled to a temp file (reads)
-	loaded   bool
-	writable bool     // true if opened for writing
-	writeTmp *os.File // temp file for buffered writes
+	machine    string
+	path       string
+	flag       int
+	tmpFile    *os.File // lazy-loaded content spooled to a temp file (reads)
+	loaded     bool
+	writable   bool     // true if opened for writing
+	writeTmp   *os.File // temp file for buffered writes
+	readLogged bool     // debug: log first EOF
 }
 
 func (f *mountTelaFile) Close() error {
@@ -690,42 +722,60 @@ func (f *mountTelaFile) Write(p []byte) (int, error) {
 
 func (f *mountTelaFile) Read(p []byte) (int, error) {
 	if err := f.ensureLoaded(); err != nil {
-		return 0, io.EOF // unreadable file (junction, permission denied, etc.)
+		log.Printf("[mount] Read %s: ensureLoaded failed: %v", f.path, err)
+		return 0, io.EOF
 	}
-	return f.tmpFile.Read(p)
+	n, err := f.tmpFile.Read(p)
+	if n == 0 && err == io.EOF && !f.readLogged {
+		f.readLogged = true
+		pos, _ := f.tmpFile.Seek(0, io.SeekCurrent)
+		size, _ := f.tmpFile.Seek(0, io.SeekEnd)
+		f.tmpFile.Seek(pos, io.SeekStart) // restore position
+		log.Printf("[mount] Read %s: EOF at pos=%d, tmpFile size=%d", f.path, pos, size)
+	}
+	return n, err
 }
 
 func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) {
 	if f.writable {
 		return 0, nil
 	}
-	// Avoid downloading the file just for metadata probes during PROPFIND.
-	// Seek(0, SeekStart) is a no-op. Seek(0, SeekEnd) just needs the size
-	// which Stat() provides from the cached directory listing.
-	if !f.loaded {
+	// If not loaded yet, answer from metadata without downloading.
+	// If loaded but failed (tmpFile nil), return 0 to avoid crashing.
+	if f.tmpFile == nil {
 		if offset == 0 && whence == io.SeekStart {
 			return 0, nil
 		}
 		if whence == io.SeekEnd {
 			fi, err := f.Stat()
 			if err != nil {
-				return 0, err
+				return 0, nil
 			}
 			return fi.Size() + offset, nil
 		}
-	}
-	if err := f.ensureLoaded(); err != nil {
-		return 0, err
+		return 0, nil
 	}
 	return f.tmpFile.Seek(offset, whence)
 }
 
 func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error) { return nil, io.EOF }
 
+// ContentType on File prevents Read-for-sniffing during GET requests.
+func (f *mountTelaFile) ContentType(ctx context.Context) (string, error) {
+	ct := mime.TypeByExtension(filepath.Ext(f.path))
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	return ct, nil
+}
+
 // ensureLoaded downloads the file content to a temp file on first read access.
 // The temp file is cleaned up in Close().
 func (f *mountTelaFile) ensureLoaded() error {
 	if f.loaded {
+		if f.tmpFile == nil {
+			return fmt.Errorf("file not readable")
+		}
 		return nil
 	}
 	f.loaded = true
@@ -772,6 +822,32 @@ func (f *mountTelaFile) Stat() (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }
 
+type countingResponseWriter struct {
+	http.ResponseWriter
+	bytesWritten int64
+}
+
+func (w *countingResponseWriter) Write(b []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(b)
+	w.bytesWritten += int64(n)
+	return n, err
+}
+
+// hasInvalidXMLChars returns true if s contains characters that are not
+// allowed in XML 1.0 text content or attribute values. These would cause
+// Go's xml.Encoder to return "invalid argument".
+func hasInvalidXMLChars(s string) bool {
+	for _, r := range s {
+		if r == 0x09 || r == 0x0A || r == 0x0D {
+			continue // tab, newline, carriage return are allowed
+		}
+		if r < 0x20 {
+			return true // control characters 0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F
+		}
+	}
+	return false
+}
+
 // ── FileInfo implementations ─────────────────────────────────────
 
 type mountDirInfo struct {
@@ -799,16 +875,36 @@ func (i *mountFileInfo) ModTime() time.Time { return i.modTime }
 func (i *mountFileInfo) IsDir() bool        { return false }
 func (i *mountFileInfo) Sys() interface{}   { return nil }
 
+// ContentType implements webdav.ContentTyper on FileInfo (not File).
+// The webdav library checks the FileInfo returned by Stat() for this
+// interface. If present, it skips calling Read() for MIME sniffing.
+// This is critical: without it, PROPFIND downloads every file.
+func (i *mountFileInfo) ContentType(ctx context.Context) (string, error) {
+	ct := mime.TypeByExtension(filepath.Ext(i.name))
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	return ct, nil
+}
+
+// ETag implements webdav.ETager on FileInfo.
+func (i *mountFileInfo) ETag(ctx context.Context) (string, error) {
+	return fmt.Sprintf(`"%x-%x"`, i.modTime.UnixNano(), i.size), nil
+}
+
 // ── Shared Readdir helper ────────────────────────────────────────
 
 func mountReaddir(entries *[]os.FileInfo, pos *int, count int) ([]os.FileInfo, error) {
-	if *pos >= len(*entries) {
-		return nil, io.EOF
-	}
 	if count <= 0 {
+		// Return all remaining entries. For empty directories, return
+		// an empty slice with nil error (not io.EOF, which the webdav
+		// handler treats as a fatal error during PROPFIND).
 		result := (*entries)[*pos:]
 		*pos = len(*entries)
 		return result, nil
+	}
+	if *pos >= len(*entries) {
+		return nil, io.EOF
 	}
 	end := *pos + count
 	if end > len(*entries) {
