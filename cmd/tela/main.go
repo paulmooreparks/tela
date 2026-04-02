@@ -65,6 +65,7 @@ import (
 
 	"github.com/paulmooreparks/tela/internal/credstore"
 	"github.com/paulmooreparks/tela/internal/service"
+	"github.com/paulmooreparks/tela/internal/telelog"
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
 
@@ -126,8 +127,7 @@ func main() {
 		return
 	}
 
-	log.SetFlags(log.Ltime)
-	log.SetPrefix("[tela] ")
+	telelog.Init("tela", os.Stderr)
 
 	if len(os.Args) < 2 {
 		printUsage()
@@ -2079,8 +2079,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 		close(stopCh)
 	}()
 
-	log.SetFlags(log.Ltime)
-	log.SetPrefix("[tela] ")
+	telelog.Init("tela", os.Stderr)
 
 	svcCfg, err := service.LoadConfig("tela")
 	if err != nil {

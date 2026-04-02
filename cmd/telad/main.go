@@ -56,6 +56,7 @@ import (
 
 	"github.com/paulmooreparks/tela/internal/credstore"
 	"github.com/paulmooreparks/tela/internal/service"
+	"github.com/paulmooreparks/tela/internal/telelog"
 	"github.com/paulmooreparks/tela/internal/wsbind"
 )
 
@@ -596,8 +597,7 @@ func main() {
 		}
 	}
 
-	log.SetFlags(log.Ltime)
-	log.SetPrefix("[telad] ")
+	telelog.Init("telad", os.Stderr)
 
 	// Handle graceful shutdown
 	stopCh = make(chan struct{})
@@ -912,20 +912,19 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 		close(stopCh)
 	}()
 
-	log.SetFlags(log.Ltime)
-	log.SetPrefix("[telad] ")
-
 	// When running as a Windows service, redirect log output to a file.
 	// stderr goes nowhere under the SCM, so without this all log output
 	// (including per-machine loggers that write to os.Stderr) is lost.
+	logDest := io.Writer(os.Stderr)
 	if runtime.GOOS == "windows" && service.IsWindowsService() {
 		logPath := service.LogPath("telad")
 		lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, service.ConfigFilePerm())
 		if err == nil {
-			log.SetOutput(lf)
+			logDest = lf
 			os.Stderr = lf
 		}
 	}
+	telelog.Init("telad", logDest)
 
 	svcCfg, err := service.LoadConfig("telad")
 	if err != nil {
@@ -1087,7 +1086,7 @@ func runMultiMachine(cfg *configFile) {
 
 			// Start upstream listeners (run for telad's lifetime, independent of sessions).
 			cleanupUpstreams := startUpstreamListeners(
-				log.New(os.Stderr, fmt.Sprintf("[%s] ", mc.Name), log.Ltime), mc.Upstreams)
+				telelog.NewLogger(mc.Name, nil), mc.Upstreams)
 			defer cleanupUpstreams()
 
 			runSingleMachine(cfg.Hub, reg, mc.Target)
@@ -1119,8 +1118,7 @@ func reconnectDelay(attempt int, maxDelay time.Duration) time.Duration {
 
 // runSingleMachine is the reconnect loop for one machine.
 func runSingleMachine(hubURL string, reg registration, targetHost string) {
-	prefix := fmt.Sprintf("[telad:%s] ", reg.MachineID)
-	logger := log.New(os.Stderr, prefix, log.Ltime)
+	logger := telelog.NewLogger("telad:"+reg.MachineID, nil)
 	const maxDelay = 5 * time.Minute
 	attempt := 0
 	for {

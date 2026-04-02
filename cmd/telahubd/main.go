@@ -61,6 +61,7 @@ import (
 
 	"github.com/paulmooreparks/tela/console"
 	"github.com/paulmooreparks/tela/internal/service"
+	"github.com/paulmooreparks/tela/internal/telelog"
 )
 
 // version is set by -ldflags at build time.
@@ -1600,7 +1601,7 @@ func main() {
 		return
 	}
 
-	log.SetFlags(log.Ltime)
+	telelog.Init("hub", os.Stderr)
 
 	// Parse flags
 	flag.Usage = func() { printHubUsage() }

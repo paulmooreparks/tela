@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"golang.zx2c4.com/wireguard/tun/netstack"
+
+	"github.com/paulmooreparks/tela/internal/telelog"
 )
 
 // gatewayConfig is the YAML schema for a path-based reverse proxy
@@ -58,7 +60,7 @@ func startGatewayListener(lg *log.Logger, tnet *netstack.Net,
 		}
 		proxy := httputil.NewSingleHostReverseProxy(targetURL)
 		// Suppress proxy error log spam; the target may be temporarily down.
-		proxy.ErrorLog = log.New(lg.Writer(), "[gateway] ", log.Ltime)
+		proxy.ErrorLog = telelog.NewLogger("gateway", nil)
 		compiled = append(compiled, compiledRoute{
 			prefix: r.Path,
 			proxy:  proxy,

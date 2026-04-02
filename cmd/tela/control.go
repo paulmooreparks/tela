@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/paulmooreparks/tela/internal/telelog"
 )
 
 // controlOutput captures log output for the browser terminal.
@@ -229,8 +231,10 @@ func controlFilePath() string {
 // It writes the control file and returns a cleanup function that removes it
 // and shuts down the server.
 func startControlServer(profileName string, stopCh chan struct{}) func() {
-	// Capture log output for the browser terminal
-	log.SetOutput(&controlLogWriter{original: os.Stderr})
+	// Capture log output for the control API. telelog writes formatted
+	// lines to its output (os.Stderr by default). We replace the telelog
+	// output with a tee that writes to both stderr and the capture buffer.
+	telelog.SetOutput(&controlLogWriter{original: os.Stderr})
 
 	// Generate a 32-byte random token (64 hex chars).
 	tokenBytes := make([]byte, 32)

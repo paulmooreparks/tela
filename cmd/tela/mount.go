@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"golang.org/x/net/webdav"
+
+	"github.com/paulmooreparks/tela/internal/telelog"
 )
 
 // ── Mount state ──────────────────────────────────────────────────
@@ -362,8 +364,7 @@ func cmdMount(args []string) {
 		fmt.Sscanf(v, "%d", port)
 	}
 
-	log.SetFlags(log.Ltime)
-	log.SetPrefix("[mount] ")
+	telelog.Init("mount", os.Stderr)
 
 	base, token, err := mountLoadControlEndpoint()
 	if err != nil {
