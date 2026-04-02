@@ -378,7 +378,9 @@ func cmdMount(args []string) {
 		LockSystem: webdav.NewMemLS(),
 		Logger: func(r *http.Request, err error) {
 			if err != nil {
-				log.Printf("%s %s -> %v", r.Method, r.URL.Path, err)
+				log.Printf("%s %s -> ERROR: %v", r.Method, r.URL.Path, err)
+			} else {
+				log.Printf("%s %s -> ok", r.Method, r.URL.Path)
 			}
 		},
 	}
@@ -613,7 +615,8 @@ func (d *mountMachineDir) Readdir(count int) ([]os.FileInfo, error) {
 	if d.entries == nil {
 		resp, err := mountCachedList(d.machine, d.path)
 		if err != nil {
-			return nil, err
+			// Return empty listing instead of error to avoid breaking PROPFIND
+			return nil, io.EOF
 		}
 		for _, e := range resp.Entries {
 			modTime := time.Now()
@@ -717,7 +720,7 @@ func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) {
 	return f.tmpFile.Seek(offset, whence)
 }
 
-func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error) { return nil, os.ErrInvalid }
+func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error) { return nil, io.EOF }
 
 // ensureLoaded downloads the file content to a temp file on first read access.
 // The temp file is cleaned up in Close().

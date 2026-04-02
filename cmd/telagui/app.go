@@ -2835,7 +2835,7 @@ func (a *App) installTool(name, version string) (string, error) {
 	url := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s-%s-%s%s",
 		version, name, runtime.GOOS, runtime.GOARCH, ext)
 
-	installDir := telaInstallDir()
+	installDir := a.effectiveBinPath()
 	os.MkdirAll(installDir, 0755)
 	destPath := filepath.Join(installDir, name+ext)
 
