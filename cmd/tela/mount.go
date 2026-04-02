@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -12,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -194,6 +197,122 @@ func mountFileShareRequest(machine string, op interface{}) (*mountFsResponse, er
 	return nil, lastErr
 }
 
+// mountDownloadToFile streams file content from a remote machine into dst
+// using the CHUNK protocol. The caller is responsible for seeking dst back
+// to the start and closing it.
+func mountDownloadToFile(machine, path string, dst *os.File) error {
+	reqBody, _ := json.Marshal(map[string]string{"op": "read", "path": path})
+	reqBody = append(reqBody, '\n')
+
+	url := mountControlBase + "/files/" + machine
+	req, _ := http.NewRequest("POST", url, strings.NewReader(string(reqBody)))
+	req.Header.Set("Authorization", "Bearer "+mountControlToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		var errResp struct{ Error string `json:"error"` }
+		json.Unmarshal(body, &errResp)
+		if errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Read and discard the JSON header line (fsResponse)
+	if _, err := reader.ReadBytes('\n'); err != nil {
+		return fmt.Errorf("read header: %w", err)
+	}
+
+	// Read CHUNK protocol: "CHUNK <size>\n<data>" repeated, "CHUNK 0\n" to end
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("read chunk header: %w", err)
+		}
+		line = strings.TrimRight(line, "\n\r")
+
+		if !strings.HasPrefix(line, "CHUNK ") {
+			return fmt.Errorf("protocol error: expected CHUNK, got: %s", line)
+		}
+
+		chunkSize, err := strconv.ParseInt(strings.TrimPrefix(line, "CHUNK "), 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid chunk size: %w", err)
+		}
+		if chunkSize == 0 {
+			break
+		}
+
+		if _, err := io.CopyN(dst, reader, chunkSize); err != nil {
+			return fmt.Errorf("read chunk data: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// mountUploadFile writes file content to a remote machine using the control
+// API's file share proxy. It sends the data using the CHUNK protocol.
+func mountUploadFile(machine, path string, data []byte) error {
+	// Build the CHUNK-encoded body: JSON header line + CHUNK <size>\n<data> + CHUNK 0\n
+	var buf bytes.Buffer
+	header, _ := json.Marshal(map[string]interface{}{"op": "write", "path": path, "size": len(data)})
+	buf.Write(header)
+	buf.WriteByte('\n')
+	fmt.Fprintf(&buf, "CHUNK %d\n", len(data))
+	buf.Write(data)
+	fmt.Fprintf(&buf, "CHUNK 0\n")
+
+	url := mountControlBase + "/files/" + machine
+	req, _ := http.NewRequest("POST", url, &buf)
+	req.Header.Set("Authorization", "Bearer "+mountControlToken)
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		var errResp struct{ Error string `json:"error"` }
+		json.Unmarshal(body, &errResp)
+		if errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	// Parse the JSON response to check for errors
+	lines := strings.SplitN(string(body), "\n", 2)
+	var fsResp mountFsResponse
+	if err := json.Unmarshal([]byte(lines[0]), &fsResp); err != nil {
+		return fmt.Errorf("invalid response: %w", err)
+	}
+	if !fsResp.OK {
+		return fmt.Errorf("%s", fsResp.Error)
+	}
+	return nil
+}
+
 func mountListMachines() ([]string, error) {
 	url := mountControlBase + "/services"
 	req, _ := http.NewRequest("GET", url, nil)
@@ -349,7 +468,8 @@ func (fs *mountFS) OpenFile(ctx context.Context, name string, flag int, perm os.
 		return &mountMachineDir{machine: machine, path: remotePath}, nil
 	}
 
-	return &mountTelaFile{machine: machine, path: remotePath, flag: flag}, nil
+	writable := flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) != 0
+	return &mountTelaFile{machine: machine, path: remotePath, flag: flag, writable: writable}, nil
 }
 
 func (fs *mountFS) RemoveAll(ctx context.Context, name string) error {
@@ -515,16 +635,99 @@ func (d *mountMachineDir) Readdir(count int) ([]os.FileInfo, error) {
 // ── File ─────────────────────────────────────────────────────────
 
 type mountTelaFile struct {
-	machine string
-	path    string
-	flag    int
+	machine  string
+	path     string
+	flag     int
+	tmpFile  *os.File // lazy-loaded content spooled to a temp file (reads)
+	loaded   bool
+	writable bool     // true if opened for writing
+	writeTmp *os.File // temp file for buffered writes
 }
 
-func (f *mountTelaFile) Close() error                                 { return nil }
-func (f *mountTelaFile) Write(p []byte) (int, error)                  { return 0, os.ErrPermission }
-func (f *mountTelaFile) Read(p []byte) (int, error)                   { return 0, io.EOF }
-func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) { return 0, nil }
-func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error)     { return nil, os.ErrInvalid }
+func (f *mountTelaFile) Close() error {
+	// Upload buffered writes
+	if f.writable && f.writeTmp != nil {
+		size, _ := f.writeTmp.Seek(0, io.SeekEnd)
+		if size > 0 {
+			f.writeTmp.Seek(0, io.SeekStart)
+			data, _ := io.ReadAll(f.writeTmp)
+			if err := mountUploadFile(f.machine, f.path, data); err != nil {
+				log.Printf("[mount] upload %s/%s failed: %v", f.machine, f.path, err)
+				f.writeTmp.Close()
+				os.Remove(f.writeTmp.Name())
+				return err
+			}
+		}
+		f.writeTmp.Close()
+		os.Remove(f.writeTmp.Name())
+		mountInvalidateCache(f.machine, f.path)
+	}
+	// Clean up read temp file
+	if f.tmpFile != nil {
+		name := f.tmpFile.Name()
+		f.tmpFile.Close()
+		os.Remove(name)
+	}
+	return nil
+}
+
+func (f *mountTelaFile) Write(p []byte) (int, error) {
+	if !f.writable {
+		return 0, os.ErrPermission
+	}
+	if f.writeTmp == nil {
+		tmp, err := os.CreateTemp("", "tela-mount-write-*")
+		if err != nil {
+			return 0, err
+		}
+		f.writeTmp = tmp
+	}
+	return f.writeTmp.Write(p)
+}
+
+func (f *mountTelaFile) Read(p []byte) (int, error) {
+	if err := f.ensureLoaded(); err != nil {
+		return 0, err
+	}
+	return f.tmpFile.Read(p)
+}
+
+func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) {
+	if f.writable {
+		return 0, nil
+	}
+	if err := f.ensureLoaded(); err != nil {
+		return 0, err
+	}
+	return f.tmpFile.Seek(offset, whence)
+}
+
+func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error) { return nil, os.ErrInvalid }
+
+// ensureLoaded downloads the file content to a temp file on first read access.
+// The temp file is cleaned up in Close().
+func (f *mountTelaFile) ensureLoaded() error {
+	if f.loaded {
+		return nil
+	}
+	f.loaded = true
+
+	tmp, err := os.CreateTemp("", "tela-mount-read-*")
+	if err != nil {
+		return err
+	}
+
+	if err := mountDownloadToFile(f.machine, f.path, tmp); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		log.Printf("[mount] download %s/%s failed: %v", f.machine, f.path, err)
+		return err
+	}
+
+	tmp.Seek(0, io.SeekStart)
+	f.tmpFile = tmp
+	return nil
+}
 
 func (f *mountTelaFile) Stat() (os.FileInfo, error) {
 	parentPath := filepath.Dir(f.path)
