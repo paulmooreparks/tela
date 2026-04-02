@@ -379,8 +379,6 @@ func cmdMount(args []string) {
 		Logger: func(r *http.Request, err error) {
 			if err != nil {
 				log.Printf("%s %s -> %v", r.Method, r.URL.Path, err)
-			} else {
-				log.Printf("%s %s -> ok", r.Method, r.URL.Path)
 			}
 		},
 	}
@@ -456,7 +454,6 @@ func (fs *mountFS) Mkdir(ctx context.Context, name string, perm os.FileMode) err
 }
 
 func (fs *mountFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
-	log.Printf("[mount] OpenFile: name=%q flag=%d", name, flag)
 	machine, remotePath := mountParsePath(name)
 
 	if machine == "" {
@@ -690,27 +687,34 @@ func (f *mountTelaFile) Write(p []byte) (int, error) {
 
 func (f *mountTelaFile) Read(p []byte) (int, error) {
 	if err := f.ensureLoaded(); err != nil {
-		log.Printf("[mount] Read %s/%s: ensureLoaded error: %v", f.machine, f.path, err)
-		return 0, err
+		return 0, io.EOF // unreadable file (junction, permission denied, etc.)
 	}
-	n, err := f.tmpFile.Read(p)
-	if err != nil && err != io.EOF {
-		log.Printf("[mount] Read %s/%s: read error: %v", f.machine, f.path, err)
-	}
-	return n, err
+	return f.tmpFile.Read(p)
 }
 
 func (f *mountTelaFile) Seek(offset int64, whence int) (int64, error) {
 	if f.writable {
 		return 0, nil
 	}
+	// Avoid downloading the file just for metadata probes during PROPFIND.
+	// Seek(0, SeekStart) is a no-op. Seek(0, SeekEnd) just needs the size
+	// which Stat() provides from the cached directory listing.
+	if !f.loaded {
+		if offset == 0 && whence == io.SeekStart {
+			return 0, nil
+		}
+		if whence == io.SeekEnd {
+			fi, err := f.Stat()
+			if err != nil {
+				return 0, err
+			}
+			return fi.Size() + offset, nil
+		}
+	}
 	if err := f.ensureLoaded(); err != nil {
-		log.Printf("[mount] Seek %s/%s: ensureLoaded error: %v", f.machine, f.path, err)
 		return 0, err
 	}
-	pos, err := f.tmpFile.Seek(offset, whence)
-	log.Printf("[mount] Seek %s/%s: offset=%d whence=%d -> pos=%d err=%v", f.machine, f.path, offset, whence, pos, err)
-	return pos, err
+	return f.tmpFile.Seek(offset, whence)
 }
 
 func (f *mountTelaFile) Readdir(count int) ([]os.FileInfo, error) { return nil, os.ErrInvalid }
@@ -723,23 +727,17 @@ func (f *mountTelaFile) ensureLoaded() error {
 	}
 	f.loaded = true
 
-	log.Printf("[mount] ensureLoaded: downloading %s/%s", f.machine, f.path)
-
 	tmp, err := os.CreateTemp("", "tela-mount-read-*")
 	if err != nil {
-		log.Printf("[mount] ensureLoaded: temp file create failed: %v", err)
 		return err
 	}
 
 	if err := mountDownloadToFile(f.machine, f.path, tmp); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())
-		log.Printf("[mount] download %s/%s failed: %v", f.machine, f.path, err)
 		return err
 	}
 
-	size, _ := tmp.Seek(0, io.SeekEnd)
-	log.Printf("[mount] ensureLoaded: %s/%s downloaded %d bytes to %s", f.machine, f.path, size, tmp.Name())
 	tmp.Seek(0, io.SeekStart)
 	f.tmpFile = tmp
 	return nil
