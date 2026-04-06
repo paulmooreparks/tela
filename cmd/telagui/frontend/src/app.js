@@ -358,6 +358,9 @@ function pollHubOnline(hubURL, hubName, targetVer, attempt) {
         tvLog(hubName + ': updated to ' + ver);
         var btn = document.getElementById('hub-update-btn');
         if (btn) btn.disabled = false;
+        // Re-render hub settings with fresh data.
+        var settingsPane = document.getElementById('hubs-admin-detail');
+        if (settingsPane && currentAdminView === 'hub-settings') renderHubSettings(settingsPane);
       } else {
         hubUpdateStatus('Waiting for hub to restart... (' + (attempt + 1) + ')');
         pollHubOnline(hubURL, hubName, targetVer, attempt + 1);
@@ -912,6 +915,8 @@ function dismissConnectTooltip() {
 }
 
 // Check for updates after a short delay (versions need time to fetch)
+// Fetch latest version early so all views have it.
+checkForUpdate();
 setTimeout(function () {
   refreshVersionDisplay();
   checkForUpdate();
@@ -928,12 +933,62 @@ function refreshVersionDisplay() {
 }
 
 var updateInfo = null;
+var latestVersion = '';
+
+// Format a version with an up-to-date or outdated indicator.
+// Uses a span with class="version-badge" and data-ver so we can
+// refresh all badges when latestVersion arrives asynchronously.
+function versionBadge(ver) {
+  if (!ver) return '<span class="version-badge" data-ver="">unknown</span>';
+  return '<span class="version-badge" data-ver="' + escAttr(ver) + '">' + formatVersionBadge(ver) + '</span>';
+}
+
+function formatVersionBadge(ver) {
+  if (!latestVersion) {
+    return escHtml(ver) + ' <span class="tools-service-label">(checking...)</span>';
+  }
+  if (ver === latestVersion) {
+    return '<span class="tools-status-ok">' + escHtml(ver) + '</span>'
+      + ' <span class="tools-service-label">(latest: ' + escHtml(latestVersion) + ')</span>';
+  }
+  return '<span class="tools-status-warn">' + escHtml(ver) + '</span>'
+    + ' <span class="tools-service-label">update available: ' + escHtml(latestVersion) + '</span>';
+}
+
+// Refresh all version badges on screen (called when latestVersion is populated).
+function refreshVersionBadges() {
+  document.querySelectorAll('.version-badge').forEach(function (el) {
+    var ver = el.getAttribute('data-ver');
+    if (ver) el.innerHTML = formatVersionBadge(ver);
+  });
+  // Sidebar version labels: just color them.
+  document.querySelectorAll('.version-badge-sidebar').forEach(function (el) {
+    var ver = el.getAttribute('data-ver');
+    if (latestVersion && ver && ver !== latestVersion) {
+      el.style.color = '#f39c12';
+    } else {
+      el.style.color = '';
+    }
+  });
+}
 var updateDismissedForSession = false;
 var updateSkippedVersion = '';
 
 function checkForUpdate() {
   goApp.GetUpdateInfo().then(function (info) {
     updateInfo = info;
+    if (info.version) {
+      latestVersion = info.version;
+      refreshVersionBadges();
+    } else {
+      // updateVersion not yet populated; fetch directly from bin status.
+      goApp.GetBinStatus().then(function (bins) {
+        if (bins && bins.length > 0 && bins[0].latest) {
+          latestVersion = bins[0].latest;
+          refreshVersionBadges();
+        }
+      });
+    }
     if (!info.pending || (!info.guiBehind && !info.cliBehind)) {
       document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
       return;
@@ -2318,7 +2373,7 @@ function agentsRenderSidebar() {
       + '<span class="machine-status-dot ' + dotClass + '"></span>'
       + '<div>'
       + '<div class="agents-sidebar-name">' + escHtml(a.id) + '</div>'
-      + '<div class="agents-sidebar-version">' + escHtml(ver) + '</div>'
+      + '<div class="agents-sidebar-version version-badge-sidebar" data-ver="' + escAttr(ver) + '"' + (latestVersion && ver !== latestVersion ? ' style="color:#f39c12"' : '') + '>' + escHtml(ver) + '</div>'
       + '</div>'
       + '</div>';
   });
@@ -2368,7 +2423,7 @@ function agentsShowDetail(a) {
   html += '<div class="setting-card"><div class="setting-card-title">Agent Info</div>'
     + '<div class="setting-card-desc">Read-only metadata reported by the agent at registration.</div>'
     + '<table class="kv-table">'
-    + '<tr><td>Version</td><td>' + escHtml(a.version || 'unknown') + '</td></tr>'
+    + '<tr><td>Version</td><td>' + versionBadge(a.version) + '</td></tr>'
     + '<tr><td>Hub</td><td>' + escHtml(a.hub) + '</td></tr>'
     + '<tr><td>Hostname</td><td>' + escHtml(a.hostname || '-') + '</td></tr>'
     + '<tr><td>Platform</td><td>' + escHtml(a.os || '-') + '</td></tr>'
@@ -2799,6 +2854,11 @@ function pollAgentOnline(wsHub, machineId, hub, targetVer, attempt) {
         tvLog(machineId + ': updated to ' + ver);
         var btn = document.getElementById('agent-update-btn');
         if (btn) btn.disabled = false;
+        // Refresh sidebar and detail with fresh data.
+        agentsData = agents;
+        agentsRenderSidebar();
+        var fresh = agents.find(function (a) { return a.id === machineId; });
+        if (fresh) agentsShowDetail(fresh);
       } else {
         agentUpdateStatus('Waiting for agent to restart... (' + (attempt + 1) + ')');
         pollAgentOnline(wsHub, machineId, hub, targetVer, attempt + 1);
@@ -3773,7 +3833,7 @@ function renderHubSettings(pane) {
       if (hubInfoData.hubName) html += '<div class="settings-row"><div class="settings-label">Hub name</div><div class="settings-value">' + escHtml(hubInfoData.hubName) + '</div></div>';
       if (hi.hostname) html += '<div class="settings-row"><div class="settings-label">Hostname</div><div class="settings-value">' + escHtml(hi.hostname) + '</div></div>';
       if (hi.os && hi.arch) html += '<div class="settings-row"><div class="settings-label">Platform</div><div class="settings-value">' + escHtml(hi.os + '/' + hi.arch) + '</div></div>';
-      if (hi.version) html += '<div class="settings-row"><div class="settings-label">Version</div><div class="settings-value">' + escHtml(hi.version) + '</div></div>';
+      if (hi.version) html += '<div class="settings-row"><div class="settings-label">Version</div><div class="settings-value">' + versionBadge(hi.version) + '</div></div>';
       if (hi.goVersion) html += '<div class="settings-row"><div class="settings-label">Go version</div><div class="settings-value">' + escHtml(hi.goVersion) + '</div></div>';
       if (hi.uptime) {
         var secs = parseInt(hi.uptime, 10);
