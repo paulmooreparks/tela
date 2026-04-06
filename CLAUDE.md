@@ -1,5 +1,29 @@
 # CLAUDE.md - Tela Project Context
 
+## Onboarding
+
+At the start of each conversation, read these files to understand the project
+context, current status, and design direction:
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Build commands, coding conventions, API style, review items |
+| `DESIGN.md` | Architecture, protocol spec, component design, roadmap |
+| `DESIGN-remote-admin.md` | Agent/hub management protocol, implementation status |
+| `DESIGN-file-sharing.md` | File sharing protocol and implementation |
+| `STATUS.md` | Traceability matrix mapping design sections to implementation |
+| `TelaVisor.md` | TelaVisor desktop client layout, features, and UX |
+| `TELA-DESIGN-LANGUAGE.md` | Visual design language shared across all Tela products |
+| `ACCESS-MODEL.md` | Token-based RBAC, permissions, ACL model |
+| `CONFIGURATION.md` | Config file formats for all three binaries |
+| `REFERENCE.md` | CLI reference for tela, telad, and telahubd |
+| `TODO.md` | Current task list and priorities |
+
+Do not read all files upfront in every conversation. Read `CLAUDE.md` always.
+Read the others when the conversation topic requires them (e.g., read
+`DESIGN-remote-admin.md` when working on agent management, read `TelaVisor.md`
+when working on the GUI). Use your judgment to decide which files are relevant.
+
 ## Project Overview
 
 Tela is a FOSS encrypted remote-access fabric using WireGuard tunnels.

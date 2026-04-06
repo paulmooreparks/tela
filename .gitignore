@@ -3,10 +3,9 @@ node_modules/
 
 # Compiled binaries
 *.exe
-tela.exe
-telad.exe
+*.exe.old
+*.exe~
 
 # Local service configs (may contain tokens/credentials — live in %ProgramData%\Tela\ or /etc/tela/)
 *-telad.yaml
 *-telahubd.yaml
-cmd/telagui/build/bin/*.exe~

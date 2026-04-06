@@ -22,17 +22,27 @@ export function AdminGrantRegister(arg1:string,arg2:string,arg3:string):Promise<
 
 export function AdminListACLs(arg1:string):Promise<string>;
 
+export function AdminListAccess(arg1:string):Promise<string>;
+
 export function AdminListPortals(arg1:string):Promise<string>;
 
 export function AdminListTokens(arg1:string):Promise<string>;
 
+export function AdminRemoveAccess(arg1:string,arg2:string):Promise<string>;
+
+export function AdminRenameAccess(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function AdminRevokeConnect(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AdminRevokeMachineAccess(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminRevokeManage(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminRevokeRegister(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminRotateToken(arg1:string,arg2:string):Promise<string>;
+
+export function AdminSetMachineAccess(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AssignLocalPort(arg1:number):Promise<number>;
 

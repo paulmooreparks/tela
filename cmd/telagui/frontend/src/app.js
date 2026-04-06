@@ -780,7 +780,10 @@ function renderToolsTable(container, showActions, onDone) {
       html += '<tr><td>' + (showActions ? '<span class="bin-dot bin-dot-ok"></span>' : '') + 'TelaVisor</td>'
         + '<td class="tools-version">' + escHtml(guiVer || 'dev') + '</td>'
         + '<td class="tools-version ' + (tvUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(latest || guiVer || 'dev') + '</td>';
-      if (showActions) html += '<td></td>';
+      if (showActions) {
+        var tvAction = tvUpToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="restartToUpdate(this)">Update &amp; Restart</button>';
+        html += '<td>' + tvAction + '</td>';
+      }
       html += '</tr>';
 
       // Managed binaries
