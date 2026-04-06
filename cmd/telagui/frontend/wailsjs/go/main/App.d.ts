@@ -116,6 +116,8 @@ export function GetDefaultBinPath():Promise<string>;
 
 export function GetHubInfo(arg1:string):Promise<string>;
 
+export function GetHubLogs(arg1:string,arg2:number):Promise<string>;
+
 export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
@@ -239,5 +241,9 @@ export function TryAttach():Promise<boolean>;
 export function UninstallService():Promise<string>;
 
 export function UpdateAgent(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function UpdateHub(arg1:string,arg2:string):Promise<string>;
+
+export function UpdateServiceAgent():Promise<string>;
 
 export function ValidateBinPath(arg1:string):Promise<string>;

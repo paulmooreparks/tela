@@ -67,6 +67,60 @@ import (
 // version is set by -ldflags at build time.
 var version = "dev"
 
+// ── Log ring buffer ───────────────────────────────────────────────
+
+const logRingSize = 1000
+
+var (
+	logRing    [logRingSize]string
+	logRingPos int
+	logRingLen int
+	logRingMu  sync.Mutex
+)
+
+// logRingWriter is an io.Writer that captures log output into the ring buffer
+// while also forwarding to the original writer.
+type logRingWriter struct {
+	original io.Writer
+	buf      []byte // partial line buffer
+}
+
+func (w *logRingWriter) Write(p []byte) (int, error) {
+	n, err := w.original.Write(p)
+	w.buf = append(w.buf, p[:n]...)
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			break
+		}
+		line := string(w.buf[:idx])
+		w.buf = w.buf[idx+1:]
+		logRingMu.Lock()
+		logRing[logRingPos] = line
+		logRingPos = (logRingPos + 1) % logRingSize
+		if logRingLen < logRingSize {
+			logRingLen++
+		}
+		logRingMu.Unlock()
+	}
+	return n, err
+}
+
+// snapshotLogRing returns the last n lines from the log ring buffer.
+func snapshotLogRing(n int) []string {
+	logRingMu.Lock()
+	defer logRingMu.Unlock()
+	if n <= 0 || n > logRingLen {
+		n = logRingLen
+	}
+	lines := make([]string, n)
+	start := (logRingPos - n + logRingSize) % logRingSize
+	for i := 0; i < n; i++ {
+		lines[i] = logRing[(start+i)%logRingSize]
+	}
+	return lines
+}
+
 // telaConfigDir returns the user's tela configuration directory.
 func telaConfigDir() string {
 	if runtime.GOOS == "windows" {
@@ -1601,7 +1655,7 @@ func main() {
 		return
 	}
 
-	telelog.Init("hub", os.Stderr)
+	telelog.Init("hub", &logRingWriter{original: os.Stderr})
 
 	// Parse flags
 	flag.Usage = func() { printHubUsage() }
@@ -1808,6 +1862,8 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/admin/access/", handleAdminAccess)
 	mux.HandleFunc("/api/admin/access", handleAdminAccess)
 	mux.HandleFunc("/api/admin/agents/", handleAdminAgents)
+	mux.HandleFunc("/api/admin/logs", handleAdminLogs)
+	mux.HandleFunc("/api/admin/update", handleAdminUpdate)
 	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)
 
@@ -2093,6 +2149,18 @@ func hubServiceStatus() {
 // serviceRunHub loads the YAML config from the system directory and
 // starts the hub. It blocks until stopCh is closed.
 func serviceRunHub(stopCh <-chan struct{}) {
+	// Redirect log output to a file when running as a Windows service.
+	logDest := io.Writer(os.Stderr)
+	if runtime.GOOS == "windows" && service.IsWindowsService() {
+		logPath := service.LogPath("telahubd")
+		lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, service.ConfigFilePerm())
+		if err == nil {
+			logDest = lf
+			os.Stderr = lf
+		}
+	}
+	telelog.Init("hub", &logRingWriter{original: logDest})
+
 	svcCfg, err := service.LoadConfig("telahubd")
 	if err != nil {
 		log.Fatalf("service config: %v", err)

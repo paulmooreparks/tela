@@ -73,6 +73,11 @@ func telaConfigDir() string {
 
 // writeControlFile writes telad's control file so TelaVisor can detect
 // the running instance. Returns a cleanup function that removes the file.
+//
+// When running as a service, the control file is written to the shared
+// service config directory (e.g. C:\ProgramData\Tela\run) so that
+// TelaVisor running as a normal user can find it. When running from a
+// terminal, it goes to the user's config directory (~/.tela/run).
 func writeControlFile(cfg *configFile, configPath string) func() {
 	machines := make([]string, len(cfg.Machines))
 	for i, m := range cfg.Machines {
@@ -86,8 +91,12 @@ func writeControlFile(cfg *configFile, configPath string) func() {
 		"configPath": configPath,
 	}
 
-	runDir := filepath.Join(telaConfigDir(), "run")
-	if err := os.MkdirAll(runDir, 0700); err != nil {
+	baseDir := telaConfigDir()
+	if service.IsWindowsService() {
+		baseDir = service.ConfigDir()
+	}
+	runDir := filepath.Join(baseDir, "run")
+	if err := os.MkdirAll(runDir, 0755); err != nil {
 		log.Printf("[telad] failed to create run directory: %v", err)
 		return func() {}
 	}
@@ -97,7 +106,7 @@ func writeControlFile(cfg *configFile, configPath string) func() {
 	if err != nil {
 		return func() {}
 	}
-	if err := os.WriteFile(controlPath, data, 0600); err != nil {
+	if err := os.WriteFile(controlPath, data, 0644); err != nil {
 		log.Printf("[telad] failed to write control file: %v", err)
 		return func() {}
 	}

@@ -230,6 +230,10 @@ export function GetHubInfo(arg1) {
   return window['go']['main']['App']['GetHubInfo'](arg1);
 }
 
+export function GetHubLogs(arg1, arg2) {
+  return window['go']['main']['App']['GetHubLogs'](arg1, arg2);
+}
+
 export function GetHubStatus(arg1) {
   return window['go']['main']['App']['GetHubStatus'](arg1);
 }
@@ -476,6 +480,14 @@ export function UninstallService() {
 
 export function UpdateAgent(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateAgent'](arg1, arg2, arg3);
+}
+
+export function UpdateHub(arg1, arg2) {
+  return window['go']['main']['App']['UpdateHub'](arg1, arg2);
+}
+
+export function UpdateServiceAgent() {
+  return window['go']['main']['App']['UpdateServiceAgent']();
 }
 
 export function ValidateBinPath(arg1) {

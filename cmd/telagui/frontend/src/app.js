@@ -180,7 +180,110 @@ function clearLogPanel() {
 }
 
 function openAttachDialog() {
-  // Placeholder for attach log source dialog
+  var existing = document.getElementById('attach-log-popover');
+  if (existing) { existing.remove(); return; }
+
+  var pop = document.createElement('div');
+  pop.id = 'attach-log-popover';
+  pop.className = 'attach-log-popover';
+  pop.innerHTML = '<div class="attach-log-loading">Loading sources...</div>';
+
+  var addBtn = document.querySelector('.log-panel-tab-add');
+  addBtn.parentNode.appendChild(pop);
+
+  // Close on click outside
+  function closePopover(e) {
+    if (!pop.contains(e.target) && e.target !== addBtn) {
+      pop.remove();
+      document.removeEventListener('mousedown', closePopover);
+    }
+  }
+  setTimeout(function () { document.addEventListener('mousedown', closePopover); }, 0);
+
+  goApp.GetAgentList().then(function (agents) {
+    agents = agents || [];
+    // Extract unique hubs
+    var hubSet = {};
+    agents.forEach(function (a) { if (a.hub) hubSet[a.hub] = true; });
+    var hubs = Object.keys(hubSet);
+
+    var html = '';
+    if (hubs.length > 0) {
+      html += '<div class="attach-log-section">Hubs</div>';
+      hubs.forEach(function (h) {
+        html += '<button class="attach-log-item" onclick="hubViewLogs(\'' + escAttr(h) + '\');this.closest(\'.attach-log-popover\').remove()">'
+          + '<span class="log-dot log-dot-live"></span>' + escHtml(h) + '</button>';
+      });
+    }
+    if (agents.length > 0) {
+      html += '<div class="attach-log-section">Agents</div>';
+      agents.forEach(function (a) {
+        var dotClass = a.online ? 'log-dot-live' : 'log-dot-idle';
+        html += '<button class="attach-log-item" onclick="agentsViewLogs(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\');this.closest(\'.attach-log-popover\').remove()">'
+          + '<span class="log-dot ' + dotClass + '"></span>' + escHtml(a.id) + '</button>';
+      });
+    }
+    if (!html) html = '<div class="attach-log-empty">No log sources available.</div>';
+    pop.innerHTML = html;
+  }).catch(function () {
+    pop.innerHTML = '<div class="attach-log-empty">Failed to load sources.</div>';
+  });
+}
+
+function hubViewLogs(hubName) {
+  var paneId = 'log-hub-' + hubName.replace(/[^a-zA-Z0-9]/g, '-');
+  var existing = document.getElementById(paneId);
+
+  if (!existing) {
+    var tabBar = document.querySelector('.log-panel-tabs');
+    var addBtn = tabBar.querySelector('.log-panel-tab-add');
+    var tab = document.createElement('button');
+    tab.className = 'log-panel-tab';
+    tab.onclick = function () { switchLogTab(tab, paneId); };
+    tab.innerHTML = '<span class="log-dot log-dot-idle" id="' + paneId + '-dot"></span>'
+      + escHtml(hubName)
+      + '<span class="log-tab-close" onclick="event.stopPropagation();removeAgentLogTab(\'' + escAttr(paneId) + '\',this.parentNode)" title="Close">&times;</span>';
+    tabBar.insertBefore(tab, addBtn);
+
+    var pre = document.createElement('pre');
+    pre.className = 'log-panel-output hidden';
+    pre.id = paneId;
+    pre.textContent = 'Loading logs for ' + hubName + '...\n';
+    document.getElementById('log-panel').appendChild(pre);
+    initLogScrollTracking(paneId);
+  }
+
+  var tabBtn = document.querySelector('.log-panel-tabs').querySelector('[onclick*="' + paneId + '"]')
+    || document.querySelector('.log-panel-tab:last-of-type');
+  if (tabBtn) switchLogTab(tabBtn, paneId);
+
+  var panel = document.getElementById('log-panel');
+  if (panel.classList.contains('collapsed')) toggleLogPanel();
+
+  var wsHub = toWSURL(hubName);
+  var dot = document.getElementById(paneId + '-dot');
+  if (dot) dot.className = 'log-dot log-dot-warn';
+
+  goApp.GetHubLogs(wsHub, 500).then(function (resp) {
+    try { var data = JSON.parse(resp); } catch (e) {
+      document.getElementById(paneId).textContent = 'Error: invalid response\n';
+      if (dot) dot.className = 'log-dot log-dot-idle';
+      return;
+    }
+    if (data.error) {
+      document.getElementById(paneId).textContent = 'Error: ' + data.error + '\n';
+      if (dot) dot.className = 'log-dot log-dot-idle';
+      return;
+    }
+    var lines = data.lines || [];
+    var el = document.getElementById(paneId);
+    el.textContent = lines.join('\n') + '\n';
+    logAutoScroll(el);
+    if (dot) dot.className = 'log-dot log-dot-live';
+  }).catch(function (err) {
+    document.getElementById(paneId).textContent = 'Failed: ' + err + '\n';
+    if (dot) dot.className = 'log-dot log-dot-idle';
+  });
 }
 
 // --- Command Log in Panel ---
@@ -762,6 +865,33 @@ function refreshSingleBinary(name, btn) {
   });
 }
 
+function updateServiceAgent(btn) {
+  btn.disabled = true;
+  btn.textContent = 'Updating...';
+  tvLog('Sending update command to local telad service...');
+  goApp.UpdateServiceAgent().then(function (resp) {
+    try { var data = JSON.parse(resp); } catch (e) {}
+    if (data && data.error) {
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+      showError('Service update failed: ' + data.error);
+      return;
+    }
+    btn.textContent = 'Restarting...';
+    tvLog('Update: ' + (data && data.message ? data.message : 'update sent'));
+    // Wait for the service to restart, then refresh.
+    setTimeout(function () {
+      btn.textContent = 'Done';
+      refreshBinStatus();
+      refreshUpdateTable();
+    }, 10000);
+  }).catch(function (err) {
+    btn.disabled = false;
+    btn.textContent = 'Retry';
+    showError('Service update failed: ' + err);
+  });
+}
+
 // Shared: render a tools table with optional per-binary action buttons.
 // container: DOM element to fill. showActions: if true, show Update/Install buttons.
 // onDone: optional callback after rendering.
@@ -789,20 +919,50 @@ function renderToolsTable(container, showActions, onDone) {
       // Managed binaries
       if (bins) {
         bins.forEach(function (b) {
-          var dotClass = b.found ? 'bin-dot-ok' : 'bin-dot-missing';
-          var installedText = b.found ? (b.version || 'unknown') : 'not found';
-          var installedClass = b.found ? '' : ' tools-status-warn';
-          var availClass = b.found ? (b.upToDate ? 'tools-status-ok' : 'tools-status-warn') : 'tools-status-warn';
-          html += '<tr><td>' + (showActions ? '<span class="bin-dot ' + dotClass + '"></span>' : '') + escHtml(b.name) + '</td>'
-            + '<td class="tools-version' + installedClass + '">' + escHtml(installedText) + '</td>'
+          var svcOnly = !b.found && b.serviceInstalled;
+
+          // Main row version: use service version when no local copy exists.
+          var mainVer = b.found ? (b.version || 'unknown') : (svcOnly ? (b.serviceVersion || 'unknown') : 'not installed');
+          var mainUpToDate = svcOnly ? (b.serviceVersion === b.latest) : b.upToDate;
+          var dotClass = (b.found || svcOnly) ? 'bin-dot-ok' : 'bin-dot-missing';
+          var availClass = (b.found || svcOnly) ? (mainUpToDate ? 'tools-status-ok' : 'tools-status-warn') : '';
+
+          // Label: show "service (running/stopped)" when the service is the only installation.
+          var nameLabel = escHtml(b.name);
+          if (svcOnly) {
+            var svcStatus = b.serviceRunning ? 'running' : 'stopped';
+            nameLabel += ' <span class="tools-service-label">service (' + svcStatus + ')</span>';
+          }
+
+          html += '<tr><td>' + (showActions ? '<span class="bin-dot ' + dotClass + '"></span>' : '') + nameLabel + '</td>'
+            + '<td class="tools-version">' + escHtml(mainVer) + '</td>'
             + '<td class="tools-version ' + availClass + '">' + escHtml(b.latest || '?') + '</td>';
           if (showActions) {
-            var action = b.found
-              ? (b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>')
-              : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
+            var action = '';
+            if (b.found) {
+              action = b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>';
+            } else if (svcOnly && !mainUpToDate) {
+              action = '<button class="tb-btn tools-action-btn" onclick="updateServiceAgent(this)">Update</button>';
+            } else if (!svcOnly) {
+              action = '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
+            }
             html += '<td>' + action + '</td>';
           }
           html += '</tr>';
+
+          // Show a service sub-row only when BOTH a local copy and a service exist.
+          if (b.found && b.serviceInstalled) {
+            var svcVer = b.serviceVersion || 'unknown';
+            var svcState = b.serviceRunning ? 'running' : 'stopped';
+            var svcUpToDate = b.serviceVersion === b.latest;
+            var svcAvailClass = svcUpToDate ? 'tools-status-ok' : 'tools-status-warn';
+            html += '<tr class="tools-service-row"><td>' + (showActions ? '<span class="bin-dot ' + (b.serviceRunning ? 'bin-dot-ok' : 'bin-dot-missing') + '"></span>' : '')
+              + '<span class="tools-service-label">service (' + svcState + ')</span></td>'
+              + '<td class="tools-version">' + escHtml(svcVer) + '</td>'
+              + '<td class="tools-version ' + svcAvailClass + '">' + escHtml(b.latest || '?') + '</td>';
+            if (showActions) html += '<td></td>';
+            html += '</tr>';
+          }
         });
       }
       html += '</tbody></table>';

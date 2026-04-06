@@ -30,11 +30,18 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // requireOwnerOrAdmin checks the Authorization header and returns the
@@ -1375,4 +1382,218 @@ func removeToken(tokens []string, tok string) []string {
 		}
 	}
 	return out
+}
+
+// handleAdminLogs returns recent hub log lines.
+//
+//	GET /api/admin/logs              Last 100 lines (default)
+//	GET /api/admin/logs?lines=500    Last 500 lines
+//
+// Response: {"lines": ["2026-04-06T12:00:00Z [hub] ...", ...]}
+// handleAdminUpdate triggers a self-update of the hub binary.
+//
+//	POST /api/admin/update              Update to latest release
+//	POST /api/admin/update {"version":"v0.4.0"}  Update to specific version
+//
+// Response: {"ok":true, "message":"updating to v0.4.0"}
+func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if _, ok := requireOwnerOrAdmin(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var req struct {
+		Version string `json:"version"`
+	}
+	if r.Body != nil {
+		json.NewDecoder(r.Body).Decode(&req)
+	}
+	ver := req.Version
+
+	if ver == "" || ver == "latest" {
+		resolved, err := hubLatestRelease()
+		if err != nil {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusBadGateway, map[string]string{"error": "failed to query latest release: " + err.Error()})
+			return
+		}
+		ver = resolved
+	}
+
+	if ver == version && version != "dev" {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"ok": true, "message": "already running " + ver})
+		return
+	}
+
+	log.Printf("[hub] update requested to %s", ver)
+	adminCorsHeaders(w, r)
+	writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"ok": true, "message": "updating to " + ver})
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		if err := hubDownloadAndStage(ver); err != nil {
+			log.Printf("[hub] update failed: %v", err)
+			return
+		}
+		hubRestartSelf()
+	}()
+}
+
+// hubLatestRelease queries the GitHub API for the latest Tela release tag.
+func hubLatestRelease() (string, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+	}
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", err
+	}
+	if release.TagName == "" {
+		return "", fmt.Errorf("no tag_name in GitHub response")
+	}
+	return release.TagName, nil
+}
+
+// hubDownloadAndStage downloads the given version of telahubd from GitHub
+// releases and replaces the current binary.
+func hubDownloadAndStage(ver string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot find executable path: %w", err)
+	}
+	exe, err = filepath.EvalSymlinks(exe)
+	if err != nil {
+		return fmt.Errorf("cannot resolve executable path: %w", err)
+	}
+
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	binaryName := fmt.Sprintf("telahubd-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
+	dlURL := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", ver, binaryName)
+
+	log.Printf("[hub] downloading %s", dlURL)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Get(dlURL)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("download returned %d", resp.StatusCode)
+	}
+
+	dir := filepath.Dir(exe)
+	tmpFile, err := os.CreateTemp(dir, "telahubd-update-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer func() {
+		os.Remove(tmpPath)
+	}()
+
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("download write: %w", err)
+	}
+	tmpFile.Close()
+
+	if runtime.GOOS != "windows" {
+		os.Chmod(tmpPath, 0755)
+	}
+
+	if runtime.GOOS == "windows" {
+		oldPath := exe + ".old"
+		os.Remove(oldPath)
+		if err := os.Rename(exe, oldPath); err != nil {
+			return fmt.Errorf("rename current binary: %w", err)
+		}
+		if err := os.Rename(tmpPath, exe); err != nil {
+			os.Rename(oldPath, exe)
+			return fmt.Errorf("install new binary: %w", err)
+		}
+		go func() {
+			for range 10 {
+				if os.Remove(oldPath) == nil {
+					return
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+		}()
+	} else {
+		if err := os.Rename(tmpPath, exe); err != nil {
+			return fmt.Errorf("install new binary: %w", err)
+		}
+	}
+
+	log.Printf("[hub] updated telahubd to %s", ver)
+	return nil
+}
+
+// hubRestartSelf re-executes the current telahubd binary.
+func hubRestartSelf() {
+	exe, err := os.Executable()
+	if err != nil {
+		log.Printf("[hub] restart failed: cannot find executable: %v", err)
+		return
+	}
+	log.Printf("[hub] restarting telahubd via %s", exe)
+	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Start()
+	os.Exit(0)
+}
+
+func handleAdminLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if _, ok := requireOwnerOrAdmin(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodGet {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	n := 100
+	if v := r.URL.Query().Get("lines"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			n = parsed
+		}
+	}
+
+	lines := snapshotLogRing(n)
+	adminCorsHeaders(w, r)
+	writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"lines": lines})
 }

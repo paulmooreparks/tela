@@ -47,6 +47,10 @@ export namespace main {
 	    version: string;
 	    latest: string;
 	    upToDate: boolean;
+	    serviceInstalled: boolean;
+	    serviceRunning: boolean;
+	    servicePath: string;
+	    serviceVersion: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new BinaryInfo(source);
@@ -60,6 +64,10 @@ export namespace main {
 	        this.version = source["version"];
 	        this.latest = source["latest"];
 	        this.upToDate = source["upToDate"];
+	        this.serviceInstalled = source["serviceInstalled"];
+	        this.serviceRunning = source["serviceRunning"];
+	        this.servicePath = source["servicePath"];
+	        this.serviceVersion = source["serviceVersion"];
 	    }
 	}
 	export class CommandLogEntry {

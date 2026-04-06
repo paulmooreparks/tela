@@ -1499,6 +1499,8 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .tools-status-ok { font-size: 12px; color: var(--accent); }
 .tools-status-warn { font-size: 12px; color: #f39c12; }
 .tools-action-btn { padding: 2px 8px; font-size: 11px; }
+.tools-service-row td { border-bottom: 1px solid var(--surface-alt); padding-top: 0; }
+.tools-service-label { font-size: 11px; color: var(--text-muted); font-style: italic; }
 .section-desc code { font-family: var(--mono); font-size: 0.82rem; background: var(--surface-alt); padding: 1px 6px; border-radius: 3px; }
 .history-item { padding: 6px 0; border-bottom: 1px solid var(--surface-alt); font-size: 13px; }
 .history-item:last-child { border-bottom: none; }
@@ -1995,7 +1997,12 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .log-panel-tab:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
 .log-panel-tab.active { color: #e2e8f0; border-bottom-color: var(--accent); }
-.log-panel-tab-add { color: #64748b !important; border: none !important; padding: 0 10px; font-size: 16px; }
+.log-panel-tab-add { color: #64748b !important; border: none !important; padding: 0 10px; font-size: 16px; display: flex; align-items: center; line-height: 1; position: relative; }
+.attach-log-popover { position: absolute; bottom: 100%; left: 0; min-width: 200px; max-height: 300px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100; padding: 4px 0; }
+.attach-log-section { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 12px 2px; }
+.attach-log-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 12px; font-size: 12px; font-family: var(--font); color: var(--text); background: none; border: none; cursor: pointer; text-align: left; }
+.attach-log-item:hover { background: rgba(255,255,255,0.05); }
+.attach-log-loading, .attach-log-empty { font-size: 12px; color: var(--text-muted); padding: 8px 12px; }
 .log-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .log-dot-live { background: var(--accent); }
 .log-dot-idle { background: #94a3b8; }

@@ -28,6 +28,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/paulmooreparks/tela/internal/credstore"
+	"github.com/paulmooreparks/tela/internal/service"
 	"gopkg.in/yaml.v3"
 )
 
@@ -828,14 +829,36 @@ type LocalInstance struct {
 	Name       string   `json:"name,omitempty"`       // telahubd only
 }
 
+// controlRunDirs returns the directories to search for control files.
+// Services write to the shared service config dir (e.g. C:\ProgramData\Tela\run),
+// while terminal instances write to the user's config dir (~/.tela/run).
+func controlRunDirs() []string {
+	userDir := filepath.Join(telaConfigDir(), "run")
+	svcDir := filepath.Join(service.ConfigDir(), "run")
+	if userDir == svcDir {
+		return []string{userDir}
+	}
+	return []string{svcDir, userDir}
+}
+
+// readControlFile reads a control JSON file from the first directory that has it.
+func readControlFile(filename string) ([]byte, error) {
+	for _, dir := range controlRunDirs() {
+		data, err := os.ReadFile(filepath.Join(dir, filename))
+		if err == nil {
+			return data, nil
+		}
+	}
+	return nil, fmt.Errorf("control file %s not found", filename)
+}
+
 // GetLocalInstances checks for locally running telad and telahubd instances
 // by reading their control files. Returns instances that are alive (PID exists).
 func (a *App) GetLocalInstances() []LocalInstance {
 	var instances []LocalInstance
-	runDir := filepath.Join(telaConfigDir(), "run")
 
 	// Check telad
-	if data, err := os.ReadFile(filepath.Join(runDir, "telad.json")); err == nil {
+	if data, err := readControlFile("telad.json"); err == nil {
 		var info struct {
 			PID        int      `json:"pid"`
 			Machines   []string `json:"machines"`
@@ -851,7 +874,7 @@ func (a *App) GetLocalInstances() []LocalInstance {
 	}
 
 	// Check telahubd
-	if data, err := os.ReadFile(filepath.Join(runDir, "telahubd.json")); err == nil {
+	if data, err := readControlFile("telahubd.json"); err == nil {
 		var info struct {
 			PID  int    `json:"pid"`
 			Port int    `json:"port"`
@@ -2310,6 +2333,54 @@ func (a *App) UpdateAgent(hubURL, machineID, version string) string {
 	return string(data)
 }
 
+// GetHubLogs retrieves recent log lines from a hub via the admin API.
+func (a *App) GetHubLogs(hubURL string, lines int) string {
+	if lines <= 0 {
+		lines = 500
+	}
+	path := fmt.Sprintf("/api/admin/logs?lines=%d", lines)
+	data, err := a.adminAPICall(hubURL, "GET", path, nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// UpdateHub triggers a self-update on a remote hub via the admin API.
+func (a *App) UpdateHub(hubURL, version string) string {
+	payload := json.RawMessage(`{}`)
+	if version != "" {
+		payload = json.RawMessage(fmt.Sprintf(`{"version":%q}`, version))
+	}
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/update", payload)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// UpdateServiceAgent triggers a self-update on the locally running telad service
+// by reading the control file to find the hub and machine, then sending the
+// update command through the management API.
+func (a *App) UpdateServiceAgent() string {
+	data, err := readControlFile("telad.json")
+	if err != nil {
+		return `{"error":"no local telad control file found"}`
+	}
+	var info struct {
+		PID      int      `json:"pid"`
+		Machines []string `json:"machines"`
+		Hub      string   `json:"hub"`
+	}
+	if err := json.Unmarshal(data, &info); err != nil || len(info.Machines) == 0 || info.Hub == "" {
+		return `{"error":"invalid telad control file"}`
+	}
+	if info.PID <= 0 || !processAlive(info.PID) {
+		return `{"error":"telad service is not running"}`
+	}
+	return a.UpdateAgent(info.Hub, info.Machines[0], "")
+}
+
 // hubNameFromURLGo extracts a short hub name from a URL (Go-side equivalent).
 func hubNameFromURLGo(u string) string {
 	u = strings.TrimPrefix(u, "wss://")
@@ -2689,12 +2760,16 @@ func (a *App) GetDefaultBinPath() string {
 
 // BinaryInfo describes the status of a managed binary.
 type BinaryInfo struct {
-	Name      string `json:"name"`
-	Path      string `json:"path"`
-	Found     bool   `json:"found"`
-	Version   string `json:"version"`
-	Latest    string `json:"latest"`
-	UpToDate  bool   `json:"upToDate"`
+	Name             string `json:"name"`
+	Path             string `json:"path"`
+	Found            bool   `json:"found"`
+	Version          string `json:"version"`
+	Latest           string `json:"latest"`
+	UpToDate         bool   `json:"upToDate"`
+	ServiceInstalled bool   `json:"serviceInstalled"`
+	ServiceRunning   bool   `json:"serviceRunning"`
+	ServicePath      string `json:"servicePath"`
+	ServiceVersion   string `json:"serviceVersion"`
 }
 
 // ValidateBinPath checks if a path is a valid, accessible directory.
@@ -2713,6 +2788,24 @@ func (a *App) ValidateBinPath(path string) string {
 		return "Path is not a directory."
 	}
 	return "" // valid
+}
+
+// getBinaryVersion runs "binary version" and extracts the version string.
+func getBinaryVersion(path string) string {
+	cmd := exec.Command(path, "version")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) >= 2 {
+		return parts[1]
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return ""
 }
 
 // GetBinStatus checks the status of all managed binaries in the configured path.
@@ -2736,19 +2829,20 @@ func (a *App) GetBinStatus() []BinaryInfo {
 
 		if _, err := os.Stat(path); err == nil {
 			info.Found = true
-			// Get version by running binary
-			cmd := exec.Command(path, "version")
-			hideConsoleWindow(cmd)
-			out, err := cmd.CombinedOutput()
-			if err == nil {
-				parts := strings.Fields(strings.TrimSpace(string(out)))
-				if len(parts) >= 2 {
-					info.Version = parts[1]
-				} else if len(parts) == 1 {
-					info.Version = parts[0]
+			info.Version = getBinaryVersion(path)
+			info.UpToDate = info.Version == latest
+		}
+
+		// Check if running as an OS service (telad and telahubd only).
+		if name == "telad" || name == "telahubd" {
+			if status, err := service.QueryStatus(name); err == nil && status.Installed {
+				info.ServiceInstalled = true
+				info.ServiceRunning = status.Running
+				if svcCfg, err := service.LoadConfig(name); err == nil && svcCfg.BinaryPath != "" {
+					info.ServicePath = svcCfg.BinaryPath
+					info.ServiceVersion = getBinaryVersion(svcCfg.BinaryPath)
 				}
 			}
-			info.UpToDate = info.Version == latest
 		}
 
 		results = append(results, info)
