@@ -293,16 +293,72 @@ function hubViewLogs(hubName) {
   });
 }
 
+function hubUpdateStatus(msg) {
+  var el = document.getElementById('hub-update-status');
+  if (el) el.textContent = msg;
+}
+
 function hubUpdate(hubURL, hubName) {
   showConfirmDialog('Update Hub', 'Download and install the latest telahubd on ' + hubName + '? The hub will restart after updating.', 'Update').then(function (yes) {
     if (!yes) return;
+    var btn = document.getElementById('hub-update-btn');
+    if (btn) btn.disabled = true;
+    hubUpdateStatus('Sending update request...');
     tvLog('Updating telahubd on ' + hubName + '...');
+
     goApp.UpdateHub(hubURL, '').then(function (resp) {
       try { var data = JSON.parse(resp); } catch (e) {}
-      if (data && data.error) { showError('Update failed: ' + data.error); return; }
-      tvLog('Update: ' + (data && data.message ? data.message : 'requested for ' + hubName));
-    }).catch(function (err) { showError('Update failed: ' + err); });
+      if (data && data.error) {
+        hubUpdateStatus('');
+        if (btn) btn.disabled = false;
+        showError('Update failed: ' + data.error);
+        return;
+      }
+      var msg = (data && data.message) || '';
+      tvLog('Update: ' + (msg || 'requested for ' + hubName));
+
+      if (msg.indexOf('already running') === 0) {
+        hubUpdateStatus(msg);
+        if (btn) btn.disabled = false;
+        return;
+      }
+
+      // Hub is downloading and will restart. Poll until it comes back.
+      hubUpdateStatus('Hub is downloading update and restarting...');
+      pollHubOnline(hubURL, hubName, 0);
+    }).catch(function (err) {
+      hubUpdateStatus('');
+      if (btn) btn.disabled = false;
+      showError('Update failed: ' + err);
+    });
   });
+}
+
+function pollHubOnline(hubURL, hubName, attempt) {
+  if (attempt > 30) {
+    hubUpdateStatus('Hub did not come back online.');
+    tvLog(hubName + ': hub did not come back after update');
+    var btn = document.getElementById('hub-update-btn');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  setTimeout(function () {
+    goApp.GetHubInfo(hubURL).then(function (raw) {
+      try { var info = JSON.parse(raw); } catch (e) {}
+      if (info && info.hub && info.hub.version) {
+        hubUpdateStatus('Updated to ' + info.hub.version);
+        tvLog(hubName + ': updated to ' + info.hub.version);
+        var btn = document.getElementById('hub-update-btn');
+        if (btn) btn.disabled = false;
+      } else {
+        hubUpdateStatus('Waiting for hub to restart... (' + (attempt + 1) + ')');
+        pollHubOnline(hubURL, hubName, attempt + 1);
+      }
+    }).catch(function () {
+      hubUpdateStatus('Waiting for hub to restart... (' + (attempt + 1) + ')');
+      pollHubOnline(hubURL, hubName, attempt + 1);
+    });
+  }, 2000);
 }
 
 function hubRestart(hubURL, hubName) {
@@ -2376,7 +2432,8 @@ function agentsShowDetail(a) {
   if (canManage) {
     html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
       + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
-      + '<tr><td>Update</td><td><button type="button" class="tb-btn" onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">Update</button></td></tr>'
+      + '<tr><td>Software</td><td><button type="button" class="tb-btn" id="agent-update-btn" onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">Update</button>'
+      + ' <span id="agent-update-status" class="tools-service-label"></span></td></tr>'
       + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
   } else {
     html += '<tr><td colspan="2">Agent ' + (isOnline ? 'does not support remote management. Update telad to enable.' : 'is offline.') + '</td></tr>';
@@ -2671,17 +2728,73 @@ function agentsRestart(machineId, hub) {
   });
 }
 
+function agentUpdateStatus(msg) {
+  var el = document.getElementById('agent-update-status');
+  if (el) el.textContent = msg;
+}
+
 function agentsUpdate(machineId, hub) {
   showConfirmDialog('Update Agent', 'Download and install the latest telad on ' + machineId + '? The agent will restart after updating.', 'Update').then(function (yes) {
     if (!yes) return;
     var wsHub = toWSURL(hub);
+    var btn = document.getElementById('agent-update-btn');
+    if (btn) btn.disabled = true;
+    agentUpdateStatus('Sending update request...');
     tvLog('Updating telad on ' + machineId + '...');
+
     goApp.UpdateAgent(wsHub, machineId, '').then(function (resp) {
       try { var data = JSON.parse(resp); } catch (e) {}
-      if (data && data.error) { showError('Update failed: ' + data.error); return; }
-      tvLog('Update: ' + (data && data.message ? data.message : 'requested for ' + machineId));
-    }).catch(function (err) { showError('Update failed: ' + err); });
+      if (data && data.error) {
+        agentUpdateStatus('');
+        if (btn) btn.disabled = false;
+        showError('Update failed: ' + data.error);
+        return;
+      }
+      var msg = (data && data.message) || '';
+      tvLog('Update: ' + (msg || 'requested for ' + machineId));
+
+      if (msg.indexOf('already running') === 0) {
+        agentUpdateStatus(msg);
+        if (btn) btn.disabled = false;
+        return;
+      }
+
+      agentUpdateStatus('Agent is downloading update and restarting...');
+      pollAgentOnline(wsHub, machineId, hub, 0);
+    }).catch(function (err) {
+      agentUpdateStatus('');
+      if (btn) btn.disabled = false;
+      showError('Update failed: ' + err);
+    });
   });
+}
+
+function pollAgentOnline(wsHub, machineId, hub, attempt) {
+  if (attempt > 30) {
+    agentUpdateStatus('Agent did not come back online.');
+    tvLog(machineId + ': agent did not come back after update');
+    var btn = document.getElementById('agent-update-btn');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  setTimeout(function () {
+    goApp.GetAgentList().then(function (agents) {
+      var agent = (agents || []).find(function (a) { return a.id === machineId; });
+      if (agent && agent.online) {
+        var ver = agent.version || 'unknown';
+        agentUpdateStatus('Updated to ' + ver);
+        tvLog(machineId + ': updated to ' + ver);
+        var btn = document.getElementById('agent-update-btn');
+        if (btn) btn.disabled = false;
+      } else {
+        agentUpdateStatus('Waiting for agent to restart... (' + (attempt + 1) + ')');
+        pollAgentOnline(wsHub, machineId, hub, attempt + 1);
+      }
+    }).catch(function () {
+      agentUpdateStatus('Waiting for agent to restart... (' + (attempt + 1) + ')');
+      pollAgentOnline(wsHub, machineId, hub, attempt + 1);
+    });
+  }, 2000);
 }
 
 // Legacy helpers removed -- agentsShowDetail now uses setting-card classes directly.
@@ -3677,8 +3790,9 @@ function renderHubSettings(pane) {
       html += '<div class="settings-group"><div class="settings-group-header">Management</div>';
       html += '<div class="settings-row"><div class="settings-label">Log output</div>'
         + '<div class="settings-value"><button class="tb-btn" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
-      html += '<div class="settings-row"><div class="settings-label">Update</div>'
-        + '<div class="settings-value"><button class="tb-btn" onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Update</button></div></div>';
+      html += '<div class="settings-row"><div class="settings-label">Software</div>'
+        + '<div class="settings-value"><button class="tb-btn" id="hub-update-btn" onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Update</button>'
+        + ' <span id="hub-update-status" class="tools-service-label"></span></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Restart</div>'
         + '<div class="settings-value"><button class="tb-btn" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
       html += '</div>';
