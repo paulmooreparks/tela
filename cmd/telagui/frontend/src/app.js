@@ -323,9 +323,14 @@ function hubUpdate(hubURL, hubName) {
         return;
       }
 
+      // Extract target version from "updating to v0.4.0".
+      var targetVer = '';
+      var match = msg.match(/updating to (\S+)/);
+      if (match) targetVer = match[1];
+
       // Hub is downloading and will restart. Poll until it comes back.
       hubUpdateStatus('Hub is downloading update and restarting...');
-      pollHubOnline(hubURL, hubName, 0);
+      pollHubOnline(hubURL, hubName, targetVer, 0);
     }).catch(function (err) {
       hubUpdateStatus('');
       if (btn) btn.disabled = false;
@@ -334,7 +339,7 @@ function hubUpdate(hubURL, hubName) {
   });
 }
 
-function pollHubOnline(hubURL, hubName, attempt) {
+function pollHubOnline(hubURL, hubName, targetVer, attempt) {
   if (attempt > 30) {
     hubUpdateStatus('Hub did not come back online.');
     tvLog(hubName + ': hub did not come back after update');
@@ -345,18 +350,21 @@ function pollHubOnline(hubURL, hubName, attempt) {
   setTimeout(function () {
     goApp.GetHubInfo(hubURL).then(function (raw) {
       try { var info = JSON.parse(raw); } catch (e) {}
-      if (info && info.hub && info.hub.version) {
-        hubUpdateStatus('Updated to ' + info.hub.version);
-        tvLog(hubName + ': updated to ' + info.hub.version);
+      var ver = (info && info.hub && info.hub.version) || '';
+      // If we know the target version, wait for it specifically.
+      // Otherwise, accept any version response as success.
+      if (ver && (!targetVer || ver === targetVer)) {
+        hubUpdateStatus('Updated to ' + ver);
+        tvLog(hubName + ': updated to ' + ver);
         var btn = document.getElementById('hub-update-btn');
         if (btn) btn.disabled = false;
       } else {
         hubUpdateStatus('Waiting for hub to restart... (' + (attempt + 1) + ')');
-        pollHubOnline(hubURL, hubName, attempt + 1);
+        pollHubOnline(hubURL, hubName, targetVer, attempt + 1);
       }
     }).catch(function () {
       hubUpdateStatus('Waiting for hub to restart... (' + (attempt + 1) + ')');
-      pollHubOnline(hubURL, hubName, attempt + 1);
+      pollHubOnline(hubURL, hubName, targetVer, attempt + 1);
     });
   }, 2000);
 }
@@ -2759,8 +2767,13 @@ function agentsUpdate(machineId, hub) {
         return;
       }
 
+      // Extract target version from "updating to v0.4.0".
+      var targetVer = '';
+      var verMatch = msg.match(/updating to (\S+)/);
+      if (verMatch) targetVer = verMatch[1];
+
       agentUpdateStatus('Agent is downloading update and restarting...');
-      pollAgentOnline(wsHub, machineId, hub, 0);
+      pollAgentOnline(wsHub, machineId, hub, targetVer, 0);
     }).catch(function (err) {
       agentUpdateStatus('');
       if (btn) btn.disabled = false;
@@ -2769,7 +2782,7 @@ function agentsUpdate(machineId, hub) {
   });
 }
 
-function pollAgentOnline(wsHub, machineId, hub, attempt) {
+function pollAgentOnline(wsHub, machineId, hub, targetVer, attempt) {
   if (attempt > 30) {
     agentUpdateStatus('Agent did not come back online.');
     tvLog(machineId + ': agent did not come back after update');
@@ -2780,19 +2793,19 @@ function pollAgentOnline(wsHub, machineId, hub, attempt) {
   setTimeout(function () {
     goApp.GetAgentList().then(function (agents) {
       var agent = (agents || []).find(function (a) { return a.id === machineId; });
-      if (agent && agent.online) {
-        var ver = agent.version || 'unknown';
+      var ver = (agent && agent.version) || '';
+      if (agent && agent.online && ver && (!targetVer || ver === targetVer)) {
         agentUpdateStatus('Updated to ' + ver);
         tvLog(machineId + ': updated to ' + ver);
         var btn = document.getElementById('agent-update-btn');
         if (btn) btn.disabled = false;
       } else {
         agentUpdateStatus('Waiting for agent to restart... (' + (attempt + 1) + ')');
-        pollAgentOnline(wsHub, machineId, hub, attempt + 1);
+        pollAgentOnline(wsHub, machineId, hub, targetVer, attempt + 1);
       }
     }).catch(function () {
       agentUpdateStatus('Waiting for agent to restart... (' + (attempt + 1) + ')');
-      pollAgentOnline(wsHub, machineId, hub, attempt + 1);
+      pollAgentOnline(wsHub, machineId, hub, targetVer, attempt + 1);
     });
   }, 2000);
 }
