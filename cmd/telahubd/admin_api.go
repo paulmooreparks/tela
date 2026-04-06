@@ -1557,7 +1557,22 @@ func hubDownloadAndStage(ver string) error {
 }
 
 // hubRestartSelf re-executes the current telahubd binary.
+// isDocker returns true if the process is running inside a Docker container.
+func isDocker() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
+}
+
+// hubRestartSelf re-executes the current telahubd binary.
+// Inside Docker, we just exit and let the container restart policy
+// handle the re-exec (starting a child process doesn't survive
+// tini's exit).
 func hubRestartSelf() {
+	if isDocker() {
+		log.Printf("[hub] exiting for container restart")
+		os.Exit(0)
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		log.Printf("[hub] restart failed: cannot find executable: %v", err)
@@ -1569,6 +1584,36 @@ func hubRestartSelf() {
 	cmd.Stderr = os.Stderr
 	cmd.Start()
 	os.Exit(0)
+}
+
+// handleAdminRestart triggers a graceful restart of the hub.
+//
+//	POST /api/admin/restart
+//
+// Response: {"ok":true, "message":"restarting"}
+func handleAdminRestart(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if _, ok := requireOwnerOrAdmin(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	log.Printf("[hub] restart requested via admin API")
+	adminCorsHeaders(w, r)
+	writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"ok": true, "message": "restarting"})
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		hubRestartSelf()
+	}()
 }
 
 func handleAdminLogs(w http.ResponseWriter, r *http.Request) {

@@ -655,6 +655,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 			"arch":      runtime.GOARCH,
 			"hostname":  hostname,
 			"goVersion": runtime.Version(),
+			"version":   version,
 			"uptime":    int(time.Since(startTime).Seconds()),
 		},
 	}
@@ -1863,6 +1864,7 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/admin/access", handleAdminAccess)
 	mux.HandleFunc("/api/admin/agents/", handleAdminAgents)
 	mux.HandleFunc("/api/admin/logs", handleAdminLogs)
+	mux.HandleFunc("/api/admin/restart", handleAdminRestart)
 	mux.HandleFunc("/api/admin/update", handleAdminUpdate)
 	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)

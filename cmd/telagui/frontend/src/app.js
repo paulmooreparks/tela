@@ -188,8 +188,13 @@ function openAttachDialog() {
   pop.className = 'attach-log-popover';
   pop.innerHTML = '<div class="attach-log-loading">Loading sources...</div>';
 
+  // Anchor to the header (not inside the scrollable tabs container).
   var addBtn = document.querySelector('.log-panel-tab-add');
-  addBtn.parentNode.appendChild(pop);
+  var rect = addBtn.getBoundingClientRect();
+  pop.style.position = 'fixed';
+  pop.style.left = rect.left + 'px';
+  pop.style.bottom = (window.innerHeight - rect.top) + 'px';
+  document.body.appendChild(pop);
 
   // Close on click outside
   function closePopover(e) {
@@ -248,9 +253,11 @@ function hubViewLogs(hubName) {
     var pre = document.createElement('pre');
     pre.className = 'log-panel-output hidden';
     pre.id = paneId;
+    pre.setAttribute('data-hub', hubName);
     pre.textContent = 'Loading logs for ' + hubName + '...\n';
     document.getElementById('log-panel').appendChild(pre);
     initLogScrollTracking(paneId);
+    saveLogTabs();
   }
 
   var tabBtn = document.querySelector('.log-panel-tabs').querySelector('[onclick*="' + paneId + '"]')
@@ -283,6 +290,30 @@ function hubViewLogs(hubName) {
   }).catch(function (err) {
     document.getElementById(paneId).textContent = 'Failed: ' + err + '\n';
     if (dot) dot.className = 'log-dot log-dot-idle';
+  });
+}
+
+function hubUpdate(hubURL, hubName) {
+  showConfirmDialog('Update Hub', 'Download and install the latest telahubd on ' + hubName + '? The hub will restart after updating.', 'Update').then(function (yes) {
+    if (!yes) return;
+    tvLog('Updating telahubd on ' + hubName + '...');
+    goApp.UpdateHub(hubURL, '').then(function (resp) {
+      try { var data = JSON.parse(resp); } catch (e) {}
+      if (data && data.error) { showError('Update failed: ' + data.error); return; }
+      tvLog('Update: ' + (data && data.message ? data.message : 'requested for ' + hubName));
+    }).catch(function (err) { showError('Update failed: ' + err); });
+  });
+}
+
+function hubRestart(hubURL, hubName) {
+  showConfirmDialog('Restart Hub', 'Restart telahubd on ' + hubName + '? All active sessions will be interrupted.', 'Restart').then(function (yes) {
+    if (!yes) return;
+    tvLog('Restarting telahubd on ' + hubName + '...');
+    goApp.RestartHub(hubURL).then(function (resp) {
+      try { var data = JSON.parse(resp); } catch (e) {}
+      if (data && data.error) { showError('Restart failed: ' + data.error); return; }
+      tvLog('Restart: ' + (data && data.message ? data.message : 'requested for ' + hubName));
+    }).catch(function (err) { showError('Restart failed: ' + err); });
   });
 }
 
@@ -763,6 +794,7 @@ initLogScrollTracking('cmd-list');
 // Load log max lines from settings
 goApp.GetSettings().then(function (s) {
   if (s.logMaxLines && s.logMaxLines > 0) logMaxLines = s.logMaxLines;
+  restoreLogTabs(s.openLogTabs || []);
 });
 
 // --- Startup ---
@@ -2533,12 +2565,14 @@ function agentsViewLogs(machineId, hub) {
     var pre = document.createElement('pre');
     pre.className = 'log-panel-output hidden';
     pre.id = paneId;
+    pre.setAttribute('data-hub', hub);
     pre.textContent = 'Loading logs for ' + machineId + '...\n';
     var logPanel = document.getElementById('log-panel');
     logPanel.appendChild(pre);
 
     // Init scroll tracking
     initLogScrollTracking(paneId);
+    saveLogTabs();
   }
 
   // Switch to the tab
@@ -2583,6 +2617,44 @@ function removeAgentLogTab(paneId, tabBtn) {
   if (pane) pane.remove();
   if (tabBtn) tabBtn.remove();
   // Switch back to TelaVisor tab
+  var tvTab = document.querySelector('.log-panel-tab');
+  if (tvTab) switchLogTab(tvTab, 'log-tv');
+  saveLogTabs();
+}
+
+// Collect open dynamic log tabs and persist to settings.
+function saveLogTabs() {
+  var tabs = [];
+  var panes = document.querySelectorAll('.log-panel-output');
+  panes.forEach(function (p) {
+    var id = p.id;
+    if (id.indexOf('log-agent-') === 0) {
+      var machineId = id.substring('log-agent-'.length);
+      // Find the hub from the tab button's data attribute
+      var hub = p.getAttribute('data-hub') || '';
+      tabs.push({ type: 'agent', id: machineId, hub: hub });
+    } else if (id.indexOf('log-hub-') === 0) {
+      var hubName = p.getAttribute('data-hub') || '';
+      tabs.push({ type: 'hub', id: hubName, hub: hubName });
+    }
+  });
+  goApp.GetSettings().then(function (s) {
+    s.openLogTabs = tabs;
+    goApp.SaveSettings(JSON.stringify(s));
+  });
+}
+
+// Restore log tabs from saved settings on startup.
+function restoreLogTabs(tabs) {
+  if (!tabs || tabs.length === 0) return;
+  tabs.forEach(function (t) {
+    if (t.type === 'agent' && t.id && t.hub) {
+      agentsViewLogs(t.id, t.hub);
+    } else if (t.type === 'hub' && t.id) {
+      hubViewLogs(t.id);
+    }
+  });
+  // Switch back to TelaVisor tab after restoring
   var tvTab = document.querySelector('.log-panel-tab');
   if (tvTab) switchLogTab(tvTab, 'log-tv');
 }
@@ -3575,6 +3647,7 @@ function renderHubSettings(pane) {
       if (hubInfoData.hubName) html += '<div class="settings-row"><div class="settings-label">Hub name</div><div class="settings-value">' + escHtml(hubInfoData.hubName) + '</div></div>';
       if (hi.hostname) html += '<div class="settings-row"><div class="settings-label">Hostname</div><div class="settings-value">' + escHtml(hi.hostname) + '</div></div>';
       if (hi.os && hi.arch) html += '<div class="settings-row"><div class="settings-label">Platform</div><div class="settings-value">' + escHtml(hi.os + '/' + hi.arch) + '</div></div>';
+      if (hi.version) html += '<div class="settings-row"><div class="settings-label">Version</div><div class="settings-value">' + escHtml(hi.version) + '</div></div>';
       if (hi.goVersion) html += '<div class="settings-row"><div class="settings-label">Go version</div><div class="settings-value">' + escHtml(hi.goVersion) + '</div></div>';
       if (hi.uptime) {
         var secs = parseInt(hi.uptime, 10);
@@ -3598,6 +3671,18 @@ function renderHubSettings(pane) {
       html += '<div class="settings-row"><div class="settings-label">None</div><div class="settings-value" style="font-family:var(--font);color:var(--text-muted)">No portal registrations</div></div>';
     }
     html += '</div>';
+
+    // Management
+    if (tokenRole === 'owner' || tokenRole === 'admin') {
+      html += '<div class="settings-group"><div class="settings-group-header">Management</div>';
+      html += '<div class="settings-row"><div class="settings-label">Log output</div>'
+        + '<div class="settings-value"><button class="tb-btn" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
+      html += '<div class="settings-row"><div class="settings-label">Update</div>'
+        + '<div class="settings-value"><button class="tb-btn" onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Update</button></div></div>';
+      html += '<div class="settings-row"><div class="settings-label">Restart</div>'
+        + '<div class="settings-value"><button class="tb-btn" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
+      html += '</div>';
+    }
 
     // Danger zone
     html += '<div class="settings-group danger-zone"><div class="settings-group-header">Danger Zone</div>'

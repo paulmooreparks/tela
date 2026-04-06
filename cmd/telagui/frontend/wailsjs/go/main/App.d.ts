@@ -198,6 +198,8 @@ export function ResolveAllPorts(arg1:string):Promise<Array<main.PortAssignment>>
 
 export function RestartAgent(arg1:string,arg2:string):Promise<string>;
 
+export function RestartHub(arg1:string):Promise<string>;
+
 export function RestartToUpdate():Promise<void>;
 
 export function SaveFileDialog(arg1:string):Promise<string>;

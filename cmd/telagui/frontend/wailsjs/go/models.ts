@@ -330,6 +330,22 @@ export namespace main {
 	        this.name = source["name"];
 	    }
 	}
+	export class LogTabInfo {
+	    type: string;
+	    id: string;
+	    hub: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LogTabInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.id = source["id"];
+	        this.hub = source["hub"];
+	    }
+	}
 	
 	export class PortAssignment {
 	    key: string;
@@ -402,6 +418,7 @@ export namespace main {
 	    windowY: number;
 	    windowWidth: number;
 	    windowHeight: number;
+	    openLogTabs: LogTabInfo[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -432,7 +449,26 @@ export namespace main {
 	        this.windowY = source["windowY"];
 	        this.windowWidth = source["windowWidth"];
 	        this.windowHeight = source["windowHeight"];
+	        this.openLogTabs = this.convertValues(source["openLogTabs"], LogTabInfo);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ToolVersions {
 	    gui: string;

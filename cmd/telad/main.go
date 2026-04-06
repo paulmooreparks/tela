@@ -545,7 +545,22 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 
 // restartSelf re-executes the current binary. Used by both the restart
 // and update management actions.
+// isDocker returns true if the process is running inside a Docker container.
+func isDocker() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
+}
+
+// restartSelf re-executes the current binary. When running under a
+// process manager (Docker, Windows SCM, systemd), we just exit and let
+// the manager handle the restart. Spawning a child would leave an
+// orphan when the manager also restarts the process.
 func restartSelf(lg *log.Logger) {
+	if isDocker() || service.IsWindowsService() {
+		lg.Printf("mgmt: exiting for managed restart")
+		os.Exit(0)
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		lg.Printf("mgmt: restart failed: cannot find executable: %v", err)
@@ -1141,6 +1156,8 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 	}
 
 	setActiveConfig(fileCfg, yamlPath)
+	removeControl := writeControlFile(fileCfg, yamlPath)
+	defer removeControl()
 	go runMultiMachine(fileCfg)
 
 	<-svcStop

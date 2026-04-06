@@ -394,6 +394,10 @@ export function RestartAgent(arg1, arg2) {
   return window['go']['main']['App']['RestartAgent'](arg1, arg2);
 }
 
+export function RestartHub(arg1) {
+  return window['go']['main']['App']['RestartHub'](arg1);
+}
+
 export function RestartToUpdate() {
   return window['go']['main']['App']['RestartToUpdate']();
 }

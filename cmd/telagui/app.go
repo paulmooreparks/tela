@@ -2359,6 +2359,15 @@ func (a *App) UpdateHub(hubURL, version string) string {
 	return string(data)
 }
 
+// RestartHub requests a remote hub restart via the admin API.
+func (a *App) RestartHub(hubURL string) string {
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/restart", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
 // UpdateServiceAgent triggers a self-update on the locally running telad service
 // by reading the control file to find the hub and machine, then sending the
 // update command through the management API.
@@ -3163,6 +3172,14 @@ type Settings struct {
 	WindowY                 int    `yaml:"windowY" json:"windowY"`
 	WindowWidth             int    `yaml:"windowWidth" json:"windowWidth"`
 	WindowHeight            int    `yaml:"windowHeight" json:"windowHeight"`
+	OpenLogTabs             []LogTabInfo `yaml:"openLogTabs,omitempty" json:"openLogTabs"`
+}
+
+// LogTabInfo describes an open log tab to restore on startup.
+type LogTabInfo struct {
+	Type string `yaml:"type" json:"type"` // "agent" or "hub"
+	ID   string `yaml:"id" json:"id"`     // machine ID or hub name
+	Hub  string `yaml:"hub" json:"hub"`   // hub name (for agents)
 }
 
 func defaultSettings() Settings {
