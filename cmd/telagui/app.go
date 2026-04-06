@@ -2296,6 +2296,20 @@ func (a *App) RestartAgent(hubURL, machineID string) string {
 	return string(data)
 }
 
+// UpdateAgent requests a remote agent self-update via the hub management API.
+// If version is empty, the agent resolves "latest" from GitHub releases.
+func (a *App) UpdateAgent(hubURL, machineID, version string) string {
+	payload := json.RawMessage(`{}`)
+	if version != "" {
+		payload = json.RawMessage(fmt.Sprintf(`{"version":%q}`, version))
+	}
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/update", payload)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
 // hubNameFromURLGo extracts a short hub name from a URL (Go-side equivalent).
 func hubNameFromURLGo(u string) string {
 	u = strings.TrimPrefix(u, "wss://")

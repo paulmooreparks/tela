@@ -473,17 +473,55 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		// Schedule restart after response is sent
 		go func() {
 			time.Sleep(500 * time.Millisecond)
-			exe, err := os.Executable()
+			restartSelf(lg)
+		}()
+		return resp
+
+	case "update":
+		var req struct {
+			Version string `json:"version"`
+		}
+		if msg.Payload != nil {
+			json.Unmarshal(msg.Payload, &req)
+		}
+		ver := req.Version
+		lg.Printf("mgmt: update requested version=%q (requestId=%s)", ver, msg.RequestID)
+
+		// Resolve "latest" or empty version via GitHub API.
+		if ver == "" || ver == "latest" {
+			resolved, err := latestRelease()
 			if err != nil {
-				log.Printf("mgmt: restart failed: cannot find executable: %v", err)
+				resp, _ := json.Marshal(controlMessage{
+					Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+					Message: "failed to query latest release: " + err.Error(),
+				})
+				return resp
+			}
+			ver = resolved
+		}
+
+		// Already at this version?
+		if ver == version && version != "dev" {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+				Message: "already running " + ver,
+			})
+			return resp
+		}
+
+		// Download, stage, and restart in the background.
+		// Send response immediately so the hub does not time out.
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Message: "updating to " + ver,
+		})
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			if err := downloadAndStageUpdate(lg, ver); err != nil {
+				lg.Printf("mgmt: update failed: %v", err)
 				return
 			}
-			log.Printf("mgmt: restarting telad via %s", exe)
-			cmd := exec.Command(exe, os.Args[1:]...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			cmd.Start()
-			os.Exit(0)
+			restartSelf(lg)
 		}()
 		return resp
 
@@ -494,6 +532,135 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		})
 		return resp
 	}
+}
+
+// restartSelf re-executes the current binary. Used by both the restart
+// and update management actions.
+func restartSelf(lg *log.Logger) {
+	exe, err := os.Executable()
+	if err != nil {
+		lg.Printf("mgmt: restart failed: cannot find executable: %v", err)
+		return
+	}
+	lg.Printf("mgmt: restarting telad via %s", exe)
+	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Start()
+	os.Exit(0)
+}
+
+// latestRelease queries the GitHub API for the latest Tela release tag.
+func latestRelease() (string, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+	}
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", err
+	}
+	if release.TagName == "" {
+		return "", fmt.Errorf("no tag_name in GitHub response")
+	}
+	return release.TagName, nil
+}
+
+// downloadAndStageUpdate downloads the given version of telad from GitHub
+// releases and replaces the current binary. On Windows the running exe is
+// renamed to .old before the new binary is moved into place.
+func downloadAndStageUpdate(lg *log.Logger, ver string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot find executable path: %w", err)
+	}
+	exe, err = filepath.EvalSymlinks(exe)
+	if err != nil {
+		return fmt.Errorf("cannot resolve executable path: %w", err)
+	}
+
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	binaryName := fmt.Sprintf("telad-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
+	dlURL := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", ver, binaryName)
+
+	lg.Printf("mgmt: downloading %s", dlURL)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Get(dlURL)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("download returned %d", resp.StatusCode)
+	}
+
+	// Write to a temp file in the same directory (same volume for atomic rename).
+	dir := filepath.Dir(exe)
+	tmpFile, err := os.CreateTemp(dir, "telad-update-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer func() {
+		// Clean up temp file on any error path.
+		os.Remove(tmpPath)
+	}()
+
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("download write: %w", err)
+	}
+	tmpFile.Close()
+
+	if runtime.GOOS != "windows" {
+		os.Chmod(tmpPath, 0755)
+	}
+
+	// Swap the binary.
+	if runtime.GOOS == "windows" {
+		oldPath := exe + ".old"
+		os.Remove(oldPath)
+		if err := os.Rename(exe, oldPath); err != nil {
+			return fmt.Errorf("rename current binary: %w", err)
+		}
+		if err := os.Rename(tmpPath, exe); err != nil {
+			// Rollback.
+			os.Rename(oldPath, exe)
+			return fmt.Errorf("install new binary: %w", err)
+		}
+		// Clean up old binary in the background.
+		go func() {
+			for range 10 {
+				if os.Remove(oldPath) == nil {
+					return
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+		}()
+	} else {
+		if err := os.Rename(tmpPath, exe); err != nil {
+			return fmt.Errorf("install new binary: %w", err)
+		}
+	}
+
+	lg.Printf("mgmt: updated telad to %s", ver)
+	return nil
 }
 
 func printUsage() {

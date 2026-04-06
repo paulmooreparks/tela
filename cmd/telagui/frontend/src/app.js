@@ -2036,24 +2036,20 @@ var agentsSelectedHub = '';
 function agentsRefresh() {
   goApp.GetConnectionState().then(function (state) {
     document.getElementById('agents-pair-btn').disabled = !state.connected;
-    if (!state.connected) {
-      document.getElementById('agents-sidebar-list').innerHTML = '<p class="empty-hint" style="padding:16px;">Connect to view agents.</p>';
-      document.getElementById('agents-detail').innerHTML = '<div class="agents-detail-empty">Connect to view agents.</div>';
-      agentsData = [];
-      return;
+  }).catch(function () {
+    document.getElementById('agents-pair-btn').disabled = true;
+  });
+  goApp.GetAgentList().then(function (agents) {
+    agentsData = agents || [];
+    agentsRenderSidebar();
+    if (agentsSelectedId) {
+      var found = agentsData.find(function (a) { return a.id === agentsSelectedId; });
+      if (found) agentsShowDetail(found);
+      else document.getElementById('agents-detail').innerHTML = '<div class="agents-detail-empty">Select an agent to view details.</div>';
     }
-    goApp.GetAgentList().then(function (agents) {
-      agentsData = agents || [];
-      agentsRenderSidebar();
-      if (agentsSelectedId) {
-        var found = agentsData.find(function (a) { return a.id === agentsSelectedId; });
-        if (found) agentsShowDetail(found);
-        else document.getElementById('agents-detail').innerHTML = '<div class="agents-detail-empty">Select an agent to view details.</div>';
-      }
-    }).catch(function () {
-      document.getElementById('agents-sidebar-list').innerHTML = '<p class="empty-hint" style="padding:16px;">Failed to load agents.</p>';
-    });
-  }).catch(function () {});
+  }).catch(function () {
+    document.getElementById('agents-sidebar-list').innerHTML = '<p class="empty-hint" style="padding:16px;">Failed to load agents.</p>';
+  });
 }
 
 function agentsRenderSidebar() {
@@ -2188,6 +2184,7 @@ function agentsShowDetail(a) {
   if (canManage) {
     html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
       + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
+      + '<tr><td>Update</td><td><button type="button" class="tb-btn" onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">Update</button></td></tr>'
       + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
   } else {
     html += '<tr><td colspan="2">Agent ' + (isOnline ? 'does not support remote management. Update telad to enable.' : 'is offline.') + '</td></tr>';
@@ -2439,6 +2436,19 @@ function agentsRestart(machineId, hub) {
       if (data && data.error) { showError('Restart failed: ' + data.error); return; }
       tvLog('Restart requested for ' + machineId);
     }).catch(function (err) { showError('Restart failed: ' + err); });
+  });
+}
+
+function agentsUpdate(machineId, hub) {
+  showConfirmDialog('Update Agent', 'Download and install the latest telad on ' + machineId + '? The agent will restart after updating.', 'Update').then(function (yes) {
+    if (!yes) return;
+    var wsHub = toWSURL(hub);
+    tvLog('Updating telad on ' + machineId + '...');
+    goApp.UpdateAgent(wsHub, machineId, '').then(function (resp) {
+      try { var data = JSON.parse(resp); } catch (e) {}
+      if (data && data.error) { showError('Update failed: ' + data.error); return; }
+      tvLog('Update: ' + (data && data.message ? data.message : 'requested for ' + machineId));
+    }).catch(function (err) { showError('Update failed: ' + err); });
   });
 }
 

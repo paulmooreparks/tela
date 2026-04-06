@@ -474,6 +474,10 @@ export function UninstallService() {
   return window['go']['main']['App']['UninstallService']();
 }
 
+export function UpdateAgent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdateAgent'](arg1, arg2, arg3);
+}
+
 export function ValidateBinPath(arg1) {
   return window['go']['main']['App']['ValidateBinPath'](arg1);
 }

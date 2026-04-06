@@ -238,4 +238,6 @@ export function TryAttach():Promise<boolean>;
 
 export function UninstallService():Promise<string>;
 
+export function UpdateAgent(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function ValidateBinPath(arg1:string):Promise<string>;
