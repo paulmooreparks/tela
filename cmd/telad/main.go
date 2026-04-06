@@ -597,7 +597,7 @@ func main() {
 		}
 	}
 
-	telelog.Init("telad", os.Stderr)
+	telelog.Init("telad", &logRingWriter{original: os.Stderr})
 
 	// Handle graceful shutdown
 	stopCh = make(chan struct{})
@@ -924,7 +924,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 			os.Stderr = lf
 		}
 	}
-	telelog.Init("telad", logDest)
+	telelog.Init("telad", &logRingWriter{original: logDest})
 
 	svcCfg, err := service.LoadConfig("telad")
 	if err != nil {
