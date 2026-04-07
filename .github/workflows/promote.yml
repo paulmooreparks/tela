@@ -41,6 +41,9 @@ permissions:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.validate.outputs.new_tag }}
+      src_sha: ${{ steps.validate.outputs.src_sha }}
 
     steps:
       - name: Checkout source
@@ -117,4 +120,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$NEW_TAG" "$SRC_SHA" -m "Promote ${{ github.event.inputs.source_tag }} to ${{ github.event.inputs.target_channel }}"
           git push origin "$NEW_TAG"
-          echo "Pushed $NEW_TAG. release.yml will now build and publish."
+          echo "Pushed $NEW_TAG. release.yml will be invoked next."
+
+  # Build the new tag by calling release.yml directly. We cannot rely on
+  # the on.push.tags trigger here because tags pushed by GITHUB_TOKEN do
+  # not trigger downstream workflows (GitHub blocks this to prevent
+  # workflow loops). workflow_call sidesteps that restriction.
+  build:
+    needs: promote
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.promote.outputs.new_tag }}
