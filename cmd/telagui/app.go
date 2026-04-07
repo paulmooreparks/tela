@@ -2879,16 +2879,18 @@ func (a *App) GetBinStatus() []BinaryInfo {
 	return results
 }
 
-// InstallBinary downloads a specific binary to the configured bin path.
+// InstallBinary downloads a specific binary from the client's configured
+// release channel into the configured bin path. The download is verified
+// against the channel manifest's SHA-256 before being installed.
 func (a *App) InstallBinary(name string) error {
 	binDir := a.effectiveBinPath()
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		return fmt.Errorf("create bin dir: %w", err)
 	}
 
-	latest, err := a.latestRelease()
+	m, err := a.clientChannelManifest()
 	if err != nil {
-		return fmt.Errorf("cannot determine latest version: %w", err)
+		return fmt.Errorf("fetch channel manifest: %w", err)
 	}
 
 	ext := ""
@@ -2896,26 +2898,39 @@ func (a *App) InstallBinary(name string) error {
 		ext = ".exe"
 	}
 	binaryName := fmt.Sprintf("%s-%s-%s%s", name, runtime.GOOS, runtime.GOARCH, ext)
-	dlURL := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", latest, binaryName)
+	entry, ok := m.Binaries[binaryName]
+	if !ok {
+		return fmt.Errorf("%s manifest %s has no binary named %s", m.Channel, m.Version, binaryName)
+	}
+	dlURL := m.BinaryURL(binaryName)
 
 	resp, err := http.Get(dlURL)
-	if err != nil || resp.StatusCode != 200 {
-		if resp != nil {
-			resp.Body.Close()
-		}
-		return fmt.Errorf("download %s failed: HTTP %d", name, resp.StatusCode)
+	if err != nil {
+		return fmt.Errorf("download %s: %w", name, err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("download %s failed: HTTP %d", name, resp.StatusCode)
+	}
 
 	destPath := filepath.Join(binDir, name+ext)
-	f, err := os.Create(destPath)
+	tmpPath := destPath + ".tmp"
+	f, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("create %s: %w", destPath, err)
+		return fmt.Errorf("create %s: %w", tmpPath, err)
 	}
-	_, err = io.Copy(f, resp.Body)
+	if err := channelpkg.VerifyReader(f, resp.Body, entry.SHA256, entry.Size); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("verify %s: %w", name, err)
+	}
 	f.Close()
-	if err != nil {
-		return fmt.Errorf("write %s: %w", destPath, err)
+	if runtime.GOOS == "windows" {
+		os.Remove(destPath)
+	}
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("install %s: %w", destPath, err)
 	}
 	os.Chmod(destPath, 0755)
 
@@ -2949,19 +2964,33 @@ func (a *App) EnsureTool(name string) (string, error) {
 	return a.installTool(name, version)
 }
 
+// clientChannelManifest fetches and caches the release-channel manifest
+// for the channel this client is configured to follow. Used by every
+// "what is the latest version?" code path in TelaVisor (Installed Tools,
+// EnsureTool, InstallBinary, the version-check ticker) so that all of
+// them agree with the channel selector in Application Settings.
+var tvChannelFetcher = &channelpkg.Fetcher{}
+
+func (a *App) clientChannelManifest() (*channelpkg.Manifest, error) {
+	store, err := credstore.Load(credstore.UserPath())
+	var ch, base string
+	if err == nil && store != nil {
+		ch = store.Update.Channel
+		base = store.Update.ManifestBase
+	}
+	ch = channelpkg.Normalize(ch)
+	return tvChannelFetcher.GetURL(channelpkg.ManifestURL(base, ch))
+}
+
+// latestRelease returns the current version on the client's configured
+// release channel. Replaces the old GitHub /releases/latest call so that
+// dev/beta/stable users see the right "available" target.
 func (a *App) latestRelease() (string, error) {
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := a.doRequest(req, 15*time.Second)
+	m, err := a.clientChannelManifest()
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-	json.NewDecoder(resp.Body).Decode(&release)
-	return release.TagName, nil
+	return m.Version, nil
 }
 
 func (a *App) installTool(name, version string) (string, error) {
@@ -2969,14 +2998,25 @@ func (a *App) installTool(name, version string) (string, error) {
 	if runtime.GOOS == "windows" {
 		ext = ".exe"
 	}
-	url := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s-%s-%s%s",
-		version, name, runtime.GOOS, runtime.GOARCH, ext)
+
+	// version is a hint from the caller; the channel manifest is the
+	// authoritative source for both the URL and the SHA-256.
+	m, err := a.clientChannelManifest()
+	if err != nil {
+		return "", fmt.Errorf("fetch channel manifest: %w", err)
+	}
+	binaryName := fmt.Sprintf("%s-%s-%s%s", name, runtime.GOOS, runtime.GOARCH, ext)
+	entry, ok := m.Binaries[binaryName]
+	if !ok {
+		return "", fmt.Errorf("%s manifest %s has no binary named %s", m.Channel, m.Version, binaryName)
+	}
+	url := m.BinaryURL(binaryName)
 
 	installDir := a.effectiveBinPath()
 	os.MkdirAll(installDir, 0755)
 	destPath := filepath.Join(installDir, name+ext)
 
-	a.logCommand("Install "+name+" "+version,
+	a.logCommand("Install "+name+" "+m.Version,
 		fmt.Sprintf("curl -fSL -o %q %s", destPath, url))
 
 	resp, err := http.Get(url)
@@ -2988,16 +3028,16 @@ func (a *App) installTool(name, version string) (string, error) {
 		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
 	}
 
-	// Atomic write: download to temp file, then rename
+	// Atomic write: download to temp file with SHA-256 verification, then rename.
 	tmpPath := destPath + ".tmp"
 	f, err := os.Create(tmpPath)
 	if err != nil {
 		return "", err
 	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	if err := channelpkg.VerifyReader(f, resp.Body, entry.SHA256, entry.Size); err != nil {
 		f.Close()
 		os.Remove(tmpPath)
-		return "", fmt.Errorf("download incomplete: %w", err)
+		return "", fmt.Errorf("verify download: %w", err)
 	}
 	f.Close()
 
