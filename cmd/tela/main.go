@@ -190,7 +190,9 @@ Commands:
   login     Store hub credentials in the credential store
   logout    Remove hub credentials from the credential store
   pair      Exchange a pairing code for a hub connect token
-  admin     Remote hub auth management (tokens, ACLs, portals, pairing codes)
+  admin     Remote hub administration: access (RBAC), tokens, portals, pairing
+            codes, and per-agent management (logs, restart, update, config)
+            Run 'tela admin help' for the full subcommand list.
   service   Manage tela as an OS service (install, start, stop, uninstall, status)
   version   Print version and exit
 

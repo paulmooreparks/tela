@@ -91,6 +91,8 @@ Token commands (legacy):
   remove-token   Remove a token identity
   grant          Grant connect access to a machine
   revoke         Revoke connect access to a machine
+  grant-manage   Grant manage access to a machine
+  revoke-manage  Revoke manage access to a machine
   rotate         Regenerate token for an identity
   pair-code      Generate a pairing code for agent onboarding
 
@@ -98,6 +100,14 @@ Portal commands:
   list-portals    List portal registrations
   add-portal      Register hub with a portal
   remove-portal   Remove a portal registration
+
+Agent commands (remote agent management):
+  agent list      List all agents on the hub
+  agent config    Show an agent's running configuration
+  agent set       Push a partial config update to an agent
+  agent logs      Retrieve recent log lines from an agent
+  agent restart   Request a graceful restart of an agent
+  agent update    Download a new release and restart the agent
 
 All commands require -hub and -token.
 The token must belong to an owner or admin identity.
@@ -121,6 +131,12 @@ Examples:
   tela admin add-portal awansaya -hub gohub -token <owner-token> \
     -portal-url https://awansaya.net
   tela admin remove-portal awansaya -hub gohub -token <owner-token>
+
+  tela admin agent list -hub gohub -token <owner-token>
+  tela admin agent logs -hub gohub -token <owner-token> -machine barn -n 200
+  tela admin agent restart -hub gohub -token <owner-token> -machine barn
+  tela admin agent update -hub gohub -token <owner-token> -machine barn
+  tela admin agent update -hub gohub -token <owner-token> -machine barn -version v0.4.0
 
 Tip: set TELA_OWNER_TOKEN in your shell profile so you don't need -token
 every time.  Use a separate TELA_TOKEN for day-to-day tela connect usage.
@@ -788,6 +804,7 @@ Usage:
   tela admin agent set      -hub <url> -token <tok> -machine <id> <json-fields>
   tela admin agent logs     -hub <url> -token <tok> -machine <id> [-n 100]
   tela admin agent restart  -hub <url> -token <tok> -machine <id>
+  tela admin agent update   -hub <url> -token <tok> -machine <id> [-version vX.Y.Z]
 `)
 		os.Exit(1)
 	}
@@ -803,6 +820,8 @@ Usage:
 		cmdAdminAgentLogs(args[1:])
 	case "restart":
 		cmdAdminAgentRestart(args[1:])
+	case "update":
+		cmdAdminAgentUpdate(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown agent command: %s\n", args[0])
 		os.Exit(1)
@@ -1002,6 +1021,44 @@ func cmdAdminAgentRestart(args []string) {
 	adminCheckError(status, result)
 
 	fmt.Printf("Restart requested for '%s'.\n", *machine)
+}
+
+func cmdAdminAgentUpdate(args []string) {
+	fs := flag.NewFlagSet("admin agent update", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", envOrDefault("TELA_OWNER_TOKEN", envOrDefault("TELA_TOKEN", "")), "Auth token")
+	machine := fs.String("machine", "", "Machine ID")
+	version := fs.String("version", "", "Target release version (default: latest)")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub := mustResolveHub(*hubURL)
+	tok := *token
+	if tok == "" {
+		tok = credstore.LookupToken(hub)
+	}
+	if hub == "" || tok == "" || *machine == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub, -token, and -machine are required")
+		os.Exit(1)
+	}
+
+	var payload map[string]string
+	if *version != "" {
+		payload = map[string]string{"version": *version}
+	}
+
+	status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(*machine)+"/update", tok, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	if msg, ok := result["message"].(string); ok {
+		fmt.Printf("%s: %s\n", *machine, msg)
+	} else {
+		fmt.Printf("Update requested for '%s'.\n", *machine)
+	}
 }
 
 // ── tela admin access ──────────────────────────────────────────────
