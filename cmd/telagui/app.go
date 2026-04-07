@@ -1213,7 +1213,7 @@ func (a *App) AdminCreateToken(hubURL, id, role string) string {
 
 // AdminDeleteToken removes a token identity from a hub.
 func (a *App) AdminDeleteToken(hubURL, id string) string {
-	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/tokens/"+url.PathEscape(id), nil)
+	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/access/"+url.PathEscape(id), nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1264,15 +1264,6 @@ func (a *App) AdminRevokeMachineAccess(hubURL, id, machineId string) string {
 func (a *App) AdminRenameAccess(hubURL, id, newId string) string {
 	body, _ := json.Marshal(map[string]string{"id": newId})
 	data, err := a.adminAPICall(hubURL, "PATCH", "/api/admin/access/"+url.PathEscape(id), body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
-// AdminRemoveAccess removes a token identity and scrubs it from all ACLs.
-func (a *App) AdminRemoveAccess(hubURL, id string) string {
-	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/access/"+url.PathEscape(id), nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}

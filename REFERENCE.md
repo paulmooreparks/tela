@@ -749,7 +749,7 @@ The gateway registers itself with the hub as a service named `gateway` with `pro
 
 The gateway does not terminate TLS (the WireGuard tunnel provides end-to-end encryption), does not do load balancing, and does not transform requests or responses. It is a transparent HTTP reverse proxy for tunnel-internal routing.
 
-See [DESIGN-gateway.md](DESIGN-gateway.md) for the full design specification.
+See [howto/gateway.md](howto/gateway.md) for a step-by-step walkthrough or [DESIGN-gateway.md](DESIGN-gateway.md) for the design rationale and comparison to alternatives.
 
 ### Running telad as a service
 

@@ -370,7 +370,7 @@ func cmdAdminRemoveToken(args []string) {
 	id := fs.Arg(0)
 	hub, tok := adminParseHubAndToken(fs)
 
-	status, result, err := adminHTTP("DELETE", hub, "/api/admin/tokens/"+url.PathEscape(id), tok, nil)
+	status, result, err := adminHTTP("DELETE", hub, "/api/admin/access/"+url.PathEscape(id), tok, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

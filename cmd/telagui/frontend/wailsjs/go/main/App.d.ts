@@ -20,8 +20,6 @@ export function AdminListPortals(arg1:string):Promise<string>;
 
 export function AdminListTokens(arg1:string):Promise<string>;
 
-export function AdminRemoveAccess(arg1:string,arg2:string):Promise<string>;
-
 export function AdminRenameAccess(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminRevokeMachineAccess(arg1:string,arg2:string,arg3:string):Promise<string>;

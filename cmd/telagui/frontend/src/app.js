@@ -4302,8 +4302,6 @@ function submitAccessGrant(event) {
   });
 }
 
-// --- ACLs View (legacy) ---
-
 // --- Hub Console View ---
 
 function renderHubConsole(pane) {

@@ -14,11 +14,13 @@
 //     PUT    /api/admin/access/{id}/machines/{machineId}      Set permissions  {"permissions":["connect","manage"]}
 //     DELETE /api/admin/access/{id}/machines/{machineId}      Revoke all permissions on a machine
 //
-//   Tokens (CRUD on the token identity itself):
+//   Tokens:
 //     GET    /api/admin/tokens                                List all token identities
 //     POST   /api/admin/tokens                                Create a new token identity (returned once)
-//     DELETE /api/admin/tokens?id=<id>                        Delete a token identity
 //     POST   /api/admin/rotate/{id}                           Regenerate the token for an identity
+//
+//   (Token deletion goes through DELETE /api/admin/access/{id}, which also
+//    scrubs the token from every machine ACL.)
 //
 //   Portals:
 //     GET    /api/admin/portals                               List portal registrations
@@ -111,7 +113,9 @@ type adminAddResponse struct {
 	Token string `json:"token"` // full token -- shown once
 }
 
-// ── handleAdminTokens dispatches GET / POST / DELETE ───────────────
+// ── handleAdminTokens dispatches GET (list) and POST (create).
+// Token deletion goes through DELETE /api/admin/access/{id}, which
+// also scrubs the token from every machine ACL in one step.
 
 func handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -124,23 +128,11 @@ func handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Support DELETE /api/admin/tokens/{id} (RESTful) alongside
-	// legacy DELETE /api/admin/tokens?id=<id> (query param).
-	pathID := strings.TrimPrefix(r.URL.Path, "/api/admin/tokens/")
-	if pathID == r.URL.Path || pathID == "" {
-		pathID = "" // no path-based ID
-	}
-	if r.Method == http.MethodDelete && pathID != "" {
-		r.URL.RawQuery = "id=" + url.QueryEscape(pathID)
-	}
-
 	switch r.Method {
 	case http.MethodGet:
 		adminListTokens(w, r)
 	case http.MethodPost:
 		adminAddToken(w, r)
-	case http.MethodDelete:
-		adminRemoveToken(w, r)
 	default:
 		adminCorsHeaders(w, r)
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -232,72 +224,6 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 		Token: token,
 	})
 }
-
-func adminRemoveToken(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "id query param is required"})
-		return
-	}
-
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
-
-	found := false
-	var removedToken string
-	filtered := make([]tokenEntry, 0, len(globalCfg.Auth.Tokens))
-	for _, t := range globalCfg.Auth.Tokens {
-		if t.ID == id {
-			found = true
-			removedToken = t.Token
-			continue
-		}
-		filtered = append(filtered, t)
-	}
-	if !found {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
-		return
-	}
-	globalCfg.Auth.Tokens = filtered
-
-	// Scrub the removed token from all machine ACLs
-	for name, acl := range globalCfg.Auth.Machines {
-		changed := false
-		if acl.RegisterToken == removedToken {
-			acl.RegisterToken = ""
-			changed = true
-		}
-		newCT := make([]string, 0, len(acl.ConnectTokens))
-		for _, ct := range acl.ConnectTokens {
-			if ct == removedToken {
-				changed = true
-				continue
-			}
-			newCT = append(newCT, ct)
-		}
-		if changed {
-			acl.ConnectTokens = newCT
-			globalCfg.Auth.Machines[name] = acl
-		}
-	}
-
-	if err := persistConfig(); err != nil {
-		log.Printf("[hub] admin: persist error: %v", err)
-	}
-
-	log.Printf("[hub] admin: removed identity %q", id)
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "id": id})
-}
-
 
 // ── POST /api/admin/rotate/<id> ────────────────────────────────────
 

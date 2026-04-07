@@ -38,10 +38,6 @@ export function AdminListTokens(arg1) {
   return window['go']['main']['App']['AdminListTokens'](arg1);
 }
 
-export function AdminRemoveAccess(arg1, arg2) {
-  return window['go']['main']['App']['AdminRemoveAccess'](arg1, arg2);
-}
-
 export function AdminRenameAccess(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminRenameAccess'](arg1, arg2, arg3);
 }

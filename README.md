@@ -243,7 +243,7 @@ Tela is designed to be secure by default. The hub auto-generates an owner token 
 
 **Explorer integration.** `tela mount` starts a WebDAV server that mounts Tela file shares as a local drive. On Windows, run `tela mount -mount T:` to map a drive letter. On macOS and Linux, run `tela mount -mount ~/tela` to mount to a directory. Each connected machine with file sharing enabled appears as a top-level folder. No kernel drivers or third-party software required.
 
-**Gateway.** The agent can run a built-in HTTP reverse proxy that routes requests by URL path to different local services. This lets you expose a multi-service application (web UI, REST API, metrics) through a single tunnel port without needing nginx, Caddy, or any other reverse proxy. See [REFERENCE.md](REFERENCE.md#gateway-path-based-reverse-proxy) for configuration details.
+**Gateway.** The agent can run a built-in HTTP reverse proxy that routes requests by URL path to different local services. This lets you expose a multi-service application (web UI, REST API, metrics) through a single tunnel port without needing nginx, Caddy, or any other reverse proxy. See [howto/gateway.md](howto/gateway.md) for a full walkthrough or [REFERENCE.md](REFERENCE.md#gateway-path-based-reverse-proxy) for the configuration reference.
 
 **Upstreams.** The agent can forward a service's outbound dependency calls to configurable targets. Services call `localhost:PORT` and telad routes to the real dependency, which can be local, on another machine, or in a different environment. This lets developers rewire service dependencies by editing a YAML file without changing code, containers, or remote environments. See [REFERENCE.md](REFERENCE.md#upstreams-dependency-routing) for configuration details.
 

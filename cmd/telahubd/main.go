@@ -1847,7 +1847,6 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/status", handleAPIStatus)
 	mux.HandleFunc("/status", handleAPIStatus)
 	mux.HandleFunc("/api/history", handleAPIHistory)
-	mux.HandleFunc("/api/admin/tokens/", handleAdminTokens) // DELETE /api/admin/tokens/{id}
 	mux.HandleFunc("/api/admin/tokens", handleAdminTokens)
 	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate) // /api/admin/rotate/{id}
 	mux.HandleFunc("/api/admin/portals/", handleAdminPortals) // DELETE /api/admin/portals/{name}

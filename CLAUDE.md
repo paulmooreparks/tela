@@ -64,6 +64,27 @@ All three binaries must compile cleanly after any change. Always run both
 
 ## Guiding Principles
 
+### Pre-1.0: no cruft, no backward compatibility
+
+Tela has not shipped 1.0 yet. There is no backward compatibility burden, and
+there will not be one until 1.0. Until then:
+
+- **Delete duplicate code paths.** When a new shape replaces an old one,
+  remove the old one in the same change. Do not leave the old behind "for
+  now," do not mark it deprecated, do not keep it as a fallback.
+- **Delete old API endpoints, CLI subcommands, config field names, message
+  types, and database columns the moment they have a successor.** Do not
+  introduce compat shims, dual-write code, or versioned wrappers.
+- **Rename freely.** If a name is wrong, fix it everywhere in one commit.
+  No aliases, no `// renamed from X` comments.
+- **Migrate data, do not version it.** If a config or schema changes shape,
+  write the migration and delete the old shape.
+
+After 1.0, the rules invert: deprecation will be slow and deliberate, and
+backward compatibility will be maintained religiously. The reason this
+matters now is that any cruft left in the tree at 1.0 becomes a permanent
+maintenance burden. Cut it before it gets locked in.
+
 ### Secure by default (OpenBSD philosophy)
 Systems ship locked down. Operators must take deliberate action to open them up.
 - Hubs auto-generate an owner token on first start (never run open by default)
