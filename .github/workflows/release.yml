@@ -263,9 +263,27 @@ jobs:
           Write-Host "makensis location:"
           Get-Command makensis -ErrorAction SilentlyContinue | Select-Object Source
           cd cmd/telagui
-          # Set version in wails.json so NSIS installer gets the correct version
+          # Set version in wails.json so the NSIS installer's VIFileVersion
+          # field is set correctly. NSIS requires strict X.X.X.X numeric
+          # format -- no prerelease suffixes -- so we map the channel tag
+          # shape to four numeric components:
+          #   v0.5.0           -> 0.5.0.0   (stable)
+          #   v0.5.0-dev.112   -> 0.5.0.112 (dev)
+          #   v0.5.0-beta.3    -> 0.5.0.3   (beta)
           $VERSION = "${{ steps.version.outputs.tag }}"
-          $VERSION_NUM = $VERSION.TrimStart("v")
+          $RAW = $VERSION.TrimStart("v")
+          if ($RAW -match '^(\d+\.\d+\.\d+)(?:-(?:dev|beta)\.(\d+))?$') {
+            $base = $Matches[1]
+            $suffix = if ($Matches[2]) { $Matches[2] } else { "0" }
+            $VERSION_NUM = "$base.$suffix"
+          } else {
+            # Fallback: strip any non-numeric, non-dot characters and pad
+            # to four components. Should never hit this path with the
+            # known channel tag shapes.
+            $VERSION_NUM = ($RAW -replace '[^0-9.]', '')
+            while (($VERSION_NUM -split '\.').Count -lt 4) { $VERSION_NUM += ".0" }
+          }
+          Write-Host "wails.json productVersion: $VERSION_NUM (from tag $VERSION)"
           $wailsJson = Get-Content wails.json | ConvertFrom-Json
           $wailsJson.info.productVersion = $VERSION_NUM
           $wailsJson | ConvertTo-Json -Depth 10 | Set-Content wails.json
