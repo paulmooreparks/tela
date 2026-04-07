@@ -35,34 +35,18 @@ func cmdAdmin(args []string) {
 	rest := args[1:]
 
 	switch subcmd {
-	case "list-tokens":
-		cmdAdminListTokens(rest)
-	case "add-token":
-		cmdAdminAddToken(rest)
-	case "remove-token":
-		cmdAdminRemoveToken(rest)
-	case "grant":
-		cmdAdminGrant(rest)
-	case "revoke":
-		cmdAdminRevoke(rest)
-	case "rotate":
-		cmdAdminRotate(rest)
-	case "pair-code":
-		cmdAdminPairCode(rest)
-	case "list-portals":
-		cmdAdminListPortals(rest)
-	case "add-portal":
-		cmdAdminAddPortal(rest)
-	case "remove-portal":
-		cmdAdminRemovePortal(rest)
-	case "grant-manage":
-		cmdAdminGrantManage(rest)
-	case "revoke-manage":
-		cmdAdminRevokeManage(rest)
 	case "access":
 		cmdAdminAccess(rest)
 	case "agent":
 		cmdAdminAgent(rest)
+	case "tokens":
+		cmdAdminTokens(rest)
+	case "portals":
+		cmdAdminPortals(rest)
+	case "rotate":
+		cmdAdminRotate(rest)
+	case "pair-code":
+		cmdAdminPairCode(rest)
 	case "help", "-h", "--help":
 		printAdminUsage()
 	default:
@@ -73,41 +57,45 @@ func cmdAdmin(args []string) {
 }
 
 func printAdminUsage() {
-	fmt.Fprintf(os.Stderr, `tela admin -- remote hub auth and portal management
+	fmt.Fprintf(os.Stderr, `tela admin -- remote hub administration
 
 Usage:
-  tela admin <command> [options]
+  tela admin <resource> <action> [options]
 
-Access commands (unified view):
-  access          List all identities with their per-machine permissions
-  access grant    Grant permissions on a machine (connect,register,manage)
-  access revoke   Revoke all permissions on a machine
-  access rename   Rename an identity
-  access remove   Remove an identity and all its permissions
+Resources:
+  access    Per-identity, per-machine permissions (the unified RBAC view)
+  agent     Remote agent management through the hub
+  tokens    Token identity CRUD
+  portals   Portal registrations on the hub
 
-Token commands (legacy):
-  list-tokens    List all token identities on the hub
-  add-token      Add a new token identity (returns the token once)
-  remove-token   Remove a token identity
-  grant          Grant connect access to a machine
-  revoke         Revoke connect access to a machine
-  grant-manage   Grant manage access to a machine
-  revoke-manage  Revoke manage access to a machine
-  rotate         Regenerate token for an identity
-  pair-code      Generate a pairing code for agent onboarding
+Standalone commands:
+  rotate     Regenerate the token for an identity
+  pair-code  Generate a one-time pairing code for agent onboarding
 
-Portal commands:
-  list-portals    List portal registrations
-  add-portal      Register hub with a portal
-  remove-portal   Remove a portal registration
+Access:
+  tela admin access                                List all identities and their permissions
+  tela admin access grant <id> <machine> <perms>   Grant permissions (comma-separated: connect,register,manage)
+  tela admin access revoke <id> <machine>          Revoke all permissions on a machine
+  tela admin access rename <id> <new-id>           Rename an identity
+  tela admin access remove <id>                    Remove an identity entirely
 
-Agent commands (remote agent management):
-  agent list      List all agents on the hub
-  agent config    Show an agent's running configuration
-  agent set       Push a partial config update to an agent
-  agent logs      Retrieve recent log lines from an agent
-  agent restart   Request a graceful restart of an agent
-  agent update    Download a new release and restart the agent
+Agent:
+  tela admin agent list                            List agents registered with the hub
+  tela admin agent config -machine <id>            Show an agent's running configuration
+  tela admin agent set -machine <id> <json>        Push a partial config update
+  tela admin agent logs -machine <id> [-n 100]     Retrieve recent log lines
+  tela admin agent restart -machine <id>           Request a graceful restart
+  tela admin agent update -machine <id> [-version vX.Y.Z]  Download a new release and restart
+
+Tokens:
+  tela admin tokens list                           List all token identities
+  tela admin tokens add <id> [-role <role>]        Create a new token identity (returns once)
+  tela admin tokens remove <id>                    Remove a token identity
+
+Portals:
+  tela admin portals list                          List portal registrations
+  tela admin portals add <name> -portal-url <url>  Register the hub with a portal
+  tela admin portals remove <name>                 Remove a portal registration
 
 All commands require -hub and -token.
 The token must belong to an owner or admin identity.
@@ -118,28 +106,24 @@ Token resolution (in order):
   3. TELA_TOKEN env var
 
 Examples:
-  tela admin list-tokens -hub gohub -token <owner-token>
-  tela admin add-token alice -hub gohub -token <owner-token>
-  tela admin add-token bob -hub gohub -token <owner-token> -role admin
-  tela admin grant alice my-desktop -hub gohub -token <owner-token>
-  tela admin revoke alice my-desktop -hub gohub -token <owner-token>
-  tela admin remove-token alice -hub gohub -token <owner-token>
+  tela admin access -hub gohub -token <owner-token>
+  tela admin access grant alice barn connect,manage -hub gohub -token <owner-token>
+  tela admin tokens add alice -hub gohub -token <owner-token>
+  tela admin tokens add bob -role admin -hub gohub -token <owner-token>
   tela admin rotate alice -hub gohub -token <owner-token>
   tela admin pair-code barn -hub gohub -token <owner-token>
 
-  tela admin list-portals -hub gohub -token <owner-token>
-  tela admin add-portal awansaya -hub gohub -token <owner-token> \
-    -portal-url https://awansaya.net
-  tela admin remove-portal awansaya -hub gohub -token <owner-token>
+  tela admin portals add awansaya -portal-url https://awansaya.net \
+    -hub gohub -token <owner-token>
 
   tela admin agent list -hub gohub -token <owner-token>
-  tela admin agent logs -hub gohub -token <owner-token> -machine barn -n 200
-  tela admin agent restart -hub gohub -token <owner-token> -machine barn
-  tela admin agent update -hub gohub -token <owner-token> -machine barn
-  tela admin agent update -hub gohub -token <owner-token> -machine barn -version v0.4.0
+  tela admin agent logs -machine barn -n 200 -hub gohub -token <owner-token>
+  tela admin agent restart -machine barn -hub gohub -token <owner-token>
+  tela admin agent update -machine barn -hub gohub -token <owner-token>
+  tela admin agent update -machine barn -version v0.4.0 -hub gohub -token <owner-token>
 
 Tip: set TELA_OWNER_TOKEN in your shell profile so you don't need -token
-every time.  Use a separate TELA_TOKEN for day-to-day tela connect usage.
+every time. Use a separate TELA_TOKEN for day-to-day tela connect usage.
 `)
 }
 
@@ -397,72 +381,6 @@ func cmdAdminRemoveToken(args []string) {
 	fmt.Println("Change is already active (no hub restart needed).")
 }
 
-// ── tela admin grant ───────────────────────────────────────────────
-
-func cmdAdminGrant(args []string) {
-	fs := flag.NewFlagSet("admin grant", flag.ExitOnError)
-	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(permuteArgs(fs, args))
-	_ = hubURL
-	_ = token
-
-	if fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin grant <id> <machineId> -hub <hub> -token <token>")
-		os.Exit(1)
-	}
-	id := fs.Arg(0)
-	machineID := fs.Arg(1)
-	hub, tok := adminParseHubAndToken(fs)
-
-	body := map[string]string{"id": id, "machineId": machineID}
-
-	status, result, err := adminHTTP("POST", hub, "/api/admin/grant", tok, body)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	adminCheckError(status, result)
-
-	st, _ := result["status"].(string)
-	if st == "already_granted" {
-		fmt.Printf("Identity '%s' already has connect access to '%s'.\n", id, machineID)
-	} else {
-		fmt.Printf("Granted '%s' connect access to '%s'.\n", id, machineID)
-		fmt.Println("Change is already active (no hub restart needed).")
-	}
-}
-
-// ── tela admin revoke ──────────────────────────────────────────────
-
-func cmdAdminRevoke(args []string) {
-	fs := flag.NewFlagSet("admin revoke", flag.ExitOnError)
-	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(permuteArgs(fs, args))
-	_ = hubURL
-	_ = token
-
-	if fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin revoke <id> <machineId> -hub <hub> -token <token>")
-		os.Exit(1)
-	}
-	id := fs.Arg(0)
-	machineID := fs.Arg(1)
-	hub, tok := adminParseHubAndToken(fs)
-
-	body := map[string]string{"id": id, "machineId": machineID}
-
-	status, result, err := adminHTTP("POST", hub, "/api/admin/revoke", tok, body)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	adminCheckError(status, result)
-
-	fmt.Printf("Revoked '%s' connect access to '%s'.\n", id, machineID)
-	fmt.Println("Change is already active (no hub restart needed).")
-}
 
 // ── tela admin rotate ──────────────────────────────────────────────
 
@@ -729,67 +647,54 @@ func cmdAdminRemovePortal(args []string) {
 	fmt.Println("Change is already active (no hub restart needed).")
 }
 
-// ── Manage ACL ────────────────────────────────────────────────────
+// ── tela admin tokens ─────────────────────────────────────────────
+// Noun-style dispatcher that delegates to the existing list/add/remove
+// functions. Keeps the public CLI surface RESTful: tokens is the
+// resource, list/add/remove are the operations on it.
 
-func cmdAdminGrantManage(args []string) {
-	fs := flag.NewFlagSet("admin grant-manage", flag.ExitOnError)
-	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(permuteArgs(fs, args))
-	_ = hubURL
-	_ = token
-
-	if fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin grant-manage <id> <machineId> -hub <hub> -token <token>")
+func cmdAdminTokens(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, `Usage:
+  tela admin tokens list                       List all token identities
+  tela admin tokens add <id> [-role <role>]    Create a new token identity
+  tela admin tokens remove <id>                Remove a token identity`)
 		os.Exit(1)
 	}
-	id := fs.Arg(0)
-	machineID := fs.Arg(1)
-	hub, tok := adminParseHubAndToken(fs)
-
-	body := map[string]string{"id": id, "machineId": machineID}
-	status, result, err := adminHTTP("POST", hub, "/api/admin/grant-manage", tok, body)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	switch args[0] {
+	case "list":
+		cmdAdminListTokens(args[1:])
+	case "add":
+		cmdAdminAddToken(args[1:])
+	case "remove", "rm":
+		cmdAdminRemoveToken(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown tokens subcommand: %s\n", args[0])
 		os.Exit(1)
-	}
-	adminCheckError(status, result)
-
-	st, _ := result["status"].(string)
-	if st == "already_granted" {
-		fmt.Printf("Identity '%s' already has manage access to '%s'.\n", id, machineID)
-	} else {
-		fmt.Printf("Granted '%s' manage access to '%s'.\n", id, machineID)
-		fmt.Println("Change is already active (no hub restart needed).")
 	}
 }
 
-func cmdAdminRevokeManage(args []string) {
-	fs := flag.NewFlagSet("admin revoke-manage", flag.ExitOnError)
-	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
-	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
-	fs.Parse(permuteArgs(fs, args))
-	_ = hubURL
-	_ = token
+// ── tela admin portals ────────────────────────────────────────────
+// Noun-style dispatcher for portal registrations on the hub.
 
-	if fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin revoke-manage <id> <machineId> -hub <hub> -token <token>")
+func cmdAdminPortals(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, `Usage:
+  tela admin portals list                              List portal registrations
+  tela admin portals add <name> -portal-url <url>      Register hub with a portal
+  tela admin portals remove <name>                     Remove a portal registration`)
 		os.Exit(1)
 	}
-	id := fs.Arg(0)
-	machineID := fs.Arg(1)
-	hub, tok := adminParseHubAndToken(fs)
-
-	body := map[string]string{"id": id, "machineId": machineID}
-	status, result, err := adminHTTP("POST", hub, "/api/admin/revoke-manage", tok, body)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	switch args[0] {
+	case "list":
+		cmdAdminListPortals(args[1:])
+	case "add":
+		cmdAdminAddPortal(args[1:])
+	case "remove", "rm":
+		cmdAdminRemovePortal(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown portals subcommand: %s\n", args[0])
 		os.Exit(1)
 	}
-	adminCheckError(status, result)
-
-	fmt.Printf("Revoked '%s' manage access to '%s'.\n", id, machineID)
-	fmt.Println("Change is already active (no hub restart needed).")
 }
 
 // ── Agent management ──────────────────────────────────────────────

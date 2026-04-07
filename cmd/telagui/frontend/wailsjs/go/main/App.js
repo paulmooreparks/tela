@@ -26,22 +26,6 @@ export function AdminGeneratePairCode(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AdminGeneratePairCode'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function AdminGrantConnect(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminGrantConnect'](arg1, arg2, arg3);
-}
-
-export function AdminGrantManage(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminGrantManage'](arg1, arg2, arg3);
-}
-
-export function AdminGrantRegister(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminGrantRegister'](arg1, arg2, arg3);
-}
-
-export function AdminListACLs(arg1) {
-  return window['go']['main']['App']['AdminListACLs'](arg1);
-}
-
 export function AdminListAccess(arg1) {
   return window['go']['main']['App']['AdminListAccess'](arg1);
 }
@@ -62,20 +46,8 @@ export function AdminRenameAccess(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminRenameAccess'](arg1, arg2, arg3);
 }
 
-export function AdminRevokeConnect(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminRevokeConnect'](arg1, arg2, arg3);
-}
-
 export function AdminRevokeMachineAccess(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminRevokeMachineAccess'](arg1, arg2, arg3);
-}
-
-export function AdminRevokeManage(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminRevokeManage'](arg1, arg2, arg3);
-}
-
-export function AdminRevokeRegister(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminRevokeRegister'](arg1, arg2, arg3);
 }
 
 export function AdminRotateToken(arg1, arg2) {

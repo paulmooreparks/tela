@@ -125,9 +125,9 @@ Deny (403 Forbidden)
 
 ## The unified access API
 
-The separate concepts of tokens and machine permissions are stored in different sections of the hub's config file (`auth.tokens` and `auth.machines`). Historically, they were also exposed as separate API endpoints (`/api/admin/tokens` and `/api/admin/acls`), which required users to mentally join them by matching token values to ACL entries.
+The two concepts of tokens and machine permissions are stored in different sections of the hub's config file (`auth.tokens` and `auth.machines`), but they are exposed through a single unified API: `/api/admin/access`.
 
-The unified access API (`/api/admin/access`) joins these into a single resource. Each access entry shows one identity alongside its role and all of its per-machine permissions:
+Each access entry joins an identity with its role and all of its per-machine permissions, so callers do not have to fetch tokens and ACLs separately and reconcile them by matching token values:
 
 ```
 GET /api/admin/access

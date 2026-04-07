@@ -1229,64 +1229,6 @@ func (a *App) AdminRotateToken(hubURL, id string) string {
 	return string(data)
 }
 
-// AdminListACLs returns the ACL rules from a hub's admin API.
-func (a *App) AdminListACLs(hubURL string) string {
-	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/acls", nil)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
-// AdminGrantConnect grants connect access to an identity for a machine.
-func (a *App) AdminGrantConnect(hubURL, id, machineId string) string {
-	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/grant", body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
-// AdminRevokeConnect revokes connect access from an identity for a machine.
-func (a *App) AdminRevokeConnect(hubURL, id, machineId string) string {
-	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/revoke", body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
-// AdminGrantRegister grants register access to an identity for a machine.
-func (a *App) AdminGrantRegister(hubURL, id, machineId string) string {
-	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/grant-register", body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
-// AdminRevokeRegister revokes register access from an identity for a machine.
-func (a *App) AdminGrantManage(hubURL, id, machineId string) string {
-	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/grant-manage", body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
-func (a *App) AdminRevokeManage(hubURL, id, machineId string) string {
-	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/revoke-manage", body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
 // ── Unified Access API ─────────────────────────────────────────────
 
 // AdminListAccess returns the unified access list (tokens + permissions joined).
@@ -1331,15 +1273,6 @@ func (a *App) AdminRenameAccess(hubURL, id, newId string) string {
 // AdminRemoveAccess removes a token identity and scrubs it from all ACLs.
 func (a *App) AdminRemoveAccess(hubURL, id string) string {
 	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/access/"+url.PathEscape(id), nil)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
-}
-
-func (a *App) AdminRevokeRegister(hubURL, id, machineId string) string {
-	body, _ := json.Marshal(map[string]string{"id": id, "machineId": machineId})
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/revoke-register", body)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}

@@ -1,30 +1,41 @@
-// admin_api.go -- REST API for remote hub auth and portal management
+// admin_api.go -- REST API for remote hub administration.
 //
 // All endpoints require Authorization: Bearer <owner-or-admin-token>.
 // Changes take effect immediately (hot-reload) and are persisted to the
 // YAML config file so they survive restarts.
 //
-// Unified access API (RESTful):
-//   GET    /api/admin/access                           List all access entries (tokens + permissions joined)
-//   GET    /api/admin/access/{id}                      Get one access entry
-//   PATCH  /api/admin/access/{id}                      Update entry (rename: {"id":"new-name"})
-//   DELETE /api/admin/access/{id}                      Remove identity (token + all ACL refs)
-//   PUT    /api/admin/access/{id}/machines/{machineId} Set permissions  {"permissions":["connect","manage"]}
-//   DELETE /api/admin/access/{id}/machines/{machineId} Revoke all permissions on a machine
+// Resources:
 //
-// Legacy endpoints (kept for backward compatibility):
-//   GET    /api/admin/tokens            List all token identities
-//   POST   /api/admin/tokens            Add a new token identity
-//   DELETE /api/admin/tokens?id=<id>    Remove a token identity
-//   GET    /api/admin/acls              List all machine ACL rules
-//   POST   /api/admin/grant             Grant connect access  {id, machineId}
-//   POST   /api/admin/revoke            Revoke connect access {id, machineId}
-//   POST   /api/admin/grant-register    Grant register access {id, machineId}
-//   POST   /api/admin/revoke-register   Revoke register access {id, machineId}
-//   POST   /api/admin/rotate/<id>       Regenerate token for identity
-//   GET    /api/admin/portals           List portal registrations
-//   POST   /api/admin/portals           Add/update a portal registration
-//   DELETE /api/admin/portals?name=<n>  Remove a portal registration
+//   Access (the unified RBAC view -- preferred for all permission work):
+//     GET    /api/admin/access                                List all identities and permissions
+//     GET    /api/admin/access/{id}                           Get one access entry
+//     PATCH  /api/admin/access/{id}                           Rename: {"id":"new-name"}
+//     DELETE /api/admin/access/{id}                           Remove identity entirely
+//     PUT    /api/admin/access/{id}/machines/{machineId}      Set permissions  {"permissions":["connect","manage"]}
+//     DELETE /api/admin/access/{id}/machines/{machineId}      Revoke all permissions on a machine
+//
+//   Tokens (CRUD on the token identity itself):
+//     GET    /api/admin/tokens                                List all token identities
+//     POST   /api/admin/tokens                                Create a new token identity (returned once)
+//     DELETE /api/admin/tokens?id=<id>                        Delete a token identity
+//     POST   /api/admin/rotate/{id}                           Regenerate the token for an identity
+//
+//   Portals:
+//     GET    /api/admin/portals                               List portal registrations
+//     POST   /api/admin/portals                               Add or update a portal registration
+//     DELETE /api/admin/portals?name=<n>                      Remove a portal registration
+//
+//   Pairing:
+//     POST   /api/admin/pair-code                             Generate a one-time pairing code
+//
+//   Agents (mediated agent management; the hub forwards to telad):
+//     GET    /api/admin/agents                                List registered agents
+//     POST   /api/admin/agents/{machine}/{action}             Send a management action (config-get, config-set, logs, restart, update)
+//
+//   Hub lifecycle:
+//     GET    /api/admin/logs?lines=N                          Recent hub log lines
+//     POST   /api/admin/restart                               Graceful restart
+//     POST   /api/admin/update                                Self-update from GitHub releases
 
 package main
 
@@ -287,348 +298,6 @@ func adminRemoveToken(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "id": id})
 }
 
-// ── GET /api/admin/acls ───────────────────────────────────────────
-
-type adminACLView struct {
-	MachineID     string   `json:"machineId"`
-	RegisterID    string   `json:"registerId,omitempty"`    // identity that can register (empty = none)
-	ConnectIDs    []string `json:"connectIds"`              // identities that can connect
-	ManageIDs     []string `json:"manageIds"`               // identities that can manage
-}
-
-func handleAdminACLs(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := requireOwnerOrAdmin(w, r); !ok {
-		return
-	}
-
-	globalCfgMu.RLock()
-	defer globalCfgMu.RUnlock()
-
-	acls := make([]adminACLView, 0, len(globalCfg.Auth.Machines))
-	for machineID, acl := range globalCfg.Auth.Machines {
-		view := adminACLView{
-			MachineID:  machineID,
-			ConnectIDs: make([]string, 0, len(acl.ConnectTokens)),
-			ManageIDs:  make([]string, 0, len(acl.ManageTokens)),
-		}
-
-		// Reverse-lookup register token to identity
-		if acl.RegisterToken != "" {
-			if id := globalAuth.identityID(acl.RegisterToken); id != "" {
-				view.RegisterID = id
-			}
-		}
-
-		// Reverse-lookup connect tokens to identities
-		for _, ct := range acl.ConnectTokens {
-			if id := globalAuth.identityID(ct); id != "" {
-				view.ConnectIDs = append(view.ConnectIDs, id)
-			}
-		}
-
-		// Reverse-lookup manage tokens to identities
-		for _, mt := range acl.ManageTokens {
-			if id := globalAuth.identityID(mt); id != "" {
-				view.ManageIDs = append(view.ManageIDs, id)
-			}
-		}
-
-		acls = append(acls, view)
-	}
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"acls": acls})
-}
-
-// ── POST /api/admin/grant-register ───────────────────────────────
-
-func handleAdminGrantRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodPost {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := requireOwnerOrAdmin(w, r); !ok {
-		return
-	}
-
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
-	var req adminGrantRequest
-	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
-		return
-	}
-
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
-
-	entry := findTokenEntryInCfg(req.ID)
-	if entry == nil {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
-		return
-	}
-
-	if globalCfg.Auth.Machines == nil {
-		globalCfg.Auth.Machines = make(map[string]machineACL)
-	}
-	acl := globalCfg.Auth.Machines[req.MachineID]
-
-	if acl.RegisterToken == entry.Token {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "already_granted", "id": req.ID, "machineId": req.MachineID})
-		return
-	}
-
-	acl.RegisterToken = entry.Token
-	globalCfg.Auth.Machines[req.MachineID] = acl
-
-	if err := persistConfig(); err != nil {
-		log.Printf("[hub] admin: persist error: %v", err)
-	}
-
-	log.Printf("[hub] admin: granted %q register to %q", req.ID, req.MachineID)
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "granted", "id": req.ID, "machineId": req.MachineID})
-}
-
-// ── POST /api/admin/revoke-register ──────────────────────────────
-
-func handleAdminRevokeRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodPost {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := requireOwnerOrAdmin(w, r); !ok {
-		return
-	}
-
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
-	var req adminGrantRequest
-	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
-		return
-	}
-
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
-
-	entry := findTokenEntryInCfg(req.ID)
-	if entry == nil {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
-		return
-	}
-
-	acl, exists := globalCfg.Auth.Machines[req.MachineID]
-	if !exists || acl.RegisterToken != entry.Token {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity does not have register access to this machine"})
-		return
-	}
-
-	acl.RegisterToken = ""
-	globalCfg.Auth.Machines[req.MachineID] = acl
-
-	if err := persistConfig(); err != nil {
-		log.Printf("[hub] admin: persist error: %v", err)
-	}
-
-	log.Printf("[hub] admin: revoked %q register from %q", req.ID, req.MachineID)
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": req.ID, "machineId": req.MachineID})
-}
-
-// ── POST /api/admin/grant ──────────────────────────────────────────
-
-type adminGrantRequest struct {
-	ID        string `json:"id"`
-	MachineID string `json:"machineId"`
-}
-
-func handleAdminGrant(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodPost {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := requireOwnerOrAdmin(w, r); !ok {
-		return
-	}
-
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
-	var req adminGrantRequest
-	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
-		return
-	}
-
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
-
-	entry := findTokenEntryInCfg(req.ID)
-	if entry == nil {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
-		return
-	}
-
-	if globalCfg.Auth.Machines == nil {
-		globalCfg.Auth.Machines = make(map[string]machineACL)
-	}
-	acl := globalCfg.Auth.Machines[req.MachineID]
-
-	// Check if already granted
-	for _, ct := range acl.ConnectTokens {
-		if ct == entry.Token {
-			adminCorsHeaders(w, r)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"status": "already_granted"})
-			return
-		}
-	}
-
-	acl.ConnectTokens = append(acl.ConnectTokens, entry.Token)
-	globalCfg.Auth.Machines[req.MachineID] = acl
-
-	if err := persistConfig(); err != nil {
-		log.Printf("[hub] admin: persist error: %v", err)
-	}
-
-	log.Printf("[hub] admin: granted %q connect to %q", req.ID, req.MachineID)
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "granted", "id": req.ID, "machineId": req.MachineID})
-}
-
-// ── POST /api/admin/revoke ─────────────────────────────────────────
-
-func handleAdminRevoke(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodPost {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := requireOwnerOrAdmin(w, r); !ok {
-		return
-	}
-
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
-	var req adminGrantRequest // same shape
-	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
-		return
-	}
-
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
-
-	entry := findTokenEntryInCfg(req.ID)
-	if entry == nil {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
-		return
-	}
-
-	acl, exists := globalCfg.Auth.Machines[req.MachineID]
-	if !exists {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "no ACL for machine"})
-		return
-	}
-
-	found := false
-	newCT := make([]string, 0, len(acl.ConnectTokens))
-	for _, ct := range acl.ConnectTokens {
-		if ct == entry.Token {
-			found = true
-			continue
-		}
-		newCT = append(newCT, ct)
-	}
-	if !found {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity does not have access to this machine"})
-		return
-	}
-
-	acl.ConnectTokens = newCT
-	globalCfg.Auth.Machines[req.MachineID] = acl
-
-	if err := persistConfig(); err != nil {
-		log.Printf("[hub] admin: persist error: %v", err)
-	}
-
-	log.Printf("[hub] admin: revoked %q from %q", req.ID, req.MachineID)
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": req.ID, "machineId": req.MachineID})
-}
 
 // ── POST /api/admin/rotate/<id> ────────────────────────────────────
 
@@ -895,139 +564,6 @@ func adminRemovePortal(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "name": name})
 }
 
-// ── POST /api/admin/grant-manage ───────────────────────────────────
-
-func handleAdminGrantManage(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodPost {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := requireOwnerOrAdmin(w, r); !ok {
-		return
-	}
-
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
-	var req adminGrantRequest
-	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
-		return
-	}
-
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
-
-	entry := findTokenEntryInCfg(req.ID)
-	if entry == nil {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
-		return
-	}
-
-	if globalCfg.Auth.Machines == nil {
-		globalCfg.Auth.Machines = make(map[string]machineACL)
-	}
-	acl := globalCfg.Auth.Machines[req.MachineID]
-
-	for _, mt := range acl.ManageTokens {
-		if mt == entry.Token {
-			adminCorsHeaders(w, r)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"status": "already_granted"})
-			return
-		}
-	}
-
-	acl.ManageTokens = append(acl.ManageTokens, entry.Token)
-	globalCfg.Auth.Machines[req.MachineID] = acl
-
-	if err := persistConfig(); err != nil {
-		log.Printf("[hub] admin: persist error: %v", err)
-	}
-
-	log.Printf("[hub] admin: granted %q manage on %q", req.ID, req.MachineID)
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "granted", "id": req.ID, "machineId": req.MachineID})
-}
-
-// ── POST /api/admin/revoke-manage ──────────────────────────────────
-
-func handleAdminRevokeManage(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodPost {
-		adminCorsHeaders(w, r)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := requireOwnerOrAdmin(w, r); !ok {
-		return
-	}
-
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
-	var req adminGrantRequest
-	if err := json.Unmarshal(body, &req); err != nil || req.ID == "" || req.MachineID == "" {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "id and machineId are required"})
-		return
-	}
-
-	globalCfgMu.Lock()
-	defer globalCfgMu.Unlock()
-
-	entry := findTokenEntryInCfg(req.ID)
-	if entry == nil {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
-		return
-	}
-
-	if globalCfg.Auth.Machines == nil {
-		adminCorsHeaders(w, r)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "not_found"})
-		return
-	}
-	acl := globalCfg.Auth.Machines[req.MachineID]
-
-	filtered := make([]string, 0, len(acl.ManageTokens))
-	for _, mt := range acl.ManageTokens {
-		if mt != entry.Token {
-			filtered = append(filtered, mt)
-		}
-	}
-	acl.ManageTokens = filtered
-	globalCfg.Auth.Machines[req.MachineID] = acl
-
-	if err := persistConfig(); err != nil {
-		log.Printf("[hub] admin: persist error: %v", err)
-	}
-
-	log.Printf("[hub] admin: revoked %q manage on %q", req.ID, req.MachineID)
-
-	adminCorsHeaders(w, r)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": req.ID, "machineId": req.MachineID})
-}
 
 // ── Unified Access API ───────────────────────────────────────────
 //

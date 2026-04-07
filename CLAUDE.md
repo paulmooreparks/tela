@@ -99,9 +99,9 @@ the colloquial "REST" that amounts to RPC-over-HTTP with JSON. Specifically:
 - Avoid action-oriented endpoints like `/api/admin/rotate/{id}`. Prefer
   PATCH or PUT on the resource with the intended state change in the body.
 
-Legacy endpoints that predate this convention (e.g., `/api/admin/grant`,
-`/api/admin/revoke`) remain for backward compatibility but should not be
-used as a pattern for new endpoints.
+Tela is pre-release. There is no backward compatibility burden yet. When
+the right shape becomes obvious, delete the cruft and migrate to the new
+shape rather than carrying both.
 
 ## Architecture Notes
 

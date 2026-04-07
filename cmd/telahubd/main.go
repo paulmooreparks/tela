@@ -1849,16 +1849,9 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/api/history", handleAPIHistory)
 	mux.HandleFunc("/api/admin/tokens/", handleAdminTokens) // DELETE /api/admin/tokens/{id}
 	mux.HandleFunc("/api/admin/tokens", handleAdminTokens)
-	mux.HandleFunc("/api/admin/acls", handleAdminACLs)
-	mux.HandleFunc("/api/admin/grant", handleAdminGrant)
-	mux.HandleFunc("/api/admin/revoke", handleAdminRevoke)
-	mux.HandleFunc("/api/admin/grant-register", handleAdminGrantRegister)
-	mux.HandleFunc("/api/admin/revoke-register", handleAdminRevokeRegister)
 	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate) // /api/admin/rotate/{id}
 	mux.HandleFunc("/api/admin/portals/", handleAdminPortals) // DELETE /api/admin/portals/{name}
 	mux.HandleFunc("/api/admin/portals", handleAdminPortals)
-	mux.HandleFunc("/api/admin/grant-manage", handleAdminGrantManage)
-	mux.HandleFunc("/api/admin/revoke-manage", handleAdminRevokeManage)
 	mux.HandleFunc("/api/admin/pair-code", handleAdminPairCode)
 	mux.HandleFunc("/api/admin/access/", handleAdminAccess)
 	mux.HandleFunc("/api/admin/access", handleAdminAccess)

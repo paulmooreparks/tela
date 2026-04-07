@@ -264,7 +264,7 @@ The `+` button at the right end of the tab strip opens the attach popover. It li
 
 The popover renders next to the `+` button using fixed positioning so it is not clipped by the scrollable tab strip. Click outside to dismiss.
 
-Dynamic log tabs use the same close-button pattern as the built-in tabs and can be torn off by closing them with the `\u00d7` button. Each agent or hub log tab shows a colored status dot:
+Dynamic log tabs use the same close-button pattern as the built-in tabs and can be torn off by closing them with their close button. Each agent or hub log tab shows a colored status dot:
 
 - **Green** -- the log fetched successfully and the source is reporting fresh lines
 - **Amber** -- the log is being fetched (in flight)

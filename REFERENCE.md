@@ -449,20 +449,11 @@ If you need to override the embedded console with custom files, set `TELAHUBD_WW
 | `/.well-known/tela` | GET | none | Hub directory discovery (RFC 8615) |
 | `/api/hubs` | GET | viewer+ | Hub listing for portal/CLI resolution |
 
-**Legacy endpoints (backward compatibility)**
-
-The following endpoints predate the unified access API and remain for backward compatibility. New code should use the `/api/admin/access` endpoints instead.
+**Token rotation**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/admin/grant` | POST | Grant connect access (use PUT on `/access/{id}/machines/{m}`) |
-| `/api/admin/revoke` | POST | Revoke connect access (use DELETE on `/access/{id}/machines/{m}`) |
-| `/api/admin/grant-register` | POST | Grant register access |
-| `/api/admin/revoke-register` | POST | Revoke register access |
-| `/api/admin/grant-manage` | POST | Grant manage access |
-| `/api/admin/revoke-manage` | POST | Revoke manage access |
-| `/api/admin/rotate/{id}` | POST | Regenerate a token |
-| `/api/admin/acls` | GET | List per-machine ACL rules (use GET `/api/admin/access`) |
+| `/api/admin/rotate/{id}` | POST | Regenerate the token for an identity |
 
 ### Firewall requirements
 
