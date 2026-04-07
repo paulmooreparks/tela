@@ -20,8 +20,10 @@ Tela ships through three release channels. A channel is a named pointer that res
 
 The defaults are:
 
-- TelaVisor and the Tela binaries default to `stable` after 1.0.
-- Until 1.0, only `dev` exists. There is no beta or stable line yet.
+- Pre-1.0: every binary defaults to `dev`. The channel mechanism itself works for all three channels (you can run a hub on beta or stable today), but `dev` is the safe default while the project is moving fast and `stable` is not yet the load-bearing public face it will be after 1.0.
+- Post-1.0: TelaVisor and the Tela binaries default to `stable`. New installations get the conservative line by default; opting into beta or dev becomes a deliberate choice.
+
+What changes at 1.0 is the *meaning* of `stable`, not its existence. Pre-1.0 a stable tag is "the most soaked thing we have, with no compatibility promise yet." Post-1.0 it carries the backward-compatibility guarantees described later in this document. Beta exists and is usable in both eras, with the same role: a candidate the maintainers want to put under more eyes before declaring it stable.
 
 Users can change channel through TelaVisor's Application Settings, through `tela channel set <name>`, or by editing the `update.channel` field in their hub or agent YAML config.
 
@@ -65,7 +67,7 @@ Branches flow forward only: `main` → `beta` → `release`. A fix lands on `mai
 
 Hotfixes are the one exception. If a critical bug is in a stable release, a fix can be cherry-picked from `main` directly to a `hotfix/v0.4.x` branch off the stable tag, tagged as `v0.4.1`, and immediately released. The same fix must then be merged forward into `beta` and `main` to prevent drift.
 
-**Pre-1.0 reality:** Today only `main` and the dev channel exist. The `beta` and `release` branches will be created when there is enough soaked code on `main` to warrant a beta cut. There is no harm in this; the model is in place and ready when we are.
+**Branches as conceptual containers, not gates.** The `beta` and `release` branches exist so that anyone reading the GitHub branch list can see "what is currently on this channel," but `promote.yml` does not actually require them: it tags commits directly. The forward-only `main` → `beta` → `release` flow is the *policy* for how a fix moves between channels; the branches are bookkeeping.
 
 ---
 
@@ -147,8 +149,8 @@ In all three cases the workflow:
 
 Pre-1.0:
 - **Dev**: every commit. No promise of stability.
-- **Beta**: cut on demand, when a maintainer decides a dev build deserves wider exposure. No fixed cadence.
-- **Stable**: not cut yet. The first stable release will be `v1.0.0`.
+- **Beta**: cut on demand when a maintainer decides a dev build deserves wider exposure. No fixed cadence.
+- **Stable**: cut on demand when a beta has soaked. Pre-1.0 stable releases (`v0.x.y`) are real releases that can be promoted to and installed against, but they carry no backward-compatibility promise yet — that begins at `v1.0.0`. Use them as "the most-soaked thing we've got," not as a long-term support line.
 
 Post-1.0:
 - **Dev**: every commit. Same as today.
