@@ -195,7 +195,9 @@ Commands:
   admin     Remote hub administration: access (RBAC), tokens, portals, pairing
             codes, hub lifecycle, and per-agent management. Run
             'tela admin help' for the full subcommand list.
-  channel   Show or set the client's release channel (dev|beta|stable)
+  channel   Show, set, inspect, or download from the release channel (dev|beta|stable).
+            Run 'tela channel help' for details. 'tela channel download <binary>'
+            fetches and SHA-256-verifies a binary from the configured channel.
   service   Manage tela as an OS service (install, start, stop, uninstall, status)
   version   Print version and exit
 
