@@ -1612,6 +1612,7 @@ Commands:
   service   Manage telahubd as an OS service (install, start, stop, etc.)
   user      Manage auth tokens (add, remove, grant, revoke, rotate)
   portal    Manage portal registrations (add, remove, list, sync)
+  update    Self-update the telahubd binary from the configured release channel
   version   Print version and exit
   help      Show this help
 
@@ -1654,6 +1655,9 @@ func main() {
 			return
 		case "portal":
 			handlePortalCommand()
+			return
+		case "update":
+			cmdSelfUpdate(os.Args[2:])
 			return
 		case "version", "--version":
 			fmt.Printf("telahubd %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)

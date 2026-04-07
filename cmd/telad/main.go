@@ -799,6 +799,7 @@ Subcommands:
   login     Store agent credentials in the system credential store
   logout    Remove agent credentials from the system credential store
   pair      Exchange a pairing code for an agent token
+  update    Self-update the telad binary from the configured release channel
   version   Print version and exit
   help      Show this help
 
@@ -858,6 +859,9 @@ func main() {
 			return
 		case "pair":
 			cmdPair(os.Args[2:])
+			return
+		case "update":
+			cmdSelfUpdate(os.Args[2:])
 			return
 		}
 	}
