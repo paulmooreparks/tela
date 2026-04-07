@@ -73,17 +73,27 @@ TelaVisor wraps the `tela` CLI in a graphical interface. It manages hub credenti
 
 ![TelaVisor Status tab, connected](screens/telavisor-status-connected.png)
 
-TelaVisor uses a two-mode layout. Clients mode manages connections, profiles, files, and client settings. Infrastructure mode provides hub administration (tokens, ACLs, history), agent monitoring, remote management, and credential storage.
+TelaVisor uses a two-mode layout. **Clients mode** manages connections, profiles, files, and client settings. **Infrastructure mode** provides full hub and agent administration: hub settings, machines, per-identity access, tokens, history, agent configuration, remote management, and credential storage.
+
+The Hub Settings view exposes lifecycle controls (View Logs, Update, Restart) and shows version badges that compare the running hub against the latest GitHub release. The same pattern is mirrored on the Agents tab for telad instances.
+
+![TelaVisor Hub Settings, Management section](screens/telavisor-hub-management.png)
+
+The Tokens view lets you create identities, rotate tokens, delete identities, and generate one-time pairing codes that users or agents can exchange for permanent tokens.
 
 ![TelaVisor Hubs, Tokens](screens/telavisor-hub-tokens.png)
+
+The Agents tab lists all telad instances visible across your configured hubs without requiring an active tunnel connection. Each agent shows version, services, file share configuration, and management controls. The Software row updates the agent binary in place by downloading from GitHub releases and restarting through the OS service manager.
+
+![TelaVisor Agents tab](screens/telavisor-agents.png)
 
 The Files tab provides a built-in file browser for machines with file sharing enabled. You can upload, download, rename, move, and delete files on remote machines through the encrypted tunnel. The file list updates in real time as changes happen on the remote machine.
 
 ![TelaVisor Files tab](screens/telavisor-files-browse.png)
 
-The Agents tab lists all agents across your hubs, showing version, services, file share configuration, and management controls.
+The persistent log panel at the bottom of the window collects output from TelaVisor itself, the tela process, the Commands log (every API call and CLI command issued), and any number of dynamic tabs you attach via the `+` button. Attaching a hub or agent log source streams the remote log buffer through the hub admin API. Open log tabs are remembered between sessions.
 
-![TelaVisor Agents tab](screens/telavisor-agents.png)
+![TelaVisor log panel attach popover](screens/telavisor-log-attach-popover.png)
 
 See [TelaVisor.md](TelaVisor.md) for full documentation.
 

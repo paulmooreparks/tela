@@ -287,6 +287,14 @@ Hub endpoints for agent management return 404 for agents that have not registere
 
 The management APIs described above are designed to be consumed by portals for enterprise fleet management. A portal like Awan Saya aggregates many hubs and their agents into a single management plane, scoped by organization, team, and role.
 
+#### 9.0 Terminology: agent vs fleet
+
+An **agent** is a single telad instance registered with a hub. It is the concrete unit users interact with: one machine, one daemon, one identity in the hub's machine table.
+
+A **fleet** is a *view* across many agents. It is the cross-hub aggregate that only the portal can produce, because only the portal knows which hubs belong to which organization. A user with TelaVisor sees their agents one hub at a time; the same user signed into the portal sees the same agents collected into a fleet.
+
+The user-facing label across all Tela products is **Agents** (the noun for the thing). "Fleet" appears only as a description of the aggregate or as part of internal API paths (`/api/fleet/agents/...`). Both TelaVisor's Infrastructure mode and the Awan Saya portal use the navigation label "Agents" so users moving between them see consistent terminology.
+
 #### 9.1 Current portal-hub relationship
 
 Today, the portal:

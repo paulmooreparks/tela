@@ -952,7 +952,15 @@ function formatVersionBadge(ver) {
       + ' <span class="tools-service-label">(latest: ' + escHtml(latestVersion) + ')</span>';
   }
   return '<span class="tools-status-warn">' + escHtml(ver) + '</span>'
-    + ' <span class="tools-service-label">update available: ' + escHtml(latestVersion) + '</span>';
+    + ' <a href="#" onclick="event.preventDefault();scrollToManagement();" class="tools-service-label" style="text-decoration:underline;cursor:pointer;">update available: ' + escHtml(latestVersion) + '</a>';
+}
+
+// Scroll to the Management card on the active settings page (hub or agent).
+function scrollToManagement() {
+  var el = document.getElementById('hub-management-card') || document.getElementById('agent-management-card');
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 // Refresh all version badges on screen (called when latestVersion is populated).
@@ -970,6 +978,15 @@ function refreshVersionBadges() {
       el.style.color = '';
     }
   });
+  // Re-render the agent detail and hub settings so Management button labels update.
+  if (document.getElementById('agent-management-card')) {
+    var agent = (agentsData || []).find(function (a) { return a.id === agentsSelectedId; });
+    if (agent) agentsShowDetail(agent);
+  }
+  if (document.getElementById('hub-management-card')) {
+    var pane = document.getElementById('hubs-admin-detail');
+    if (pane && currentAdminView === 'hub-settings') renderHubSettings(pane);
+  }
 }
 var updateDismissedForSession = false;
 var updateSkippedVersion = '';
@@ -2489,14 +2506,27 @@ function agentsShowDetail(a) {
   html += '</div>';
 
   // Management
-  html += '<div class="setting-card"><div class="setting-card-title">Management</div>'
+  html += '<div class="setting-card" id="agent-management-card"><div class="setting-card-title">Management</div>'
     + '<div class="setting-card-desc">Remote agent lifecycle controls.</div>'
     + '<table class="kv-table">';
   if (canManage) {
+    var agentVer = a.version || '';
+    var agentUpToDate = !latestVersion || !agentVer || agentVer === latestVersion;
+    var agentBtnLabel = 'Update';
+    var agentInfoText = '';
+    if (agentVer && latestVersion) {
+      if (agentUpToDate) {
+        agentBtnLabel = 'Up to date';
+        agentInfoText = agentVer + ' (latest)';
+      } else {
+        agentBtnLabel = 'Update to ' + latestVersion;
+        agentInfoText = 'currently running ' + agentVer;
+      }
+    }
     html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
       + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
-      + '<tr><td>Software</td><td><button type="button" class="tb-btn" id="agent-update-btn" onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">Update</button>'
-      + ' <span id="agent-update-status" class="tools-service-label"></span></td></tr>'
+      + '<tr><td>Software</td><td><button type="button" class="tb-btn" id="agent-update-btn" ' + (agentUpToDate ? 'disabled ' : '') + 'onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">' + escHtml(agentBtnLabel) + '</button>'
+      + ' <span id="agent-update-status" class="tools-service-label">' + escHtml(agentInfoText) + '</span></td></tr>'
       + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
   } else {
     html += '<tr><td colspan="2">Agent ' + (isOnline ? 'does not support remote management. Update telad to enable.' : 'is offline.') + '</td></tr>';
@@ -3860,12 +3890,25 @@ function renderHubSettings(pane) {
 
     // Management
     if (tokenRole === 'owner' || tokenRole === 'admin') {
-      html += '<div class="settings-group"><div class="settings-group-header">Management</div>';
+      var hubVer = (hubInfoData && hubInfoData.hub && hubInfoData.hub.version) || '';
+      var hubUpToDate = !latestVersion || !hubVer || hubVer === latestVersion;
+      var updateBtnLabel = 'Update';
+      var updateInfoText = '';
+      if (hubVer && latestVersion) {
+        if (hubUpToDate) {
+          updateBtnLabel = 'Up to date';
+          updateInfoText = hubVer + ' (latest)';
+        } else {
+          updateBtnLabel = 'Update to ' + latestVersion;
+          updateInfoText = 'currently running ' + hubVer;
+        }
+      }
+      html += '<div class="settings-group" id="hub-management-card"><div class="settings-group-header">Management</div>';
       html += '<div class="settings-row"><div class="settings-label">Log output</div>'
         + '<div class="settings-value"><button class="tb-btn" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Software</div>'
-        + '<div class="settings-value"><button class="tb-btn" id="hub-update-btn" onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Update</button>'
-        + ' <span id="hub-update-status" class="tools-service-label"></span></div></div>';
+        + '<div class="settings-value"><button class="tb-btn" id="hub-update-btn" ' + (hubUpToDate ? 'disabled ' : '') + 'onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">' + escHtml(updateBtnLabel) + '</button>'
+        + ' <span id="hub-update-status" class="tools-service-label">' + escHtml(updateInfoText) + '</span></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Restart</div>'
         + '<div class="settings-value"><button class="tb-btn" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
       html += '</div>';

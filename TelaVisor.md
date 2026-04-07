@@ -14,8 +14,8 @@ TelaVisor manages the full lifecycle of connecting to remote services through Te
 2. **Select services.** Browse machines registered on each hub, see which are online, and check the services you want to connect to.
 3. **Connect with one click.** TelaVisor saves your selections as a connection profile, launches `tela connect -profile`, and monitors the process.
 4. **Monitor tunnel status.** The Status view shows each selected service with its remote port, local port, and current state. Status updates arrive in real time over tela's WebSocket control API.
-5. **Manage hubs.** View hub settings, manage tokens, configure access control lists (ACLs), view connection history, and generate pairing codes from Infrastructure mode.
-6. **Monitor agents.** View agent details, services, file share configuration, and manage agent lifecycle from the Agents tab.
+5. **Manage hubs.** View hub settings, manage tokens, configure per-machine access, view connection history, generate pairing codes, view remote logs, and update or restart hub binaries from Infrastructure mode.
+6. **Manage agents.** View agent details, services, file share configuration, push config changes through the hub-mediated management protocol, view remote logs, and update or restart agent binaries from the Agents tab.
 7. **Manage multiple profiles.** Create, rename, delete, import, and export profiles. Each profile is a standalone YAML file compatible with `tela connect -profile`.
 8. **Browse remote files.** The built-in file browser provides Explorer-style access to file shares on connected machines through the encrypted tunnel.
 
@@ -31,8 +31,6 @@ You switch between modes using the toggle in the center of the title bar. Each m
 The title bar also contains a connection status icon, a file manager button, an information button, an update indicator, a settings button, and a quit button.
 
 TelaVisor supports light and dark themes. The theme can be set to Light, Dark, or System (follows OS preference) in Application Settings.
-
-![Status tab, light theme](screens/telavisor-status-light.png)
 
 ## Clients mode
 
@@ -76,11 +74,7 @@ The left sidebar lists hubs and their machines. Hub-level checkboxes control whe
 
 ![Profiles tab, Profile Settings](screens/telavisor-profiles-settings.png)
 
-Clicking a hub in the sidebar shows a summary card with machine counts, online status, and selected service counts.
-
-![Profiles tab, hub selected](screens/telavisor-profiles-hub.png)
-
-Clicking a machine shows its available services with checkboxes and local port assignments. Selected services are included in the connection profile.
+Clicking a hub in the sidebar shows a summary card with machine counts, online status, and selected service counts. Clicking a machine shows its available services with checkboxes and local port assignments. Selected services are included in the connection profile.
 
 ![Profiles tab, machine services](screens/telavisor-profiles-machine.png)
 
@@ -143,23 +137,47 @@ Infrastructure mode provides administration for hubs, agents, remotes, and crede
 
 ### Hubs
 
-The Hubs tab provides full administration for any hub where you have owner or admin credentials. Select a hub from the dropdown in the sidebar, then navigate between views using the sidebar navigation.
+The Hubs tab provides full administration for any hub where you have owner or admin credentials. Select a hub from the dropdown in the sidebar, then navigate between views using the sidebar navigation: Hub Settings, Machines, Access, Tokens, and History.
 
 #### Hub Settings
 
-The Hub Settings view shows connection details, hub metadata, and portal registrations for the selected hub.
+The Hub Settings view shows connection details, hub metadata, portal registrations, lifecycle controls, and destructive actions for the selected hub.
 
 ![Hub Settings](screens/telavisor-hub-settings.png)
 
-The Connection section shows the hub URL, online status, your role, and a link to the hub's web console. The Hub Info section displays the hub name, hostname, platform, Go version, and uptime, all retrieved from the hub's `/api/status` endpoint. The Portals section lists registered portal associations.
+The Connection section shows the hub URL, online status, your role, and a link to the hub's web console. The Hub Info section displays the hub name, hostname, platform, version, Go version, and uptime, all retrieved from the hub's `/api/status` endpoint.
+
+The Version row shows a live indicator: green with `(latest: vX.Y.Z)` when the hub is current, amber with `update available: vX.Y.Z` when behind. The latest available version is fetched once at startup from the GitHub releases API and is reused across all hub and agent version badges.
+
+The Portals section lists registered portal associations. The Management section provides hub lifecycle controls (visible to owners and admins):
+
+- **Log output** -- View Logs opens a new log panel tab streaming the hub's recent log buffer
+- **Software** -- shows whether the hub is up to date or behind the latest release; the button label reads either `Up to date` (disabled) or `Update to vX.Y.Z` (active). Clicking it asks the hub to download the new release, replace its binary, and restart. Progress is shown inline (`Hub is downloading update and restarting...`, `Waiting for hub to restart... (1)`, `Updated to vX.Y.Z`) and the page re-renders when the hub comes back online.
+- **Restart** -- requests an immediate graceful restart of the hub process
+
+![Hub Settings, Management section and Danger Zone](screens/telavisor-hub-management.png)
 
 The Danger Zone at the bottom provides destructive actions: removing the hub from TelaVisor (which does not affect the hub itself) and clearing all stored hub tokens from the local credential store.
+
+Hub Settings views for hubs running newer or older release versions look identical -- only the version badge color and the Software button label change to reflect the running version.
+
+![Hub Settings, devhub on Awan Saya](screens/telavisor-hub-settings-devhub.png)
 
 You can add a new hub by clicking the Add Hub button in the sidebar footer.
 
 #### Machines
 
-The Machines view lists all machines registered on the selected hub with their online status and services.
+The Machines view lists all machines registered on the selected hub with their online status, last-seen timestamp, advertised services, and active session count.
+
+![Machines view](screens/telavisor-hub-machines.png)
+
+#### Access
+
+The Access view (formerly ACLs) shows the unified per-identity, per-machine permission model. Each identity is a card showing its role pill (owner, admin, user, viewer), token preview, and the machines it has permissions on. Owner and admin roles have implicit access to all machines.
+
+![Access view](screens/telavisor-hub-access.png)
+
+The Grant Access button at the bottom opens a dialog that lets you grant Connect, Register, or Manage permissions to any identity on any machine. A wildcard ACL (`*`) applies to all machines when present. Register access is single-assignment: only one identity can register a given machine. Manage access controls who can view and edit agent configuration, view logs, and restart or update agents remotely.
 
 #### Tokens
 
@@ -169,13 +187,13 @@ The Tokens view lets you manage authentication tokens for the selected hub. You 
 
 Token previews show the first 8 characters. Full tokens are only visible at creation time or immediately after rotation. To change a token's role, delete the identity and create a new one with the desired role.
 
-#### ACLs
+The Add Token dialog lets you create a new identity with a chosen role (owner, admin, user, viewer):
 
-The ACLs view lets you manage per-machine permissions. ACL rules are displayed as cards grouped by machine. Each card shows a table of identities with their Register, Connect, and Manage permissions, with per-permission Revoke buttons.
+![Add Token dialog](screens/telavisor-hub-add-token.png)
 
-![ACLs view](screens/telavisor-hub-acls.png)
+The Generate Pairing Code dialog issues a short-lived, single-use code (e.g., `ABCD-1234`) that can be exchanged for a permanent token by running `tela pair` or by pasting it into TelaVisor's pairing flow. Codes are configurable for role and expiration window (10 minutes to 7 days).
 
-The Grant Access dialog lets you grant Connect, Register, or Manage permissions to any identity on any machine. A wildcard ACL (`*`) applies to all machines when present. Register access is single-assignment: only one identity can register a given machine. Manage access controls who can view and edit agent configuration, view logs, and restart agents remotely.
+![Generate Pairing Code dialog](screens/telavisor-hub-pair-code.png)
 
 #### History
 
@@ -185,22 +203,36 @@ The History view shows recent session events on the selected hub (agent registra
 
 ### Agents
 
-The Agents tab lists all agents (telad instances) visible across your configured hubs. The sidebar shows each agent with its online status and version. Selecting an agent displays its details. A toolbar provides Undo, Save, Restart, and Logs buttons.
+The Agents tab lists all agents (telad instances) visible across your configured hubs without requiring an active tunnel connection. The sidebar shows each agent with its online status, version, and the hub it is registered with. Selecting an agent displays its details. A toolbar above the detail provides Undo, Save, Restart, and Logs buttons.
 
-![Agents view](screens/telavisor-agents.png)
+![Agents tab, barn detail](screens/telavisor-agents.png)
 
-The agent detail view shows read-only info and editable settings:
+The agent detail view shows several setting cards:
 
-- **Agent Info** -- read-only: version, hub, hostname, platform, last seen time, and active session count
+- **Agent Info** -- read-only metadata reported by the agent at registration: version (with up-to-date badge), hub, hostname, platform, last seen time, and active session count
 - **Display Name** -- editable: human-readable name shown in dashboards
 - **Tags** -- editable: comma-separated metadata tags for filtering
 - **Location** -- editable: physical or logical location
 - **Services** -- the ports and protocols the agent exposes (e.g., SSH :22, RDP :3389)
 - **File Share** -- editable: enable/disable, writable, allow delete, max file size, blocked extensions
-- **Management** -- View Config (shows running config in a dialog), View Logs (opens a log panel tab), Restart (with confirmation). Requires manage permission on the machine.
+
+![Agent Services and File Share cards](screens/telavisor-agents-fileshare.png)
+
+- **Management** -- the lifecycle controls section, available when you have manage permission on the machine
 - **Danger Zone** -- force-disconnect the agent or remove the machine from the hub
 
-Editable fields are pushed to the agent through the hub-mediated management protocol when you click Save. The agent validates and persists changes to its config file. Manage permission is required (owner/admin roles have it by default; user-role tokens need an explicit manage grant via the ACLs view).
+The Management card mirrors the hub Management card layout:
+
+- **Configuration** -- View Config opens the agent's running configuration in a dialog
+- **Log output** -- View Logs opens a new log panel tab and fetches the agent's recent log buffer through the hub's mediated management protocol
+- **Software** -- shows whether the agent is up to date or behind the latest release; the button label reads `Up to date` (disabled) or `Update to vX.Y.Z` (active). The agent downloads the new release from GitHub, replaces its own binary, and restarts. Progress is shown inline and the sidebar updates when the new version registers.
+- **Restart** -- requests a graceful agent restart
+
+![Agent Management card and Danger Zone](screens/telavisor-agents-management.png)
+
+Editable fields are pushed to the agent through the hub-mediated management protocol when you click Save. The agent validates and persists changes to its config file. Manage permission is required (owner/admin roles have it by default; user-role tokens need an explicit manage grant via the Access view).
+
+When telad runs as an OS service (Windows SCM, systemd, launchd) the same Update and Restart actions work because telad detects that it is running under a process manager and exits cleanly, letting the manager restart the binary. This avoids leaving orphan processes from a self-spawned restart.
 
 ### Remotes
 
@@ -221,6 +253,28 @@ The log panel is a persistent area at the bottom of the window that provides tab
 ![Log panel with tela output](screens/telavisor-status-log.png)
 
 The log panel auto-scrolls to the bottom as new lines arrive. If you scroll up to read history, auto-scroll pauses until you scroll back to the bottom. Each pane is limited to a configurable maximum number of lines (default 5000, configurable in Application Settings).
+
+The log panel remembers which dynamic log tabs were open between sessions. Tabs you open via View Logs (in the Hubs or Agents tab) or via the attach popover are saved to the TelaVisor settings file and restored on next launch.
+
+### Attaching log sources
+
+The `+` button at the right end of the tab strip opens the attach popover. It lists all hubs you have credentials for and all agents visible across those hubs. Clicking a hub opens a tab streaming `GET /api/admin/logs` from that hub; clicking an agent opens a tab fetching the agent's log ring through the hub's mediated management protocol.
+
+![Attach log source popover](screens/telavisor-log-attach-popover.png)
+
+The popover renders next to the `+` button using fixed positioning so it is not clipped by the scrollable tab strip. Click outside to dismiss.
+
+Dynamic log tabs use the same close-button pattern as the built-in tabs and can be torn off by closing them with the `\u00d7` button. Each agent or hub log tab shows a colored status dot:
+
+- **Green** -- the log fetched successfully and the source is reporting fresh lines
+- **Amber** -- the log is being fetched (in flight)
+- **Grey** -- idle or the source is offline
+
+![Log tab for an agent](screens/telavisor-status-agent-log.png)
+
+The Commands tab is a built-in pane that shows every API call and CLI command TelaVisor issues, with method badges (GET, POST, DEL, CLI), filter chips, and a copy-to-clipboard action on each entry. This is useful for learning the underlying CLI behind a UI action, troubleshooting, or scripting equivalent commands.
+
+![Commands tab in the log panel](screens/telavisor-status-commands.png)
 
 The following toolbar buttons are available at the top of the log panel:
 
