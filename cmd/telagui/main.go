@@ -20,9 +20,9 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:       "TelaVisor",
-		Width:       1024,
-		Height:      700,
+		Title:  "TelaVisor",
+		Width:  1024,
+		Height: 700,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

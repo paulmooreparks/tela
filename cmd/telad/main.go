@@ -146,25 +146,25 @@ type capabilities struct {
 }
 
 type controlMessage struct {
-	Type      string   `json:"type"`
-	MachineID string   `json:"machineId,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-	Hostname    string `json:"hostname,omitempty"`
-	OS          string `json:"os,omitempty"`
-	AgentVersion string `json:"agentVersion,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-	Location    string   `json:"location,omitempty"`
-	Owner       string   `json:"owner,omitempty"`
-	Message   string   `json:"message,omitempty"`
-	WGPubKey  string   `json:"wgPubKey,omitempty"`
-	Ports     []uint16 `json:"ports,omitempty"`
-	Services  []serviceDescriptor `json:"services,omitempty"`
-	Token     string   `json:"token,omitempty"`
-	Port      int      `json:"port,omitempty"` // single port (udp-offer)
-	Host      string   `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
-	SessionID  string `json:"sessionId,omitempty"`
-	SessionIdx int    `json:"sessionIdx,omitempty"`
-	Capabilities *capabilities `json:"capabilities,omitempty"`
+	Type         string              `json:"type"`
+	MachineID    string              `json:"machineId,omitempty"`
+	DisplayName  string              `json:"displayName,omitempty"`
+	Hostname     string              `json:"hostname,omitempty"`
+	OS           string              `json:"os,omitempty"`
+	AgentVersion string              `json:"agentVersion,omitempty"`
+	Tags         []string            `json:"tags,omitempty"`
+	Location     string              `json:"location,omitempty"`
+	Owner        string              `json:"owner,omitempty"`
+	Message      string              `json:"message,omitempty"`
+	WGPubKey     string              `json:"wgPubKey,omitempty"`
+	Ports        []uint16            `json:"ports,omitempty"`
+	Services     []serviceDescriptor `json:"services,omitempty"`
+	Token        string              `json:"token,omitempty"`
+	Port         int                 `json:"port,omitempty"` // single port (udp-offer)
+	Host         string              `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
+	SessionID    string              `json:"sessionId,omitempty"`
+	SessionIdx   int                 `json:"sessionIdx,omitempty"`
+	Capabilities *capabilities       `json:"capabilities,omitempty"`
 
 	// Management protocol fields (mgmt-request / mgmt-response)
 	RequestID string          `json:"requestId,omitempty"`
@@ -196,17 +196,17 @@ type configFile struct {
 
 // machineConfig describes one machine to register with the hub.
 type machineConfig struct {
-	Name        string   `yaml:"name"`
-	DisplayName string   `yaml:"displayName,omitempty"`
-	Hostname    string   `yaml:"hostname,omitempty"`    // override os.Hostname() (useful in containers)
-	OS          string   `yaml:"os,omitempty"`          // e.g. "windows", "linux"; defaults to runtime.GOOS
-	Tags        []string `yaml:"tags,omitempty"`
-	Location    string   `yaml:"location,omitempty"`
-	Owner       string   `yaml:"owner,omitempty"`
-	Ports       []uint16 `yaml:"ports,omitempty"`
+	Name        string              `yaml:"name"`
+	DisplayName string              `yaml:"displayName,omitempty"`
+	Hostname    string              `yaml:"hostname,omitempty"` // override os.Hostname() (useful in containers)
+	OS          string              `yaml:"os,omitempty"`       // e.g. "windows", "linux"; defaults to runtime.GOOS
+	Tags        []string            `yaml:"tags,omitempty"`
+	Location    string              `yaml:"location,omitempty"`
+	Owner       string              `yaml:"owner,omitempty"`
+	Ports       []uint16            `yaml:"ports,omitempty"`
 	Services    []serviceDescriptor `yaml:"services,omitempty"`
-	Target      string   `yaml:"target,omitempty"` // defaults to 127.0.0.1
-	Token       string   `yaml:"token,omitempty"`  // overrides top-level token
+	Target      string              `yaml:"target,omitempty"` // defaults to 127.0.0.1
+	Token       string              `yaml:"token,omitempty"`  // overrides top-level token
 	FileShare   fileShareConfig     `yaml:"fileShare,omitempty"`
 	Gateway     *gatewayConfig      `yaml:"gateway,omitempty"`
 	Upstreams   []upstreamConfig    `yaml:"upstreams,omitempty"`
@@ -291,8 +291,8 @@ func snapshotLogRing(n int) []string {
 
 // activeConfig holds the currently loaded config for management queries.
 var (
-	activeConfig   *configFile
-	activeConfigMu sync.RWMutex
+	activeConfig     *configFile
+	activeConfigMu   sync.RWMutex
 	activeConfigPath string
 )
 

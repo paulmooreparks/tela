@@ -182,7 +182,9 @@ func mountFileShareRequest(machine string, op interface{}) (*mountFsResponse, er
 		}
 
 		if resp.StatusCode != 200 {
-			var errResp struct{ Error string `json:"error"` }
+			var errResp struct {
+				Error string `json:"error"`
+			}
 			json.Unmarshal(body, &errResp)
 			if errResp.Error != "" {
 				return nil, fmt.Errorf("%s", errResp.Error)
@@ -224,7 +226,9 @@ func mountDownloadToFile(machine, path string, dst *os.File) error {
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		var errResp struct{ Error string `json:"error"` }
+		var errResp struct {
+			Error string `json:"error"`
+		}
 		json.Unmarshal(body, &errResp)
 		if errResp.Error != "" {
 			return fmt.Errorf("%s", errResp.Error)
@@ -296,7 +300,9 @@ func mountUploadFile(machine, path string, data []byte) error {
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		var errResp struct{ Error string `json:"error"` }
+		var errResp struct {
+			Error string `json:"error"`
+		}
 		json.Unmarshal(body, &errResp)
 		if errResp.Error != "" {
 			return fmt.Errorf("%s", errResp.Error)
@@ -497,7 +503,6 @@ func (fs *mountFS) OpenFile(ctx context.Context, name string, flag int, perm os.
 	writable := flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) != 0
 	return &mountTelaFile{machine: machine, path: remotePath, flag: flag, writable: writable}, nil
 }
-
 
 func (fs *mountFS) RemoveAll(ctx context.Context, name string) error {
 	machine, remotePath := mountParsePath(name)

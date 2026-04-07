@@ -129,14 +129,16 @@ func LoadConfig(binaryName string) (*Config, error) {
 // BinaryConfigPath returns the standard path to a binary's YAML config
 // file in the system-wide service config directory.
 // e.g. "telad" → C:\ProgramData\Tela\telad.yaml  (Windows)
-//      "telad" → /etc/tela/telad.yaml             (Linux/macOS)
+//
+//	"telad" → /etc/tela/telad.yaml             (Linux/macOS)
 func BinaryConfigPath(binaryName string) string {
 	return filepath.Join(ConfigDir(), binaryName+".yaml")
 }
 
 // LogPath returns the path to the service log file.
 // e.g. "telad" → C:\ProgramData\Tela\telad.log  (Windows)
-//      "telad" → /etc/tela/telad.log             (Linux/macOS)
+//
+//	"telad" → /etc/tela/telad.log             (Linux/macOS)
 func LogPath(binaryName string) string {
 	return filepath.Join(ConfigDir(), binaryName+".log")
 }

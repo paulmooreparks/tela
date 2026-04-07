@@ -167,21 +167,21 @@ func writeHubControlFile() func() {
 
 // portalEntry stores a registered portal association.
 type portalEntry struct {
-	URL          string `yaml:"url"`                     // Portal base URL
-	Token        string `yaml:"token,omitempty"`         // Legacy admin API token (cleared on new registrations)
-	SyncToken    string `yaml:"syncToken,omitempty"`     // Per-hub sync token for viewer token updates
+	URL          string `yaml:"url"`                    // Portal base URL
+	Token        string `yaml:"token,omitempty"`        // Legacy admin API token (cleared on new registrations)
+	SyncToken    string `yaml:"syncToken,omitempty"`    // Per-hub sync token for viewer token updates
 	HubDirectory string `yaml:"hubDirectory,omitempty"` // Discovered hub directory path
 }
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	Port      int                    `yaml:"port"`              // HTTP+WS listen port (default 80)
-	UDPPort   int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
-	UDPHost   string                 `yaml:"udpHost,omitempty"` // public IP/hostname for UDP relay (when behind proxy)
-	Name      string                 `yaml:"name"`              // Display name for this hub
-	WWWDir    string                 `yaml:"wwwDir"`            // Static file directory (default ./www)
-	Auth      authConfig             `yaml:"auth,omitempty"`    // Token-based access control
-	Portals   map[string]portalEntry `yaml:"portals,omitempty"` // Registered portals
+	Port    int                    `yaml:"port"`              // HTTP+WS listen port (default 80)
+	UDPPort int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
+	UDPHost string                 `yaml:"udpHost,omitempty"` // public IP/hostname for UDP relay (when behind proxy)
+	Name    string                 `yaml:"name"`              // Display name for this hub
+	WWWDir  string                 `yaml:"wwwDir"`            // Static file directory (default ./www)
+	Auth    authConfig             `yaml:"auth,omitempty"`    // Token-based access control
+	Portals map[string]portalEntry `yaml:"portals,omitempty"` // Registered portals
 }
 
 // loadHubConfig reads a telahubd YAML config file.
@@ -256,8 +256,8 @@ var (
 	udpHost        = "" // if set, included in udp-offer for proxy setups
 	hubName        = ""
 	wwwDir         = "./www"
-	wwwDirOverride = false // true when wwwDir explicitly set via config/env
-	verbose        = false // if true, log individual relay messages
+	wwwDirOverride = false             // true when wwwDir explicitly set via config/env
+	verbose        = false             // if true, log individual relay messages
 	globalAuth     = newAuthStore(nil) // replaced at startup; open hub until config is loaded
 	globalCfg      *hubConfig          // live config; mutated by admin API
 	globalCfgMu    sync.RWMutex        // protects globalCfg + config file writes
@@ -280,10 +280,10 @@ type clientSession struct {
 type machineEntry struct {
 	mu sync.Mutex
 
-	ControlWS  *safeConn                   // agent's registration/signaling channel
-	ControlGen uint64                       // incremented on each new ControlWS; used to avoid stale disconnect races
-	Sessions   map[string]*clientSession    // sessionID → active session
-	NextIdx    int                          // monotonically incrementing session index
+	ControlWS  *safeConn                 // agent's registration/signaling channel
+	ControlGen uint64                    // incremented on each new ControlWS; used to avoid stale disconnect races
+	Sessions   map[string]*clientSession // sessionID → active session
+	NextIdx    int                       // monotonically incrementing session index
 
 	// Metadata from registration
 	Ports        []int
@@ -343,7 +343,7 @@ type wsState struct {
 // udpSession tracks one side of a UDP relay pair.
 type udpSession struct {
 	PeerTokenHex string
-	PeerWS       *safeConn    // fallback: peer's WebSocket (write-safe)
+	PeerWS       *safeConn // fallback: peer's WebSocket (write-safe)
 	Role         string
 	Addr         *net.UDPAddr // learned from first UDP message
 	MachineID    string
@@ -576,14 +576,14 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 
 	machinesMu.RLock()
 	type statusMachine struct {
-		ID             string        `json:"id"`
-		DisplayName    *string       `json:"displayName"`
-		Hostname       *string       `json:"hostname"`
-		OS             *string       `json:"os"`
-		AgentVersion   *string       `json:"agentVersion"`
-		Tags           []string      `json:"tags"`
-		Location       *string       `json:"location"`
-		Owner          *string       `json:"owner"`
+		ID             string                 `json:"id"`
+		DisplayName    *string                `json:"displayName"`
+		Hostname       *string                `json:"hostname"`
+		OS             *string                `json:"os"`
+		AgentVersion   *string                `json:"agentVersion"`
+		Tags           []string               `json:"tags"`
+		Location       *string                `json:"location"`
+		Owner          *string                `json:"owner"`
 		AgentConnected bool                   `json:"agentConnected"`
 		SessionCount   int                    `json:"sessionCount"`
 		RegisteredAt   *string                `json:"registeredAt"`
@@ -1121,9 +1121,9 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 
 	// Ask the agent to open a session WebSocket
 	req := map[string]any{
-		"type":      "session-request",
-		"sessionId": sessionID,
-		"wgPubKey":  msg.WGPubKey,
+		"type":       "session-request",
+		"sessionId":  sessionID,
+		"wgPubKey":   msg.WGPubKey,
 		"sessionIdx": sessionIdx,
 	}
 	data, _ := json.Marshal(req)
@@ -1848,7 +1848,7 @@ func runHub(stopCh <-chan struct{}) {
 	mux.HandleFunc("/status", handleAPIStatus)
 	mux.HandleFunc("/api/history", handleAPIHistory)
 	mux.HandleFunc("/api/admin/tokens", handleAdminTokens)
-	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate) // /api/admin/rotate/{id}
+	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate)   // /api/admin/rotate/{id}
 	mux.HandleFunc("/api/admin/portals/", handleAdminPortals) // DELETE /api/admin/portals/{name}
 	mux.HandleFunc("/api/admin/portals", handleAdminPortals)
 	mux.HandleFunc("/api/admin/pair-code", handleAdminPairCode)

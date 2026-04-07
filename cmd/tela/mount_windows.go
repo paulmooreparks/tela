@@ -19,7 +19,7 @@ var (
 )
 
 const (
-	resourceTypeDisk = 0x1
+	resourceTypeDisk  = 0x1
 	resourceConnected = 0x1
 )
 
@@ -36,7 +36,7 @@ type netResource struct {
 }
 
 const (
-	errorNoNetwork       = 1222 // ERROR_NO_NETWORK
+	errorNoNetwork         = 1222 // ERROR_NO_NETWORK
 	errorConnectionUnavail = 1201 // ERROR_CONNECTION_UNAVAIL (remembered but not connected)
 )
 
@@ -170,8 +170,8 @@ func platformUnmount(mountArg string) {
 
 	ret, _, _ := procWNetCancelConn2.Call(
 		uintptr(unsafe.Pointer(name)),
-		0,              // no flags
-		1,              // force disconnect
+		0, // no flags
+		1, // force disconnect
 	)
 
 	if ret != 0 {

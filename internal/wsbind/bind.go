@@ -57,9 +57,9 @@ const (
 // re-entrant and reset the receive path each time.
 type Bind struct {
 	ws      *websocket.Conn
-	writeMu sync.Mutex // gorilla/websocket requires serialized writes
+	writeMu sync.Mutex  // gorilla/websocket requires serialized writes
 	RecvCh  chan []byte // binary WG datagrams from the reader goroutine(s)
-	mu      sync.Mutex // protects closed, open
+	mu      sync.Mutex  // protects closed, open
 	closed  chan struct{}
 	open    bool
 
@@ -76,7 +76,7 @@ type Bind struct {
 	directActive bool
 
 	// STUN / hole-punch signaling
-	stunCh  chan []byte      // STUN binding responses routed here by udpReader
+	stunCh  chan []byte       // STUN binding responses routed here by udpReader
 	punchCh chan *net.UDPAddr // hole-punch probe signals from udpReader
 }
 
@@ -338,7 +338,7 @@ func (b *Bind) STUNDiscover() (string, error) {
 
 	req := make([]byte, 20)
 	binary.BigEndian.PutUint16(req[0:2], 0x0001) // Binding Request
-	binary.BigEndian.PutUint16(req[2:4], 0)       // Message Length (no attrs)
+	binary.BigEndian.PutUint16(req[2:4], 0)      // Message Length (no attrs)
 	binary.BigEndian.PutUint32(req[4:8], stunMagicCookie)
 	copy(req[8:20], txID)
 
@@ -580,9 +580,9 @@ func (b *Bind) StartDataKeepalive(interval time.Duration) func() {
 // endpoint is a trivial implementation -- one peer per bind.
 type endpoint struct{}
 
-func (e *endpoint) ClearSrc()            {}
-func (e *endpoint) SrcToString() string   { return "" }
-func (e *endpoint) DstToString() string   { return "ws" }
-func (e *endpoint) DstToBytes() []byte    { return nil }
-func (e *endpoint) DstIP() netip.Addr     { return netip.Addr{} }
-func (e *endpoint) SrcIP() netip.Addr     { return netip.Addr{} }
+func (e *endpoint) ClearSrc()           {}
+func (e *endpoint) SrcToString() string { return "" }
+func (e *endpoint) DstToString() string { return "ws" }
+func (e *endpoint) DstToBytes() []byte  { return nil }
+func (e *endpoint) DstIP() netip.Addr   { return netip.Addr{} }
+func (e *endpoint) SrcIP() netip.Addr   { return netip.Addr{} }

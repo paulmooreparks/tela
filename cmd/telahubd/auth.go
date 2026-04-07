@@ -21,8 +21,8 @@ type authConfig struct {
 
 // tokenEntry defines a named identity that may interact with the hub.
 type tokenEntry struct {
-	ID      string `yaml:"id"`               // human-friendly label
-	Token   string `yaml:"token"`            // secret hex value
+	ID      string `yaml:"id"`                // human-friendly label
+	Token   string `yaml:"token"`             // secret hex value
 	HubRole string `yaml:"hubRole,omitempty"` // "owner" | "admin" | (empty = user)
 }
 

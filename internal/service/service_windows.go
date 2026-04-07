@@ -378,4 +378,3 @@ func grantSystemAccess(path string) {
 		_ = exec.Command("icacls", dir, "/grant", "SYSTEM:(OI)(CI)(RX)", "/Q").Run()
 	}
 }
-

@@ -381,7 +381,6 @@ func cmdAdminRemoveToken(args []string) {
 	fmt.Println("Change is already active (no hub restart needed).")
 }
 
-
 // ── tela admin rotate ──────────────────────────────────────────────
 
 func cmdAdminRotate(args []string) {

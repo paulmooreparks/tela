@@ -44,11 +44,13 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 - [ ] Coverage gate: at least the security-critical paths must be tested before 1.0. Aim for meaningful coverage of `internal/auth`, `internal/wsbind`, and the admin API surface.
 
 ### Release engineering
-- [ ] GitHub Actions workflow that builds Linux/macOS/Windows binaries for amd64 and arm64 on tag push
-- [ ] Reproducible builds (pinned Go version, vendored or proxy-locked deps, deterministic flags)
-- [ ] Checksum file (`sha256sums.txt`) generated and published per release
-- [ ] Release notes generated from commit messages or curated by hand
-- [ ] Versioned binary naming convention enforced (`tela-vX.Y.Z-linux-amd64`, etc.) so the existing self-update code keeps working
+- [x] GitHub Actions workflow that builds Linux/macOS/Windows binaries for amd64 and arm64 on tag push (`release.yml`)
+- [x] Reproducible builds (pinned Go version, `-trimpath`, deterministic ldflags)
+- [x] Checksum file (`SHA256SUMS.txt`) generated and published per release
+- [x] Release notes generated from commit messages (`generate_release_notes: true`)
+- [x] Versioned binary naming convention enforced (`{tool}-{goos}-{goarch}{ext}`) so the existing self-update code keeps working
+- [x] CI workflow runs build, vet, test, gofmt, and `go mod tidy` checks on every push and PR (`ci.yml`)
+- [x] Cross-compile sanity check across all 6 target triples on every push
 - [ ] Tag schedule and semver discipline established before the first 1.0 tag
 
 ### Code signing

@@ -490,7 +490,6 @@ func adminRemovePortal(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "removed", "name": name})
 }
 
-
 // ── Unified Access API ───────────────────────────────────────────
 //
 // RESTful resource: an access entry joins a token identity with its

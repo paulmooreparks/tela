@@ -13,19 +13,19 @@ Purpose:
 
 Security:
 
-	- Path validation on every operation (no caching).
-	- Symlinks are never followed.
-	- System directories are rejected at startup.
-	- Extension filtering (allowlist and blocklist).
-	- Per-file and total size limits enforced before writing.
-	- Checksums validated after upload.
-	- Connection limit and idle timeout.
+  - Path validation on every operation (no caching).
+  - Symlinks are never followed.
+  - System directories are rejected at startup.
+  - Extension filtering (allowlist and blocklist).
+  - Per-file and total size limits enforced before writing.
+  - Checksums validated after upload.
+  - Connection limit and idle timeout.
 
 Invariants:
 
-	- File sharing must not be enabled without explicit config.
-	- No file operation may escape the sandbox directory.
-	- The hub never sees file contents (zero-knowledge relay).
+  - File sharing must not be enabled without explicit config.
+  - No file operation may escape the sandbox directory.
+  - The hub never sees file contents (zero-knowledge relay).
 */
 package main
 
@@ -72,7 +72,7 @@ type fileShareConfig struct {
 	Enabled           bool     `yaml:"enabled"`
 	Directory         string   `yaml:"directory"`
 	Writable          bool     `yaml:"writable,omitempty"`
-	MaxFileSize       string   `yaml:"maxFileSize,omitempty"`       // "50MB", "1GB", etc.
+	MaxFileSize       string   `yaml:"maxFileSize,omitempty"` // "50MB", "1GB", etc.
 	MaxTotalSize      string   `yaml:"maxTotalSize,omitempty"`
 	AllowDelete       bool     `yaml:"allowDelete,omitempty"`
 	AllowedExtensions []string `yaml:"allowedExtensions,omitempty"`
@@ -166,9 +166,9 @@ func parseFileShareConfig(cfg fileShareConfig) (*parsedFileShareConfig, error) {
 	}
 
 	p := &parsedFileShareConfig{
-		enabled:   true,
-		directory: absDir,
-		writable:  cfg.Writable,
+		enabled:     true,
+		directory:   absDir,
+		writable:    cfg.Writable,
 		allowDelete: cfg.AllowDelete,
 	}
 
@@ -959,9 +959,9 @@ func handleMove(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig, req f
 
 // fsEvent is a file change notification sent to subscribed clients.
 type fsEvent struct {
-	Type    string `json:"type"`    // "file_created", "file_modified", "file_deleted", "file_renamed"
-	Path    string `json:"path"`    // relative path within the share
-	Name    string `json:"name"`    // file/directory name
+	Type    string `json:"type"` // "file_created", "file_modified", "file_deleted", "file_renamed"
+	Path    string `json:"path"` // relative path within the share
+	Name    string `json:"name"` // file/directory name
 	IsDir   bool   `json:"isDir"`
 	Size    int64  `json:"size,omitempty"`
 	ModTime string `json:"modTime,omitempty"`

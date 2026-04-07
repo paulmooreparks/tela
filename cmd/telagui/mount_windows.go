@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	tvMpr                   = windows.NewLazySystemDLL("mpr.dll")
-	tvProcWNetCancelConn2   = tvMpr.NewProc("WNetCancelConnection2W")
+	tvMpr                 = windows.NewLazySystemDLL("mpr.dll")
+	tvProcWNetCancelConn2 = tvMpr.NewProc("WNetCancelConnection2W")
 )
 
 // platformUnmountDrive unmaps a Windows drive letter using the WNet API.
