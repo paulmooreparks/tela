@@ -333,6 +333,52 @@ function formatChannelStatus(info) {
   return cur + ' (latest)';
 }
 
+// preChannelMarker is the placeholder we leave on the channel row when a
+// hub or agent is on a pre-channel build (no GET /api/admin/update). The
+// caller can use the same marker to disable the Software button so the
+// two controls never disagree.
+var preChannelMarker = 'pre-channel build (update first via legacy path)';
+
+// applySoftwareButton updates a Software card button so its label, title,
+// disabled state, and trailing status text reflect the channel-aware
+// info that loadHubChannel / loadAgentChannel just fetched. Pass the
+// info object as returned by GetHubChannelInfo / GetAgentChannelInfo,
+// or null if the call failed.
+function applySoftwareButton(btnId, statusId, info, fallbackVer) {
+  var btn = document.getElementById(btnId);
+  var statusEl = document.getElementById(statusId);
+  if (!btn || !statusEl) return;
+  if (!info) {
+    btn.textContent = 'Update';
+    btn.disabled = true;
+    statusEl.textContent = '';
+    return;
+  }
+  if (info.error === 'method not allowed') {
+    btn.textContent = 'Update';
+    btn.disabled = true;
+    statusEl.textContent = preChannelMarker;
+    return;
+  }
+  var cur = info.currentVersion || fallbackVer || '';
+  var latest = info.latestVersion || '';
+  if (!latest) {
+    btn.textContent = 'Update';
+    btn.disabled = true;
+    statusEl.textContent = cur ? 'currently ' + cur : '';
+    return;
+  }
+  if (info.updateAvailable) {
+    btn.textContent = 'Update to ' + latest;
+    btn.disabled = false;
+    statusEl.textContent = 'currently running ' + cur;
+  } else {
+    btn.textContent = 'Up to date';
+    btn.disabled = true;
+    statusEl.textContent = cur + ' (latest)';
+  }
+}
+
 function loadHubChannel(hubURL) {
   var sel = document.getElementById('hub-channel-select');
   var status = document.getElementById('hub-channel-status');
@@ -340,8 +386,18 @@ function loadHubChannel(hubURL) {
   goApp.GetHubChannelInfo(hubURL).then(function (raw) {
     var info = {};
     try { info = JSON.parse(raw); } catch (e) { }
+    if (info.error === 'method not allowed') {
+      // Hub predates the channel system. Hide the dropdown row and
+      // leave a clear hint. The Software button will fall through to
+      // the legacy update path; applySoftwareButton handles labeling.
+      var row = sel.closest('.settings-row') || sel.closest('tr');
+      if (row) row.style.display = 'none';
+      applySoftwareButton('hub-update-btn', 'hub-update-status', info);
+      return;
+    }
     if (info.channel) sel.value = info.channel;
     status.textContent = formatChannelStatus(info);
+    applySoftwareButton('hub-update-btn', 'hub-update-status', info);
     sel.onchange = function () {
       var newCh = sel.value;
       showConfirmDialog('Switch Channel', 'Switch this hub to the ' + newCh + ' channel? New updates will follow the ' + newCh + ' release line.', 'Switch').then(function (yes) {
@@ -357,6 +413,7 @@ function loadHubChannel(hubURL) {
     };
   }).catch(function (err) {
     status.textContent = 'unavailable';
+    applySoftwareButton('hub-update-btn', 'hub-update-status', null);
   });
 }
 
@@ -367,10 +424,22 @@ function loadAgentChannel(hubURL, machineID) {
   goApp.GetAgentChannelInfo(hubURL, machineID).then(function (raw) {
     var info = {};
     try { info = JSON.parse(raw); } catch (e) { }
-    // Agent responses arrive wrapped in {ok, payload:{...}}
-    if (info.payload && typeof info.payload === 'object') info = info.payload;
+    // Agent mgmt responses arrive wrapped in {ok, payload:{...}, message?}.
+    // A pre-channel agent rejects the unknown action with ok=false and a
+    // 'unknown action' message; treat that the same as a 405 for the UI.
+    if (info && info.payload && typeof info.payload === 'object') info = info.payload;
+    if (info && info.ok === false && /unknown action/i.test(info.message || '')) {
+      info = { error: 'method not allowed' };
+    }
+    if (info.error === 'method not allowed') {
+      var row = sel.closest('tr') || sel.closest('.settings-row');
+      if (row) row.style.display = 'none';
+      applySoftwareButton('agent-update-btn', 'agent-update-status', info);
+      return;
+    }
     if (info.channel) sel.value = info.channel;
     status.textContent = formatChannelStatus(info);
+    applySoftwareButton('agent-update-btn', 'agent-update-status', info);
     sel.onchange = function () {
       var newCh = sel.value;
       showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
@@ -386,6 +455,7 @@ function loadAgentChannel(hubURL, machineID) {
     };
   }).catch(function () {
     status.textContent = 'unavailable';
+    applySoftwareButton('agent-update-btn', 'agent-update-status', null);
   });
 }
 
@@ -2620,24 +2690,14 @@ function agentsShowDetail(a) {
     + '<div class="setting-card-desc">Remote agent lifecycle controls.</div>'
     + '<table class="kv-table">';
   if (canManage) {
-    var agentVer = a.version || '';
-    var agentUpToDate = !latestVersion || !agentVer || agentVer === latestVersion;
-    var agentBtnLabel = 'Update';
-    var agentInfoText = '';
-    if (agentVer && latestVersion) {
-      if (agentUpToDate) {
-        agentBtnLabel = 'Up to date';
-        agentInfoText = agentVer + ' (latest)';
-      } else {
-        agentBtnLabel = 'Update to ' + latestVersion;
-        agentInfoText = 'currently running ' + agentVer;
-      }
-    }
+    // Software button starts disabled with a neutral label. loadAgentChannel
+    // overwrites it with the channel-aware truth from the agent's update-status
+    // response, so the button can never disagree with the channel row.
     html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
       + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
       + '<tr><td>Release channel</td><td>' + renderChannelSelect('agent-channel-select', '') + ' <span id="agent-channel-status" class="tools-service-label">loading...</span></td></tr>'
-      + '<tr><td>Software</td><td><button type="button" class="tb-btn" id="agent-update-btn" ' + (agentUpToDate ? 'disabled ' : '') + 'onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">' + escHtml(agentBtnLabel) + '</button>'
-      + ' <span id="agent-update-status" class="tools-service-label">' + escHtml(agentInfoText) + '</span></td></tr>'
+      + '<tr><td>Software</td><td><button type="button" class="tb-btn" id="agent-update-btn" disabled onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">Update</button>'
+      + ' <span id="agent-update-status" class="tools-service-label">loading...</span></td></tr>'
       + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
   } else {
     html += '<tr><td colspan="2">Agent ' + (isOnline ? 'does not support remote management. Update telad to enable.' : 'is offline.') + '</td></tr>';
@@ -4005,27 +4065,17 @@ function renderHubSettings(pane) {
 
     // Management
     if (tokenRole === 'owner' || tokenRole === 'admin') {
-      var hubVer = (hubInfoData && hubInfoData.hub && hubInfoData.hub.version) || '';
-      var hubUpToDate = !latestVersion || !hubVer || hubVer === latestVersion;
-      var updateBtnLabel = 'Update';
-      var updateInfoText = '';
-      if (hubVer && latestVersion) {
-        if (hubUpToDate) {
-          updateBtnLabel = 'Up to date';
-          updateInfoText = hubVer + ' (latest)';
-        } else {
-          updateBtnLabel = 'Update to ' + latestVersion;
-          updateInfoText = 'currently running ' + hubVer;
-        }
-      }
+      // Software button starts disabled with a neutral label. loadHubChannel
+      // overwrites it with the channel-aware truth from the hub's
+      // GET /api/admin/update response.
       html += '<div class="settings-group" id="hub-management-card"><div class="settings-group-header">Management</div>';
       html += '<div class="settings-row"><div class="settings-label">Log output</div>'
         + '<div class="settings-value"><button class="tb-btn" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Release channel</div>'
         + '<div class="settings-value">' + renderChannelSelect('hub-channel-select', '') + ' <span id="hub-channel-status" class="tools-service-label">loading...</span></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Software</div>'
-        + '<div class="settings-value"><button class="tb-btn" id="hub-update-btn" ' + (hubUpToDate ? 'disabled ' : '') + 'onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">' + escHtml(updateBtnLabel) + '</button>'
-        + ' <span id="hub-update-status" class="tools-service-label">' + escHtml(updateInfoText) + '</span></div></div>';
+        + '<div class="settings-value"><button class="tb-btn" id="hub-update-btn" disabled onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Update</button>'
+        + ' <span id="hub-update-status" class="tools-service-label">loading...</span></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Restart</div>'
         + '<div class="settings-value"><button class="tb-btn" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
       html += '</div>';
