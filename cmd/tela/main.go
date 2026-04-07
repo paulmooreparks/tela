@@ -157,6 +157,8 @@ func main() {
 		cmdPair(os.Args[2:])
 	case "admin":
 		cmdAdmin(os.Args[2:])
+	case "channel":
+		cmdChannel(os.Args[2:])
 	case "mount":
 		cmdMount(os.Args[2:])
 	case "service":
@@ -191,8 +193,9 @@ Commands:
   logout    Remove hub credentials from the credential store
   pair      Exchange a pairing code for a hub connect token
   admin     Remote hub administration: access (RBAC), tokens, portals, pairing
-            codes, and per-agent management (logs, restart, update, config)
-            Run 'tela admin help' for the full subcommand list.
+            codes, hub lifecycle, and per-agent management. Run
+            'tela admin help' for the full subcommand list.
+  channel   Show or set the client's release channel (dev|beta|stable)
   service   Manage tela as an OS service (install, start, stop, uninstall, status)
   version   Print version and exit
 

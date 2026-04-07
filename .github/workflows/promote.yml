@@ -1,0 +1,120 @@
+# Promote an existing dev or beta release to a higher channel.
+#
+# Promotion is always manual: a maintainer reviews what is on the source
+# channel, decides it is ready, and runs this workflow. There is no automatic
+# dev -> beta or beta -> stable.
+#
+# What this workflow does:
+#   1. Validates that source_tag exists.
+#   2. Computes the new tag name (auto-incremented for beta, user-chosen
+#      for stable).
+#   3. Creates the new tag pointing at the same commit as source_tag.
+#   4. Pushes the tag, which triggers release.yml to build and publish the
+#      promoted release and update the appropriate channel manifest.
+#
+# See RELEASE-PROCESS.md for the full model.
+
+name: Promote release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "Existing tag to promote (e.g. v0.4.0-dev.42 or v0.4.0-beta.3)"
+        required: true
+        type: string
+      target_channel:
+        description: "Channel to promote to"
+        required: true
+        type: choice
+        options:
+          - beta
+          - stable
+      target_version:
+        description: "Required only for stable promotions: the version to cut (e.g. v0.4.0)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate inputs
+        id: validate
+        run: |
+          SRC="${{ github.event.inputs.source_tag }}"
+          TGT="${{ github.event.inputs.target_channel }}"
+          VER="${{ github.event.inputs.target_version }}"
+
+          if ! git rev-parse "$SRC" >/dev/null 2>&1; then
+            echo "::error::Source tag '$SRC' does not exist"
+            exit 1
+          fi
+
+          case "$TGT" in
+            beta)
+              # Source must be a dev tag (vX.Y.0-dev.N)
+              if [[ ! "$SRC" =~ ^v[0-9]+\.[0-9]+\.0-dev\.[0-9]+$ ]]; then
+                echo "::error::Beta promotion requires a -dev.N source tag, got '$SRC'"
+                exit 1
+              fi
+              if [ -n "$VER" ]; then
+                echo "::warning::target_version is ignored for beta promotions"
+              fi
+              # Strip -dev.N to get vX.Y.0, then find next beta number
+              BASE=$(echo "$SRC" | sed -E 's/-dev\.[0-9]+$//')
+              N=1
+              while git rev-parse "${BASE}-beta.${N}" >/dev/null 2>&1; do
+                N=$((N + 1))
+              done
+              NEW_TAG="${BASE}-beta.${N}"
+              ;;
+            stable)
+              if [[ ! "$SRC" =~ ^v[0-9]+\.[0-9]+\.0-beta\.[0-9]+$ ]]; then
+                echo "::error::Stable promotion requires a -beta.N source tag, got '$SRC'"
+                exit 1
+              fi
+              if [ -z "$VER" ]; then
+                echo "::error::target_version is required for stable promotions"
+                exit 1
+              fi
+              if [[ ! "$VER" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "::error::target_version must be a plain semver tag like v0.4.0, got '$VER'"
+                exit 1
+              fi
+              if git rev-parse "$VER" >/dev/null 2>&1; then
+                echo "::error::Target tag '$VER' already exists"
+                exit 1
+              fi
+              NEW_TAG="$VER"
+              ;;
+            *)
+              echo "::error::Unknown target_channel '$TGT'"
+              exit 1
+              ;;
+          esac
+
+          SRC_SHA=$(git rev-parse "$SRC^{commit}")
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "src_sha=$SRC_SHA" >> "$GITHUB_OUTPUT"
+          echo "Promoting $SRC ($SRC_SHA) -> $NEW_TAG on channel $TGT"
+
+      - name: Create and push tag
+        env:
+          NEW_TAG: ${{ steps.validate.outputs.new_tag }}
+          SRC_SHA: ${{ steps.validate.outputs.src_sha }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEW_TAG" "$SRC_SHA" -m "Promote ${{ github.event.inputs.source_tag }} to ${{ github.event.inputs.target_channel }}"
+          git push origin "$NEW_TAG"
+          echo "Pushed $NEW_TAG. release.yml will now build and publish."

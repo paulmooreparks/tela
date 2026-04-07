@@ -72,16 +72,22 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push: use the tag verbatim. promote.yml drives beta /
+            # stable promotions this way.
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
+            # Main-branch push: synthesize a dev tag of the form
+            # vX.Y.0-dev.N where N counts commits since the most recent
+            # plain-stable anchor tag (vA.B.C with no prerelease suffix).
+            # This makes dev tags semver-comparable: v0.5.0-dev.42 < v0.5.0.
             BASE=$(cat VERSION | tr -d '[:space:]')
-            BASE_TAG="v${BASE}.0"
-            if git rev-parse "$BASE_TAG" >/dev/null 2>&1; then
-              PATCH=$(git rev-list --count "${BASE_TAG}..HEAD")
+            ANCHOR=$(git tag --list 'v*' | grep -Ev -- '-' | sort -V | tail -1)
+            if [ -n "$ANCHOR" ]; then
+              PATCH=$(git rev-list --count "${ANCHOR}..HEAD")
             else
-              PATCH=0
+              PATCH=$(git rev-list --count HEAD)
             fi
-            echo "tag=v${BASE}.${PATCH}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${BASE}.0-dev.${PATCH}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Go
@@ -172,16 +178,22 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push: use the tag verbatim. promote.yml drives beta /
+            # stable promotions this way.
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
+            # Main-branch push: synthesize a dev tag of the form
+            # vX.Y.0-dev.N where N counts commits since the most recent
+            # plain-stable anchor tag (vA.B.C with no prerelease suffix).
+            # This makes dev tags semver-comparable: v0.5.0-dev.42 < v0.5.0.
             BASE=$(cat VERSION | tr -d '[:space:]')
-            BASE_TAG="v${BASE}.0"
-            if git rev-parse "$BASE_TAG" >/dev/null 2>&1; then
-              PATCH=$(git rev-list --count "${BASE_TAG}..HEAD")
+            ANCHOR=$(git tag --list 'v*' | grep -Ev -- '-' | sort -V | tail -1)
+            if [ -n "$ANCHOR" ]; then
+              PATCH=$(git rev-list --count "${ANCHOR}..HEAD")
             else
-              PATCH=0
+              PATCH=$(git rev-list --count HEAD)
             fi
-            echo "tag=v${BASE}.${PATCH}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${BASE}.0-dev.${PATCH}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Go
@@ -289,16 +301,22 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push: use the tag verbatim. promote.yml drives beta /
+            # stable promotions this way.
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
+            # Main-branch push: synthesize a dev tag of the form
+            # vX.Y.0-dev.N where N counts commits since the most recent
+            # plain-stable anchor tag (vA.B.C with no prerelease suffix).
+            # This makes dev tags semver-comparable: v0.5.0-dev.42 < v0.5.0.
             BASE=$(cat VERSION | tr -d '[:space:]')
-            BASE_TAG="v${BASE}.0"
-            if git rev-parse "$BASE_TAG" >/dev/null 2>&1; then
-              PATCH=$(git rev-list --count "${BASE_TAG}..HEAD")
+            ANCHOR=$(git tag --list 'v*' | grep -Ev -- '-' | sort -V | tail -1)
+            if [ -n "$ANCHOR" ]; then
+              PATCH=$(git rev-list --count "${ANCHOR}..HEAD")
             else
-              PATCH=0
+              PATCH=$(git rev-list --count HEAD)
             fi
-            echo "tag=v${BASE}.${PATCH}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${BASE}.0-dev.${PATCH}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Download all artifacts
@@ -307,16 +325,38 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      - name: Generate checksums and manifest
+      - name: Determine channel from tag
+        id: channel
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if [[ "$TAG" =~ -dev\.[0-9]+$ ]]; then
+            CHANNEL="dev"
+          elif [[ "$TAG" =~ -beta\.[0-9]+$ ]]; then
+            CHANNEL="beta"
+          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            CHANNEL="stable"
+          else
+            echo "::warning::Tag '$TAG' does not match any known channel shape; defaulting to dev"
+            CHANNEL="dev"
+          fi
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "Tag $TAG belongs to channel $CHANNEL"
+
+      - name: Generate checksums and manifests
         run: |
           cd dist
           sha256sum * | tee SHA256SUMS.txt
 
-          # Build a JSON manifest for easy consumption by web pages
           VERSION="${{ steps.version.outputs.tag }}"
+          CHANNEL="${{ steps.channel.outputs.channel }}"
+          PUBLISHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          DOWNLOAD_BASE="https://github.com/${{ github.repository }}/releases/download/${VERSION}/"
+
+          # Per-release manifest (legacy slim shape, kept for existing consumers)
           echo "{\"version\":\"${VERSION}\",\"binaries\":{" > release.json
           first=true
           for f in tela-* telad-* telahubd-* telavisor-*; do
+            [ -e "$f" ] || continue
             hash=$(sha256sum "$f" | cut -d' ' -f1)
             size=$(stat -c%s "$f")
             if [ "$first" = true ]; then
@@ -327,10 +367,37 @@ jobs:
             printf '"%s":{"sha256":"%s","size":%s}' "$f" "$hash" "$size" >> release.json
           done
           echo '}}' >> release.json
-
-          # Pretty-print for readability
           python3 -m json.tool release.json > release-pretty.json
           mv release-pretty.json release.json
+
+          # Channel manifest (canonical, see channels/schema.json)
+          {
+            echo "{"
+            echo "  \"channel\": \"${CHANNEL}\","
+            echo "  \"version\": \"${VERSION}\","
+            echo "  \"tag\": \"${VERSION}\","
+            echo "  \"publishedAt\": \"${PUBLISHED_AT}\","
+            echo "  \"downloadBase\": \"${DOWNLOAD_BASE}\","
+            echo "  \"binaries\": {"
+            first=true
+            for f in tela-* telad-* telahubd-* telavisor-*; do
+              [ -e "$f" ] || continue
+              hash=$(sha256sum "$f" | cut -d' ' -f1)
+              size=$(stat -c%s "$f")
+              if [ "$first" = true ]; then
+                first=false
+              else
+                echo ","
+              fi
+              printf '    "%s": { "sha256": "%s", "size": %s }' "$f" "$hash" "$size"
+            done
+            echo ""
+            echo "  }"
+            echo "}"
+          } > "${CHANNEL}.json"
+          python3 -m json.tool "${CHANNEL}.json" > "${CHANNEL}-pretty.json"
+          mv "${CHANNEL}-pretty.json" "${CHANNEL}.json"
+          cat "${CHANNEL}.json"
 
       - name: Create or update tag (for main branch builds)
         if: startsWith(github.ref, 'refs/heads/')
@@ -367,3 +434,32 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*
+
+      - name: Publish channel manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ steps.channel.outputs.channel }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The "channels" release is a rolling, never-deleted release that
+          # hosts the three channel manifests as assets. Self-update on every
+          # Tela binary fetches its channel's JSON from here.
+          set -e
+          cd dist
+
+          # Make sure the channels release exists. Create it pinned to a
+          # zero-tag if not.
+          if ! gh release view channels --repo "$REPO" >/dev/null 2>&1; then
+            echo "Creating 'channels' rolling release"
+            gh release create channels \
+              --repo "$REPO" \
+              --title "Channel manifests" \
+              --notes "Rolling release that hosts dev.json, beta.json, and stable.json. Each manifest names the current tag for its channel and lists every binary published under that tag with its SHA-256. See RELEASE-PROCESS.md and channels/schema.json for the model."
+          fi
+
+          # Replace the asset for this channel.
+          gh release upload channels "${CHANNEL}.json" \
+            --repo "$REPO" \
+            --clobber
+
+          echo "Updated ${CHANNEL}.json on the 'channels' release"

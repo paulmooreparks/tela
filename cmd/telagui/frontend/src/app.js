@@ -303,6 +303,111 @@ function hubUpdateStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+// ── Release channels ──────────────────────────────────────────────
+
+// renderChannelSelect emits the HTML for a channel dropdown with the
+// given id. selected is the channel name to pre-select ('' leaves it on
+// dev so the UI is never blank before load completes).
+function renderChannelSelect(id, selected) {
+  var channels = ['dev', 'beta', 'stable'];
+  var sel = selected || 'dev';
+  var html = '<select id="' + escAttr(id) + '" class="tb-select">';
+  for (var i = 0; i < channels.length; i++) {
+    var c = channels[i];
+    html += '<option value="' + c + '"' + (c === sel ? ' selected' : '') + '>' + c + '</option>';
+  }
+  html += '</select>';
+  return html;
+}
+
+// formatChannelStatus builds the trailing status string next to a
+// channel dropdown. info is the parsed response shape shared by hub
+// GET /api/admin/update and agent update-status.
+function formatChannelStatus(info) {
+  if (!info) return '';
+  if (info.error) return 'error: ' + info.error;
+  var cur = info.currentVersion || '?';
+  var latest = info.latestVersion || '';
+  if (!latest) return 'currently ' + cur;
+  if (info.updateAvailable) return 'currently ' + cur + ' (latest ' + latest + ')';
+  return cur + ' (latest)';
+}
+
+function loadHubChannel(hubURL) {
+  var sel = document.getElementById('hub-channel-select');
+  var status = document.getElementById('hub-channel-status');
+  if (!sel || !status) return;
+  goApp.GetHubChannelInfo(hubURL).then(function (raw) {
+    var info = {};
+    try { info = JSON.parse(raw); } catch (e) { }
+    if (info.channel) sel.value = info.channel;
+    status.textContent = formatChannelStatus(info);
+    sel.onchange = function () {
+      var newCh = sel.value;
+      showConfirmDialog('Switch Channel', 'Switch this hub to the ' + newCh + ' channel? New updates will follow the ' + newCh + ' release line.', 'Switch').then(function (yes) {
+        if (!yes) { sel.value = info.channel || 'dev'; return; }
+        status.textContent = 'switching to ' + newCh + '...';
+        goApp.SetHubChannel(hubURL, newCh).then(function (r) {
+          var res = {};
+          try { res = JSON.parse(r); } catch (e) { }
+          if (res.error) { status.textContent = 'error: ' + res.error; return; }
+          loadHubChannel(hubURL);
+        });
+      });
+    };
+  }).catch(function (err) {
+    status.textContent = 'unavailable';
+  });
+}
+
+function loadAgentChannel(hubURL, machineID) {
+  var sel = document.getElementById('agent-channel-select');
+  var status = document.getElementById('agent-channel-status');
+  if (!sel || !status) return;
+  goApp.GetAgentChannelInfo(hubURL, machineID).then(function (raw) {
+    var info = {};
+    try { info = JSON.parse(raw); } catch (e) { }
+    // Agent responses arrive wrapped in {ok, payload:{...}}
+    if (info.payload && typeof info.payload === 'object') info = info.payload;
+    if (info.channel) sel.value = info.channel;
+    status.textContent = formatChannelStatus(info);
+    sel.onchange = function () {
+      var newCh = sel.value;
+      showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
+        if (!yes) { sel.value = info.channel || 'dev'; return; }
+        status.textContent = 'switching to ' + newCh + '...';
+        goApp.SetAgentChannel(hubURL, machineID, newCh).then(function (r) {
+          var res = {};
+          try { res = JSON.parse(r); } catch (e) { }
+          if (res.error) { status.textContent = 'error: ' + res.error; return; }
+          loadAgentChannel(hubURL, machineID);
+        });
+      });
+    };
+  }).catch(function () {
+    status.textContent = 'unavailable';
+  });
+}
+
+function loadClientChannel() {
+  var sel = document.getElementById('client-channel-select');
+  var status = document.getElementById('client-channel-status');
+  if (!sel || !status) return;
+  goApp.GetClientChannel().then(function (info) {
+    if (info && info.channel) sel.value = info.channel;
+    status.textContent = info && info.manifestUrl ? info.manifestUrl : '';
+    sel.onchange = function () {
+      var newCh = sel.value;
+      goApp.SetClientChannel(newCh).then(function (r) {
+        var res = {};
+        try { res = JSON.parse(r); } catch (e) { }
+        if (res.error) { status.textContent = 'error: ' + res.error; return; }
+        status.textContent = res.manifestUrl || '';
+      });
+    };
+  });
+}
+
 function hubUpdate(hubURL, hubName) {
   showConfirmDialog('Update Hub', 'Download and install the latest telahubd on ' + hubName + '? The hub will restart after updating.', 'Update').then(function (yes) {
     if (!yes) return;
@@ -2530,6 +2635,7 @@ function agentsShowDetail(a) {
     }
     html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
       + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
+      + '<tr><td>Release channel</td><td>' + renderChannelSelect('agent-channel-select', '') + ' <span id="agent-channel-status" class="tools-service-label">loading...</span></td></tr>'
       + '<tr><td>Software</td><td><button type="button" class="tb-btn" id="agent-update-btn" ' + (agentUpToDate ? 'disabled ' : '') + 'onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">' + escHtml(agentBtnLabel) + '</button>'
       + ' <span id="agent-update-status" class="tools-service-label">' + escHtml(agentInfoText) + '</span></td></tr>'
       + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
@@ -2551,6 +2657,10 @@ function agentsShowDetail(a) {
     + '</div>';
 
   document.getElementById('agents-detail').innerHTML = html;
+
+  if (canManage && document.getElementById('agent-channel-select')) {
+    loadAgentChannel(toWSURL(a.hub), a.id);
+  }
 }
 
 function agentsPairAgent() {
@@ -3911,6 +4021,8 @@ function renderHubSettings(pane) {
       html += '<div class="settings-group" id="hub-management-card"><div class="settings-group-header">Management</div>';
       html += '<div class="settings-row"><div class="settings-label">Log output</div>'
         + '<div class="settings-value"><button class="tb-btn" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
+      html += '<div class="settings-row"><div class="settings-label">Release channel</div>'
+        + '<div class="settings-value">' + renderChannelSelect('hub-channel-select', '') + ' <span id="hub-channel-status" class="tools-service-label">loading...</span></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Software</div>'
         + '<div class="settings-value"><button class="tb-btn" id="hub-update-btn" ' + (hubUpToDate ? 'disabled ' : '') + 'onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">' + escHtml(updateBtnLabel) + '</button>'
         + ' <span id="hub-update-status" class="tools-service-label">' + escHtml(updateInfoText) + '</span></div></div>';
@@ -3933,6 +4045,10 @@ function renderHubSettings(pane) {
       + '</div></div></div>';
 
     pane.innerHTML = html;
+
+    if ((tokenRole === 'owner' || tokenRole === 'admin') && document.getElementById('hub-channel-select')) {
+      loadHubChannel(hub);
+    }
   }
 
   goApp.GetHubInfo(hub).then(function (raw) {
@@ -4614,6 +4730,8 @@ function refreshSettings() {
     themeRadios.forEach(function (r) { r.checked = r.value === themeVal; });
     applyTelaTheme(themeVal);
   });
+
+  loadClientChannel();
 }
 
 function gatherSettings() {

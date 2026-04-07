@@ -74,6 +74,8 @@ export function FileShareUpload(arg1:string,arg2:string,arg3:string):Promise<str
 
 export function ForceQuit():Promise<void>;
 
+export function GetAgentChannelInfo(arg1:string,arg2:string):Promise<string>;
+
 export function GetAgentConfig(arg1:string,arg2:string):Promise<string>;
 
 export function GetAgentList():Promise<Array<main.AgentInfo>>;
@@ -83,6 +85,8 @@ export function GetAgentLogs(arg1:string,arg2:string,arg3:number):Promise<string
 export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
 
 export function GetCLIPath():Promise<string>;
+
+export function GetClientChannel():Promise<Record<string, string>>;
 
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 
@@ -97,6 +101,8 @@ export function GetControlStatus():Promise<Record<string, any>>;
 export function GetCurrentProfile():Promise<string>;
 
 export function GetDefaultBinPath():Promise<string>;
+
+export function GetHubChannelInfo(arg1:string):Promise<string>;
 
 export function GetHubInfo(arg1:string):Promise<string>;
 
@@ -204,7 +210,13 @@ export function ServiceStart():Promise<string>;
 
 export function ServiceStop():Promise<string>;
 
+export function SetAgentChannel(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function SetAgentConfig(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SetClientChannel(arg1:string):Promise<string>;
+
+export function SetHubChannel(arg1:string,arg2:string):Promise<string>;
 
 export function SetMountConfig(arg1:main.ProfileMount):Promise<void>;
 

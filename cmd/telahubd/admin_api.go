@@ -55,7 +55,22 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/paulmooreparks/tela/internal/channel"
 )
+
+// hubChannelFetcher is the package-level cache for channel manifests used
+// by hub self-update. It is shared across requests so the 5-minute cache
+// actually cuts down on outbound requests.
+var hubChannelFetcher = &channel.Fetcher{}
+
+// hubChannel returns the configured channel name (defaulting to dev) and
+// the manifest base override (empty for the default upstream).
+func hubChannel() (string, string) {
+	globalCfgMu.RLock()
+	defer globalCfgMu.RUnlock()
+	return channel.Normalize(globalCfg.Update.Channel), globalCfg.Update.ManifestBase
+}
 
 // requireOwnerOrAdmin checks the Authorization header and returns the
 // caller token. Admin API always requires owner/admin auth, even on
@@ -851,12 +866,22 @@ func removeToken(tokens []string, tok string) []string {
 //	GET /api/admin/logs?lines=500    Last 500 lines
 //
 // Response: {"lines": ["2026-04-06T12:00:00Z [hub] ...", ...]}
-// handleAdminUpdate triggers a self-update of the hub binary.
+// handleAdminUpdate is the self-update resource for the hub.
 //
-//	POST /api/admin/update              Update to latest release
-//	POST /api/admin/update {"version":"v0.4.0"}  Update to specific version
+//	GET   /api/admin/update             Read current channel + status
+//	PATCH /api/admin/update              Change channel: {"channel":"beta"}
+//	POST  /api/admin/update              Trigger update to channel HEAD
+//	POST  /api/admin/update {"version":"v0.4.0"}  Trigger to specific version
 //
-// Response: {"ok":true, "message":"updating to v0.4.0"}
+// GET response:
+//
+//	{
+//	  "channel":        "dev",
+//	  "manifestUrl":    "https://.../channels/dev.json",
+//	  "currentVersion": "v0.4.0-dev.42",
+//	  "latestVersion":  "v0.4.0-dev.43",
+//	  "updateAvailable": true
+//	}
 func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		adminCorsHeaders(w, r)
@@ -866,7 +891,73 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireOwnerOrAdmin(w, r); !ok {
 		return
 	}
-	if r.Method != http.MethodPost {
+
+	switch r.Method {
+	case http.MethodGet:
+		ch, base := hubChannel()
+		out := map[string]interface{}{
+			"channel":         ch,
+			"manifestUrl":     channel.ManifestURL(base, ch),
+			"currentVersion":  version,
+			"latestVersion":   "",
+			"updateAvailable": false,
+		}
+		if latest, err := hubLatestRelease(); err == nil {
+			out["latestVersion"] = latest
+			out["updateAvailable"] = latest != version && version != "dev"
+		} else {
+			out["error"] = err.Error()
+		}
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusOK, out)
+		return
+
+	case http.MethodPatch:
+		var req struct {
+			Channel      string `json:"channel"`
+			ManifestBase string `json:"manifestBase"`
+		}
+		if r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+				adminCorsHeaders(w, r)
+				writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+				return
+			}
+		}
+		req.Channel = strings.TrimSpace(strings.ToLower(req.Channel))
+		if req.Channel != "" && !channel.IsKnown(req.Channel) {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "unknown channel: " + req.Channel})
+			return
+		}
+		globalCfgMu.Lock()
+		if req.Channel != "" {
+			globalCfg.Update.Channel = req.Channel
+		}
+		// PATCH semantics: only set manifestBase if the field was sent.
+		// We use a sentinel here: empty means "leave alone".
+		if req.ManifestBase != "" {
+			globalCfg.Update.ManifestBase = req.ManifestBase
+		}
+		globalCfgMu.Unlock()
+		if err := persistConfig(); err != nil {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "persist config: " + err.Error()})
+			return
+		}
+		ch, base := hubChannel()
+		log.Printf("[hub] update channel set to %s (manifest %s)", ch, channel.ManifestURL(base, ch))
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{
+			"ok":          true,
+			"channel":     ch,
+			"manifestUrl": channel.ManifestURL(base, ch),
+		})
+		return
+
+	case http.MethodPost:
+		// fall through to update trigger
+	default:
 		adminCorsHeaders(w, r)
 		writeAdminJSON(w, r, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -910,36 +1001,20 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// hubLatestRelease queries the GitHub API for the latest Tela release tag.
+// hubLatestRelease returns the current version on the hub's configured
+// release channel by fetching that channel's manifest.
 func hubLatestRelease() (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
+	ch, base := hubChannel()
+	m, err := hubChannelFetcher.GetURL(channel.ManifestURL(base, ch))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("fetch %s manifest: %w", ch, err)
 	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
-	}
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", err
-	}
-	if release.TagName == "" {
-		return "", fmt.Errorf("no tag_name in GitHub response")
-	}
-	return release.TagName, nil
+	return m.Version, nil
 }
 
-// hubDownloadAndStage downloads the given version of telahubd from GitHub
-// releases and replaces the current binary.
+// hubDownloadAndStage downloads the given version of telahubd from the
+// channel manifest and replaces the current binary. The download is
+// verified against the manifest's SHA-256 before being installed.
 func hubDownloadAndStage(ver string) error {
 	exe, err := os.Executable()
 	if err != nil {
@@ -955,9 +1030,22 @@ func hubDownloadAndStage(ver string) error {
 		ext = ".exe"
 	}
 	binaryName := fmt.Sprintf("telahubd-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
-	dlURL := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", ver, binaryName)
 
-	log.Printf("[hub] downloading %s", dlURL)
+	ch, base := hubChannel()
+	m, err := hubChannelFetcher.GetURL(channel.ManifestURL(base, ch))
+	if err != nil {
+		return fmt.Errorf("fetch %s manifest: %w", ch, err)
+	}
+	if ver != m.Version {
+		return fmt.Errorf("requested version %s is not the current %s on channel %s (which is %s); switch channel or wait for promotion", ver, ch, ch, m.Version)
+	}
+	entry, ok := m.Binaries[binaryName]
+	if !ok {
+		return fmt.Errorf("manifest for %s has no binary named %s", m.Version, binaryName)
+	}
+	dlURL := m.BinaryURL(binaryName)
+
+	log.Printf("[hub] downloading %s (sha256 %s, %d bytes)", dlURL, entry.SHA256, entry.Size)
 
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Get(dlURL)
@@ -979,9 +1067,9 @@ func hubDownloadAndStage(ver string) error {
 		os.Remove(tmpPath)
 	}()
 
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+	if err := channel.VerifyReader(tmpFile, resp.Body, entry.SHA256, entry.Size); err != nil {
 		tmpFile.Close()
-		return fmt.Errorf("download write: %w", err)
+		return fmt.Errorf("verify download: %w", err)
 	}
 	tmpFile.Close()
 

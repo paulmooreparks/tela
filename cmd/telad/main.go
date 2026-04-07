@@ -50,6 +50,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/paulmooreparks/tela/internal/channel"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun/netstack"
 	"gopkg.in/yaml.v3"
@@ -192,6 +193,14 @@ type configFile struct {
 	Hub      string          `yaml:"hub"`
 	Token    string          `yaml:"token,omitempty"`
 	Machines []machineConfig `yaml:"machines"`
+	Update   updateConfig    `yaml:"update,omitempty"`
+}
+
+// updateConfig controls which release channel telad follows for self-update.
+// See RELEASE-PROCESS.md for the channel model.
+type updateConfig struct {
+	Channel      string `yaml:"channel,omitempty"`      // "dev", "beta", "stable" (empty = dev)
+	ManifestBase string `yaml:"manifestBase,omitempty"` // override upstream manifest URL prefix
 }
 
 // machineConfig describes one machine to register with the hub.
@@ -534,6 +543,85 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		}()
 		return resp
 
+	case "update-status":
+		ch, base := agentChannel()
+		out := map[string]interface{}{
+			"channel":         ch,
+			"manifestUrl":     channel.ManifestURL(base, ch),
+			"currentVersion":  version,
+			"latestVersion":   "",
+			"updateAvailable": false,
+		}
+		if latest, err := latestRelease(); err == nil {
+			out["latestVersion"] = latest
+			out["updateAvailable"] = latest != version && version != "dev"
+		} else {
+			out["error"] = err.Error()
+		}
+		payload, _ := json.Marshal(out)
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
+	case "update-channel":
+		var req struct {
+			Channel      string `json:"channel"`
+			ManifestBase string `json:"manifestBase"`
+		}
+		if msg.Payload != nil {
+			json.Unmarshal(msg.Payload, &req)
+		}
+		req.Channel = strings.TrimSpace(strings.ToLower(req.Channel))
+		if req.Channel != "" && !channel.IsKnown(req.Channel) {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "unknown channel: " + req.Channel,
+			})
+			return resp
+		}
+
+		activeConfigMu.Lock()
+		cfg := activeConfig
+		cfgPath := activeConfigPath
+		activeConfigMu.Unlock()
+		if cfg == nil || cfgPath == "" {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no config file to update",
+			})
+			return resp
+		}
+		if req.Channel != "" {
+			cfg.Update.Channel = req.Channel
+		}
+		if req.ManifestBase != "" {
+			cfg.Update.ManifestBase = req.ManifestBase
+		}
+		data, err := yaml.Marshal(cfg)
+		if err == nil {
+			err = os.WriteFile(cfgPath, data, 0600)
+		}
+		if err != nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "write config: " + err.Error(),
+			})
+			return resp
+		}
+		ch, base := agentChannel()
+		lg.Printf("mgmt: update channel set to %s (requestId=%s)", ch, msg.RequestID)
+		payload, _ := json.Marshal(map[string]interface{}{
+			"channel":     ch,
+			"manifestUrl": channel.ManifestURL(base, ch),
+		})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
 	default:
 		resp, _ := json.Marshal(controlMessage{
 			Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
@@ -574,32 +662,28 @@ func restartSelf(lg *log.Logger) {
 	os.Exit(0)
 }
 
-// latestRelease queries the GitHub API for the latest Tela release tag.
+// agentChannelFetcher is the package-level channel manifest cache for telad.
+var agentChannelFetcher = &channel.Fetcher{}
+
+// agentChannel returns the configured channel name (defaulting to dev) and
+// the manifest base override (empty for the default upstream).
+func agentChannel() (string, string) {
+	activeConfigMu.RLock()
+	defer activeConfigMu.RUnlock()
+	if activeConfig == nil {
+		return channel.DefaultChannel, ""
+	}
+	return channel.Normalize(activeConfig.Update.Channel), activeConfig.Update.ManifestBase
+}
+
+// latestRelease returns the current version on telad's configured channel.
 func latestRelease() (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", "https://api.github.com/repos/paulmooreparks/tela/releases/latest", nil)
+	ch, base := agentChannel()
+	m, err := agentChannelFetcher.GetURL(channel.ManifestURL(base, ch))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("fetch %s manifest: %w", ch, err)
 	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
-	}
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", err
-	}
-	if release.TagName == "" {
-		return "", fmt.Errorf("no tag_name in GitHub response")
-	}
-	return release.TagName, nil
+	return m.Version, nil
 }
 
 // downloadAndStageUpdate downloads the given version of telad from GitHub
@@ -620,9 +704,22 @@ func downloadAndStageUpdate(lg *log.Logger, ver string) error {
 		ext = ".exe"
 	}
 	binaryName := fmt.Sprintf("telad-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
-	dlURL := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", ver, binaryName)
 
-	lg.Printf("mgmt: downloading %s", dlURL)
+	ch, base := agentChannel()
+	m, err := agentChannelFetcher.GetURL(channel.ManifestURL(base, ch))
+	if err != nil {
+		return fmt.Errorf("fetch %s manifest: %w", ch, err)
+	}
+	if ver != m.Version {
+		return fmt.Errorf("requested version %s is not the current %s on channel %s (which is %s); switch channel or wait for promotion", ver, ch, ch, m.Version)
+	}
+	entry, ok := m.Binaries[binaryName]
+	if !ok {
+		return fmt.Errorf("manifest for %s has no binary named %s", m.Version, binaryName)
+	}
+	dlURL := m.BinaryURL(binaryName)
+
+	lg.Printf("mgmt: downloading %s (sha256 %s, %d bytes)", dlURL, entry.SHA256, entry.Size)
 
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Get(dlURL)
@@ -646,9 +743,9 @@ func downloadAndStageUpdate(lg *log.Logger, ver string) error {
 		os.Remove(tmpPath)
 	}()
 
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+	if err := channel.VerifyReader(tmpFile, resp.Body, entry.SHA256, entry.Size); err != nil {
 		tmpFile.Close()
-		return fmt.Errorf("download write: %w", err)
+		return fmt.Errorf("verify download: %w", err)
 	}
 	tmpFile.Close()
 

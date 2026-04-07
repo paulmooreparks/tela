@@ -2,12 +2,18 @@
 
 # Tela
 
-[![Release](https://img.shields.io/github/v/release/paulmooreparks/tela?include_prereleases&sort=semver)](https://github.com/paulmooreparks/tela/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/release.yml?branch=main)](https://github.com/paulmooreparks/tela/actions/workflows/release.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/ci.yml?branch=main&label=CI)](https://github.com/paulmooreparks/tela/actions/workflows/ci.yml)
+[![Release build](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/release.yml?branch=main&label=release)](https://github.com/paulmooreparks/tela/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/paulmooreparks/tela?include_prereleases&sort=semver&label=latest)](https://github.com/paulmooreparks/tela/releases/latest)
 [![License](https://img.shields.io/github/license/paulmooreparks/tela)](LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/paulmooreparks/tela)](go.mod)
-[![Issues](https://img.shields.io/github/issues/paulmooreparks/tela)](https://github.com/paulmooreparks/tela/issues)
 [![Downloads](https://img.shields.io/github/downloads/paulmooreparks/tela/total)](https://github.com/paulmooreparks/tela/releases)
+
+**Channels** (see [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the model):
+
+[![dev channel](https://img.shields.io/badge/dynamic/json?label=dev&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fdev.json&color=orange)](https://github.com/paulmooreparks/tela/releases/download/channels/dev.json)
+[![beta channel](https://img.shields.io/badge/dynamic/json?label=beta&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fbeta.json&color=yellow)](https://github.com/paulmooreparks/tela/releases/download/channels/beta.json)
+[![stable channel](https://img.shields.io/badge/dynamic/json?label=stable&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fstable.json&color=brightgreen)](https://github.com/paulmooreparks/tela/releases/download/channels/stable.json)
 
 Tela is a free and open-source (FOSS) remote-access system that lets you reach TCP services on remote machines through an encrypted WireGuard tunnel. It works through firewalls, NATs, and corporate proxies without requiring inbound ports, VPN software, kernel drivers, or administrator privileges on either end.
 

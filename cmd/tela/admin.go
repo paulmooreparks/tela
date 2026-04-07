@@ -39,6 +39,8 @@ func cmdAdmin(args []string) {
 		cmdAdminAccess(rest)
 	case "agent":
 		cmdAdminAgent(rest)
+	case "hub":
+		cmdAdminHub(rest)
 	case "tokens":
 		cmdAdminTokens(rest)
 	case "portals":
@@ -65,6 +67,7 @@ Usage:
 Resources:
   access    Per-identity, per-machine permissions (the unified RBAC view)
   agent     Remote agent management through the hub
+  hub       Hub lifecycle (status, logs, restart, update, channel)
   tokens    Token identity CRUD
   portals   Portal registrations on the hub
 
@@ -86,6 +89,16 @@ Agent:
   tela admin agent logs -machine <id> [-n 100]     Retrieve recent log lines
   tela admin agent restart -machine <id>           Request a graceful restart
   tela admin agent update -machine <id> [-version vX.Y.Z]  Download a new release and restart
+  tela admin agent channel -machine <id>           Show the agent's release channel and current/latest versions
+  tela admin agent channel -machine <id> set <ch>  Switch the agent to dev|beta|stable
+
+Hub:
+  tela admin hub status                            Show the hub's release channel and current/latest versions
+  tela admin hub logs [-n 100]                     Retrieve recent hub log lines
+  tela admin hub restart                           Request a graceful hub restart
+  tela admin hub update [-version vX.Y.Z]          Download a new hub release and restart
+  tela admin hub channel                           Show the hub's release channel
+  tela admin hub channel set <dev|beta|stable>     Switch the hub's release channel
 
 Tokens:
   tela admin tokens list                           List all token identities
@@ -726,9 +739,283 @@ Usage:
 		cmdAdminAgentRestart(args[1:])
 	case "update":
 		cmdAdminAgentUpdate(args[1:])
+	case "channel":
+		cmdAdminAgentChannel(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown agent command: %s\n", args[0])
 		os.Exit(1)
+	}
+}
+
+// cmdAdminAgentChannel reads or writes an agent's release channel via the
+// hub-mediated agent management protocol.
+//
+//	tela admin agent channel -machine <id>
+//	tela admin agent channel -machine <id> set <dev|beta|stable>
+func cmdAdminAgentChannel(args []string) {
+	fs := flag.NewFlagSet("admin agent channel", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", adminTokenDefault(), "Admin token")
+	machine := fs.String("machine", "", "Machine ID")
+	manifestBase := fs.String("manifest-base", "", "Override the upstream manifest URL prefix")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub := mustResolveHub(*hubURL)
+	tok := *token
+	if tok == "" {
+		tok = credstore.LookupToken(hub)
+	}
+	if hub == "" || tok == "" || *machine == "" {
+		fmt.Fprintln(os.Stderr, "Error: -hub, -token, and -machine are required")
+		os.Exit(1)
+	}
+
+	rest := fs.Args()
+	if len(rest) == 0 {
+		// Read.
+		status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(*machine)+"/update-status", tok, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		printChannelStatus(*machine, result)
+		return
+	}
+
+	if rest[0] != "set" {
+		fmt.Fprintf(os.Stderr, "Error: unknown action %q (expected 'set')\n", rest[0])
+		os.Exit(1)
+	}
+	if len(rest) < 2 {
+		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev|beta|stable)")
+		os.Exit(1)
+	}
+	payload := map[string]string{"channel": rest[1]}
+	if *manifestBase != "" {
+		payload["manifestBase"] = *manifestBase
+	}
+	status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(*machine)+"/update-channel", tok, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+	if ch, ok := result["channel"].(string); ok {
+		fmt.Printf("%s: channel set to %s\n", *machine, ch)
+		if mu, ok := result["manifestUrl"].(string); ok {
+			fmt.Printf("  manifest: %s\n", mu)
+		}
+	} else {
+		fmt.Printf("%s: channel updated\n", *machine)
+	}
+}
+
+// printChannelStatus pretty-prints the shape returned by both the hub
+// /api/admin/update GET and the agent update-status mgmt response.
+func printChannelStatus(label string, result map[string]any) {
+	ch, _ := result["channel"].(string)
+	manifestURL, _ := result["manifestUrl"].(string)
+	cur, _ := result["currentVersion"].(string)
+	latest, _ := result["latestVersion"].(string)
+	avail, _ := result["updateAvailable"].(bool)
+	errMsg, _ := result["error"].(string)
+
+	if label != "" {
+		fmt.Printf("%s\n", label)
+	}
+	fmt.Printf("  channel:         %s\n", ch)
+	fmt.Printf("  manifest:        %s\n", manifestURL)
+	fmt.Printf("  current version: %s\n", cur)
+	if latest != "" {
+		state := "up to date"
+		if avail {
+			state = "update available"
+		}
+		fmt.Printf("  latest version:  %s  (%s)\n", latest, state)
+	} else if errMsg != "" {
+		fmt.Printf("  latest version:  unavailable (%s)\n", errMsg)
+	}
+}
+
+// ── tela admin hub ─────────────────────────────────────────────────
+
+func cmdAdminHub(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, `tela admin hub -- hub lifecycle management
+
+Usage:
+  tela admin hub status   -hub <url> -token <tok>
+  tela admin hub logs     -hub <url> -token <tok> [-n 100]
+  tela admin hub restart  -hub <url> -token <tok>
+  tela admin hub update   -hub <url> -token <tok> [-version vX.Y.Z]
+  tela admin hub channel  -hub <url> -token <tok>
+  tela admin hub channel  -hub <url> -token <tok> set <dev|beta|stable>
+`)
+		os.Exit(1)
+	}
+
+	switch args[0] {
+	case "status":
+		cmdAdminHubStatus(args[1:])
+	case "logs":
+		cmdAdminHubLogs(args[1:])
+	case "restart":
+		cmdAdminHubRestart(args[1:])
+	case "update":
+		cmdAdminHubUpdate(args[1:])
+	case "channel":
+		cmdAdminHubChannel(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown hub command: %s\n", args[0])
+		os.Exit(1)
+	}
+}
+
+func cmdAdminHubStatus(args []string) {
+	fs := flag.NewFlagSet("admin hub status", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", adminTokenDefault(), "Admin token")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+
+	hub, tok := adminParseHubAndToken(fs)
+	_ = hubURL
+	_ = token
+
+	status, result, err := adminHTTP("GET", hub, "/api/admin/update", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+	printChannelStatus(hub, result)
+}
+
+func cmdAdminHubLogs(args []string) {
+	fs := flag.NewFlagSet("admin hub logs", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", adminTokenDefault(), "Admin token")
+	n := fs.Int("n", 100, "Number of log lines to retrieve")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+	_ = hubURL
+	_ = token
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("GET", hub, fmt.Sprintf("/api/admin/logs?lines=%d", *n), tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+	if lines, ok := result["lines"].([]interface{}); ok {
+		for _, line := range lines {
+			if s, ok := line.(string); ok {
+				fmt.Println(s)
+			}
+		}
+	}
+}
+
+func cmdAdminHubRestart(args []string) {
+	fs := flag.NewFlagSet("admin hub restart", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", adminTokenDefault(), "Admin token")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+	_ = hubURL
+	_ = token
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("POST", hub, "/api/admin/restart", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+	fmt.Printf("Restart requested for %s.\n", hub)
+}
+
+func cmdAdminHubUpdate(args []string) {
+	fs := flag.NewFlagSet("admin hub update", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", adminTokenDefault(), "Admin token")
+	ver := fs.String("version", "", "Target release version (default: channel HEAD)")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+	_ = hubURL
+	_ = token
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	var payload map[string]string
+	if *ver != "" {
+		payload = map[string]string{"version": *ver}
+	}
+	status, result, err := adminHTTP("POST", hub, "/api/admin/update", tok, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+	if msg, ok := result["message"].(string); ok {
+		fmt.Printf("%s: %s\n", hub, msg)
+	} else {
+		fmt.Printf("Update requested for %s.\n", hub)
+	}
+}
+
+func cmdAdminHubChannel(args []string) {
+	fs := flag.NewFlagSet("admin hub channel", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
+	token := fs.String("token", adminTokenDefault(), "Admin token")
+	manifestBase := fs.String("manifest-base", "", "Override the upstream manifest URL prefix")
+	args = permuteArgs(fs, args)
+	fs.Parse(args)
+	_ = hubURL
+	_ = token
+
+	hub, tok := adminParseHubAndToken(fs)
+
+	rest := fs.Args()
+	if len(rest) == 0 {
+		status, result, err := adminHTTP("GET", hub, "/api/admin/update", tok, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		printChannelStatus(hub, result)
+		return
+	}
+
+	if rest[0] != "set" {
+		fmt.Fprintf(os.Stderr, "Error: unknown action %q (expected 'set')\n", rest[0])
+		os.Exit(1)
+	}
+	if len(rest) < 2 {
+		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev|beta|stable)")
+		os.Exit(1)
+	}
+	payload := map[string]string{"channel": rest[1]}
+	if *manifestBase != "" {
+		payload["manifestBase"] = *manifestBase
+	}
+	status, result, err := adminHTTP("PATCH", hub, "/api/admin/update", tok, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+	if ch, ok := result["channel"].(string); ok {
+		fmt.Printf("%s: channel set to %s\n", hub, ch)
+		if mu, ok := result["manifestUrl"].(string); ok {
+			fmt.Printf("  manifest: %s\n", mu)
+		}
 	}
 }
 

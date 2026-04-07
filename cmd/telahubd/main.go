@@ -182,6 +182,20 @@ type hubConfig struct {
 	WWWDir  string                 `yaml:"wwwDir"`            // Static file directory (default ./www)
 	Auth    authConfig             `yaml:"auth,omitempty"`    // Token-based access control
 	Portals map[string]portalEntry `yaml:"portals,omitempty"` // Registered portals
+	Update  updateConfig           `yaml:"update,omitempty"`  // Self-update channel selection
+}
+
+// updateConfig controls which release channel this binary follows for
+// self-update. See RELEASE-PROCESS.md for the channel model and
+// internal/channel for the manifest fetcher.
+type updateConfig struct {
+	// Channel is "dev", "beta", or "stable". Empty means dev (the only
+	// channel that exists pre-1.0).
+	Channel string `yaml:"channel,omitempty"`
+	// ManifestBase overrides the upstream manifest URL prefix. Operators
+	// running a fork point this at their own release host. Empty means
+	// use channel.DefaultManifestBase.
+	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
 // loadHubConfig reads a telahubd YAML config file.

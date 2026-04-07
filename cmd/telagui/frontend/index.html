@@ -450,6 +450,15 @@
             <div class="settings-group-header">Updates</div>
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="markSettingsDirty()"></div><div class="settings-label">Check for updates automatically</div></div>
             <div class="settings-check-now"><button type="button" class="tb-btn" onclick="goApp.CheckForUpdatesNow()">Check Now</button></div>
+            <div class="settings-stacked-row">
+              <div class="settings-stacked-label">Release channel</div>
+              <select id="client-channel-select" class="tb-select">
+                <option value="dev">dev</option>
+                <option value="beta">beta</option>
+                <option value="stable">stable</option>
+              </select>
+              <div id="client-channel-status" class="tools-service-label" style="margin-top:4px;"></div>
+            </div>
           </div>
           <div class="settings-group">
             <div class="settings-group-header">Logging</div>

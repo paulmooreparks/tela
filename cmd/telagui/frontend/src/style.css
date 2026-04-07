@@ -292,6 +292,13 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .tb-save-btn:disabled { color: var(--text-muted); }
 .tb-save-btn:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
 .tb-delete-btn:hover { color: var(--danger) !important; border-color: var(--danger); }
+.tb-select {
+  background: var(--surface); border: 1px solid var(--border); padding: 3px 8px;
+  border-radius: 4px; font-size: 12px; color: var(--text); font-family: var(--font);
+  cursor: pointer;
+}
+.tb-select:hover { background: var(--surface-alt); }
+.tb-select:disabled { opacity: 0.35; cursor: not-allowed; }
 .prof-tree-sidebar { padding-top: 8px; }
 
 /* --- Status Pane --- */

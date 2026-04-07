@@ -23,7 +23,16 @@ type Credential struct {
 
 // Store is the on-disk representation of credentials.yaml.
 type Store struct {
-	Hubs map[string]Credential `yaml:"hubs"`
+	Hubs   map[string]Credential `yaml:"hubs"`
+	Update UpdateConfig          `yaml:"update,omitempty"`
+}
+
+// UpdateConfig stores the client's release channel preference. The tela
+// client itself uses this to decide which channel manifest to consult.
+// Hub and agent channels are stored separately in their own YAML configs.
+type UpdateConfig struct {
+	Channel      string `yaml:"channel,omitempty"`
+	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
 // UserDir returns the user-level tela config directory.

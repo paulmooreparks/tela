@@ -27,6 +27,7 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/gorilla/websocket"
+	channelpkg "github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/credstore"
 	"github.com/paulmooreparks/tela/internal/service"
 	"gopkg.in/yaml.v3"
@@ -2304,6 +2305,87 @@ func (a *App) RestartHub(hubURL string) string {
 		return `{"error":"` + err.Error() + `"}`
 	}
 	return string(data)
+}
+
+// GetHubChannelInfo reads the hub's current channel status:
+//
+//	{ channel, manifestUrl, currentVersion, latestVersion, updateAvailable }
+//
+// Returned unchanged from the hub's GET /api/admin/update response.
+func (a *App) GetHubChannelInfo(hubURL string) string {
+	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/update", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// SetHubChannel changes the hub's release channel via PATCH /api/admin/update.
+func (a *App) SetHubChannel(hubURL, channelName string) string {
+	payload := json.RawMessage(fmt.Sprintf(`{"channel":%q}`, channelName))
+	data, err := a.adminAPICall(hubURL, "PATCH", "/api/admin/update", payload)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// GetAgentChannelInfo reads a remote agent's channel status through the
+// hub-mediated management protocol.
+func (a *App) GetAgentChannelInfo(hubURL, machineID string) string {
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/update-status", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// SetAgentChannel sets a remote agent's release channel through the
+// hub-mediated management protocol.
+func (a *App) SetAgentChannel(hubURL, machineID, channelName string) string {
+	payload := json.RawMessage(fmt.Sprintf(`{"channel":%q}`, channelName))
+	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/update-channel", payload)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// GetClientChannel returns TelaVisor's own release channel preference.
+// TelaVisor, like the tela client, stores this in the user credential store
+// so the same ~/.tela/credentials.yaml drives both.
+func (a *App) GetClientChannel() map[string]string {
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil || store == nil {
+		return map[string]string{
+			"channel":     channelpkg.DefaultChannel,
+			"manifestUrl": channelpkg.ManifestURL("", channelpkg.DefaultChannel),
+		}
+	}
+	ch := channelpkg.Normalize(store.Update.Channel)
+	return map[string]string{
+		"channel":      ch,
+		"manifestUrl":  channelpkg.ManifestURL(store.Update.ManifestBase, ch),
+		"manifestBase": store.Update.ManifestBase,
+	}
+}
+
+// SetClientChannel writes TelaVisor's own release channel preference.
+func (a *App) SetClientChannel(channelName string) string {
+	ch := channelpkg.Normalize(channelName)
+	if !channelpkg.IsKnown(ch) {
+		return `{"error":"unknown channel: ` + channelName + `"}`
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		return `{"error":"load credential store: ` + err.Error() + `"}`
+	}
+	store.Update.Channel = ch
+	if err := store.Save(path); err != nil {
+		return `{"error":"save credential store: ` + err.Error() + `"}`
+	}
+	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(store.Update.ManifestBase, ch))
 }
 
 // UpdateServiceAgent triggers a self-update on the locally running telad service

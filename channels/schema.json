@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paulmooreparks/tela/channels/schema.json",
+  "title": "Tela channel manifest",
+  "description": "Pointer document that names the current release tag for a Tela channel and lists the binaries published under that tag. Fetched by every Tela binary on self-update.",
+  "type": "object",
+  "required": ["channel", "version", "tag", "publishedAt", "downloadBase", "binaries"],
+  "additionalProperties": false,
+  "properties": {
+    "channel": {
+      "type": "string",
+      "enum": ["dev", "beta", "stable"],
+      "description": "The channel this manifest describes."
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version with optional prerelease suffix. Same value as tag.",
+      "examples": ["v0.4.0-dev.42", "v0.4.0-beta.3", "v0.4.0"]
+    },
+    "tag": {
+      "type": "string",
+      "description": "Git tag that produced this release.",
+      "examples": ["v0.4.0-dev.42"]
+    },
+    "publishedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp at which this manifest was published."
+    },
+    "downloadBase": {
+      "type": "string",
+      "format": "uri",
+      "description": "Base URL under which all binaries listed in `binaries` can be fetched. Concatenate with the binary name to get the full URL."
+    },
+    "binaries": {
+      "type": "object",
+      "description": "Map of binary file name to its checksum and size. Keys are the canonical {tool}-{goos}-{goarch}{ext} names.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["sha256", "size"],
+        "additionalProperties": false,
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Lowercase hex SHA-256 of the binary."
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Size of the binary in bytes."
+          }
+        }
+      }
+    }
+  }
+}
