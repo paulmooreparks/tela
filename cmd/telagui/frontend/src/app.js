@@ -162,9 +162,14 @@ function copyLogPanel() {
 
 function saveLogPanel() {
   var active = document.querySelector('.log-panel-output:not(.hidden)');
-  if (active) {
-    goApp.SaveTextToFile(active.textContent, 'log');
-  }
+  if (!active) return;
+  var entries = active.querySelector('.cmd-list');
+  var text = (entries || active).textContent;
+  goApp.SaveTerminalOutput(text).then(function (path) {
+    if (path) tvLog('Saved log to ' + path);
+  }).catch(function (err) {
+    showError('Save failed: ' + err);
+  });
 }
 
 function clearLogPanel() {
