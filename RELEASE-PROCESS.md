@@ -208,7 +208,7 @@ The end-of-life date for the previous major is announced in the release notes fo
 **Cut a beta from a dev build:**
 
 ```
-GitHub → Actions → Promote release → Run workflow
+GitHub → Actions → Promote → Run workflow
   source_tag:    v0.4.0-dev.42
   target_channel: beta
   target_version: (leave empty)
@@ -219,7 +219,7 @@ This creates `v0.4.0-beta.{N+1}` and triggers the beta release build.
 **Cut a stable from a beta build:**
 
 ```
-GitHub → Actions → Promote release → Run workflow
+GitHub → Actions → Promote → Run workflow
   source_tag:    v0.4.0-beta.3
   target_channel: stable
   target_version: v0.4.0

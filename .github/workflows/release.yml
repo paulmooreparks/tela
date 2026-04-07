@@ -13,7 +13,7 @@
 #   - SHA-256 checksums are published alongside the binaries
 #   - Reproducible: same Go version, same flags, same source → same binary
 
-name: Release
+name: Build
 
 on:
   push:

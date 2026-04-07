@@ -3,7 +3,7 @@
 # Tela
 
 [![CI](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/ci.yml?branch=main&label=CI)](https://github.com/paulmooreparks/tela/actions/workflows/ci.yml)
-[![Release build](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/release.yml?branch=main&label=release)](https://github.com/paulmooreparks/tela/actions/workflows/release.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/release.yml?branch=main&label=build)](https://github.com/paulmooreparks/tela/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/paulmooreparks/tela?include_prereleases&sort=semver&label=latest)](https://github.com/paulmooreparks/tela/releases/latest)
 [![License](https://img.shields.io/github/license/paulmooreparks/tela)](LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/paulmooreparks/tela)](go.mod)

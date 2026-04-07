@@ -14,7 +14,7 @@
 #
 # See RELEASE-PROCESS.md for the full model.
 
-name: Promote release
+name: Promote
 
 on:
   workflow_dispatch:
