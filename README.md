@@ -83,7 +83,7 @@ TelaVisor uses a two-mode layout. **Clients mode** manages connections, profiles
 
 The Hub Settings view exposes lifecycle controls (View Logs, Update, Restart) and shows version badges that compare the running hub against the latest GitHub release. The same pattern is mirrored on the Agents tab for telad instances.
 
-![TelaVisor Hub Settings, Management section](book/src/screens/telavisor-hub-management.png)
+![TelaVisor Hub Settings](book/src/screens/telavisor-hub-settings.png)
 
 The Tokens view lets you create identities, rotate tokens, delete identities, and generate one-time pairing codes that users or agents can exchange for permanent tokens.
 
