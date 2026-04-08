@@ -1756,33 +1756,42 @@ function reconcileServicePorts(hubURL, machines) {
 }
 
 function renderHubInSidebar(content, hub, isConnected) {
+  // The Clients-mode dashboard, profile YAML, and selectedServices
+  // map all key hubs by their wss:// URL (the form the tela CLI
+  // client writes into the profile). The portal directory now reports
+  // hubs as https:// because the admin proxy uses HTTP. Convert once
+  // here and pass the wss form everywhere downstream so reconciliation
+  // with the existing profile data still works.
+  var hubKey = portalToWSURL(hub.url);
+  var hubForCallbacks = { url: hubKey, name: hub.name, hasToken: hub.hasToken, source: hub.source };
+
   var hubContainer = document.createElement('div');
-  var included = isHubIncluded(hub.url);
+  var included = isHubIncluded(hubKey);
   hubContainer.className = 'profile-hub-group' + (included ? '' : ' profile-hub-excluded');
 
   var hubHeader = document.createElement('div');
   hubHeader.className = 'profile-hub-header';
-  if (selectedHubURL === hub.url && !selectedMachineId) hubHeader.classList.add('selected');
+  if (selectedHubURL === hubKey && !selectedMachineId) hubHeader.classList.add('selected');
   var hubDisabled = isConnected ? ' disabled' : '';
   hubHeader.innerHTML = '<input type="checkbox"' + (included ? ' checked' : '') + hubDisabled
-    + ' onclick="event.stopPropagation(); toggleHubInclusion(\'' + escAttr(hub.url) + '\', this.checked)">'
+    + ' onclick="event.stopPropagation(); toggleHubInclusion(\'' + escAttr(hubKey) + '\', this.checked)">'
     + '<span class="hub-dot"></span>'
     + '<span class="hub-name">' + escHtml(hub.name) + '</span>'
     + (!hub.hasToken ? '<span class="no-token-badge">no token</span>' : '');
   hubHeader.onclick = function (e) {
     if (e.target.tagName === 'INPUT') return;
-    selectHub(hub, hubHeader);
+    selectHub(hubForCallbacks, hubHeader);
   };
   hubContainer.appendChild(hubHeader);
   content.appendChild(hubContainer);
 
   if (hub.hasToken) {
     goApp.GetHubStatus(hub.name).then(function (status) {
-      hubStatusCache[hub.url] = status;
+      hubStatusCache[hubKey] = status;
       hubHeader.querySelector('.hub-dot').className = 'hub-dot ' + (status.online ? 'online' : 'offline');
 
       if (status.machines) {
-        reconcileServicePorts(hub.url, status.machines);
+        reconcileServicePorts(hubKey, status.machines);
       }
 
       if (included) {
@@ -1793,13 +1802,13 @@ function renderHubInSidebar(content, hub, isConnected) {
             renderedMachines[mId] = true;
             var mEl = document.createElement('div');
             mEl.className = 'machine-item';
-            if (selectedHubURL === hub.url && selectedMachineId === mId) mEl.classList.add('selected');
+            if (selectedHubURL === hubKey && selectedMachineId === mId) mEl.classList.add('selected');
             var dotClass = m.agentConnected ? 'online' : 'offline';
             mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
               + escHtml(mId);
             mEl.onclick = function (e) {
               e.stopPropagation();
-              selectMachine(hub, m, mEl);
+              selectMachine(hubForCallbacks, m, mEl);
             };
             hubContainer.appendChild(mEl);
           });
@@ -1807,18 +1816,18 @@ function renderHubInSidebar(content, hub, isConnected) {
         // Show machines in the profile that aren't in the status response
         Object.keys(selectedServices).forEach(function (key) {
           var sel = selectedServices[key];
-          if (sel.hub !== hub.url) return;
+          if (sel.hub !== hubKey) return;
           if (renderedMachines[sel.machine]) return;
           renderedMachines[sel.machine] = true;
           var mEl = document.createElement('div');
           mEl.className = 'machine-item machine-unreachable';
-          if (selectedHubURL === hub.url && selectedMachineId === sel.machine) mEl.classList.add('selected');
+          if (selectedHubURL === hubKey && selectedMachineId === sel.machine) mEl.classList.add('selected');
           mEl.innerHTML = '<span class="machine-dot unreachable"></span>'
             + escHtml(sel.machine)
             + '<span class="unreachable-badge">unreachable</span>';
           mEl.onclick = function (e) {
             e.stopPropagation();
-            selectMachine(hub, { id: sel.machine, services: [], agentConnected: false, unreachable: true }, mEl);
+            selectMachine(hubForCallbacks, { id: sel.machine, services: [], agentConnected: false, unreachable: true }, mEl);
           };
           hubContainer.appendChild(mEl);
         });
@@ -1827,6 +1836,17 @@ function renderHubInSidebar(content, hub, isConnected) {
       hubHeader.querySelector('.hub-dot').className = 'hub-dot offline';
     });
   }
+}
+
+// portalToWSURL converts an https://host or http://host URL returned
+// by the portal directory back into the wss://host or ws://host form
+// the Clients-mode profile and selectedServices map use as the hub
+// identifier. Idempotent: a wss:// URL passes through unchanged.
+function portalToWSURL(u) {
+  if (!u) return u;
+  if (u.indexOf('https://') === 0) return 'wss://' + u.slice(8);
+  if (u.indexOf('http://') === 0) return 'ws://' + u.slice(7);
+  return u;
 }
 
 // --- Detail Pane: Hub View ---
@@ -4768,68 +4788,38 @@ function refreshTerminal() {
 
 // --- Settings ---
 
-// ── Portal sources (Settings > Portal Sources) ────────────────────
+// ── Portal sources (Remotes tab) ──────────────────────────────────
+//
+// The Remotes tab in Infrastructure mode is the portal-sources UI.
+// "Local" is the embedded in-process portal that ships inside TV;
+// remote entries are portals the user has signed into via the
+// OAuth 2.0 device authorization grant. portalSourceSetActive,
+// portalSourceRemove, and the openAddPortalSourceDialog flow below
+// are the documented entry points the Remotes tab calls.
 
 // State for the in-progress device code flow.
 var portalSourceFlow = null;
 
-function refreshPortalSources() {
-  var listEl = document.getElementById('portal-sources-list');
-  if (!listEl) return;
-  Promise.all([
-    goApp.PortalListSources(),
-    goApp.PortalActiveSource()
-  ]).then(function (results) {
-    var sources = results[0] || [];
-    var active = results[1] || '';
-    if (sources.length === 0) {
-      listEl.innerHTML = '<p class="empty-hint">No portal sources configured.</p>';
-      return;
-    }
-    var html = '';
-    sources.forEach(function (s) {
-      var isActive = s.name === active;
-      var isEmbedded = s.kind === 'embedded';
-      html += '<div class="portal-sources-row">'
-        + '<div class="source-info">'
-        + '<div><span class="source-name">' + escHtml(s.name) + '</span>'
-        + (isActive ? '<span class="source-active">(active)</span>' : '')
-        + '</div>'
-        + '<div class="source-url">' + escHtml(s.url) + '</div>'
-        + '</div>'
-        + '<div class="source-actions">';
-      if (!isActive) {
-        html += '<button type="button" class="tb-btn" onclick="portalSourceSetActive(\'' + escAttr(s.name) + '\')">Use</button>';
-      }
-      if (!isEmbedded) {
-        html += '<button type="button" class="tb-btn" onclick="portalSourceRemove(\'' + escAttr(s.name) + '\')">Remove</button>';
-      }
-      html += '</div></div>';
-    });
-    listEl.innerHTML = html;
-  }).catch(function (err) {
-    listEl.innerHTML = '<p class="empty-hint">Failed to load: ' + escHtml(String(err)) + '</p>';
-  });
-}
-
 function portalSourceSetActive(name) {
   goApp.PortalSetActiveSource(name).then(function () {
-    refreshPortalSources();
+    refreshRemotesList();
     // The hub list depends on the active source; force a refresh.
     if (typeof refreshHubsTab === 'function') refreshHubsTab();
+    if (typeof refreshAll === 'function') refreshAll();
   }).catch(function (err) {
-    showError('Failed to set active source: ' + err);
+    showError('Failed to set active remote: ' + err);
   });
 }
 
 function portalSourceRemove(name) {
-  showConfirmDialog('Remove Portal Source', 'Remove the portal source "' + name + '"? You can sign in again later.', 'Remove').then(function (yes) {
+  showConfirmDialog('Remove Remote', 'Remove the remote "' + name + '"? You can sign in again later.', 'Remove').then(function (yes) {
     if (!yes) return;
     goApp.PortalRemoveSource(name).then(function () {
-      refreshPortalSources();
+      refreshRemotesList();
       if (typeof refreshHubsTab === 'function') refreshHubsTab();
+      if (typeof refreshAll === 'function') refreshAll();
     }).catch(function (err) {
-      showError('Failed to remove source: ' + err);
+      showError('Failed to remove remote: ' + err);
     });
   });
 }
@@ -4909,12 +4899,11 @@ function portalSourceFinish() {
   // the embedded source as "Local" and the remote source as
   // hostname; renaming arrives in a follow-up.
   closeAddPortalSourceDialog();
-  refreshPortalSources();
+  refreshRemotesList();
   if (typeof refreshHubsTab === 'function') refreshHubsTab();
 }
 
 function refreshSettings() {
-  refreshPortalSources();
   goApp.GetSettings().then(function (s) {
     document.getElementById('setting-autoConnect').checked = s.autoConnect;
     document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;
@@ -5209,60 +5198,73 @@ function clearCredentialStore() {
 }
 
 // ── Remotes view (Hubs mode) ───────────────────────────────────────
+//
+// The Remotes tab is the portal-sources UI. "Local" is the embedded
+// in-process portal that ships inside TV; remote entries are portals
+// the user has signed into via the OAuth 2.0 device authorization
+// grant. The Add button opens a 3-step modal (URL -> user code in
+// browser -> name confirm) that drives the device code flow.
+//
+// renderRemotesView is kept as a no-op shim for legacy callers in
+// the Hubs-mode admin nav. The standalone Remotes tab uses the
+// markup in index.html and refreshRemotesList directly; the shim is
+// retained until that nav item is removed in a follow-up.
 
 function renderRemotesView(pane) {
   pane.innerHTML = '<h2>Remotes</h2>'
-    + '<p class="section-desc">Hub directory endpoints for short name resolution. Equivalent to <code>tela remote</code>.</p>'
+    + '<p class="section-desc">Portals TelaVisor talks to for hubs and agents.</p>'
     + '<div id="remotes-list-pane"></div>'
-    + '<div class="settings-inline-form" style="margin-top:12px;">'
-    + '<input type="text" id="remote-name-input" placeholder="Name" title="Remote name" class="settings-sm-input">'
-    + '<input type="text" id="remote-url-input" placeholder="Portal URL" title="Portal URL" class="settings-md-input">'
-    + '<button type="button" class="tb-btn" onclick="addRemote()">Add</button>'
+    + '<div class="remotes-add-row">'
+    + '<button type="button" class="tb-btn" onclick="openAddPortalSourceDialog()">Add Remote...</button>'
     + '</div>';
   refreshRemotesList();
 }
 
 function refreshRemotesList() {
-  goApp.ListRemotes().then(function (remotes) {
-    var el = document.getElementById('remotes-list-pane');
-    if (!el) return;
-    if (!remotes || remotes.length === 0) {
+  var el = document.getElementById('remotes-list-pane');
+  if (!el) return;
+  Promise.all([
+    goApp.PortalListSources(),
+    goApp.PortalActiveSource()
+  ]).then(function (results) {
+    var sources = results[0] || [];
+    var active = results[1] || '';
+    if (sources.length === 0) {
       el.innerHTML = '<p class="empty-hint">No remotes configured.</p>';
       return;
     }
-    var html = '<table class="admin-table"><thead><tr><th>Name</th><th>URL</th><th></th></tr></thead><tbody>';
-    remotes.forEach(function (r) {
-      html += '<tr><td><strong>' + escHtml(r.name) + '</strong></td>'
-        + '<td>' + escHtml(r.url) + '</td>'
-        + '<td><button class="icon-btn danger" onclick="removeRemote(\'' + escAttr(r.name) + '\')">Remove</button></td></tr>';
+    var html = '';
+    sources.forEach(function (s) {
+      var isActive = s.name === active;
+      var isEmbedded = s.kind === 'embedded';
+      html += '<div class="portal-sources-row">'
+        + '<div class="source-info">'
+        + '<div class="source-name-line">'
+        + '<span class="source-name">' + escHtml(s.name) + '</span>'
+        + (isActive ? '<span class="source-active">Active</span>' : '')
+        + '</div>'
+        + '<div class="source-url">' + escHtml(s.url) + '</div>'
+        + '</div>'
+        + '<div class="source-actions">';
+      if (!isActive) {
+        html += '<button type="button" class="tb-btn" onclick="portalSourceSetActive(\'' + escAttr(s.name) + '\')">Use</button>';
+      }
+      if (!isEmbedded) {
+        html += '<button type="button" class="tb-btn tb-delete-btn" onclick="portalSourceRemove(\'' + escAttr(s.name) + '\')">Remove</button>';
+      }
+      html += '</div></div>';
     });
-    html += '</tbody></table>';
     el.innerHTML = html;
+  }).catch(function (err) {
+    el.innerHTML = '<p class="empty-hint">Failed to load remotes: ' + escHtml(String(err)) + '</p>';
   });
 }
 
-function addRemote() {
-  var nameInput = document.getElementById('remote-name-input');
-  var urlInput = document.getElementById('remote-url-input');
-  var name = nameInput.value.trim();
-  var url = urlInput.value.trim();
-  if (!name || !url) return;
-  goApp.AddRemote(name, url).then(function () {
-    nameInput.value = '';
-    urlInput.value = '';
-    refreshRemotesList();
-  }).catch(function (err) {
-    tvLog('Add remote failed: ' + err);
-  });
-}
-
-function removeRemote(name) {
-  goApp.RemoveRemote(name).then(function () {
-    refreshRemotesList();
-  }).catch(function (err) {
-    tvLog('Remove remote failed: ' + err);
-  });
-}
+// addRemote / removeRemote are kept as thin shims so any frontend
+// caller that has not been migrated to the dialog still resolves.
+// The dialog is the documented path; these names are deprecated.
+function addRemote() { openAddPortalSourceDialog(); }
+function removeRemote(name) { portalSourceRemove(name); }
 
 // ── Credentials view (Hubs mode) ──────────────────────────────────
 

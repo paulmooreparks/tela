@@ -29,6 +29,7 @@ import (
 	"github.com/gorilla/websocket"
 	channelpkg "github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/credstore"
+	"github.com/paulmooreparks/tela/internal/portalclient"
 	"github.com/paulmooreparks/tela/internal/service"
 	"gopkg.in/yaml.v3"
 )
@@ -1020,31 +1021,14 @@ func hubNameFromURL(url string) string {
 }
 
 // GetHubStatus queries a hub for its machine/service status. The hub
-// is identified by name; the URL is resolved via the active portal
-// source. /api/status is the public hub status endpoint and is not
-// under /api/admin/, so the call goes directly to the hub rather than
-// through the portal admin proxy. Status is unauthenticated on most
-// hubs, so no token is sent.
+// is identified by name; the URL and stored token are resolved via
+// the active portal source through fetchHubPublicEndpoint. The body
+// of the response is decoded into the HubStatus shape the frontend
+// consumes.
 func (a *App) GetHubStatus(hubName string) HubStatus {
-	hubURL, err := a.lookupHubURL(hubName)
+	respBody, err := a.fetchHubPublicEndpoint(hubName, "/api/status")
 	if err != nil {
 		return HubStatus{Error: err.Error()}
-	}
-	apiURL := strings.TrimSuffix(hubURL, "/") + "/api/status"
-
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return HubStatus{Error: err.Error()}
-	}
-
-	resp, err := a.doRequest(req, 15*time.Second)
-	if err != nil {
-		return HubStatus{Error: err.Error()}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return HubStatus{Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
 	}
 
 	var raw struct {
@@ -1064,7 +1048,7 @@ func (a *App) GetHubStatus(hubName string) HubStatus {
 			Capabilities map[string]interface{} `json:"capabilities"`
 		} `json:"machines"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.Unmarshal(respBody, &raw); err != nil {
 		return HubStatus{Error: err.Error()}
 	}
 
@@ -1096,58 +1080,91 @@ func (a *App) GetHubStatus(hubName string) HubStatus {
 
 // --- Hub Management ---
 
-// AddHub stores a hub URL and token in the credential store.
-func (a *App) AddHub(url, token string) error {
-	wsURL := toWSURL(url)
-	a.logCommand("Add hub "+wsURL, "tela login "+wsURL)
+// AddHub adds a hub to the active portal source's directory. The
+// hub is identified by URL and admin token; the portal store mints a
+// short name from the URL host (or the user can rename it later).
+// This replaces the older credstore-based AddHub: hub admin tokens
+// now live exclusively in the portal store, never in
+// ~/.tela/credentials.yaml.
+func (a *App) AddHub(rawURL, token string) error {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return fmt.Errorf("AddHub: URL is required")
+	}
+	hubURL := canonicalHubURL(rawURL)
+	name := hostFromURL(hubURL)
+	a.logCommand("Add hub "+hubURL, "tela login "+hubURL)
 
-	store, err := credstore.Load(credstore.UserPath())
+	sourceName, err := a.PortalActiveSource()
 	if err != nil {
-		store = &credstore.Store{Hubs: make(map[string]credstore.Credential)}
+		return err
 	}
-	store.Set(wsURL, credstore.Credential{Token: token})
-	return store.Save(credstore.UserPath())
+	client, err := a.portalClientForSource(sourceName)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = client.AddHub(ctx, portalclient.AddHubRequest{
+		Name:       name,
+		URL:        hubURL,
+		AdminToken: token,
+	})
+	return err
 }
 
-// RemoveHub removes a hub from the credential store.
-func (a *App) RemoveHub(url string) error {
-	wsURL := toWSURL(url)
-	a.logCommand("Remove hub "+wsURL, "tela logout "+wsURL)
-
-	// Remove from credential store
-	store, err := credstore.Load(credstore.UserPath())
-	if err == nil {
-		store.Remove(wsURL)
-		store.Save(credstore.UserPath())
+// RemoveHub removes a hub from the active portal source's directory.
+// Accepts either a hub name or a URL the frontend may still hand in
+// (legacy code paths in the dashboard pass hub.url); URLs are
+// canonicalized and matched against the directory.
+func (a *App) RemoveHub(hubNameOrURL string) error {
+	hubNameOrURL = strings.TrimSpace(hubNameOrURL)
+	if hubNameOrURL == "" {
+		return fmt.Errorf("RemoveHub: hub name or URL is required")
 	}
+	a.logCommand("Remove hub "+hubNameOrURL, "tela logout "+hubNameOrURL)
 
-	// Remove from hubs.yaml aliases
-	hubsFile := filepath.Join(telaConfigDir(), "hubs.yaml")
-	if data, err := os.ReadFile(hubsFile); err == nil {
-		var cfg struct {
-			Hubs map[string]string `yaml:"hubs"`
-		}
-		if yaml.Unmarshal(data, &cfg) == nil && cfg.Hubs != nil {
-			changed := false
-			for name, hubURL := range cfg.Hubs {
-				if hubURL == url || hubURL == wsURL {
-					delete(cfg.Hubs, name)
-					changed = true
-				}
-			}
-			if changed {
-				out, _ := yaml.Marshal(&cfg)
-				os.WriteFile(hubsFile, out, 0600)
-			}
+	sourceName, err := a.PortalActiveSource()
+	if err != nil {
+		return err
+	}
+	client, err := a.portalClientForSource(sourceName)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Resolve to a hub name. If the input is already a name in the
+	// directory, use it as-is; otherwise look up by URL.
+	target := hubNameOrURL
+	hubs, err := client.ListHubs(ctx)
+	if err != nil {
+		return err
+	}
+	canonical := canonicalHubURL(hubNameOrURL)
+	found := false
+	for _, h := range hubs {
+		if h.Name == hubNameOrURL || h.URL == canonical {
+			target = h.Name
+			found = true
+			break
 		}
 	}
-
-	return nil
+	if !found {
+		return fmt.Errorf("RemoveHub: %q not found in portal source %q", hubNameOrURL, sourceName)
+	}
+	_, err = client.DeleteHub(ctx, target)
+	return err
 }
 
-// GetStoredToken checks the credential store for a token for the given hub URL.
+// GetStoredToken is retained as a no-op binding for compatibility
+// with frontend code that still calls it. The hub admin token now
+// lives in the portal store and is never returned to the frontend;
+// callers that need to know whether a hub is reachable should use
+// the portal directory (GetKnownHubs) instead.
 func (a *App) GetStoredToken(hubURL string) string {
-	return credstore.LookupToken(toWSURL(hubURL))
+	return ""
 }
 
 // --- Hub Admin API ---
@@ -1334,63 +1351,95 @@ func (a *App) AdminGeneratePairCode(hubName, pairType, role, machineId string, e
 }
 
 // GetHubInfo returns extended hub info from the hub's /api/status
-// endpoint, fetched via the embedded portal's known URL for the hub.
-// The portal admin proxy only forwards /api/admin/* paths, so this
-// method goes around it: look up the hub URL via the active portal
-// source, then GET /api/status directly. Status is unauthenticated
-// (or viewer-token gated) so no admin token is needed.
+// endpoint. The portal admin proxy only forwards /api/admin/* paths,
+// so /api/status goes around it: look up the hub URL and the
+// embedded portal's stored token for that hub via lookupHub, then
+// GET /api/status with the token. Hubs that have auth enabled
+// require any valid token; the embedded portal's stored admin or
+// viewer token satisfies that.
 func (a *App) GetHubInfo(hubName string) string {
-	hubURL, err := a.lookupHubURL(hubName)
+	body, err := a.fetchHubPublicEndpoint(hubName, "/api/status")
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
-	}
-	apiURL := strings.TrimSuffix(hubURL, "/") + "/api/status"
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	resp, err := a.doRequestLogged(req, 15*time.Second)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	if resp.StatusCode >= 400 {
-		return `{"error":"HTTP ` + strconv.Itoa(resp.StatusCode) + `"}`
 	}
 	return string(body)
 }
 
 // GetHubHistory fetches the hub's recent connection history. /api/history
 // is a public hub endpoint outside /api/admin/, so the call goes
-// directly to the hub URL resolved via the active portal source rather
-// than through the admin proxy.
+// directly to the hub URL resolved via the active portal source
+// rather than through the admin proxy. The stored token is sent so
+// auth-enabled hubs accept the request.
 func (a *App) GetHubHistory(hubName string) string {
-	hubURL, err := a.lookupHubURL(hubName)
+	body, err := a.fetchHubPublicEndpoint(hubName, "/api/history")
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
-	apiURL := strings.TrimSuffix(hubURL, "/") + "/api/history"
+	return string(body)
+}
+
+// fetchHubPublicEndpoint resolves the hub via the active portal
+// source, then issues a GET against the hub URL + path with the
+// stored token (viewer if present, otherwise admin) on the
+// Authorization header. Used for public hub endpoints like
+// /api/status and /api/history that the admin proxy cannot forward
+// but that auth-enabled hubs still gate behind a token.
+func (a *App) fetchHubPublicEndpoint(hubName, path string) ([]byte, error) {
+	hubURL, token, err := a.lookupHubAuth(hubName)
+	if err != nil {
+		return nil, err
+	}
+	apiURL := strings.TrimSuffix(hubURL, "/") + path
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
+		return nil, err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := a.doRequestLogged(req, 15*time.Second)
 	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
+		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
+		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return `{"error":"HTTP ` + strconv.Itoa(resp.StatusCode) + `"}`
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	return string(body)
+	return body, nil
+}
+
+// lookupHubAuth returns the hub URL AND a token suitable for public
+// hub endpoints (status, history) by reaching directly into the
+// embedded portal store. Remote portal sources do not expose the
+// stored token over the wire (a future portal protocol passthrough
+// will fix this for remote sources), so for now this only works for
+// the embedded source. When the active source is remote, the
+// returned token is empty and the caller falls back to no auth.
+func (a *App) lookupHubAuth(hubName string) (string, string, error) {
+	sourceName, err := a.PortalActiveSource()
+	if err != nil {
+		return "", "", err
+	}
+	// For the embedded source, reach into the file store directly
+	// for the stored token. For remote sources, fall back to a URL
+	// lookup with no token.
+	if (sourceName == "" || sourceName == embeddedSourceName) && a.portal != nil {
+		hub, _, err := a.portal.store.LookupHubForUser(context.Background(), nil, hubName)
+		if err != nil {
+			return "", "", err
+		}
+		token := hub.ViewerToken
+		if token == "" {
+			token = hub.AdminToken
+		}
+		return hub.URL, token, nil
+	}
+	hubURL, err := a.lookupHubURL(hubName)
+	return hubURL, "", err
 }
 
 // GetTokenRole returns the role for the admin token the active portal

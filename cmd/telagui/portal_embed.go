@@ -339,6 +339,16 @@ func importLegacyHubs(ctx context.Context, store *file.Store) (int, error) {
 		}
 		imported++
 	}
+
+	// Once everything is migrated, delete the legacy hubs.yaml so the
+	// next launch does not re-import. Pre-1.0 policy: no compat shims;
+	// the portal store is now the single source of truth for the hub
+	// directory. The credstore entries stay for now because the
+	// Clients-mode profile path still references them by URL; that
+	// migration is a separate concern.
+	if imported > 0 || len(hubs) > 0 {
+		_ = os.Remove(hubsFile)
+	}
 	return imported, nil
 }
 

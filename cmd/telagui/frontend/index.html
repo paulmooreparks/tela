@@ -239,13 +239,11 @@
     <!-- Remotes tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-remotes">
       <div class="status-pane">
-        <h1 style="margin-bottom:4px;">Remotes</h1>
-        <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Hub directory endpoints for short name resolution. Equivalent to <code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela remote</code>.</p>
+        <h1 class="remotes-title">Remotes</h1>
+        <p class="section-desc remotes-desc">Portals TelaVisor talks to for hubs and agents. The Local source is always present and serves the hubs you have configured on this machine. Sign in to a remote portal (such as Awan Saya) to see the hubs it manages.</p>
         <div id="remotes-list-pane"></div>
-        <div class="settings-inline-form" style="margin-top:12px;">
-          <input type="text" id="remote-name-input" placeholder="Name" title="Remote name" class="settings-sm-input">
-          <input type="text" id="remote-url-input" placeholder="Portal URL" title="Portal URL" class="settings-md-input">
-          <button type="button" class="tb-btn" onclick="addRemote()">Add</button>
+        <div class="remotes-add-row">
+          <button type="button" class="tb-btn" onclick="openAddPortalSourceDialog()">Add Remote...</button>
         </div>
       </div>
     </div>
@@ -468,14 +466,6 @@
               <input type="number" id="setting-logMaxLines" class="settings-short-input" min="100" max="100000" step="100" title="Maximum lines to keep in each log pane" onchange="markSettingsDirty()">
             </div>
           </div>
-          <div class="settings-group">
-            <div class="settings-group-header">Portal Sources</div>
-            <p class="section-desc portal-sources-desc">TelaVisor talks to one or more portals to find your hubs. The Local source is always present and serves the hubs you have configured on this machine. Sign in to a remote portal (such as Awan Saya) to see the hubs it manages.</p>
-            <div id="portal-sources-list"></div>
-            <div class="portal-source-add-row">
-              <button type="button" class="tb-btn" onclick="openAddPortalSourceDialog()">Add Portal Source...</button>
-            </div>
-          </div>
           <div id="settings-error" class="settings-error-msg hidden"></div>
         </div>
       </div>
@@ -486,7 +476,7 @@
   <div class="modal-overlay hidden" id="add-portal-source-modal" onclick="if(event.target===this)closeAddPortalSourceDialog()">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3>Add Portal Source</h3>
+        <h3>Add Remote</h3>
         <button type="button" class="modal-close" onclick="closeAddPortalSourceDialog()">&times;</button>
       </div>
       <div class="modal-body">
@@ -494,7 +484,7 @@
           <div id="portal-source-step-url">
             <p class="section-desc">Enter the URL of the portal you want to sign in to. The portal must implement Tela portal protocol 1.0.</p>
             <div class="settings-stacked-row">
-              <div class="settings-stacked-label">Portal URL</div>
+              <div class="settings-stacked-label">Remote URL</div>
               <input type="text" id="portal-source-url-input" placeholder="https://awansaya.net" class="tb-input portal-source-input">
             </div>
             <div id="portal-source-error" class="settings-error-msg hidden"></div>
@@ -515,9 +505,9 @@
             </div>
           </div>
           <div id="portal-source-step-name" class="hidden">
-            <p class="section-desc">Authorization successful. Choose a name for this portal source.</p>
+            <p class="section-desc">Authorization successful. Choose a name for this remote.</p>
             <div class="settings-stacked-row">
-              <div class="settings-stacked-label">Source name</div>
+              <div class="settings-stacked-label">Remote name</div>
               <input type="text" id="portal-source-name-input" placeholder="awansaya" class="tb-input portal-source-input">
             </div>
             <div id="portal-source-name-error" class="settings-error-msg hidden"></div>

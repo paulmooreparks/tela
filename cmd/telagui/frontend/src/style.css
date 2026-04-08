@@ -2195,24 +2195,115 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   background: var(--bg); color: var(--text); border-color: var(--border);
 }
 
-/* Portal sources (Settings > Portal Sources, Add Portal Source modal) */
-.portal-sources-desc { margin: 0 0 8px 0; }
+/* Remotes tab + Add Remote modal (portal sources UI) */
+.remotes-title { margin-bottom: 4px; }
+.remotes-desc { margin-bottom: 20px; color: var(--text-muted); font-size: 0.9rem; }
+.remotes-add-row { margin-top: 16px; }
+
+#remotes-list-pane,
+#portal-sources-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
 .portal-sources-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 0; gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
 }
-.portal-sources-row .source-info { display: flex; flex-direction: column; }
-.portal-sources-row .source-name { font-weight: 600; }
-.portal-sources-row .source-url { font-size: 12px; color: var(--text-muted); word-break: break-all; }
-.portal-sources-row .source-active { font-size: 11px; color: var(--accent); margin-left: 6px; }
-.portal-sources-row .source-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.portal-source-add-row { margin-top: 8px; }
-.portal-source-input { width: 100%; }
-.portal-source-actions { margin-top: 12px; display: flex; gap: 8px; }
-.portal-source-code-box { text-align: center; margin: 16px 0; }
-.portal-source-code-label { font-size: 12px; color: var(--text-muted); }
+.portal-sources-row:last-child { border-bottom: none; }
+
+.portal-sources-row .source-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.portal-sources-row .source-name-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.portal-sources-row .source-name {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.portal-sources-row .source-active {
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--surface-alt);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.portal-sources-row .source-url {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+  margin-top: 3px;
+  font-family: var(--mono);
+}
+
+.portal-sources-row .source-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Add Remote modal: input + button rows + device code display */
+.portal-source-input { width: 100%; box-sizing: border-box; }
+
+.portal-source-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.portal-source-code-box {
+  text-align: center;
+  margin: 20px 0;
+  padding: 20px 16px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.portal-source-code-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .portal-source-code-value {
-  font-size: 28px; font-family: monospace; letter-spacing: 4px; margin: 8px 0;
+  font-size: 32px;
+  font-family: var(--mono);
+  letter-spacing: 6px;
+  margin: 12px 0 0 0;
+  color: var(--text);
+  font-weight: 600;
 }
+
 .portal-source-poll-status { text-align: center; }
-.portal-source-verification { word-break: break-all; }
+.portal-source-verification {
+  word-break: break-all;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}

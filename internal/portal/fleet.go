@@ -103,8 +103,14 @@ func (s *Server) fetchHubAgents(parent *http.Request, hub *Hub) []map[string]any
 		s.logf("portal: fleet: build %s request: %v", hub.Name, err)
 		return nil
 	}
-	if hub.ViewerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+hub.ViewerToken)
+	// Prefer the viewer token (least privilege); fall back to the
+	// admin token when no viewer is stored. The status endpoint
+	// accepts any valid hub token when auth is enabled, so the admin
+	// token works as a fallback for stores that only carry one.
+	if tok := hub.ViewerToken; tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	} else if hub.AdminToken != "" {
+		req.Header.Set("Authorization", "Bearer "+hub.AdminToken)
 	}
 
 	resp, err := fleetClient.Do(req)
