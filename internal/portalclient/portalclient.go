@@ -246,6 +246,128 @@ func (c *Client) HubAdminJSON(ctx context.Context, hubName, operation, method st
 	return decodeOrError(resp, out)
 }
 
+// ── OAuth 2.0 device authorization grant (RFC 8628) ────────────────
+
+// DeviceAuthorization is the response from POST /api/oauth/device.
+// The user visits VerificationURI (or VerificationURIComplete, which
+// pre-fills UserCode), authorizes the request in their browser, and
+// the client polls /api/oauth/token with DeviceCode until it gets a
+// token back. Spec: DESIGN-portal.md section 6.3.
+type DeviceAuthorization struct {
+	DeviceCode              string `json:"device_code"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURIComplete string `json:"verification_uri_complete,omitempty"`
+	ExpiresIn               int    `json:"expires_in"`
+	Interval                int    `json:"interval"`
+}
+
+// DeviceTokenResponse is the success response from polling
+// POST /api/oauth/token. AccessToken is the bearer token to install
+// on a Client; TokenType is always "Bearer" per the spec.
+type DeviceTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+}
+
+// StartDeviceAuth begins the device authorization grant. No bearer
+// token is sent (this is the call that bootstraps one). The caller
+// then displays UserCode + VerificationURI to the user (typically
+// also opening the URI in the system browser) and starts polling
+// PollDeviceToken on the documented Interval until it returns a
+// token, returns ErrAuthorizationPending (still waiting), or returns
+// any other error.
+func (c *Client) StartDeviceAuth(ctx context.Context) (DeviceAuthorization, error) {
+	var out DeviceAuthorization
+	req, err := c.newRequest(ctx, http.MethodPost, "/api/oauth/device", struct{}{})
+	if err != nil {
+		return out, err
+	}
+	req.Header.Del("Authorization")
+	if err := c.doJSON(req, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// PollDeviceToken issues one poll against /api/oauth/token. The
+// returned error is one of:
+//
+//   - nil with a populated DeviceTokenResponse: the user has
+//     authorized; install AccessToken on a Client and proceed.
+//   - ErrAuthorizationPending: keep polling at the documented
+//     interval.
+//   - ErrSlowDown: increase the polling interval by 5 seconds and
+//     keep polling.
+//   - ErrExpiredToken: the device code expired; restart the flow
+//     with StartDeviceAuth.
+//   - ErrAccessDenied: the user denied the request.
+//   - any other error: transport or unexpected server response.
+func (c *Client) PollDeviceToken(ctx context.Context, deviceCode string) (DeviceTokenResponse, error) {
+	var out DeviceTokenResponse
+	body := struct {
+		GrantType  string `json:"grant_type"`
+		DeviceCode string `json:"device_code"`
+	}{
+		GrantType:  "urn:ietf:params:oauth:grant-type:device_code",
+		DeviceCode: deviceCode,
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, "/api/oauth/token", body)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Del("Authorization")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return out, fmt.Errorf("portalclient: poll device token: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return out, fmt.Errorf("portalclient: decode token response: %w", err)
+		}
+		return out, nil
+	}
+
+	// RFC 8628 polling errors come back as 400 with an OAuth error
+	// body: {"error": "authorization_pending"} etc. Map the documented
+	// codes onto sentinel errors so callers can use errors.Is.
+	var oauthErr struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+	_ = json.Unmarshal(raw, &oauthErr)
+	switch oauthErr.Error {
+	case "authorization_pending":
+		return out, ErrAuthorizationPending
+	case "slow_down":
+		return out, ErrSlowDown
+	case "expired_token":
+		return out, ErrExpiredToken
+	case "access_denied":
+		return out, ErrAccessDenied
+	}
+	msg := strings.TrimSpace(string(raw))
+	if oauthErr.ErrorDescription != "" {
+		msg = oauthErr.ErrorDescription
+	} else if oauthErr.Error != "" {
+		msg = oauthErr.Error
+	}
+	return out, &HTTPError{StatusCode: resp.StatusCode, Message: msg}
+}
+
+// Sentinel errors returned by PollDeviceToken to encode the four
+// documented OAuth device-grant polling states from RFC 8628.
+var (
+	ErrAuthorizationPending = errors.New("portalclient: authorization_pending")
+	ErrSlowDown             = errors.New("portalclient: slow_down")
+	ErrExpiredToken         = errors.New("portalclient: expired_token")
+	ErrAccessDenied         = errors.New("portalclient: access_denied")
+)
+
 // ── Lower-level helpers ─────────────────────────────────────────────
 
 // newRequest builds a request against c.BaseURL with the bearer

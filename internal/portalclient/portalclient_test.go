@@ -9,8 +9,12 @@ package portalclient_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/paulmooreparks/tela/internal/portal"
@@ -110,6 +114,83 @@ func TestClient_HubsCRUD(t *testing.T) {
 	}
 	if len(hubs) != 0 {
 		t.Fatalf("DeleteHub result = %+v, want empty", hubs)
+	}
+}
+
+// TestClient_DeviceAuthFlow exercises the device code state machine
+// against a hand-written stub server. The stub returns
+// authorization_pending on the first poll and a token on the second,
+// matching the documented RFC 8628 state transition.
+func TestClient_DeviceAuthFlow(t *testing.T) {
+	var pollCount int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/oauth/device", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(portalclient.DeviceAuthorization{
+			DeviceCode:      "dev-code-abc",
+			UserCode:        "WDJB-MJHT",
+			VerificationURI: "http://stub/device",
+			ExpiresIn:       900,
+			Interval:        5,
+		})
+	})
+	mux.HandleFunc("POST /api/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		n := atomic.AddInt32(&pollCount, 1)
+		if n == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "authorization_pending"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(portalclient.DeviceTokenResponse{
+			AccessToken: "minted-access-token",
+			TokenType:   "Bearer",
+		})
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	c := portalclient.New(ts.URL, "")
+	ctx := context.Background()
+
+	auth, err := c.StartDeviceAuth(ctx)
+	if err != nil {
+		t.Fatalf("StartDeviceAuth: %v", err)
+	}
+	if auth.DeviceCode != "dev-code-abc" || auth.UserCode != "WDJB-MJHT" {
+		t.Fatalf("StartDeviceAuth body = %+v", auth)
+	}
+
+	// First poll: pending.
+	if _, err := c.PollDeviceToken(ctx, auth.DeviceCode); !errors.Is(err, portalclient.ErrAuthorizationPending) {
+		t.Fatalf("first poll err = %v, want ErrAuthorizationPending", err)
+	}
+
+	// Second poll: token.
+	tok, err := c.PollDeviceToken(ctx, auth.DeviceCode)
+	if err != nil {
+		t.Fatalf("second poll: %v", err)
+	}
+	if tok.AccessToken != "minted-access-token" || tok.TokenType != "Bearer" {
+		t.Fatalf("token = %+v", tok)
+	}
+}
+
+// TestClient_DeviceAuthDenied checks that access_denied maps onto the
+// sentinel error so callers can branch on errors.Is.
+func TestClient_DeviceAuthDenied(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "access_denied"})
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	c := portalclient.New(ts.URL, "")
+	if _, err := c.PollDeviceToken(context.Background(), "any"); !errors.Is(err, portalclient.ErrAccessDenied) {
+		t.Fatalf("err = %v, want ErrAccessDenied", err)
 	}
 }
 
