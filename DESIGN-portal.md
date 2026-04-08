@@ -13,12 +13,15 @@ identity implementation -- accounts, organizations, teams, billing,
 self-service signup -- is out of scope and lives in whatever store an
 implementation chooses to pair with the protocol.
 
-Status: **draft, not yet implemented in the Tela tree**. The current Awan
-Saya server matches this spec, and the `telahubd` outbound portal client
-in `internal/hub/hub.go` (`registerWithPortal`, `discoverHubDirectory`,
-`syncViewerTokenToPortals`) matches this spec. New implementations must
-match it too. Pre-1.0 the spec is mutable; post-1.0 it follows the same
-backward-compatibility rules as the hub admin API.
+Status: **draft, version 1.0 shape decided, extraction not yet started**.
+The four open questions in the first draft of this spec were resolved
+on 2026-04-08 (see section 13). The decisions are baked into sections
+2, 4, 5, and 11. Awan Saya and the `telahubd` outbound portal client
+in `internal/hub/hub.go` currently implement the legacy shape; both
+will be migrated to the new shape in the same commit that introduces
+the `internal/portal` Go package. Pre-1.0 the spec is still mutable;
+post-1.0 it follows the version negotiation and backward-compatibility
+rules in section 2.
 
 Discussion of why a portal exists at all, the scaling story, and how
 TelaVisor is expected to host the protocol in personal-use mode lives in
@@ -54,11 +57,13 @@ and any other endpoints it wants outside the protocol's scope.
 
 ---
 
-## 2. Discovery: `/.well-known/tela`
+## 2. Discovery and version negotiation: `/.well-known/tela`
 
 A portal MUST serve a JSON document at `/.well-known/tela` that names
-where the hub directory lives. This is the only well-known endpoint Tela
-defines and is the entry point any client uses when given a portal URL.
+where the hub directory lives and which portal protocol versions the
+portal speaks. This is the only well-known endpoint Tela defines and
+is the entry point any client uses when given a portal URL. It serves
+two purposes: directory discovery and protocol version negotiation.
 
 ### Request
 
@@ -78,23 +83,76 @@ changes.
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 
-{ "hub_directory": "/api/hubs" }
+{
+  "hub_directory": "/api/hubs",
+  "protocolVersion": "1.0",
+  "supportedVersions": ["1.0"]
+}
 ```
 
-The single field `hub_directory` is the path on the same origin where the
-portal serves the hub directory endpoints (section 3). It MUST be a
-relative path beginning with `/`. Implementations SHOULD use `/api/hubs`
-as the conventional default; clients MUST honor whatever value the
-portal returns.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `hub_directory` | string | yes | Path on the same origin where the portal serves the hub directory endpoints (section 3). MUST be a relative path beginning with `/`. Implementations SHOULD use `/api/hubs` as the conventional default; clients MUST honor whatever value the portal returns. |
+| `protocolVersion` | string | yes (post-1.0) | The portal protocol version the portal recommends clients use. Major.minor semver string. The portal MUST select this from its `supportedVersions` list. Pre-1.0 portals MAY ship `"0.x"` to mark themselves as in development. |
+| `supportedVersions` | array of strings | yes (post-1.0) | The full set of portal protocol versions this portal speaks. MUST be non-empty. MUST contain `protocolVersion`. Newer portals supporting older clients list multiple versions here. |
+
+### Version semantics
+
+Versions follow standard semver discipline applied to a wire protocol:
+
+- **Major version bump** (`1.x` → `2.x`) signals a breaking change.
+  Clients written for major version N MUST refuse to operate against
+  a portal whose `supportedVersions` does not include any `N.*` entry.
+- **Minor version bump** (`1.0` → `1.1`) signals an additive change:
+  new optional fields, new endpoints, new optional query parameters.
+  A client written against `1.0` MUST work against any `1.x` portal,
+  ignoring fields and endpoints it does not understand.
+- **Within a single major version, the portal protocol is strictly
+  additive.** Removing fields, renaming fields, changing field types,
+  or changing the semantics of existing fields are all forbidden and
+  require a major version bump. Adding new optional fields, adding
+  new endpoints, and adding new optional query parameters are allowed
+  in a minor version bump.
+
+### Negotiation rule
+
+A client MUST:
+
+1. Fetch `/.well-known/tela` at session start.
+2. Read `supportedVersions` and select the **highest** version it
+   understands (where "highest" is by semver ordering).
+3. Use that version's shapes and rules for the rest of the session.
+4. Refuse to operate (with a clear error to the user) if no version in
+   `supportedVersions` matches a major version the client supports.
+
+A client SHOULD NOT re-fetch `/.well-known/tela` mid-session unless it
+has reason to believe the portal has been upgraded.
 
 ### Fallback
 
 If `/.well-known/tela` is not served (HTTP 404, network error, malformed
-JSON), clients MUST fall back to `/api/hubs`. This preserves
-compatibility with portals that predate this document.
+JSON), clients MUST fall back to:
 
-`telahubd`'s reference client implements the fallback in
+- `hub_directory: "/api/hubs"` (the conventional default)
+- `protocolVersion: "0"` (the unversioned legacy contract, equivalent to
+  the shape this document describes minus the post-1.0 negotiation rules)
+
+This preserves compatibility with portals that predate this document.
+A client that has fallen back to `protocolVersion: "0"` MUST NOT assume
+any field beyond what was documented in the legacy contract.
+
+`telahubd`'s reference client implements the discovery + fallback in
 `internal/hub/hub.go` `discoverHubDirectory()`.
+
+### Parallel with the hub wire format
+
+The same negotiation pattern is the obvious answer for the **hub wire
+protocol** (the WebSocket protocol between agents/clients and the hub).
+ROADMAP-1.0.md "Protocol freeze" calls this out as a 1.0 blocker for
+the hub side. The two protocols are independent and version
+independently, but they should share the same discipline: well-known
+discovery surface, additive-only minor versions, breaking changes
+require a major bump and a refusal-to-talk on mismatch.
 
 ---
 
@@ -142,7 +200,7 @@ Response:
 | `orgName` | string | no | Free-form display label for the organizational scope this hub belongs to, if the portal models orgs. May be `null` or omitted. Single-user portals can return `null` everywhere. |
 
 Authentication failures return `401 Unauthorized` with the standard error
-shape (section 5). An empty hub list is `200 OK` with `{"hubs": []}`, not
+shape (section 7). An empty hub list is `200 OK` with `{"hubs": []}`, not
 an error.
 
 ### 3.2 POST /api/hubs -- register or update a hub
@@ -296,7 +354,7 @@ Response: same shape as `GET /api/hubs`, reflecting the post-delete list.
 
 ---
 
-## 4. Admin proxy: `/api/hub-admin/{hubName}/{path}`
+## 4. Admin proxy: `/api/hub-admin/{hubName}/{operation}`
 
 A portal MUST expose an HTTP proxy that lets authenticated users invoke
 the hub's admin API without having direct network reachability or
@@ -306,16 +364,31 @@ during registration) and forwards the request on the user's behalf.
 The proxy URL is:
 
 ```
-{portal-base-url}/api/hub-admin/{hubName}/{adminPath}
+{portal-base-url}/api/hub-admin/{hubName}/{operation}
 ```
 
 Where:
 
 - `{hubName}` is the short hub name (URL-encoded if it contains special
   characters).
-- `{adminPath}` is the **full hub admin path including the leading
-  `/api/admin/`**, e.g. `/api/admin/access`, `/api/admin/agents/barn/logs`,
-  `/api/admin/update`.
+- `{operation}` is the hub admin path **without** the leading
+  `/api/admin/` prefix. Examples: `access`, `agents/barn/logs`,
+  `update`, `pair-code`, `tokens`, `restart`. The portal MUST internally
+  prepend `/api/admin/` before forwarding to the hub.
+
+The portal MUST NOT accept the legacy double-prefix form
+`/api/hub-admin/{hubName}/api/admin/{operation}`. Clients MUST use the
+short form. This is the canonical shape for portal protocol version 1.0
+and onward; portals advertising `protocolVersion: "0"` (legacy fallback
+per section 2) used the double-prefix form.
+
+The reason: the portal's `/api/hub-admin/` namespace and the hub's
+`/api/admin/` namespace are unrelated paths that happened to share a
+prefix string. Carrying both in one URL was a coincidence of how the
+two projects independently organized their admin endpoints, not a
+structural relationship. The shorter form decouples the portal URL
+shape from the hub URL shape: if the hub ever moved its admin API to
+a different path, the portal proxy URL would not change.
 
 ### 4.1 Method passthrough
 
@@ -361,15 +434,24 @@ the existence of a hub to users who cannot see it.
 
 ---
 
-## 5. Fleet aggregation: `/api/fleet/agents`
+## 5. Fleet aggregation: `GET /api/fleet/agents`
 
 A portal MUST expose an aggregated view of every agent across every hub
 the user can manage. This is the endpoint TelaVisor and the Awan Saya web
 UI use to populate the cross-hub Agents tab.
 
-### 5.1 GET /api/fleet/agents
+This is the **only** aggregation endpoint in the protocol. Per-agent
+actions (restart, update, logs, config-get, config-set, update-status,
+update-channel, etc.) go through the generic admin proxy (section 4),
+not through a fleet-specific URL. The aggregation lives in the protocol
+because it does work no client can replicate efficiently in a single
+call: the portal already holds per-hub viewer tokens, already iterates
+the user's hubs to compute the directory list, and is the natural place
+to handle per-hub timeouts as a unit. Pushing that work to clients
+would force every client (TelaVisor, Awan Saya, future frontends) to
+reimplement iteration, token lookup, and timeout handling.
 
-Request:
+### Request
 
 ```
 GET /api/fleet/agents HTTP/1.1
@@ -382,7 +464,7 @@ Optional query parameters:
 |-----------|-------------|
 | `orgId` | Restrict the response to hubs in the given org scope. Implementation-defined; portals that do not model orgs MAY ignore this parameter. |
 
-Response:
+### Response
 
 ```json
 {
@@ -421,68 +503,27 @@ A portal MAY add additional fields to each agent record, but clients
 MUST tolerate unknown fields and MUST NOT break if a portal omits any
 optional field.
 
-### 5.2 POST /api/fleet/agents/{hub}/{machine}/{action}
+### Per-agent actions go through the admin proxy
 
-Sends a management action to a specific agent. This is a convenience
-wrapper around the admin proxy (section 4) that targets the agent
-management proxy (`/api/admin/agents/{machine}/{action}`) at the hub.
-
-Request:
+To send a management action to a specific agent, use the admin proxy
+(section 4):
 
 ```http
-POST /api/fleet/agents/myhub/barn/restart HTTP/1.1
+POST /api/hub-admin/myhub/agents/barn/restart HTTP/1.1
 Content-Type: application/json
 Authorization: <user session>
 
 {}
 ```
 
-The body is forwarded to the hub's `POST /api/admin/agents/barn/restart`
-endpoint. Action names are passed through unchanged; the portal does not
-maintain an allowlist. Known actions include `config-get`, `config-set`,
-`logs`, `restart`, `update`, `update-status`, `update-channel`. Future
-actions added to the hub work without portal changes.
-
-Authorization: same rules as section 4 (user must have `canManage` on
-the hub).
-
-Response: passthrough from the hub.
+This forwards to the hub's `POST /api/admin/agents/barn/restart`. Known
+actions include `config-get`, `config-set`, `logs`, `restart`, `update`,
+`update-status`, `update-channel`. Future actions added to the hub work
+without portal changes because the proxy is generic.
 
 ---
 
-## 6. Pairing codes: `/api/hubs/{hubName}/pair-code`
-
-A portal MUST expose a pair-code generation endpoint that proxies to the
-hub's `/api/admin/pair-code` (in `internal/hub/pair.go`). This is what
-TelaVisor and the Awan Saya web UI use to generate one-time onboarding
-codes for new agents and clients.
-
-### Request
-
-```http
-POST /api/hubs/myhub/pair-code HTTP/1.1
-Content-Type: application/json
-Authorization: <user session>
-
-{
-  "type": "register",
-  "machineId": "barn",
-  "machines": ["barn"],
-  "ttl": "10m"
-}
-```
-
-The body is forwarded to the hub's pair-code endpoint. The portal MUST
-require `canManage` on the named hub. The portal MAY add a TTL cap or
-other policy on top.
-
-### Response
-
-Passthrough from the hub.
-
----
-
-## 7. Authentication summary
+## 6. Authentication summary
 
 | Endpoint | Auth |
 |----------|------|
@@ -507,7 +548,7 @@ authorized for this user, on this hub, for this operation?"
 
 ---
 
-## 8. Error shape
+## 7. Error shape
 
 All error responses MUST be JSON with at least an `error` field:
 
@@ -532,7 +573,7 @@ Portals MAY add additional fields to error responses (e.g. `code`,
 
 ---
 
-## 9. Sync token format
+## 8. Sync token format
 
 Sync tokens issued by `POST /api/hubs` (section 3.2) MUST start with the
 prefix `hubsync_` so clients can distinguish them from user session
@@ -551,7 +592,7 @@ record and issues a new sync token, which the hub stores.
 
 ---
 
-## 10. CORS and origin policy
+## 9. CORS and origin policy
 
 A portal SHOULD reject cross-origin state-changing requests (`POST`,
 `PUT`, `PATCH`, `DELETE`) unless the request origin is on an explicit
@@ -563,7 +604,7 @@ protocol does not prescribe the allowlist format.
 
 ---
 
-## 11. What is **not** in the protocol
+## 10. What is **not** in the protocol
 
 The following are explicitly NOT part of the portal protocol. They are
 SaaS concerns of specific implementations and have no place in any
@@ -594,11 +635,15 @@ portal that omits the SaaS surface entirely.
 
 ---
 
-## 12. Conformance checklist
+## 11. Conformance checklist
 
 To call yourself a Tela portal, you must:
 
-- [ ] Serve `/.well-known/tela` (section 2)
+- [ ] Serve `/.well-known/tela` (section 2) including `protocolVersion`
+      and `supportedVersions` fields
+- [ ] Honor the version negotiation rule: refuse clients whose major
+      version is not in `supportedVersions`, treat the protocol as
+      strictly additive within a major version
 - [ ] Serve `GET /api/hubs` (section 3.1) returning the documented shape
 - [ ] Serve `POST /api/hubs` (section 3.2) supporting both hub-bootstrap
       and user-add contexts, returning a `hubsync_*` sync token in the
@@ -607,20 +652,33 @@ To call yourself a Tela portal, you must:
       token, with timing-safe comparison
 - [ ] Serve `PATCH /api/hubs` and `DELETE /api/hubs?name=` (sections 3.4,
       3.5)
-- [ ] Serve `/api/hub-admin/{hubName}/{adminPath}` (section 4) preserving
-      method, body, and query string; gated on `canManage`
-- [ ] Serve `GET /api/fleet/agents` (section 5.1) and `POST /api/fleet/
-      agents/{hub}/{machine}/{action}` (section 5.2)
-- [ ] Serve `POST /api/hubs/{hubName}/pair-code` (section 6)
-- [ ] Return errors in the documented JSON shape (section 8)
-- [ ] Store sync tokens as SHA-256 hashes only (section 9)
+- [ ] Serve `/api/hub-admin/{hubName}/{operation}` (section 4) where
+      `{operation}` is the hub admin path **without** the `/api/admin/`
+      prefix, preserving method, body, and query string; gated on
+      `canManage`. Refuse the legacy double-prefix form.
+- [ ] Serve `GET /api/fleet/agents` (section 5) returning the merged
+      cross-hub agent list
+- [ ] Return errors in the documented JSON shape (section 7)
+- [ ] Store sync tokens as SHA-256 hashes only (section 8)
 
 You MAY implement additional endpoints, but a client written against
 this spec MUST work against your portal without knowing about them.
 
+You MUST NOT implement any of the following endpoints, which were
+considered and removed during the 1.0 spec finalization (see section
+13 for the rationale):
+
+- `POST /api/fleet/agents/{hub}/{machine}/{action}` -- use the admin
+  proxy at `POST /api/hub-admin/{hub}/agents/{machine}/{action}` instead.
+- `POST /api/hubs/{hubName}/pair-code` -- use the admin proxy at
+  `POST /api/hub-admin/{hubName}/pair-code` instead.
+- `POST /api/hub-admin/{hubName}/api/admin/{operation}` (the legacy
+  double-prefix admin proxy form) -- use the short form
+  `/api/hub-admin/{hubName}/{operation}` instead.
+
 ---
 
-## 13. Reference implementations
+## 12. Reference implementations
 
 | Implementation | Status | Storage | Identity model |
 |----------------|--------|---------|----------------|
@@ -637,35 +695,134 @@ them working.
 
 ---
 
-## 14. Open questions
+## 13. Resolved decisions
 
-These are flagged for resolution before extracting `internal/portal`.
-None blocks writing this spec, but each has to be answered before code
-lands.
+This section records the four open questions the first draft of this
+spec deferred and the decisions made before the `internal/portal`
+extraction was scheduled. The decisions are *baked into* the rest of
+this document; this section exists to document the rationale so the
+reasoning is preserved.
 
-1. **Does the protocol need versioning?** Today there is no
-   `protocolVersion` field on any portal endpoint. If the spec evolves
-   pre-1.0 we just change it; post-1.0 we need either a wire version or
-   a strict backward-compatibility rule. ROADMAP-1.0.md "Protocol freeze"
-   already calls this out for the hub wire format; the portal protocol
-   needs the same treatment.
-2. **Should the proxy paths normalize to a tighter shape?** The current
-   `/api/hub-admin/{hubName}/api/admin/...` URL has `/api/admin/` in it
-   twice, which is awkward. A cleaner shape would be
-   `/api/hub-admin/{hubName}/{adminPath}` where `adminPath` does not
-   include the `/api/admin/` prefix. Pre-1.0 we can change this; the
-   trade-off is that every existing client must be updated in the same
-   commit.
-3. **Should fleet aggregation move under hub-admin?** Fleet endpoints
-   exist as a convenience and could plausibly be expressed as repeated
-   admin proxy calls. Keeping them as a distinct family makes the common
-   case (TelaVisor's cross-hub Agents tab) cheap; folding them into the
-   admin proxy makes the protocol smaller. Decide before extraction.
-4. **Pair-code endpoint location.** Section 6 puts pair-code under
-   `/api/hubs/{hubName}/pair-code` (matching Awan Saya today), but it
-   could equally well live under `/api/hub-admin/{hubName}/api/admin/pair-code`
-   via the generic proxy. Two endpoints for the same operation is cruft.
-   Decide before extraction.
+### 13.1 Protocol versioning: yes, on `/.well-known/tela`
 
-These will be resolved when the spec moves from "draft" to "stable" as
-part of the `internal/portal` extraction work.
+**Decision.** The portal protocol gains a version field on
+`/.well-known/tela` (section 2). Two new fields, `protocolVersion`
+and `supportedVersions`, are required post-1.0. Pre-1.0 fallback for
+portals that do not yet ship the fields is explicit and documented.
+
+**Why this and not the alternatives.** Three options were on the
+table: (A) no version field, strict additive-only rule post-1.0; (B)
+version field on `/.well-known/tela` only, used for discovery-time
+negotiation; (C) version field on every response, plus discovery.
+
+Option B was chosen because `/.well-known/tela` is already the right
+place for capability discovery in any HTTP API (RFC 8615), the
+negotiation happens once per session rather than on every call, and
+it future-proofs the protocol without polluting every response shape.
+Option A leaves no graceful upgrade path for breaking changes; option
+C protects against a non-existent failure mode (a portal silently
+upgrading mid-session) at the cost of a field on every response.
+
+The same pattern is the obvious answer for the **hub wire protocol**
+under ROADMAP-1.0.md "Protocol freeze." The two protocols are
+independent and version independently, but they should share the same
+discipline.
+
+### 13.2 Admin proxy URL shape: short form only
+
+**Decision.** The proxy URL is
+`/api/hub-admin/{hubName}/{operation}` where `{operation}` is the hub
+admin path **without** the `/api/admin/` prefix. The legacy
+double-prefix form is forbidden in protocol version 1.0 and onward
+(section 4).
+
+**Why this and not the alternatives.** Two options were on the table:
+(A) keep the double-prefix form as historical accident, document the
+duplication as incidental; (B) strip the prefix and forbid the legacy
+form pre-1.0.
+
+Option B was chosen because the no-cruft pre-1.0 policy in CLAUDE.md
+exists for exactly this kind of cleanup. The double-prefix form was a
+coincidence of how two projects independently organized their admin
+namespaces, not a structural relationship. Decoupling the portal URL
+shape from the hub URL shape now means the hub can move its admin API
+later without breaking portal clients. The migration cost is bounded
+and small (server, two frontends, two client shims, one commit).
+
+### 13.3 Fleet aggregation stays its own endpoint, per-action duplicate goes
+
+**Decision.** `GET /api/fleet/agents` (section 5) stays as the cross-
+hub aggregation endpoint. `POST /api/fleet/agents/{hub}/{m}/{action}`
+is **deleted** from the spec; per-agent actions go through the generic
+admin proxy at `POST /api/hub-admin/{hub}/agents/{m}/{action}`.
+
+**Why this and not the alternatives.** Three options were on the
+table: (A) keep both families, delete the per-action duplicate; (B)
+fold everything under `/api/hub-admin/`, delete `/api/fleet/`; (C)
+promote fleet to a generalized `/api/aggregates/` namespace.
+
+Option A was chosen because the aggregation endpoint provides real
+value the admin proxy cannot match in a single call (server-side hub
+iteration, per-hub viewer-token lookup, per-hub timeout handling),
+and the per-action endpoint provides no value over the generic proxy.
+The "fleet vs hub-admin" split is a clean conceptual rule:
+**aggregate = fleet, single = hub-admin**. Option B would force every
+client (TelaVisor, Awan Saya, future frontends) to reimplement
+iteration and timeout handling. Option C is YAGNI -- one aggregation
+exists today, designing a namespace for hypothetical future
+aggregations is over-engineering.
+
+If a second aggregation appears (cross-hub session list, cross-hub
+history view, etc.), revisit whether `/api/fleet/` should be renamed
+to `/api/aggregates/` or whether the second aggregation gets its own
+family. Don't pre-decide that now.
+
+### 13.4 Pair code goes through the generic admin proxy
+
+**Decision.** The dedicated `POST /api/hubs/{hubName}/pair-code`
+endpoint is **deleted** from the spec. Pair-code generation is one
+instance of the generic admin proxy: clients call
+`POST /api/hub-admin/{hubName}/pair-code` and the portal forwards to
+the hub's `POST /api/admin/pair-code`.
+
+**Why this and not the alternatives.** Three options were on the
+table: (A) keep the dedicated endpoint, document it as canonical,
+forbid pair-code through the proxy; (B) delete the dedicated endpoint,
+fold pair-code into the generic proxy like every other admin
+operation; (C) keep both as equivalent.
+
+Option B was chosen because the whole point of the generic admin
+proxy is that it's generic. Every hub admin endpoint should be
+reachable through it. The dedicated endpoint existed for historical
+reasons (pair-code shipped before the proxy was generalized) and the
+no-cruft policy says to clean that up before 1.0 freezes the surface.
+The "pair-code is special, it deserves its own URL" justification
+does not hold up: every hub admin endpoint is special to somebody;
+none of the others got promoted to dedicated portal URLs. If
+portal-side policy ever needs to be added (rate limits, TTL caps),
+the right place is middleware on the admin proxy that matches the
+specific path, not a parallel endpoint.
+
+### 13.5 Implementation status
+
+These four decisions are baked into sections 2, 4, 5, and 11 of this
+spec. The `telahubd` outbound portal client in `internal/hub/hub.go`
+already matches sections 2, 3.2, and 3.3 (the legacy "no version
+fallback" path). The Awan Saya server already matches the legacy
+shapes. Both will need updates when the `internal/portal` extraction
+work begins:
+
+- `telahubd` learns to read `protocolVersion` and `supportedVersions`
+  from `/.well-known/tela` and to refuse portals whose major version
+  it does not support.
+- Awan Saya server gets the new `/.well-known/tela` fields, the
+  short-form admin proxy URL, and loses the per-action fleet endpoint
+  and the dedicated pair-code endpoint.
+- Awan Saya web UI and TelaVisor's `adminAPICall` shim and the
+  `portal-shared.js` helpers all switch to the short-form proxy URL.
+- Awan Saya web UI's pair-code call switches from the dedicated
+  endpoint to the generic admin proxy form.
+
+These migrations land in the same commit that introduces
+`internal/portal`. Pre-1.0 we don't carry both shapes; the cleanup is
+the point of doing this work before the freeze.
