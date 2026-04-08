@@ -1476,18 +1476,40 @@ var udpBufPool = sync.Pool{
 	New: func() any { return make([]byte, 0, 1500) },
 }
 
-func runUDPRelay() {
-	addr := &net.UDPAddr{Port: udpPort}
+func runUDPRelay(ctx context.Context) {
+	addr := &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: udpPort}
 	conn, err := net.ListenUDP("udp4", addr)
 	if err != nil {
-		log.Fatalf("[hub] UDP listen failed: %v", err)
+		// Log and return rather than killing the process. The hub
+		// continues to function as a WebSocket relay; only the UDP
+		// transport tier is unavailable.
+		log.Printf("[hub] UDP listen failed on port %d: %v (UDP relay disabled)", udpPort, err)
+		return
+	}
+	// If we requested port 0, learn the actual port we got and pin it
+	// for the udp-offer messages so clients can find us.
+	if udpPort == 0 {
+		if a, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+			udpPort = a.Port
+		}
 	}
 	log.Printf("[hub] UDP relay on port %d", udpPort)
+
+	// Close the socket when ctx fires so this goroutine exits cleanly.
+	go func() {
+		<-ctx.Done()
+		conn.Close()
+	}()
 
 	buf := make([]byte, 65536)
 	for {
 		n, raddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
+			// Closed socket on shutdown returns a "use of closed
+			// network connection" error; treat that as a clean exit.
+			if ctx.Err() != nil {
+				return
+			}
 			log.Printf("[hub] UDP read error: %v", err)
 			continue
 		}
@@ -1959,7 +1981,7 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 
 	// Background goroutines. They watch ctx so they exit cleanly when
 	// the caller cancels, leaving no goroutine leaks between test runs.
-	go runUDPRelay()
+	go runUDPRelay(ctx)
 	go runKeepalive()
 	go runUDPSessionReaper()
 
@@ -3499,4 +3521,98 @@ func containsEquals(s string) bool {
 		}
 	}
 	return false
+}
+
+// ── Test support ────────────────────────────────────────────────────
+//
+// The helpers below exist solely so the in-process test harness in
+// internal/teststack can reset the hub's package-level state between
+// test runs. They are never called by production code.
+
+// ResetForTesting wipes every piece of package-level mutable state in
+// the hub: registered machines, per-WebSocket state, history events,
+// pending management requests, UDP relay sessions, the global config,
+// and the auth store. Tests call this in t.Cleanup so the next test
+// starts from a clean slate.
+//
+// This is a stop-gap until the hub is refactored into an instance type
+// that can hold its own state. For now, "one hub per process" remains
+// the rule and tests must run sequentially.
+func ResetForTesting() {
+	machinesMu.Lock()
+	machines = make(map[string]*machineEntry)
+	machinesMu.Unlock()
+
+	wsStatesMu.Lock()
+	wsStates = make(map[*websocket.Conn]*wsState)
+	wsStatesMu.Unlock()
+
+	historyMu.Lock()
+	for i := range history {
+		history[i] = historyEvent{}
+	}
+	historyHead = 0
+	historyCount = 0
+	historyMu.Unlock()
+
+	udpSessionsMu.Lock()
+	udpSessions = make(map[string]*udpSession)
+	udpSessionsMu.Unlock()
+
+	mgmtPendingMu.Lock()
+	mgmtPending = make(map[string]chan json.RawMessage)
+	mgmtPendingMu.Unlock()
+
+	globalCfgMu.Lock()
+	globalCfg = nil
+	globalCfgPath = ""
+	globalCfgMu.Unlock()
+
+	globalAuth = newAuthStore(nil)
+
+	// Reset listening port + display name + WWW dir to defaults so a
+	// previous test does not leak its overrides into the next one.
+	// httpPort and udpPort are reset to the production defaults; the
+	// teststack helper overrides them to 0 (random) right after this
+	// reset, so each test gets a fresh OS-assigned port.
+	httpPort = 80
+	udpPort = 41820
+	udpHost = ""
+	hubName = ""
+	wwwDir = "./www"
+	wwwDirOverride = false
+	verbose = false
+}
+
+// Config is an alias for the package's internal hubConfig type. Exported
+// only so the in-process test harness can construct a config without
+// going through a YAML round-trip on disk.
+type Config = hubConfig
+
+// LoadConfig reads and parses a hub YAML config file from disk. Returns
+// a *Config that can be passed to SetTestConfig and Run().
+func LoadConfig(path string) (*Config, error) {
+	return loadHubConfig(path)
+}
+
+// SetTestConfig installs a config into the hub's package-level globals
+// so a test-supplied configuration takes effect before Run is called.
+// Production code goes through Main() which does the same population
+// from a YAML file.
+func SetTestConfig(cfg *Config) {
+	globalCfgMu.Lock()
+	globalCfg = cfg
+	globalCfgMu.Unlock()
+	if cfg != nil {
+		applyHubConfig(cfg)
+		globalAuth = newAuthStore(&cfg.Auth)
+	}
+}
+
+// SetUDPPortForTesting overrides the package-level UDP port. Tests
+// pass 0 here to ask the OS for a random free port -- this is the only
+// way to do it because applyHubConfig deliberately ignores zero values
+// (production callers use zero to mean "use the default").
+func SetUDPPortForTesting(p int) {
+	udpPort = p
 }

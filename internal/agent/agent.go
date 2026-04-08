@@ -2274,3 +2274,22 @@ func envOrDefault(key, fallback string) string {
 	}
 	return fallback
 }
+
+// ── Test support ────────────────────────────────────────────────────
+//
+// ResetForTesting wipes every piece of package-level mutable state in
+// the agent (active config, stop channel, reregister flag, verbose
+// flag) so the next test run starts from a clean slate. Tests call
+// this in t.Cleanup. Production code never calls it.
+func ResetForTesting() {
+	activeConfigMu.Lock()
+	activeConfig = nil
+	activeConfigPath = ""
+	activeConfigMu.Unlock()
+
+	// Drain stopCh if it was closed by a previous Run; tests will
+	// recreate it on the next Run() call.
+	stopCh = nil
+	reregisterNeeded = false
+	verbose = false
+}
