@@ -9,7 +9,7 @@
 // moved into position; the .old file is removed best-effort on the next
 // invocation. On Unix the rename is atomic.
 
-package main
+package client
 
 import (
 	"flag"

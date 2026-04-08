@@ -16,7 +16,7 @@ Usage:
 	tela files rm -machine barn <remote-path>
 	tela files info -machine barn
 */
-package main
+package client
 
 import (
 	"bufio"

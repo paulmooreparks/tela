@@ -8,7 +8,7 @@
 // Hub and agent channels are managed separately via `tela admin hub channel`
 // and `tela admin agent channel`.
 
-package main
+package client
 
 import (
 	"flag"

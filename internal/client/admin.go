@@ -7,7 +7,7 @@
 // All commands require an owner or admin token passed via -token flag
 // or TELA_OWNER_TOKEN environment variable (falls back to TELA_TOKEN).
 
-package main
+package client
 
 import (
 	"bytes"

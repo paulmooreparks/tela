@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -41,6 +42,7 @@ import (
 	"time"
 
 	"github.com/paulmooreparks/tela/internal/agent"
+	"github.com/paulmooreparks/tela/internal/client"
 	"github.com/paulmooreparks/tela/internal/hub"
 	"github.com/paulmooreparks/tela/internal/telelog"
 )
@@ -49,13 +51,17 @@ import (
 // Main() does this; the harness skips Main() and calls Run() directly,
 // so we have to do it ourselves. telelog uses sync.Once internally so
 // repeat calls are safe -- the first init wins and the output stays
-// pointed at io.Discard for every subsequent test in the process.
+// pointed at the chosen sink for every subsequent test in the process.
 //
-// Tests that need to inspect log output can use telelog.WrapOutput or
-// reach for the per-binary log ring buffers in internal/hub and
-// internal/agent.
+// Set TELASTACK_LOGS=1 in the environment to route hub/agent/client
+// log output to stderr while iterating on a test. Default is to
+// discard so passing tests are quiet.
 func init() {
-	telelog.Init("test", io.Discard)
+	out := io.Discard
+	if os.Getenv("TELASTACK_LOGS") != "" {
+		out = os.Stderr
+	}
+	telelog.Init("test", out)
 }
 
 // Stack is one in-process hub + one in-process agent. Tests construct
@@ -283,6 +289,80 @@ func (s *Stack) statusContainsMachine(url, machineID string) bool {
 	return false
 }
 
+// Connect spins up an in-process tela client that dials the harness's
+// hub and forwards localPort -> agent's remotePort. Returns the local
+// listen port the test should dial. The connection lives until the
+// stack is closed; tests do not need to manage its lifetime.
+//
+// Use this in conjunction with StartLocalEcho or any other "real" TCP
+// listener you set up at the agent target so that bytes written to
+// localhost:<localPort> arrive at the listener through a real
+// WireGuard tunnel through the in-process hub.
+func (s *Stack) Connect(machineID string, localPort, remotePort uint16) {
+	s.t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	prevCancel := s.cancel
+	s.cancel = func() {
+		cancel()
+		if prevCancel != nil {
+			prevCancel()
+		}
+	}
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		err := client.Connect(ctx, client.ConnectOptions{
+			HubURL:    s.hubURL,
+			MachineID: machineID,
+			Ports: []client.PortMapping{
+				{LocalPort: localPort, RemotePort: remotePort},
+			},
+		})
+		if err != nil && ctx.Err() == nil {
+			s.t.Errorf("teststack: client.Connect: %v", err)
+		}
+	}()
+}
+
+// StartLocalEcho starts a TCP echo server bound to 127.0.0.1 on a
+// random port and returns the port it picked. Used by tests as the
+// "real" service the agent forwards to. The listener is closed when
+// the stack is torn down.
+func (s *Stack) StartLocalEcho() uint16 {
+	s.t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		s.t.Fatalf("teststack: start echo: %v", err)
+	}
+	port := uint16(listener.Addr().(*net.TCPAddr).Port)
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return // listener closed
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				_, _ = io.Copy(c, c)
+			}(conn)
+		}
+	}()
+
+	prevCancel := s.cancel
+	s.cancel = func() {
+		listener.Close()
+		if prevCancel != nil {
+			prevCancel()
+		}
+	}
+	return port
+}
+
 // MachineCount returns the number of machines currently registered
 // with the hub. Useful for sanity checks in tests.
 func (s *Stack) MachineCount() int {
@@ -324,6 +404,7 @@ func (s *Stack) Close() {
 	// Clean up package-level state so the next test starts fresh.
 	hub.ResetForTesting()
 	agent.ResetForTesting()
+	client.ResetForTesting()
 
 	// Remove the temp directory. Best-effort; ignore errors so test
 	// teardown does not mask the real test failure.
