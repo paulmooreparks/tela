@@ -1,0 +1,327 @@
+// Package portalclient is a Go client for the portal protocol
+// described in DESIGN-portal.md. It speaks to any portal that
+// implements protocol version 1.0: the in-process embedded portal
+// shipped inside TelaVisor, the standalone telaportal binary, and
+// remote multi-tenant portals like Awan Saya.
+//
+// The package is small on purpose. It exposes one Client type that
+// holds a base URL, a bearer token, and an *http.Client, plus typed
+// wrapper methods for each protocol endpoint. Callers that need to
+// reach beyond the documented endpoints can use HubAdmin (the generic
+// admin proxy passthrough) and the lower-level Do method.
+//
+// The two callers planned today are TelaVisor (which embeds the file
+// store and talks to it over loopback) and the future tela CLI hubs
+// subcommand. Awan Saya does not consume this package; it is the
+// portal, not a portal client.
+//
+// Spec: tela/DESIGN-portal.md.
+package portalclient
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/paulmooreparks/tela/internal/portal"
+)
+
+// Client is a portal protocol client. Construct with New; the zero
+// value is not usable. A Client is safe for concurrent use by
+// multiple goroutines.
+type Client struct {
+	// BaseURL is the portal's HTTP base, e.g. http://127.0.0.1:8780
+	// or https://awansaya.net. Trailing slashes are tolerated.
+	BaseURL string
+
+	// BearerToken is presented on every authenticated request via
+	// the Authorization header. Empty for the discovery call only.
+	BearerToken string
+
+	// HTTPClient is the underlying transport. If nil, the package
+	// uses a client with a 60s timeout, matching the admin proxy's
+	// upstream budget on the server side.
+	HTTPClient *http.Client
+}
+
+// New returns a Client configured for baseURL with the given bearer
+// token. The HTTP client is a fresh *http.Client with a 60s timeout.
+// Callers that need a custom transport (proxies, custom TLS, etc.)
+// can replace HTTPClient on the returned value or build the Client
+// struct directly.
+func New(baseURL, bearerToken string) *Client {
+	return &Client{
+		BaseURL:     baseURL,
+		BearerToken: bearerToken,
+		HTTPClient:  &http.Client{Timeout: 60 * time.Second},
+	}
+}
+
+// Discovery is the decoded body of /.well-known/tela. Mirrors the
+// shape produced by internal/portal.wellKnownResponse.
+type Discovery struct {
+	HubDirectory      string   `json:"hub_directory"`
+	ProtocolVersion   string   `json:"protocolVersion"`
+	SupportedVersions []string `json:"supportedVersions"`
+}
+
+// Discover fetches /.well-known/tela. No authentication is sent.
+// Used by callers that want to verify the portal speaks a compatible
+// version before issuing user-scoped calls.
+func (c *Client) Discover(ctx context.Context) (Discovery, error) {
+	var out Discovery
+	req, err := c.newRequest(ctx, http.MethodGet, "/.well-known/tela", nil)
+	if err != nil {
+		return out, err
+	}
+	// Discovery is unauthenticated. Strip the header the helper added.
+	req.Header.Del("Authorization")
+	if err := c.doJSON(req, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// ── Hub directory ───────────────────────────────────────────────────
+
+// ListHubs returns the hubs visible to the authenticated user.
+// Wraps GET /api/hubs.
+func (c *Client) ListHubs(ctx context.Context) ([]portal.HubVisibility, error) {
+	var body struct {
+		Hubs []portal.HubVisibility `json:"hubs"`
+	}
+	req, err := c.newRequest(ctx, http.MethodGet, portal.HubDirectoryPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.doJSON(req, &body); err != nil {
+		return nil, err
+	}
+	return body.Hubs, nil
+}
+
+// AddHubRequest is the body shape for AddHub. Mirrors the server-side
+// shape in internal/portal.addHubRequest.
+type AddHubRequest struct {
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	ViewerToken string `json:"viewerToken,omitempty"`
+	AdminToken  string `json:"adminToken,omitempty"`
+	OrgName     string `json:"orgName,omitempty"`
+}
+
+// AddHubResponse is the response shape from AddHub. SyncToken is
+// non-empty only when the request was authenticated as a hub
+// bootstrap (the portal issues a fresh sync token exactly once).
+// Updated is true on upsert.
+type AddHubResponse struct {
+	Hubs      []portal.HubVisibility `json:"hubs"`
+	SyncToken string                 `json:"syncToken,omitempty"`
+	Updated   bool                   `json:"updated,omitempty"`
+}
+
+// AddHub adds a hub to the portal directory. Wraps POST /api/hubs.
+func (c *Client) AddHub(ctx context.Context, body AddHubRequest) (AddHubResponse, error) {
+	var out AddHubResponse
+	req, err := c.newRequest(ctx, http.MethodPost, portal.HubDirectoryPath, body)
+	if err != nil {
+		return out, err
+	}
+	if err := c.doJSON(req, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// UpdateHubRequest is the body shape for UpdateHub. Pointer fields
+// encode "field absent" vs "field present" so callers can change one
+// field without resetting the others. Mirrors
+// internal/portal.updateHubRequest.
+type UpdateHubRequest struct {
+	CurrentName string  `json:"currentName"`
+	Name        *string `json:"name,omitempty"`
+	URL         *string `json:"url,omitempty"`
+	ViewerToken *string `json:"viewerToken,omitempty"`
+	AdminToken  *string `json:"adminToken,omitempty"`
+}
+
+// UpdateHub partially updates a hub. Returns the post-mutation hub
+// list. Wraps PATCH /api/hubs.
+func (c *Client) UpdateHub(ctx context.Context, body UpdateHubRequest) ([]portal.HubVisibility, error) {
+	var resp struct {
+		Hubs []portal.HubVisibility `json:"hubs"`
+	}
+	req, err := c.newRequest(ctx, http.MethodPatch, portal.HubDirectoryPath, body)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Hubs, nil
+}
+
+// DeleteHub removes a hub by name. Returns the post-mutation hub
+// list. Wraps DELETE /api/hubs?name=NAME.
+func (c *Client) DeleteHub(ctx context.Context, name string) ([]portal.HubVisibility, error) {
+	var resp struct {
+		Hubs []portal.HubVisibility `json:"hubs"`
+	}
+	path := portal.HubDirectoryPath + "?name=" + url.QueryEscape(name)
+	req, err := c.newRequest(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Hubs, nil
+}
+
+// ── Fleet aggregation ───────────────────────────────────────────────
+
+// FleetAgents returns the merged agent list across every hub the
+// authenticated user can manage. Each entry is the upstream hub's
+// /api/status machine record tagged with `hub` and `hubUrl` fields.
+// Wraps GET /api/fleet/agents.
+func (c *Client) FleetAgents(ctx context.Context) ([]map[string]any, error) {
+	var resp struct {
+		Agents []map[string]any `json:"agents"`
+	}
+	req, err := c.newRequest(ctx, http.MethodGet, "/api/fleet/agents", nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Agents, nil
+}
+
+// ── Admin proxy ─────────────────────────────────────────────────────
+
+// HubAdmin issues an admin request against the named hub via the
+// portal's /api/hub-admin/{hubName}/{operation} proxy. Method is the
+// HTTP verb (GET, POST, PATCH, etc.); operation is the hub admin
+// path WITHOUT the leading /api/admin/ (e.g. "access" or
+// "agents/abc123/status"). The body, if any, is sent as
+// application/json.
+//
+// The returned *http.Response is the raw upstream response. The
+// caller is responsible for closing Body. Non-2xx statuses are NOT
+// translated to errors here, because admin endpoints have endpoint-
+// specific status semantics; the caller decides what counts as a
+// failure. Network errors and request-construction errors are
+// returned in err with a nil response.
+func (c *Client) HubAdmin(ctx context.Context, hubName, operation, method string, body any) (*http.Response, error) {
+	if hubName == "" || operation == "" {
+		return nil, errors.New("portalclient: HubAdmin requires hubName and operation")
+	}
+	path := "/api/hub-admin/" + url.PathEscape(hubName) + "/" + operation
+	req, err := c.newRequest(ctx, method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	return c.HTTPClient.Do(req)
+}
+
+// HubAdminJSON is a convenience wrapper around HubAdmin that decodes
+// the response body into out (if non-nil) and returns an error for
+// non-2xx responses. Callers that need raw access to the response
+// (streaming, custom status handling, non-JSON bodies) should use
+// HubAdmin directly.
+func (c *Client) HubAdminJSON(ctx context.Context, hubName, operation, method string, body, out any) error {
+	resp, err := c.HubAdmin(ctx, hubName, operation, method, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return decodeOrError(resp, out)
+}
+
+// ── Lower-level helpers ─────────────────────────────────────────────
+
+// newRequest builds a request against c.BaseURL with the bearer
+// token attached. Body, if non-nil, is JSON-encoded.
+func (c *Client) newRequest(ctx context.Context, method, path string, body any) (*http.Request, error) {
+	target := strings.TrimRight(c.BaseURL, "/") + path
+	var reader io.Reader
+	if body != nil {
+		buf, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("portalclient: marshal body: %w", err)
+		}
+		reader = bytes.NewReader(buf)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, reader)
+	if err != nil {
+		return nil, fmt.Errorf("portalclient: build request: %w", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	}
+	if c.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.BearerToken)
+	}
+	req.Header.Set("Accept", "application/json")
+	return req, nil
+}
+
+// doJSON executes req via the client's HTTP transport and decodes
+// the JSON response body into out. Non-2xx responses return an
+// *HTTPError; transport failures return a wrapped error.
+func (c *Client) doJSON(req *http.Request, out any) error {
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("portalclient: %s %s: %w", req.Method, req.URL.Path, err)
+	}
+	defer resp.Body.Close()
+	return decodeOrError(resp, out)
+}
+
+// decodeOrError reads resp.Body and either decodes it into out (on
+// 2xx) or returns an *HTTPError carrying the status code and
+// server-provided error message. out may be nil to discard the body.
+func decodeOrError(resp *http.Response, out any) error {
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(body))
+		// Best-effort: if the body is the documented {"error": "..."} shape, extract it.
+		var errBody struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errBody) == nil && errBody.Error != "" {
+			msg = errBody.Error
+		}
+		return &HTTPError{StatusCode: resp.StatusCode, Message: msg}
+	}
+	if out == nil || len(body) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("portalclient: decode response: %w", err)
+	}
+	return nil
+}
+
+// HTTPError is returned for non-2xx responses from any client method
+// that decodes JSON. Callers can errors.As to inspect StatusCode
+// (e.g. to distinguish 401 from 404).
+type HTTPError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *HTTPError) Error() string {
+	if e.Message == "" {
+		return fmt.Sprintf("portalclient: HTTP %d", e.StatusCode)
+	}
+	return fmt.Sprintf("portalclient: HTTP %d: %s", e.StatusCode, e.Message)
+}
