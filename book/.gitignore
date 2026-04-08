@@ -1,1 +1,5 @@
 book/
+# mdbook-mermaid install populates theme/ at build time. Locally,
+# `cd book && mdbook-mermaid install .` writes the same files; we leave
+# them out of the repo so the upstream version always wins on rebuild.
+theme/

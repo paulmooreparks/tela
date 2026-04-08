@@ -24,6 +24,10 @@ git-repository-url = "https://github.com/paulmooreparks/tela"
 edit-url-template = "https://github.com/paulmooreparks/tela/edit/main/{path}"
 site-url = "/tela/"
 mathjax-support = false
+# additional-css and additional-js for mermaid are added by
+# `mdbook-mermaid install .`, which the CI workflow runs after
+# installing the preprocessor binary. Local builds need the same step
+# (one time): `cd book && mdbook-mermaid install .`
 
 [output.html.search]
 enable = true
@@ -42,3 +46,9 @@ level = 1
 [preprocessor.index]
 
 [preprocessor.links]
+
+# mdbook-mermaid renders ```mermaid fenced code blocks via mermaid.js.
+# The CI workflow installs mdbook-mermaid alongside mdbook before
+# building. Locally, run `cargo install mdbook-mermaid` once.
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
