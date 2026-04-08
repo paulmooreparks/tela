@@ -37,5 +37,5 @@ WireGuard packets between them, but it cannot decrypt the contents -- only
 the agent and the client share the keys. Even if the hub is compromised,
 session contents are not exposed.
 
-For the full architecture, see [Design overview](../architecture/design.md).
-For the CLI surface of each binary, see [CLI reference](reference.md).
+For the full design rationale, see [Why a connectivity fabric](../architecture/design.md).
+For the CLI surface of each binary, see [Appendix A: CLI reference](reference.md).

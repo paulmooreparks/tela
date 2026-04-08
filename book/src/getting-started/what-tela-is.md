@@ -167,11 +167,11 @@ they do not turn Tela into a routed mesh in the way that Tailscale, Nebula,
 or ZeroTier are. If your design requires agent-to-agent routing without
 the hub on the data path as a first-class feature, that is a property to
 evaluate carefully against the chapters in the
-[Architecture](../architecture/design.md) section. The
+[Design Rationale](../architecture/design.md) section. The
 [glossary](../glossary.md) has the longer history of the word and the prior
 art that justifies it.
 
 ---
 
-For the architectural details, see [Design overview](../architecture/design.md).
+For the architectural details, see [Why a connectivity fabric](../architecture/design.md).
 For installation, see [Installation](installation.md).

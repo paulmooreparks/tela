@@ -30,9 +30,11 @@ You will need [Wails v2](https://wails.io/) installed.
 - [CLAUDE.md](https://github.com/paulmooreparks/tela/blob/main/CLAUDE.md) --
   the project's guiding principles, coding conventions, API style, and the
   list of architectural review items
-- [DESIGN.md](architecture/design.md) -- the architecture and protocol spec
-- [STATUS.md](ops/status.md) -- design vs implementation traceability
-- [ROADMAP-1.0.md](ops/roadmap.md) -- the 1.0 readiness checklist (anything
+- [Why a connectivity fabric](architecture/design.md) -- the design
+  rationale for the core architecture
+- [Status: design vs implementation](ops/status.md) -- the live
+  traceability matrix from design sections to implementation
+- [Roadmap to 1.0](ops/roadmap.md) -- the 1.0 readiness checklist (anything
   unticked there is fair game)
 
 ## Filing issues

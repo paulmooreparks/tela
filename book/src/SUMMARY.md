@@ -11,8 +11,6 @@
 # User Guide
 
 - [The three binaries](guide/three-binaries.md)
-- [CLI reference](guide/reference.md)
-- [Configuration files](guide/configuration.md)
 - [TelaVisor desktop app](guide/telavisor.md)
 - [Hub directories and portals](guide/directories.md)
 
@@ -34,23 +32,33 @@
 - [Education labs](use-cases/education-labs.md)
 - [IoT / edge](use-cases/iot-edge.md)
 
-# Architecture
-
-- [Design overview](architecture/design.md)
-- [Access model and RBAC](architecture/access-model.md)
-- [Remote admin protocol](architecture/remote-admin.md)
-- [File sharing protocol](architecture/file-sharing.md)
-- [Path-based gateway](architecture/gateway.md)
-- [Portal protocol](architecture/portal-protocol.md)
-- [Tela Design Language](architecture/tdl.md)
-
 # Operations
 
 - [Release process](ops/release-process.md)
+
+# Design Rationale
+
+- [Why a connectivity fabric](architecture/design.md)
+- [The access model](architecture/access-model.md)
+- [Remote administration](architecture/remote-admin.md)
+- [File sharing](architecture/file-sharing.md)
+- [Gateways](architecture/gateway.md)
+- [The portal protocol](architecture/portal-protocol.md)
+- [The Tela Design Language](architecture/tdl.md)
+
+---
+
+# Appendices
+
+- [A. CLI reference](guide/reference.md)
+- [B. Configuration file reference](guide/configuration.md)
+- [C. Glossary](glossary.md)
+
+# Project Status
+
 - [Status: design vs implementation](ops/status.md)
 - [Roadmap to 1.0](ops/roadmap.md)
 
 ---
 
-[Glossary](glossary.md)
 [Contributing](contributing.md)

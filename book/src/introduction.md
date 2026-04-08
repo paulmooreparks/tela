@@ -46,13 +46,21 @@ features built on top of it second.
 - The [Use Cases](use-cases/personal-cloud.md) section walks through six
   concrete deployment scenarios with the access model and the deployment
   pattern for each.
-- The [Architecture](architecture/design.md) section is the design and
-  protocol documentation for readers who want to understand what is
-  happening under the hood, or who are evaluating Tela for a use case the
-  book has not anticipated.
 - The [Operations](ops/release-process.md) section covers the release
-  process, the design-to-implementation status matrix, and the roadmap to
-  1.0.
+  process for hub and agent operators.
+- The [Design Rationale](architecture/design.md) section answers the
+  *why* questions: why three small daemons rather than one, why the hub
+  is a blind relay, why the gateway is a primitive that recurs at four
+  layers, why the access model has the four roles it does. Read it after
+  the body of the book if you want to understand the project's design
+  decisions and the alternatives that were considered and rejected.
+- The [Appendices](guide/reference.md) collect the reference data: the
+  command-line reference, the configuration file reference, and the
+  glossary. Use them as lookups, not as reading.
+- The [Project Status](ops/status.md) section is the live design-to-
+  implementation traceability matrix and the 1.0 readiness checklist.
+  These are project artifacts that the documentation site renders as
+  living documents; they are not part of the published book.
 
 The book is generated from the Markdown files in the
 [tela](https://github.com/paulmooreparks/tela) repository on every push to
