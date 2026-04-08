@@ -38,7 +38,7 @@ TelaVisor supports light and dark themes. The theme can be set to Light, Dark, o
 
 The Status tab shows the current connection state and lists all selected services grouped by machine. When disconnected, the service indicators are grey and status reads "Not connected." When connected, each service shows whether it is listening for connections or actively tunneling traffic.
 
-![Status tab, disconnected](screens/telavisor-status-disconnected.png)
+![Status tab, disconnected](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-status-disconnected.png)
 
 Each service card shows:
 
@@ -50,7 +50,7 @@ Each service card shows:
 
 Status indicators update in real time via tela's WebSocket control API. When you connect to a service (for example, `ssh localhost -p 10022`), the status changes from Listening to Active. When the session ends, it returns to Listening.
 
-![Status tab, connected](screens/telavisor-status-connected.png)
+![Status tab, connected](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-status-connected.png)
 
 The profile name and connection state (Disconnected or Connected with PID) appear at the top of the page.
 
@@ -72,15 +72,15 @@ The left sidebar lists hubs and their machines. Hub-level checkboxes control whe
 
 **Profile Settings** shows profile-level configuration: the profile name, mount settings (drive letter, port, auto-mount on connect), and MTU override.
 
-![Profiles tab, Profile Settings](screens/telavisor-profiles-settings.png)
+![Profiles tab, Profile Settings](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-profiles-settings.png)
 
 Clicking a hub in the sidebar shows a summary card with machine counts, online status, and selected service counts. Clicking a machine shows its available services with checkboxes and local port assignments. Selected services are included in the connection profile.
 
-![Profiles tab, machine services](screens/telavisor-profiles-machine.png)
+![Profiles tab, machine services](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-profiles-machine.png)
 
 Clicking Preview shows a live YAML preview of the profile with the file path displayed in the header. The YAML preview fills the available vertical space and scrolls independently.
 
-![Profiles tab, YAML preview](screens/telavisor-profiles-preview.png)
+![Profiles tab, YAML preview](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-profiles-preview.png)
 
 When tela is connected, hub and machine checkboxes are disabled to prevent profile changes during an active session.
 
@@ -90,11 +90,11 @@ The Files tab provides a built-in file browser for machines with file sharing en
 
 When you open the Files tab while connected, it shows a list of connected machines with their file sharing status (writable, delete-allowed, max file size, and blocked file types).
 
-![Files tab, machine list](screens/telavisor-files-machines.png)
+![Files tab, machine list](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-files-machines.png)
 
 Click a machine to browse its shared directory. The file browser uses an Explorer-style layout:
 
-![Files tab, browsing](screens/telavisor-files-browse.png)
+![Files tab, browsing](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-files-browse.png)
 
 - **Address bar** with back and up navigation buttons, and a clickable breadcrumb path. Each segment is clickable.
 - **Action bar** with Upload, New Folder, Rename, Download, and Delete buttons. Buttons are disabled based on selection state and read-only status. A "Hide dotfiles" toggle controls visibility of dot-prefixed files and directories.
@@ -117,7 +117,7 @@ The file list updates in real time. When files are created, modified, deleted, o
 
 The Client Settings tab provides configuration for how tela runs on the local machine. A toolbar at the top provides Undo and Save buttons that are enabled when changes are pending.
 
-![Client Settings](screens/telavisor-client-settings.png)
+![Client Settings](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-client-settings.png)
 
 The tab contains the following sections:
 
@@ -129,7 +129,7 @@ The tab contains the following sections:
 
 When telad or telahubd is installed as a managed OS service, the Installed Tools row shows `service (running)` or `service (stopped)` next to the binary name and the Update button delegates to the elevated service process to perform the swap (TelaVisor itself does not need to be elevated). After the service restarts against the new binary, the table polls the on-disk version until it changes, so the Installed column reflects the actual installed version with no guesswork.
 
-![Client Settings, scrolled](screens/telavisor-client-settings2.png)
+![Client Settings, scrolled](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-client-settings2.png)
 
 **System Service** -- allows installing and managing the tela system service, which runs the default profile as an always-on background service that starts with the OS. Buttons for Install, Start, Stop, and Uninstall are enabled based on the current service state.
 
@@ -145,7 +145,7 @@ The Hubs tab provides full administration for any hub where you have owner or ad
 
 The Hub Settings view shows connection details, hub metadata, portal registrations, lifecycle controls, and destructive actions for the selected hub.
 
-![Hub Settings](screens/telavisor-hub-settings.png)
+![Hub Settings](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-settings.png)
 
 The Connection section shows the hub URL, online status, your role, and a link to the hub's web console. The Hub Info section displays the hub name, hostname, platform, version, Go version, and uptime, all retrieved from the hub's `/api/status` endpoint.
 
@@ -158,13 +158,13 @@ The Portals section lists registered portal associations. The Management section
 - **Software** -- shows whether the hub is up to date or behind the channel's HEAD; the button label reads either `Up to date` (disabled) or `Update to vX.Y.Z` (active). Clicking it asks the hub to download the new release, verify it against the channel manifest's SHA-256, replace its binary, and restart. Progress is shown inline (`Hub is downloading update and restarting...`, `Waiting for hub to restart... (1)`, `Updated to vX.Y.Z`) and the page re-renders when the hub comes back online. The label and disabled state are derived from the channel manifest, not from the GitHub `/releases/latest` API, so a hub on dev cannot be told to "update to v0.5.0" (the stable HEAD).
 - **Restart** -- requests an immediate graceful restart of the hub process
 
-![Hub Settings, Management section and Danger Zone](screens/telavisor-hub-management.png)
+![Hub Settings, Management section and Danger Zone](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-management.png)
 
 The Danger Zone at the bottom provides destructive actions: removing the hub from TelaVisor (which does not affect the hub itself) and clearing all stored hub tokens from the local credential store.
 
 Hub Settings views for hubs running newer or older release versions look identical -- only the version badge color and the Software button label change to reflect the running version.
 
-![Hub Settings, devhub on Awan Saya](screens/telavisor-hub-settings-devhub.png)
+![Hub Settings, devhub on Awan Saya](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-settings-devhub.png)
 
 You can add a new hub by clicking the Add Hub button in the sidebar footer.
 
@@ -172,13 +172,13 @@ You can add a new hub by clicking the Add Hub button in the sidebar footer.
 
 The Machines view lists all machines registered on the selected hub with their online status, last-seen timestamp, advertised services, and active session count.
 
-![Machines view](screens/telavisor-hub-machines.png)
+![Machines view](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-machines.png)
 
 #### Access
 
 The Access view (formerly ACLs) shows the unified per-identity, per-machine permission model. Each identity is a card showing its role pill (owner, admin, user, viewer), token preview, and the machines it has permissions on. Owner and admin roles have implicit access to all machines.
 
-![Access view](screens/telavisor-hub-access.png)
+![Access view](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-access.png)
 
 The Grant Access button at the bottom opens a dialog that lets you grant Connect, Register, or Manage permissions to any identity on any machine. A wildcard ACL (`*`) applies to all machines when present. Register access is single-assignment: only one identity can register a given machine. Manage access controls who can view and edit agent configuration, view logs, and restart or update agents remotely.
 
@@ -186,29 +186,29 @@ The Grant Access button at the bottom opens a dialog that lets you grant Connect
 
 The Tokens view lets you manage authentication tokens for the selected hub. You can create new identities, rotate tokens, delete identities, and generate one-time pairing codes.
 
-![Tokens view](screens/telavisor-hub-tokens.png)
+![Tokens view](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-tokens.png)
 
 Token previews show the first 8 characters. Full tokens are only visible at creation time or immediately after rotation. To change a token's role, delete the identity and create a new one with the desired role.
 
 The Add Token dialog lets you create a new identity with a chosen role (owner, admin, user, viewer):
 
-![Add Token dialog](screens/telavisor-hub-add-token.png)
+![Add Token dialog](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-add-token.png)
 
 The Generate Pairing Code dialog issues a short-lived, single-use code (e.g., `ABCD-1234`) that can be exchanged for a permanent token by running `tela pair` or by pasting it into TelaVisor's pairing flow. Codes are configurable for role and expiration window (10 minutes to 7 days).
 
-![Generate Pairing Code dialog](screens/telavisor-hub-pair-code.png)
+![Generate Pairing Code dialog](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-pair-code.png)
 
 #### History
 
 The History view shows recent session events on the selected hub (agent registrations, client connections, disconnections).
 
-![History view](screens/telavisor-hub-history.png)
+![History view](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-history.png)
 
 ### Agents
 
 The Agents tab lists all agents (telad instances) visible across your configured hubs without requiring an active tunnel connection. The sidebar shows each agent with its online status, version, and the hub it is registered with. Selecting an agent displays its details. A toolbar above the detail provides Undo, Save, Restart, and Logs buttons.
 
-![Agents tab, barn detail](screens/telavisor-agents.png)
+![Agents tab, barn detail](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-agents.png)
 
 The agent detail view shows several setting cards:
 
@@ -219,7 +219,7 @@ The agent detail view shows several setting cards:
 - **Services** -- the ports and protocols the agent exposes (e.g., SSH :22, RDP :3389)
 - **File Share** -- editable: enable/disable, writable, allow delete, max file size, blocked extensions
 
-![Agent Services and File Share cards](screens/telavisor-agents-fileshare.png)
+![Agent Services and File Share cards](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-agents-fileshare.png)
 
 - **Management** -- the lifecycle controls section, available when you have manage permission on the machine
 - **Danger Zone** -- force-disconnect the agent or remove the machine from the hub
@@ -232,7 +232,7 @@ The Management card mirrors the hub Management card layout:
 - **Software** -- shows whether the agent is up to date or behind the channel's HEAD. Label, title, and disabled state are derived from the channel manifest (via the agent's `update-status` mgmt action), so an agent on dev never gets offered a stable build. Clicking Update sends the existing `update` mgmt action to the agent, which downloads the new release, verifies it against the channel manifest's SHA-256, atomically swaps its binary, and either exits (under a service manager) or relaunches itself (when running standalone).
 - **Restart** -- requests a graceful agent restart
 
-![Agent Management card and Danger Zone](screens/telavisor-agents-management.png)
+![Agent Management card and Danger Zone](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-agents-management.png)
 
 Editable fields are pushed to the agent through the hub-mediated management protocol when you click Save. The agent validates and persists changes to its config file. Manage permission is required (owner/admin roles have it by default; user-role tokens need an explicit manage grant via the Access view).
 
@@ -242,19 +242,19 @@ When telad runs as an OS service (Windows SCM, systemd, launchd) the same Update
 
 The Remotes tab manages hub directory endpoints for short name resolution. This is equivalent to the `tela remote` CLI command. Each remote maps a name to a portal URL that provides hub discovery.
 
-![Remotes view](screens/telavisor-remotes.png)
+![Remotes view](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-remotes.png)
 
 ### Credentials
 
 The Credentials tab shows all hub tokens stored in the local credential file. This is equivalent to `tela login` / `tela logout`. Each entry shows the hub URL and identity name, with a Remove button to delete individual credentials and a Clear All button to remove everything.
 
-![Credentials view](screens/telavisor-credentials.png)
+![Credentials view](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-credentials.png)
 
 ## Log panel
 
 The log panel is a persistent area at the bottom of the window that provides tabbed log output visible across all modes. You can resize it by dragging its top edge, or collapse it to a slim bar showing only a "Logs" label and expand chevron.
 
-![Log panel with tela output](screens/telavisor-status-log.png)
+![Log panel with tela output](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-status-log.png)
 
 The log panel auto-scrolls to the bottom as new lines arrive. If you scroll up to read history, auto-scroll pauses until you scroll back to the bottom. Each pane is limited to a configurable maximum number of lines (default 5000, configurable in Application Settings).
 
@@ -264,7 +264,7 @@ The log panel remembers which dynamic log tabs were open between sessions. Tabs 
 
 The `+` button at the right end of the tab strip opens the attach popover. It lists all hubs you have credentials for and all agents visible across those hubs. Clicking a hub opens a tab streaming `GET /api/admin/logs` from that hub; clicking an agent opens a tab fetching the agent's log ring through the hub's mediated management protocol.
 
-![Attach log source popover](screens/telavisor-log-attach-popover.png)
+![Attach log source popover](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-log-attach-popover.png)
 
 The popover renders next to the `+` button using fixed positioning so it is not clipped by the scrollable tab strip. Click outside to dismiss.
 
@@ -274,11 +274,11 @@ Dynamic log tabs use the same close-button pattern as the built-in tabs and can 
 - **Amber** -- the log is being fetched (in flight)
 - **Grey** -- idle or the source is offline
 
-![Log tab for an agent](screens/telavisor-status-agent-log.png)
+![Log tab for an agent](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-status-agent-log.png)
 
 The Commands tab is a built-in pane that shows every API call and CLI command TelaVisor issues, with method badges (GET, POST, DEL, CLI), filter chips, and a copy-to-clipboard action on each entry. This is useful for learning the underlying CLI behind a UI action, troubleshooting, or scripting equivalent commands.
 
-![Commands tab in the log panel](screens/telavisor-status-commands.png)
+![Commands tab in the log panel](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-status-commands.png)
 
 The following toolbar buttons are available at the top of the log panel:
 
@@ -299,7 +299,7 @@ The Commands tab shows each operation as a compact line with a method badge (GET
 
 You can open the Application Settings dialog from the gear icon in the title bar. A toolbar at the top of the dialog provides Apply, Apply & Close, and Cancel buttons. Apply and Apply & Close are disabled until a setting changes.
 
-![Application Settings](screens/telavisor-app-settings.png)
+![Application Settings](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-app-settings.png)
 
 The settings are organized into sections:
 
@@ -327,19 +327,19 @@ The settings are organized into sections:
 - **Verbose by default** -- enables verbose output whenever tela connects
 - **Max log lines per pane** -- limits the number of lines kept in each log tab (default 5000)
 
-![Application Settings, Logging](screens/telavisor-app-settings2.png)
+![Application Settings, Logging](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-app-settings2.png)
 
 ## About
 
 You can open the About dialog by clicking the Tela**Visor** title in the top-left corner of the title bar, or by clicking the information icon. It shows version numbers for both TelaVisor and the tela CLI, project links, license information, dependency credits, and the CLI binary path.
 
-![About dialog](screens/telavisor-about.png)
+![About dialog](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-about.png)
 
 ## Update indicator
 
 When an update is available, an orange warning icon appears in the title bar. Clicking it opens a dialog that shows current and latest versions for each binary with per-binary Update and Install buttons.
 
-![Update dialog](screens/telavisor-update.png)
+![Update dialog](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-update.png)
 
 From the dialog you can:
 
