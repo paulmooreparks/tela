@@ -41,6 +41,7 @@
 - [Remote admin protocol](architecture/remote-admin.md)
 - [File sharing protocol](architecture/file-sharing.md)
 - [Path-based gateway](architecture/gateway.md)
+- [Portal protocol](architecture/portal-protocol.md)
 - [Tela Design Language](architecture/tdl.md)
 
 # Operations

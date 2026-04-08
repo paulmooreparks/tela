@@ -11,6 +11,7 @@ context, current status, and design direction:
 | `DESIGN.md` | Architecture, protocol spec, component design, roadmap |
 | `DESIGN-remote-admin.md` | Agent/hub management protocol, implementation status |
 | `DESIGN-file-sharing.md` | File sharing protocol and implementation |
+| `DESIGN-portal.md` | Portal protocol specification (the wire contract every Tela portal must implement) |
 | `STATUS.md` | Traceability matrix mapping design sections to implementation |
 | `TelaVisor.md` | TelaVisor desktop client layout, features, and UX |
 | `TELA-DESIGN-LANGUAGE.md` | Visual design language shared across all Tela products |
@@ -217,18 +218,22 @@ Session index is monotonically incrementing per machine (1-254 max).
 Admin API changes take effect immediately via `authStore.reload()` and are
 persisted to YAML. No hub restart needed for token/ACL/portal changes.
 
-### Portal architecture (deferred decision, see ROADMAP-1.0.md)
-The portal currently exists only as Awan Saya (a separate Node.js +
-PostgreSQL repo). There is no portal protocol spec, no Go portal package,
-and no way for TelaVisor to host a personal portal. This is a deliberate
-hold: a future scope decision under "Portal architecture: one protocol,
-many hosts" in ROADMAP-1.0.md sketches the right shape (extract
-`internal/portal` with pluggable storage, add a TelaVisor "Portal mode"
-that runs the file-backed store in-process, keep Awan Saya as the
-Postgres reference implementation). **Do not start any portal
-extraction work without writing the portal protocol spec doc first** --
-the spec is what prevents two implementations from drifting. See the
-ROADMAP entry for the full plan.
+### Portal architecture (spec written, extraction not yet started)
+The portal protocol is now specified in [DESIGN-portal.md](DESIGN-portal.md).
+It is the wire-level contract every Tela portal must implement: ten or so
+endpoints, two auth modes, a documented JSON shape per response. Awan Saya
+matches this spec; the planned `internal/portal` Go package will too.
+The spec carves the portal contract out from the SaaS surface (accounts,
+orgs, billing, signup) so a single-user portal can implement only the
+contract.
+
+The full plan for extraction lives under "Portal architecture: one
+protocol, many hosts" in ROADMAP-1.0.md and goes: extract `internal/portal`
+with pluggable storage, add a TelaVisor "Portal mode" that runs the
+file-backed store in-process, keep Awan Saya as the Postgres reference
+implementation. The spec has four open questions in section 14 that need
+to be resolved before extraction. Read DESIGN-portal.md before touching
+any portal-related code.
 
 ### Release channels
 Tela ships through three channels: `dev` (every commit to main), `beta`
