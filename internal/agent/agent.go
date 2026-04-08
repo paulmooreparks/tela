@@ -72,6 +72,50 @@ func telaConfigDir() string {
 	return filepath.Join(home, ".tela")
 }
 
+// newUUID returns a random v4 UUID in the standard 8-4-4-4-12 hex format.
+func newUUID() string {
+	var b [16]byte
+	_, _ = io.ReadFull(rand.Reader, b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
+	s := hex.EncodeToString(b[:])
+	return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
+}
+
+// agentState holds the telad identity state. It lives in telad.state
+// alongside telad.yaml. Operators should not edit it -- the file is
+// managed by telad itself.
+type agentState struct {
+	AgentID string `yaml:"agentId"`
+}
+
+// loadOrCreateAgentState loads telad.state from the same directory as
+// configPath, or from the default tela config directory when configPath
+// is empty. If the file does not exist or has no agentId, a new UUID is
+// generated and written. Returns the loaded state and the path used.
+func loadOrCreateAgentState(configPath string) (agentState, string) {
+	var dir string
+	if configPath != "" {
+		dir = filepath.Dir(configPath)
+	} else {
+		dir = telaConfigDir()
+	}
+	statePath := filepath.Join(dir, "telad.state")
+
+	var st agentState
+	if data, err := os.ReadFile(statePath); err == nil {
+		_ = yaml.Unmarshal(data, &st)
+	}
+	if st.AgentID == "" {
+		st.AgentID = newUUID()
+		data, _ := yaml.Marshal(&st)
+		_ = os.MkdirAll(dir, 0o700)
+		_ = os.WriteFile(statePath, data, 0o600)
+		log.Printf("[agent] generated agentId %s", st.AgentID)
+	}
+	return st, statePath
+}
+
 // writeControlFile writes telad's control file so TelaVisor can detect
 // the running instance. Returns a cleanup function that removes the file.
 //
@@ -161,7 +205,9 @@ type capabilities struct {
 
 type controlMessage struct {
 	Type         string              `json:"type"`
-	MachineID    string              `json:"machineId,omitempty"`
+	MachineID    string              `json:"machineId,omitempty"`   // session-join and hub responses
+	MachineName  string              `json:"machineName,omitempty"` // register: display name (replaces machineId on register)
+	AgentID      string              `json:"agentId,omitempty"`     // register: stable agent identity UUID
 	DisplayName  string              `json:"displayName,omitempty"`
 	Hostname     string              `json:"hostname,omitempty"`
 	OS           string              `json:"os,omitempty"`
@@ -235,7 +281,8 @@ type machineConfig struct {
 }
 
 type registration struct {
-	MachineID    string
+	MachineName  string // display name (formerly MachineID)
+	AgentID      string // stable identity UUID from telad.state
 	DisplayName  string
 	Hostname     string
 	OS           string
@@ -928,7 +975,7 @@ func Main() {
 		setActiveConfig(cfg, absPath)
 		removeControl := writeControlFile(cfg, absPath)
 		defer removeControl()
-		runMultiMachine(cfg)
+		runMultiMachine(cfg, absPath)
 		return
 	}
 
@@ -947,8 +994,10 @@ func Main() {
 	}
 
 	hostname, _ := os.Hostname()
+	state, _ := loadOrCreateAgentState(*configPath)
 	reg := registration{
-		MachineID:    *machineID,
+		MachineName:  *machineID,
+		AgentID:      state.AgentID,
 		Hostname:     hostname,
 		OS:           runtime.GOOS,
 		AgentVersion: version,
@@ -1275,7 +1324,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 	setActiveConfig(fileCfg, yamlPath)
 	removeControl := writeControlFile(fileCfg, yamlPath)
 	defer removeControl()
-	go runMultiMachine(fileCfg)
+	go runMultiMachine(fileCfg, yamlPath)
 
 	<-svcStop
 	log.Println("service stopping")
@@ -1392,13 +1441,16 @@ func Run(ctx context.Context, cfg *Config) error {
 			close(stopCh)
 		}
 	}()
-	runMultiMachine(cfg)
+	runMultiMachine(cfg, "")
 	return nil
 }
 
 // runMultiMachine launches a goroutine per machine and blocks forever.
-func runMultiMachine(cfg *configFile) {
+// configPath is the path to telad.yaml; it is used to locate telad.state.
+// Pass "" to fall back to the default tela config directory.
+func runMultiMachine(cfg *configFile, configPath string) {
 	log.Printf("config: %d machine(s), hub %s", len(cfg.Machines), cfg.Hub)
+	state, _ := loadOrCreateAgentState(configPath)
 	var wg sync.WaitGroup
 	for _, m := range cfg.Machines {
 		wg.Add(1)
@@ -1426,7 +1478,8 @@ func runMultiMachine(cfg *configFile) {
 			}
 
 			reg := registration{
-				MachineID:    mc.Name,
+				MachineName:  mc.Name,
+				AgentID:      state.AgentID,
 				DisplayName:  mc.DisplayName,
 				Hostname:     hostname,
 				OS:           machineOS,
@@ -1476,7 +1529,7 @@ func reconnectDelay(attempt int, maxDelay time.Duration) time.Duration {
 
 // runSingleMachine is the reconnect loop for one machine.
 func runSingleMachine(hubURL string, reg registration, targetHost string) {
-	logger := telelog.NewLogger("telad:"+reg.MachineID, nil)
+	logger := telelog.NewLogger("telad:"+reg.MachineName, nil)
 	const maxDelay = 5 * time.Minute
 	attempt := 0
 	for {
@@ -1653,10 +1706,11 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	}()
 
 	// Register with hub (include ports/services + metadata for the registry)
-	lg.Printf("connected, registering as: %s", reg.MachineID)
+	lg.Printf("connected, registering as: %s (agentId %s)", reg.MachineName, reg.AgentID)
 	regMsg := controlMessage{
 		Type:         "register",
-		MachineID:    reg.MachineID,
+		MachineName:  reg.MachineName,
+		AgentID:      reg.AgentID,
 		DisplayName:  reg.DisplayName,
 		Hostname:     reg.Hostname,
 		OS:           reg.OS,
@@ -1729,10 +1783,11 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 				if cfg != nil {
 					// Find the machine config and send updated registration
 					for _, m := range cfg.Machines {
-						if m.Name == reg.MachineID {
+						if m.Name == reg.MachineName {
 							regMsg := controlMessage{
 								Type:         "register",
-								MachineID:    m.Name,
+								MachineName:  m.Name,
+								AgentID:      reg.AgentID,
 								DisplayName:  m.DisplayName,
 								Hostname:     reg.Hostname,
 								OS:           reg.OS,
@@ -1784,7 +1839,7 @@ func runSessionWorker(ctx context.Context, lg *log.Logger, hubURL string, reg re
 	// Send session-join to associate this WS with the session
 	joinMsg := controlMessage{
 		Type:      "session-join",
-		MachineID: reg.MachineID,
+		MachineID: reg.MachineName,
 		SessionID: sessionID,
 	}
 	if err := ws.WriteJSON(&joinMsg); err != nil {
