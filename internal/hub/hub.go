@@ -79,6 +79,20 @@ func SetVersion(v string) {
 	}
 }
 
+// ── UUID helpers ──────────────────────────────────────────────────
+
+// newUUID returns a random v4 UUID formatted as the standard
+// 8-4-4-4-12 hex string. Uses crypto/rand so the output is
+// suitable as a stable, hard-to-guess identity.
+func newUUID() string {
+	var b [16]byte
+	_, _ = io.ReadFull(rand.Reader, b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
+	s := hex.EncodeToString(b[:])
+	return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
+}
+
 // ── Log ring buffer ───────────────────────────────────────────────
 
 const logRingSize = 1000
@@ -187,6 +201,7 @@ type portalEntry struct {
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
+	HubID   string                 `yaml:"hubId,omitempty"`   // Stable hub identity UUID (v4); generated on first start
 	Port    int                    `yaml:"port"`              // HTTP+WS listen port (default 80)
 	UDPPort int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
 	UDPHost string                 `yaml:"udpHost,omitempty"` // public IP/hostname for UDP relay (when behind proxy)
@@ -236,6 +251,9 @@ func applyHubConfig(cfg *hubConfig) {
 		if cfg.UDPHost != "" {
 			udpHost = cfg.UDPHost
 		}
+		if cfg.HubID != "" {
+			hubID = cfg.HubID
+		}
 		if cfg.Name != "" {
 			hubName = cfg.Name
 		}
@@ -280,6 +298,7 @@ var (
 	httpPort       = 80
 	udpPort        = 41820
 	udpHost        = "" // if set, included in udp-offer for proxy setups
+	hubID          = "" // stable UUID; set at startup from config or generated
 	hubName        = ""
 	wwwDir         = "./www"
 	wwwDirOverride = false             // true when wwwDir explicitly set via config/env
@@ -311,7 +330,12 @@ type machineEntry struct {
 	Sessions   map[string]*clientSession // sessionID → active session
 	NextIdx    int                       // monotonically incrementing session index
 
-	// Metadata from registration
+	// Identity (set on first registration, never updated)
+	AgentID               string // stable UUID from the agent's telad.state
+	MachineRegistrationID string // hub-local UUID generated on first registration of this agentId
+
+	// Display metadata (updated on each registration)
+	MachineName  string // operator-assigned name from telad.yaml (display label)
 	Ports        []int
 	Services     []serviceDesc
 	Token        string
@@ -344,12 +368,13 @@ type historyEvent struct {
 
 // wsState is stored per WebSocket connection.
 type wsState struct {
-	Role      string // "agent", "client", or "agent-session"
-	MachineID string
-	SessionID string // non-empty for session-specific connections
-	Paired    bool
-	Peer      *safeConn
-	WGPubKey  string // client's WireGuard public key
+	Role        string // "agent", "client", or "agent-session"
+	MachineID   string // agentId for agents/sessions; machineName for clients
+	MachineName string // display name (always the operator-assigned machine name)
+	SessionID   string // non-empty for session-specific connections
+	Paired      bool
+	Peer        *safeConn
+	WGPubKey    string // client's WireGuard public key
 
 	// ControlGen is set on agent registration to the machineEntry's ControlGen
 	// at that time. handleDisconnect uses it to avoid clearing a newer
@@ -405,8 +430,9 @@ func (sc *safeConn) WriteControl(messageType int, data []byte, deadline time.Tim
 // ── Global state ───────────────────────────────────────────────────
 
 var (
-	machines   = make(map[string]*machineEntry)
-	machinesMu sync.RWMutex
+	machines       = make(map[string]*machineEntry) // agentId → entry
+	machinesByName = make(map[string]string)        // machineName → agentId
+	machinesMu     sync.RWMutex
 
 	// Per-WebSocket state, keyed by connection pointer.
 	wsStates   = make(map[*websocket.Conn]*wsState)
@@ -602,35 +628,40 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 
 	machinesMu.RLock()
 	type statusMachine struct {
-		ID             string                 `json:"id"`
-		DisplayName    *string                `json:"displayName"`
-		Hostname       *string                `json:"hostname"`
-		OS             *string                `json:"os"`
-		AgentVersion   *string                `json:"agentVersion"`
-		Tags           []string               `json:"tags"`
-		Location       *string                `json:"location"`
-		Owner          *string                `json:"owner"`
-		AgentConnected bool                   `json:"agentConnected"`
-		SessionCount   int                    `json:"sessionCount"`
-		RegisteredAt   *string                `json:"registeredAt"`
-		LastSeen       *string                `json:"lastSeen"`
-		Services       []serviceDesc          `json:"services"`
-		Capabilities   map[string]interface{} `json:"capabilities,omitempty"`
+		ID                    string                 `json:"id"`
+		AgentID               string                 `json:"agentId,omitempty"`
+		MachineRegistrationID string                 `json:"machineRegistrationId,omitempty"`
+		DisplayName           *string                `json:"displayName"`
+		Hostname              *string                `json:"hostname"`
+		OS                    *string                `json:"os"`
+		AgentVersion          *string                `json:"agentVersion"`
+		Tags                  []string               `json:"tags"`
+		Location              *string                `json:"location"`
+		Owner                 *string                `json:"owner"`
+		AgentConnected        bool                   `json:"agentConnected"`
+		SessionCount          int                    `json:"sessionCount"`
+		RegisteredAt          *string                `json:"registeredAt"`
+		LastSeen              *string                `json:"lastSeen"`
+		Services              []serviceDesc          `json:"services"`
+		Capabilities          map[string]interface{} `json:"capabilities,omitempty"`
 	}
 
 	list := make([]statusMachine, 0, len(machines))
-	for id, entry := range machines {
+	for _, entry := range machines {
 		// Filter: skip machines the caller cannot view.
-		if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, id) {
+		// Auth uses the machine name (what the operator configured in ACLs).
+		if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, entry.MachineName) {
 			continue
 		}
 		entry.mu.Lock()
 		sm := statusMachine{
-			ID:             id,
-			Tags:           entry.Tags,
-			AgentConnected: entry.ControlWS != nil,
-			SessionCount:   len(entry.Sessions),
-			Services:       normalizeServices(entry.Ports, entry.Services),
+			ID:                    entry.MachineName,
+			AgentID:               entry.AgentID,
+			MachineRegistrationID: entry.MachineRegistrationID,
+			Tags:                  entry.Tags,
+			AgentConnected:        entry.ControlWS != nil,
+			SessionCount:          len(entry.Sessions),
+			Services:              normalizeServices(entry.Ports, entry.Services),
 		}
 		if entry.DisplayName != "" {
 			sm.DisplayName = &entry.DisplayName
@@ -685,10 +716,40 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 			"uptime":    int(time.Since(startTime).Seconds()),
 		},
 	}
+	if hubID != "" {
+		payload["hubId"] = hubID
+	}
 	if hubName != "" {
 		payload["hubName"] = hubName
 	}
 
+	corsHeaders(w)
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.Encode(payload)
+}
+
+// handleWellKnown serves GET /.well-known/tela on the hub. It is
+// unauthenticated so that portals can discover the hub's identity
+// without needing a token. See DESIGN-identity.md section 6.1.
+func handleWellKnown(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		corsHeaders(w)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	payload := map[string]any{
+		"protocolVersion":   "1.1",
+		"supportedVersions": []string{"1.1"},
+	}
+	if hubID != "" {
+		payload["hubId"] = hubID
+	}
 	corsHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
@@ -848,7 +909,9 @@ var upgrader = websocket.Upgrader{
 // JSON messages from agents and clients during signaling.
 type signalingMsg struct {
 	Type         string        `json:"type"`
-	MachineID    string        `json:"machineId,omitempty"`
+	MachineID    string        `json:"machineId,omitempty"`   // session-join / client connect (machine name)
+	MachineName  string        `json:"machineName,omitempty"` // register: display name
+	AgentID      string        `json:"agentId,omitempty"`     // register: stable agent identity UUID
 	Token        string        `json:"token,omitempty"`
 	WGPubKey     string        `json:"wgPubKey,omitempty"`
 	Ports        []int         `json:"ports,omitempty"`
@@ -980,32 +1043,49 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
-	machineID := msg.MachineID
+	machineName := msg.MachineName
+	agentID := msg.AgentID
+	if agentID == "" {
+		sendError(ws, "register: agentId is required")
+		return
+	}
 	state.Role = "agent"
-	state.MachineID = machineID
+	state.MachineName = machineName
 
 	// Auth check: is this token allowed to register this machine?
-	if globalAuth.isEnabled() && !globalAuth.canRegister(msg.Token, machineID) {
+	if globalAuth.isEnabled() && !globalAuth.canRegister(msg.Token, machineName) {
 		id := globalAuth.identityID(msg.Token)
 		if id == "" {
 			id = "unknown"
 		}
-		log.Printf("[hub] agent register denied: %s (identity: %s)", machineID, id)
+		log.Printf("[hub] agent register denied: %s (identity: %s)", machineName, id)
 		sendError(ws, "Access denied")
 		return
 	}
 
 	now := time.Now()
+	// Composite key: one entry per (agentId, machineName) pair. This lets a
+	// single telad installation manage multiple machines while still storing
+	// agentId on each entry for cross-hub correlation.
+	machineKey := agentID + ":" + machineName
 
 	machinesMu.Lock()
-	entry, exists := machines[machineID]
+	entry, exists := machines[machineKey]
 	if !exists {
 		entry = &machineEntry{
-			RegisteredAt: now,
+			AgentID:               agentID,
+			MachineRegistrationID: newUUID(),
+			RegisteredAt:          now,
 		}
-		machines[machineID] = entry
+		machines[machineKey] = entry
+	}
+	// Update the name index so connect/session-join can resolve name → machineKey.
+	if machineName != "" {
+		machinesByName[machineName] = machineKey
 	}
 	machinesMu.Unlock()
+
+	state.MachineID = machineKey // machines map key for disconnect/pong lookups
 
 	entry.mu.Lock()
 	// Close the old control WebSocket if the agent is reconnecting.
@@ -1019,6 +1099,7 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	entry.ControlWS = ws
 	entry.ControlGen++
 	state.ControlGen = entry.ControlGen
+	entry.MachineName = machineName
 	entry.Token = msg.Token
 	entry.Ports = msg.Ports
 	entry.Services = msg.Services
@@ -1061,30 +1142,36 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	}
 	entry.mu.Unlock()
 
-	log.Printf("[hub] agent registered: %s ports=%v version=%q%s", machineID, ports, msg.AgentVersion, tokenLog(msg.Token))
-	recordEvent(machineID, "agent-register", fmt.Sprintf("ports=%v", ports))
+	log.Printf("[hub] agent registered: %s (agentId %s) ports=%v version=%q%s", machineName, agentID, ports, msg.AgentVersion, tokenLog(msg.Token))
+	recordEvent(machineName, "agent-register", fmt.Sprintf("ports=%v", ports))
 
-	reply, _ := json.Marshal(map[string]string{"type": "registered", "machineId": machineID})
+	reply, _ := json.Marshal(map[string]string{"type": "registered", "machineId": machineName})
 	ws.WriteMessage(websocket.TextMessage, reply)
 }
 
 func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
-	machineID := msg.MachineID
+	machineName := msg.MachineID // client sends machine name in the machineId field
 	state.Role = "client"
-	state.MachineID = machineID
+	state.MachineName = machineName
 	state.WGPubKey = msg.WGPubKey
 	if msg.Ports != nil {
 		state.RequestedPorts = append([]int(nil), msg.Ports...)
 	}
 
 	machinesMu.RLock()
-	entry, exists := machines[machineID]
+	agentID := machinesByName[machineName]
+	var entry *machineEntry
+	var exists bool
+	if agentID != "" {
+		entry, exists = machines[agentID]
+	}
 	machinesMu.RUnlock()
 
 	if !exists || entry == nil {
 		sendError(ws, "Machine not found")
 		return
 	}
+	state.MachineID = agentID // machines map key for disconnect handling
 
 	entry.mu.Lock()
 	controlWS := entry.ControlWS
@@ -1098,17 +1185,17 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 
 	// Token / auth validation
 	if globalAuth.isEnabled() {
-		if !globalAuth.canConnect(msg.Token, machineID) {
+		if !globalAuth.canConnect(msg.Token, machineName) {
 			id := globalAuth.identityID(msg.Token)
 			if id == "" {
 				id = "unknown"
 			}
-			log.Printf("[hub] client connect denied: %s (identity: %s)", machineID, id)
+			log.Printf("[hub] client connect denied: %s (identity: %s)", machineName, id)
 			sendError(ws, "Access denied")
 			return
 		}
 	} else if entryToken != "" && subtle.ConstantTimeCompare([]byte(entryToken), []byte(msg.Token)) != 1 {
-		log.Printf("[hub] client token mismatch for %s", machineID)
+		log.Printf("[hub] client token mismatch for %s", machineName)
 		errMsg, _ := json.Marshal(map[string]string{"type": "error", "message": "Invalid token"})
 		ws.WriteMessage(websocket.TextMessage, errMsg)
 		ws.WriteMessage(websocket.CloseMessage,
@@ -1143,7 +1230,7 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 	session.SessionIdx = sessionIdx
 	entry.mu.Unlock()
 
-	log.Printf("[hub] client connected for: %s session=%s%s", machineID, sessionID[:8], wgLog(msg.WGPubKey))
+	log.Printf("[hub] client connected for: %s session=%s%s", machineName, sessionID[:8], wgLog(msg.WGPubKey))
 
 	// Ask the agent to open a session WebSocket
 	req := map[string]any{
@@ -1168,8 +1255,8 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 		}
 		delete(entry.Sessions, sessionID)
 		entry.mu.Unlock()
-		log.Printf("[hub] session %s timed out waiting for agent join (%s)", sessionID[:8], machineID)
-		cleanupSession(machineID, sess)
+		log.Printf("[hub] session %s timed out waiting for agent join (%s)", sessionID[:8], machineName)
+		cleanupSession(agentID, sess)
 		if sess.ClientWS != nil {
 			sess.ClientWS.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseGoingAway, "agent did not join session"))
@@ -1179,19 +1266,25 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 }
 
 func handleSessionJoin(ws *safeConn, state *wsState, msg *signalingMsg) {
-	machineID := msg.MachineID
+	machineName := msg.MachineID // agent sends machine name in the machineId field
 	sessionID := msg.SessionID
 	state.Role = "agent-session"
-	state.MachineID = machineID
+	state.MachineName = machineName
 	state.SessionID = sessionID
 
 	machinesMu.RLock()
-	entry, exists := machines[machineID]
+	agentID := machinesByName[machineName]
+	var entry *machineEntry
+	var exists bool
+	if agentID != "" {
+		entry, exists = machines[agentID]
+	}
 	machinesMu.RUnlock()
 	if !exists {
 		sendError(ws, "Machine not found")
 		return
 	}
+	state.MachineID = agentID // machines map key for disconnect handling
 
 	entry.mu.Lock()
 	session, ok := entry.Sessions[sessionID]
@@ -1209,11 +1302,15 @@ func handleSessionJoin(ws *safeConn, state *wsState, msg *signalingMsg) {
 		return
 	}
 
-	log.Printf("[hub] agent joined session %s for: %s", sessionID[:8], machineID)
-	pairSession(machineID, entry, session)
+	log.Printf("[hub] agent joined session %s for: %s", sessionID[:8], machineName)
+	pairSession(agentID, entry, session)
 }
 
-func pairSession(machineID string, entry *machineEntry, session *clientSession) {
+func pairSession(machineKey string, entry *machineEntry, session *clientSession) {
+	machineID := entry.MachineName
+	if machineID == "" {
+		machineID = machineKey
+	}
 	agentWS := session.AgentWS
 	clientWS := session.ClientWS
 	if agentWS == nil || clientWS == nil {
@@ -1329,12 +1426,16 @@ func handleDisconnect(ws *safeConn) {
 		return
 	}
 
-	log.Printf("[hub] %s disconnected: %s (session=%s)", state.Role, state.MachineID, state.SessionID)
+	name := state.MachineName
+	if name == "" {
+		name = state.MachineID // fallback for old-format connections
+	}
+	log.Printf("[hub] %s disconnected: %s (session=%s)", state.Role, name, state.SessionID)
 	detail := state.SessionDetail
 	if detail == "" {
 		detail = state.Role + " disconnected"
 	}
-	recordEvent(state.MachineID, state.Role+"-disconnect", detail)
+	recordEvent(name, state.Role+"-disconnect", detail)
 
 	switch state.Role {
 	case "agent":
@@ -1361,7 +1462,7 @@ func handleDisconnect(ws *safeConn) {
 
 		if stale {
 			log.Printf("[hub] ignoring stale agent disconnect for %s (gen %d, current %d)",
-				state.MachineID, state.ControlGen, entry.ControlGen)
+				name, state.ControlGen, entry.ControlGen)
 			return
 		}
 
@@ -1785,6 +1886,18 @@ func Main() {
 
 	globalAuth = newAuthStore(&cfg.Auth)
 
+	// Hub identity: generate a stable hubId on first start.
+	if cfg.HubID == "" {
+		cfg.HubID = newUUID()
+		hubID = cfg.HubID
+		log.Printf("[hub] generated hubId %s", hubID)
+		if globalCfgPath != "" {
+			if err := writeHubConfig(globalCfgPath, cfg); err != nil {
+				log.Printf("[hub] warning: could not persist hubId: %v", err)
+			}
+		}
+	}
+
 	// Portal env-var bootstrap (requires globalAuth for viewer token)
 	if bootstrapPortalsFromEnv(cfg, globalCfgPath) {
 		log.Println("[hub] portal registered from TELAHUBD_PORTAL_URL")
@@ -1826,20 +1939,25 @@ func handleAdminAgents(w http.ResponseWriter, r *http.Request) {
 		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "expected /api/admin/agents/{machine}/{action}"})
 		return
 	}
-	machineID := parts[0]
+	machineName := parts[0]
 	action := parts[1]
 
 	// Check manage permission (owner/admin always allowed, or per-machine manageTokens)
 	callerToken := tokenFromRequest(r)
-	if !globalAuth.canManage(callerToken, machineID) {
+	if !globalAuth.canManage(callerToken, machineName) {
 		adminCorsHeaders(w, r)
-		writeAdminJSON(w, r, http.StatusForbidden, map[string]string{"error": "manage permission required for " + machineID})
+		writeAdminJSON(w, r, http.StatusForbidden, map[string]string{"error": "manage permission required for " + machineName})
 		return
 	}
 
-	// Find the agent's ControlWS
+	// Find the agent's ControlWS (look up by name → agentId → entry)
 	machinesMu.RLock()
-	entry, exists := machines[machineID]
+	agentID := machinesByName[machineName]
+	var entry *machineEntry
+	var exists bool
+	if agentID != "" {
+		entry, exists = machines[agentID]
+	}
 	machinesMu.RUnlock()
 	if !exists {
 		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "machine not found"})
@@ -1878,7 +1996,7 @@ func handleAdminAgents(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Send mgmt-request to agent
-	log.Printf("[hub] mgmt-request: machine=%s action=%s reqId=%s", machineID, action, reqID)
+	log.Printf("[hub] mgmt-request: machine=%s action=%s reqId=%s", machineName, action, reqID)
 	req := map[string]interface{}{
 		"type":      "mgmt-request",
 		"requestId": reqID,
@@ -1935,6 +2053,7 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 
 	// Register HTTP handlers
 	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/tela", handleWellKnown)
 	mux.HandleFunc("/api/status", handleAPIStatus)
 	mux.HandleFunc("/status", handleAPIStatus)
 	mux.HandleFunc("/api/history", handleAPIHistory)
@@ -2288,6 +2407,16 @@ func serviceRunHub(stopCh <-chan struct{}) {
 	}
 
 	globalAuth = newAuthStore(&cfg.Auth)
+
+	// Hub identity: generate a stable hubId on first start.
+	if cfg.HubID == "" {
+		cfg.HubID = newUUID()
+		hubID = cfg.HubID
+		log.Printf("[hub] generated hubId %s", hubID)
+		if err := writeHubConfig(yamlPath, cfg); err != nil {
+			log.Printf("[hub] warning: could not persist hubId: %v", err)
+		}
+	}
 
 	// Portal env-var bootstrap (requires globalAuth for viewer token)
 	if bootstrapPortalsFromEnv(cfg, yamlPath) {
@@ -3566,6 +3695,7 @@ func containsEquals(s string) bool {
 func ResetForTesting() {
 	machinesMu.Lock()
 	machines = make(map[string]*machineEntry)
+	machinesByName = make(map[string]string)
 	machinesMu.Unlock()
 
 	wsStatesMu.Lock()
@@ -3603,6 +3733,7 @@ func ResetForTesting() {
 	httpPort = 80
 	udpPort = 41820
 	udpHost = ""
+	hubID = ""
 	hubName = ""
 	wwwDir = "./www"
 	wwwDirOverride = false
