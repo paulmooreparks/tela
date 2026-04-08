@@ -63,6 +63,51 @@ Related project: **Awan Saya** (`c:\Users\paul\source\repos\awansatu`) -- portal
 - Be very clear and thorough in technical writing. Do not leave out steps.
 - Spell out the first abbeviation usage in a document unless you can be reasonably sure the abbreviation is known in context (e.g., TCP and UDP are known, FOSS is not necessarily known)
 
+## Editorial Workflow (markdown sweeps)
+
+The user acts as editor on all markdown files in this repo (the mdBook under
+`book/`, plus top-level docs like `README.md`, `REFERENCE.md`, `DESIGN.md`,
+etc.) by leaving inline HTML comments tagged with an `EDIT:` marker. These
+comments are invisible in rendered output but greppable in source.
+
+When the user says "sweep edits" (or similar: "act on the EDIT notes",
+"process editorial notes", optionally scoped to a path), do this:
+
+1. Grep for `EDIT:` across the requested scope (default: whole repo).
+2. Work through each note in file order. For each one:
+   - Read enough surrounding context to understand the intent.
+   - Make the change in the prose.
+   - Delete the `<!-- EDIT: ... -->` comment in the same edit.
+   - For block-level rewrites delimited by `EDIT/REWRITE START` /
+     `EDIT/REWRITE END`, replace everything between the markers (inclusive
+     of the markers) with the rewritten prose.
+3. If a note is ambiguous, contradicts another note, or asks a question
+   (`EDIT/ASK:`), stop and ask the user before changing anything. Do not
+   guess.
+4. Apply the project's writing style rules (no emdash, no curly quotes, no
+   marketing tone, factual technical-writer voice) to the rewritten prose,
+   even if the original violated them.
+5. Report which notes were acted on and which were skipped (and why) at the
+   end of the sweep.
+
+Marker conventions the user will use:
+
+| Marker | Meaning |
+|--------|---------|
+| `<!-- EDIT: ... -->` | General note, change as described |
+| `<!-- EDIT/REWRITE: ... -->` | Replace the adjacent paragraph as described |
+| `<!-- EDIT/REWRITE START ... --> ... <!-- EDIT/REWRITE END -->` | Replace everything between the markers |
+| `<!-- EDIT/CUT: ... -->` | Delete the adjacent block; reason follows |
+| `<!-- EDIT/MOVE: ... -->` | Relocate the adjacent block; destination follows |
+| `<!-- EDIT/FACT: ... -->` | Verify a factual claim against the code or other docs |
+| `<!-- EDIT/TONE: ... -->` | Rewrite for tone without changing meaning |
+| `<!-- EDIT/ASK: ... -->` | Question for the assistant; answer, do not silently change |
+| `<!-- EDIT/TODO: ... -->` | Work to be done that the user has not yet specified fully |
+
+Do not add `EDIT:` notes yourself. They are an editorial channel from user
+to assistant, not the other way around. If you have questions about prose,
+ask in chat.
+
 ## Build & Verify
 
 ```bash

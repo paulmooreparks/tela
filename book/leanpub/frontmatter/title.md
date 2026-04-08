@@ -2,8 +2,8 @@
 
 # Tela
 
-## A FOSS Cloud Without the IaaS
+## A Connectivity Fabric
 
-### Reaching, operating, and trusting machines you already own
+### Outbound-only encrypted tunnels, from one laptop to a fleet
 
 by Paul Parks

@@ -73,6 +73,8 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 - [ ] Hub rejects connections with an unknown major version with a clear error message
 - [ ] Old client / new hub negotiation: client gets a structured error, not a silent disconnect
 - [ ] Backward-compat policy documented: minor/patch versions must remain wire-compatible after 1.0
+- [ ] **Channel multiplexing decision baked into v1.** Either ship the 12-byte channel-ID frame header from DESIGN.md §6.3 in v1 (one WebSocket per machine, multiplexed channels for sessions and control), or document explicitly that v1 is single-channel and multiplexing is deferred to a `protocolVersion = 2` upgrade path. This is wire format. It cannot be revisited after 1.0 without a major version bump, so it has to be decided before the freeze.
+- [ ] **Public Go API surface decision.** Either promote a stable subset out of `internal/` into a public package (candidates: a subset of `internal/channel`, `internal/credstore`, and the wire protocol types), or document explicitly that there is no stable Go API at 1.0 and embedders must use the wire protocol. Whichever path you choose, write it down. The default of "everything is `internal/`" is itself a permanent decision once 1.0 ships.
 
 ### Cert pinning
 - [ ] Optional cert pinning in the credential store and `hubs.yaml` (pin the hub's TLS leaf or root SHA256)
@@ -87,14 +89,47 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 - [ ] Token rotation flow that does not require a hub config edit
 - [ ] Backward-compat: existing static tokens migrate cleanly to the new format on first hub start
 
+### Audit log retention
+- [ ] Concrete retention story for the hub history ring buffer: documented default size, documented behavior on overflow, documented behavior across restarts
+- [ ] Optional on-disk persistence so events survive a hub restart, with a configuration knob to enable it
+- [ ] Optional log-shipping hook (webhook, syslog, or file with rotation) so operators can ship the audit stream to external aggregators
+- [ ] Document what is in the audit log and what is not, so a compliance reviewer can answer the retention question without reading source
+
+---
+
+## Scope decisions for 1.0
+
+These are the four ambitions a reader can reasonably project onto Tela that the project has not committed to in writing. Each one needs a written decision before 1.0, because the difference between "deferred" and "non-goal" is the difference between a healthy roadmap and a permanent expectations gap. The premise of this document is that whatever ships at 1.0 becomes a permanent maintenance burden; the same applies to whatever Tela promises *not* to be.
+
+For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 path looks like if it is deferred.**
+
+### Routed mesh networking
+- [ ] Decision: deferred to 1.x, or non-goal forever.
+- Tela has direct peer-to-peer as a transport tier, but it is not a routed mesh in the Tailscale or Nebula sense. Most traffic still travels client to hub to agent. Readers who hear "fabric" can reasonably expect agent-to-agent routing without the hub on the data path.
+- If deferred: sketch what it would take (routing table, multi-hop key exchange, NAT traversal beyond the current STUN cascade) and what `protocolVersion` would carry it.
+- If non-goal: name the alternatives a user should reach for instead and explain why Tela's hub-relay shape is the right design for the use cases the project is targeting.
+
+### Hub federation
+- [ ] Decision: deferred to 1.x, or non-goal forever.
+- Today, identity is hub-scoped. A user with a token on hub A has no relationship to hub B unless they hold a separate token there. The portal layer (Awan Saya) papers over this for end users but does not fix it at the protocol level.
+- If deferred: define what federation means at the protocol level (cross-hub trust, identity assertion format, revocation propagation) and what it would do to the access model.
+- If non-goal: document that federation is the portal's job, not the hub's, and that operators who need it should run a portal.
+
+### Single sign-on (SSO/OIDC/SAML)
+- [ ] Decision: deferred to 1.x, or non-goal forever.
+- The hub today uses bearer tokens issued by an admin. There is no integration with external identity providers (OpenID Connect, Security Assertion Markup Language, Lightweight Directory Access Protocol). The team-cloud and fleet tiers in the introduction lean on this; a real organization will not provision users by hand.
+- If deferred: pick one identity protocol to support first (OIDC is the obvious candidate), and document the contract (which claims map to which roles, how revocation works, how the hub validates tokens).
+- If non-goal: document that SSO is the portal's job and the hub will only ever speak its own token format, and explain why.
+
+### Multi-tenant hub
+- [ ] Decision: deferred to 1.x, or non-goal forever.
+- Today the answer to "I have multiple teams" is "run multiple hubs." This is fine at small scale and starts to bite at the fleet tier. A multi-tenant hub would let one process serve multiple isolated organizations with separate identity, ACL, and history surfaces.
+- If deferred: define what isolation means (config, storage, audit log, admin API) and how operators would migrate from "one hub per team" to "tenants on a shared hub."
+- If non-goal: document that the project's recommended scaling pattern is hub-per-tenant, and that the portal layer is what stitches them together for end users.
+
 ---
 
 ## Important (seriously hurts 1.0 if not done)
-
-### Channel multiplexing
-- [ ] Multiplex multiple logical channels over a single tunnel (one WS per machine, not per session)
-- [ ] Frame format with channel IDs (the 12-byte header from DESIGN.md §6.3)
-- [ ] In-tunnel control channel for management messages without spinning up a separate session
 
 ### In-browser fallback
 - [ ] Browser-based RDP/SSH client for cases where the user can't run binaries
@@ -158,6 +193,7 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 - [ ] **Security model document**: "Tela's threat model is X, Tela protects against Y, Tela does NOT protect against Z." Essential for a security tool. Users need to know what they're getting and what they're not.
 - [ ] **Deployment hardening guide**: how to deploy a hub safely on the public internet. TLS certs, log shipping, backup, monitoring, what to do if compromised.
 - [ ] **Upgrade and migration guide**: per-release "what's new / what to watch out for" doc
+- [ ] **Fleet operations playbook**: the operational practices that distinguish "I have Tela installed" from "I run Tela for a team." Token rotation at scale, agent onboarding workflows, hub log shipping, channel promotion playbooks, hub-down recovery, agent fleet upgrade strategy. Mostly draws on existing docs (release process, access model, troubleshooting) but has to be written down as one coherent narrative or the fleet tier of the introduction is aspirational, not real.
 
 ### Process docs
 - [ ] CHANGELOG.md with semver discipline (kept up to date per release)
@@ -182,6 +218,7 @@ This is the order I would do things in if I were running the project, biased tow
 6. **Code signing for Windows and macOS** — without this, downloads are scary
 7. **Security model document and troubleshooting guide** — the two most important user-facing docs you don't have yet
 8. **Then start polishing** — mobile UX, installers, package managers, structured logging, metrics, rate limiting, graceful shutdown, agent identity
+9. **Make and publish the scope decisions** — routed mesh, hub federation, SSO/OIDC, multi-tenant hub. Deferred or rejected, but written down. This is the step that converts ambient ambiguity into a permanent commitment, and it has to happen before the tag, not after, or the decisions get made by accident in the first issue thread that asks for one of them.
 
 ---
 

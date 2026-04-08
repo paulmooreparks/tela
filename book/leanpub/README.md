@@ -1,7 +1,7 @@
 # Tela: the book
 
-This directory holds the manuscript for "Tela: A FOSS Cloud Without the
-IaaS" (working title) in [Leanpub](https://leanpub.com/) format.
+This directory holds the manuscript for "Tela: A Connectivity Fabric" in
+[Leanpub](https://leanpub.com/) format.
 
 The book and the documentation site share source. Most chapters here are
 either written natively for the book or pull from the canonical Markdown

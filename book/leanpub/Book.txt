@@ -2,7 +2,7 @@ frontmatter/title.md
 frontmatter/copyright.md
 frontmatter/preface.md
 
-mainmatter/01-cloud-without-iaas.md
+mainmatter/01-a-connectivity-fabric.md
 mainmatter/02-the-three-binaries.md
 mainmatter/03-installing-and-bootstrapping.md
 mainmatter/04-first-connection.md
