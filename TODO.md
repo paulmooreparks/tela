@@ -22,11 +22,27 @@
 scenario). Same-NAT tests fail because most routers don't support hairpin NAT.
 When peers are on the same LAN, the relay path is already low-latency.
 
+## Phase 4: Relay Gateway (1.0 target)
+
+Hub-to-hub transit bridging. The generalization of Tela's existing gateway
+primitive to the relay layer: a hub forwards opaque WireGuard ciphertext on
+behalf of a client whose target agent is registered with a different hub,
+preserving the end-to-end WireGuard handshake and the blind-relay property.
+See [ROADMAP-1.0.md](ROADMAP-1.0.md) under *Important: Relay gateway* for
+the full description and the design constraints.
+
+- [ ] Hub binary outbound mode: `telahubd` dials another `telahubd` as a client and authenticates with a token, reusing the existing client-relay handshake
+- [ ] Directory schema "reachable through" field so a directory entry can name the hub that actually hosts a given machine
+- [ ] Session hop count (TTL) field in the v1 relay session header for loop prevention (must land before the protocol freeze)
+- [ ] Bridging-hub authorization via existing connect tokens on the destination hub (no new permission category)
+- [ ] Audit log entries on both bridging and destination hubs, queryable through the existing audit endpoints
+- [ ] Documentation: gateway primitive chapter that teaches the family (path / bridge / upstream / single-hop relay / multi-hop relay), with the existing path-based gateway as one rung instead of the only one
+
 ## Awan Saya
 - [x] "How it Works" section on the Awan Saya landing page is missing a step about creating/deploying a hub. A user must have a hub before they can begin step 1 (installing the agent)
 
 ## Later
-- [ ] Mesh networking (multi-peer)
+- [ ] Mesh networking (multi-peer) — non-goal for 1.0 per [ROADMAP-1.0.md](ROADMAP-1.0.md). Distinct from the relay gateway above. Picked up only if real-world utility is demonstrated against the existing transport upgrade cascade.
 - [x] ACL policies (per-machine token-based RBAC; advanced attribute-based policies are future work)
 - [ ] Mobile clients (iOS/Android)
 - [x] GUI (system tray / menu bar) -- TelaVisor with system tray support

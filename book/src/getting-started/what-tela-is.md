@@ -95,12 +95,15 @@ release process.
   upload, download, rename, move, and delete operations available from the
   command line, the desktop client, or a Web Distributed Authoring and
   Versioning (WebDAV) mount.
-- **A path-based gateway** built into the agent that exposes multiple local
-  services through a single tunnel port, replacing the need for a separate
-  reverse proxy in many deployments.
-- **Upstream rerouting** that lets a service's outbound dependency calls be
-  redirected to a different machine or environment by editing a
-  configuration file rather than the code.
+- **Gateways**, a family of forwarding primitives that Tela uses at several
+  layers of the stack: a path-based HTTP reverse proxy in the agent for
+  routing one tunnel port to several local services, a bridge-mode agent
+  for fronting services on other LAN-reachable machines, outbound
+  dependency rerouting for service-to-service calls, and the hub itself as
+  a relay gateway for opaque WireGuard ciphertext between a client and an
+  agent. They share one rule: forward without inspecting beyond what the
+  layer requires. The 1.0 roadmap extends the family with a multi-hop
+  relay gateway that bridges sessions across more than one hub.
 - **TelaVisor**, a desktop graphical interface that wraps the client and
   exposes the management features without requiring terminal access.
 - **Self-update through release channels** (dev, beta, stable) with signed
