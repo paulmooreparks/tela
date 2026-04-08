@@ -14,7 +14,7 @@
 - [CLI reference](guide/reference.md)
 - [Configuration files](guide/configuration.md)
 - [TelaVisor desktop app](guide/telavisor.md)
-- [Awan Saya portal](guide/awansaya.md)
+- [Hub directories and portals](guide/directories.md)
 
 # How-to Guides
 

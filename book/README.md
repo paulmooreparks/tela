@@ -23,9 +23,9 @@ PR that adds a new CLI command and a new section in `REFERENCE.md` also
 updates the published docs site on the next deploy. There is no second
 source of truth.
 
-A few chapters (introduction, the getting-started chapters, the brief
-Awan Saya overview, contributing) are written natively for the book and live
-only in `src/`.
+A few chapters (introduction, the getting-started chapters, the
+hub directories and portals overview, contributing) are written natively
+for the book and live only in `src/`.
 
 ## Building locally
 

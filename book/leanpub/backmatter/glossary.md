@@ -33,5 +33,5 @@ explicit scope decision (see the *Scope decisions for 1.0* section of the
 (Stub. Other terms defined elsewhere in the book and in the project: hub,
 agent, client, channel, manifest, role-based access control (RBAC),
 machine, service, token, role, access control list (ACL), gateway, file
-share, profile, remote, portal, TelaVisor, Awan Saya, blind relay, gVisor
-netstack, Curve25519, ChaCha20-Poly1305.)
+share, profile, remote, hub directory, portal, TelaVisor, blind relay,
+gVisor netstack, Curve25519, ChaCha20-Poly1305.)

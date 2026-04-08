@@ -13,7 +13,7 @@ mainmatter/08-access-and-rbac.md
 mainmatter/09-file-sharing.md
 mainmatter/10-gateways.md
 mainmatter/11-telavisor-desktop.md
-mainmatter/12-awan-saya-portal.md
+mainmatter/12-hub-directories-and-portals.md
 mainmatter/13-release-channels.md
 mainmatter/14-running-a-fleet.md
 mainmatter/15-architecture-deep-dive.md
