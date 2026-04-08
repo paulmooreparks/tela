@@ -69,6 +69,8 @@ func newAuthStore(cfg *authConfig) *authStore {
 
 // isEnabled reports whether auth enforcement is active.
 func (s *authStore) isEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.enabled
 }
 
@@ -103,11 +105,11 @@ func (s *authStore) isOwnerOrAdmin(token string) bool {
 //   - Machine has an ACL entry but no registerToken: any known token is allowed.
 //   - Machine has no ACL entry: only owner/admin.
 func (s *authStore) canRegister(token, machineID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if !s.enabled {
 		return true
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
 		return true
 	}
@@ -130,11 +132,11 @@ func (s *authStore) canRegister(token, machineID string) bool {
 //   - Token in machine-specific connectTokens: true.
 //   - Token in wildcard "*" connectTokens: true.
 func (s *authStore) canConnect(token, machineID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if !s.enabled {
 		return true
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
 		return true
 	}
@@ -153,11 +155,11 @@ func (s *authStore) canConnect(token, machineID string) bool {
 //   - Token in machine-specific manageTokens: true.
 //   - Token in wildcard "*" manageTokens: true.
 func (s *authStore) canManage(token, machineID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if !s.enabled {
 		return true
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
 		return true
 	}
@@ -181,11 +183,14 @@ func (s *authStore) canViewMachine(token, machineID string) bool {
 
 // isViewer returns true when the token has the "viewer" hub role.
 func (s *authStore) isViewer(token string) bool {
-	if !s.enabled || token == "" {
+	if token == "" {
 		return false
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if !s.enabled {
+		return false
+	}
 	e, ok := s.byToken[token]
 	return ok && e.HubRole == "viewer"
 }
