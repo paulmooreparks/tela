@@ -11,7 +11,7 @@
 //   POST /api/admin/pair-code     Generate pairing code (admin auth required)
 //   POST /api/pair                Exchange code for token (code IS the auth)
 
-package main
+package hub
 
 import (
 	"crypto/rand"

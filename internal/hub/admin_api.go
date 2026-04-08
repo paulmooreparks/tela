@@ -39,7 +39,7 @@
 //     POST   /api/admin/restart                               Graceful restart
 //     POST   /api/admin/update                                Self-update from GitHub releases
 
-package main
+package hub
 
 import (
 	"encoding/json"

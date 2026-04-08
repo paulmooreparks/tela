@@ -7,7 +7,7 @@
 // This is a thin CLI wrapper over the same hubDownloadAndStage path the
 // admin API uses; the only difference is the entry point.
 
-package main
+package hub
 
 import (
 	"flag"
