@@ -13,15 +13,21 @@ identity implementation -- accounts, organizations, teams, billing,
 self-service signup -- is out of scope and lives in whatever store an
 implementation chooses to pair with the protocol.
 
-Status: **draft, version 1.0 shape decided, extraction not yet started**.
-The four open questions in the first draft of this spec were resolved
-on 2026-04-08 (see section 13). The decisions are baked into sections
-2, 4, 5, and 11. Awan Saya and the `telahubd` outbound portal client
-in `internal/hub/hub.go` currently implement the legacy shape; both
-will be migrated to the new shape in the same commit that introduces
-the `internal/portal` Go package. Pre-1.0 the spec is still mutable;
-post-1.0 it follows the version negotiation and backward-compatibility
-rules in section 2.
+Status: **draft, version 1.0 shape decided, extraction complete,
+portal user auth amendment in progress**. The four open questions in
+the first draft of this spec were resolved on 2026-04-08 (see section
+13). The decisions are baked into sections 2, 4, 5, and 11. The
+`internal/portal` Go package, the file-backed store, the HTTP
+handlers, the spec-conformance test harness, the migration of Awan
+Saya and the `telahubd` outbound portal client to the new shape, and
+the `cmd/telaportal` single-user binary all landed in the six-commit
+extraction series ending in `a0677f6`. The current amendment in
+section 6 strengthens user-auth credentials to a single mandatory
+format (bearer token via the `Authorization` header) and standardizes
+the OAuth 2.0 device code flow for desktop client onboarding; rationale
+in section 13.6. Pre-1.0 the spec is still mutable; post-1.0 it
+follows the version negotiation and backward-compatibility rules in
+section 2.
 
 Discussion of why a portal exists at all, the scaling story, and how
 TelaVisor is expected to host the protocol in personal-use mode lives in
@@ -523,11 +529,19 @@ without portal changes because the proxy is generic.
 
 ---
 
-## 6. Authentication summary
+## 6. Authentication
+
+The protocol distinguishes three credential types. Each endpoint
+requires exactly one of them, listed in section 6.1.
+
+### 6.1 Auth summary
 
 | Endpoint | Auth |
 |----------|------|
 | `/.well-known/tela` | none |
+| `POST /api/oauth/device` (section 6.3) | none |
+| `POST /api/oauth/token` (section 6.3) | device code in body |
+| `GET /device` (section 6.3) | user, browser session |
 | `GET /api/hubs` | user |
 | `POST /api/hubs` (hub bootstrap) | hub admin token |
 | `POST /api/hubs` (user add) | user |
@@ -537,12 +551,142 @@ without portal changes because the proxy is generic.
 | `/api/hub-admin/{name}/...` | user, gated on `canManage` |
 | `GET /api/fleet/agents` | user |
 
-The protocol does not prescribe **how** user auth works. Awan Saya uses
-session cookies + a CSRF check; a single-user portal could use a static
-admin token in a config file; TelaVisor in Portal mode would treat the
-local desktop user as authenticated by virtue of their OS session. Any
-of these are legal as long as the portal can answer "is this request
-authorized for this user, on this hub, for this operation?"
+### 6.2 User auth credentials
+
+Every endpoint marked "user" in section 6.1 MUST accept a bearer
+token in the `Authorization` header:
+
+```
+Authorization: Bearer <token>
+```
+
+The token format is implementation-defined; portals SHOULD use a long,
+opaque, cryptographically random string. The protocol does not
+prescribe how the portal validates the token (database lookup, JWT
+verification, signed cookie reuse, all are legal) nor where the token
+came from (see section 6.3 for the standard issuance flow).
+
+A portal MAY *additionally* accept other credential forms — session
+cookies for browser users, mTLS for service-to-service callers — but
+bearer-token auth on the `Authorization` header MUST work alongside
+whatever else the portal accepts. This guarantees that a desktop
+client written against this spec can reach any conformant portal
+without an embedded webview, a redirect URI, or knowledge of the
+portal's specific session implementation.
+
+Awan Saya implements both: a session cookie set by the web sign-in
+flow takes precedence, and a bearer token in the `Authorization`
+header is checked as a fallback. Both resolve to the same account.
+TelaVisor in Portal mode does the same thing for its embedded
+loopback portal: a bearer token is generated at process start and
+written to `~/.tela/run/portal-endpoint.json` alongside the loopback
+port; every portal call from TelaVisor uses that bearer token, and
+external local tools can read the file to authenticate.
+
+### 6.3 Device code flow for desktop clients
+
+A portal SHOULD implement the OAuth 2.0 Device Authorization Grant
+(RFC 8628) so desktop clients can sign a user in without an embedded
+browser, a redirect URI, or a client secret. Single-user portals
+(file-backed, no account model) MAY skip this section because the
+operator configures the bearer token out of band.
+
+The flow has three machine-facing endpoints and one user-facing page:
+
+#### `POST /api/oauth/device`
+
+The desktop client initiates the flow. No auth required.
+
+Request body: empty or `{}`.
+
+Response (200):
+
+```json
+{
+  "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://portal.example.com/device",
+  "expires_in": 900,
+  "interval": 5
+}
+```
+
+The client displays the `user_code` and `verification_uri` to the
+user and starts polling.
+
+#### `POST /api/oauth/token`
+
+The desktop client polls for an access token. No auth required; the
+`device_code` is the credential.
+
+Request body:
+
+```json
+{
+  "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+  "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS"
+}
+```
+
+Response (200) when the user has approved on the verification page:
+
+```json
+{
+  "access_token": "<bearer token to use on subsequent calls>",
+  "token_type": "Bearer"
+}
+```
+
+Response (400) while waiting for approval:
+
+```json
+{ "error": "authorization_pending" }
+```
+
+Response (400) after `expires_in` elapses:
+
+```json
+{ "error": "expired_token" }
+```
+
+Response (400) when the device code is unknown, expired, or revoked:
+
+```json
+{ "error": "access_denied" }
+```
+
+Polling clients SHOULD honor the `interval` value from the device
+code response and SHOULD back off on `slow_down` errors per RFC 8628
+section 3.5.
+
+#### `GET /device`
+
+The user-facing approval page. The user opens it in a browser (the
+URL was returned as `verification_uri`), enters the `user_code`,
+signs into the portal if not already signed in, and approves the
+device. The page MAY accept the user code as a query parameter
+(`?user_code=WDJB-MJHT`) for convenience.
+
+The HTML and UX of this page are not specified. The only contract is
+that completing the approval flow MUST cause the next
+`POST /api/oauth/token` poll for that device code to return a
+successful access token response.
+
+#### Issuance and lifetime notes
+
+  - The access token returned is a regular bearer token; section 6.2
+    governs how it is used after issuance.
+  - Tokens issued via device code MAY have an expiration. The
+    protocol does not prescribe a refresh-token mechanism. An expired
+    token returns 401 to the client and the client restarts the
+    device code flow.
+  - A portal MUST NOT reuse a `device_code` after a successful token
+    exchange; each device code grants exactly one access token.
+  - A portal that does not implement device code MUST still accept
+    bearer tokens issued by some other means (admin-configured static
+    token, web UI personal access token, etc.). Device code is the
+    standard *issuance* path for desktop clients, not the only legal
+    credential.
 
 ---
 
@@ -656,6 +800,13 @@ To call yourself a Tela portal, you must:
       `canManage`. Refuse the legacy double-prefix form.
 - [ ] Serve `GET /api/fleet/agents` (section 5) returning the merged
       cross-hub agent list
+- [ ] Accept bearer-token user auth via `Authorization: Bearer <token>`
+      on every endpoint marked "user" in section 6.1, alongside any
+      other credential forms the portal supports (section 6.2)
+- [ ] (SHOULD, not MUST for single-user portals) Implement the OAuth
+      2.0 device code flow at `POST /api/oauth/device`,
+      `POST /api/oauth/token`, and `GET /device` (section 6.3) so
+      desktop clients can sign users in without an embedded browser
 - [ ] Return errors in the documented JSON shape (section 7)
 - [ ] Store sync tokens as SHA-256 hashes only (section 8)
 
@@ -801,26 +952,76 @@ portal-side policy ever needs to be added (rate limits, TTL caps),
 the right place is middleware on the admin proxy that matches the
 specific path, not a parallel endpoint.
 
-### 13.5 Implementation status
+### 13.5 Implementation status (closed)
 
-These four decisions are baked into sections 2, 4, 5, and 11 of this
-spec. The `telahubd` outbound portal client in `internal/hub/hub.go`
-already matches sections 2, 3.2, and 3.3 (the legacy "no version
-fallback" path). The Awan Saya server already matches the legacy
-shapes. Both will need updates when the `internal/portal` extraction
-work begins:
+Decisions 13.1-13.4 are baked into sections 2, 4, 5, and 11 of this
+spec and the migration work is complete. The `internal/portal` Go
+package, the file-backed store, the HTTP handlers, the spec-conformance
+test harness against `internal/teststack`, the migration of the
+`telahubd` outbound portal client and the Awan Saya server and
+frontend, and the standalone `cmd/telaportal` binary all landed in the
+six-commit extraction series ending in `a0677f6`. Pre-1.0 we did not
+carry both shapes; the legacy code paths were deleted in the same
+change that introduced the new ones, per the no-cruft policy.
 
-- `telahubd` learns to read `protocolVersion` and `supportedVersions`
-  from `/.well-known/tela` and to refuse portals whose major version
-  it does not support.
-- Awan Saya server gets the new `/.well-known/tela` fields, the
-  short-form admin proxy URL, and loses the per-action fleet endpoint
-  and the dedicated pair-code endpoint.
-- Awan Saya web UI and TelaVisor's `adminAPICall` shim and the
-  `portal-shared.js` helpers all switch to the short-form proxy URL.
-- Awan Saya web UI's pair-code call switches from the dedicated
-  endpoint to the generic admin proxy form.
+### 13.6 Portal user auth: bearer mandatory + OAuth 2.0 device code
 
-These migrations land in the same commit that introduces
-`internal/portal`. Pre-1.0 we don't carry both shapes; the cleanup is
-the point of doing this work before the freeze.
+**Decision.** Section 6 is amended in two ways. First, every endpoint
+marked "user" MUST accept a bearer token in the `Authorization`
+header (section 6.2); portals MAY accept additional credential forms
+on top, but bearer-on-Authorization is the one credential format every
+1.0 portal is required to honor. Second, portals SHOULD implement the
+OAuth 2.0 Device Authorization Grant (RFC 8628) at the three endpoints
+in section 6.3 as the standard way for desktop clients to obtain a
+bearer token without an embedded browser or a redirect URI. Single-user
+portals MAY skip the device code flow because the operator configures
+the bearer token out of band.
+
+**Why this and not the alternatives.** Three options were on the table.
+(A) Leave user auth implementation-defined, document a "bearer is one
+of several legal options" stance, let each portal choose. (B) Require
+bearer auth as a MUST, leave issuance implementation-defined. (C)
+Require bearer auth as a MUST and standardize an issuance flow that
+desktop clients can rely on without portal-specific code.
+
+Option C was chosen because the previous "implementation-defined"
+stance worked while every Tela client was either Awan Saya's web UI
+(cookies) or a hub registering itself (sync tokens). It does not work
+once TelaVisor becomes a portal client: TV needs a single credential
+format that does not require an embedded webview, a redirect URI, or
+a portal-specific session adapter. Bearer-on-Authorization is the only
+credential form every HTTP client supports natively, so bearer becomes
+the single mandatory format. Standardizing the issuance flow on top of
+that mandate (option C) means the desktop client onboarding UX is the
+same against every portal: device code prompt, browser approval, done.
+Without it, every portal would invent its own desktop sign-in story
+and the desktop client would need a switch statement per portal
+implementation, which defeats the point of having a wire spec.
+
+The OAuth 2.0 device code flow specifically (RFC 8628) was chosen
+over alternatives because (a) it is what `gh auth login`, the AWS
+CLI, the GCP CLI, the Atlassian CLI, and every other modern desktop
+sign-in flow uses; (b) it has zero embedded-browser requirements;
+(c) the server side is small (four endpoints, including the
+user-facing approval page); (d) it is well-specified, and an existing
+RFC means client and server libraries already exist in every language;
+(e) it does not require client secrets, which a desktop binary cannot
+keep secret anyway.
+
+Awan Saya already accepts bearer tokens (the `api_tokens` table and
+the cookie-then-bearer fallback in [server.js:1080-1104]) so the
+section 6.2 mandate is no-op for Awan Saya at the data model level.
+What Awan Saya needs to add is the section 6.3 device code endpoints
+and the user-facing approval page; the existing PAT-via-web-UI flow
+stays as a manual escape hatch for power users until device code
+lands. TelaVisor's embedded loopback portal (`internal/portal` over
+the file store) gets a generated bearer token written to
+`~/.tela/run/portal-endpoint.json` at process start, so the loopback
+case uses the same auth path as a remote portal — the file store's
+`Authenticator` already accepts bearer tokens and only needs the
+token to be set at startup rather than via `SetAdminToken`.
+
+The hub wire protocol is unaffected by this amendment. Sync tokens
+and hub admin tokens are not user credentials and continue to flow
+exactly as sections 3.2, 3.3, and 4 describe. This amendment is
+strictly about how *user* identity reaches the portal.
