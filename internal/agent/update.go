@@ -7,7 +7,7 @@
 // This is a thin CLI wrapper over the same downloadAndStageUpdate path
 // the management protocol uses; the only difference is the entry point.
 
-package main
+package agent
 
 import (
 	"flag"

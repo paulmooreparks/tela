@@ -27,7 +27,7 @@ Invariants:
   - No file operation may escape the sandbox directory.
   - The hub never sees file contents (zero-knowledge relay).
 */
-package main
+package agent
 
 import (
 	"bufio"
