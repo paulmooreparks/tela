@@ -2410,43 +2410,133 @@ func (a *App) SetClientChannel(channelName string) string {
 	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(store.Update.ManifestBase, ch))
 }
 
-// UpdateServiceAgent self-updates the locally installed telad service
-// from the channel manifest. Kept for frontend compatibility; equivalent
-// to UpdateLocalService("telad").
+// UpdateServiceAgent self-updates the locally installed telad service.
+// Kept for frontend compatibility; equivalent to UpdateLocalService("telad").
 func (a *App) UpdateServiceAgent() string {
 	return a.UpdateLocalService("telad")
 }
 
-// UpdateLocalService stops the named service ("telad" or "telahubd"),
-// downloads the new binary from the client's configured channel manifest,
-// verifies its SHA-256 against the manifest entry, atomically replaces
-// the on-disk binary at the path the service is installed from, and
-// starts the service again.
+// UpdateLocalService self-updates a locally installed Tela binary
+// (telad or telahubd). It dispatches based on context:
 //
-// Returns a JSON string with one of:
+//   - If the binary is installed as a running OS service, delegate the
+//     update to the elevated service process via the existing hub-
+//     mediated management protocol. TelaVisor itself runs unprivileged
+//     so it cannot stop the service or overwrite the binary directly --
+//     but the service can update itself from the inside, the same way
+//     the management API path has always worked. After dispatching, we
+//     poll the on-disk binary version until it changes (or 30s elapses)
+//     so the frontend can show the actual installed version, not a hope.
+//
+//   - If there is no service (or the service is stopped), do the local
+//     download + atomic swap from inside TelaVisor. Channel manifest,
+//     SHA-256 verification, sibling tmp file, the works.
+//
+// Returns one of:
 //
 //	{"ok":true,"version":"vX.Y.Z","path":"/usr/local/bin/telad"}
 //	{"error":"..."}
-//
-// This is a fully local operation -- no admin tokens, no hub
-// indirection, no waiting on a remote agent to obey a mgmt command.
-// The frontend can therefore tell the user "the binary on disk is now
-// vX.Y.Z" with confidence the moment this call returns.
 func (a *App) UpdateLocalService(binaryName string) string {
 	if binaryName != "telad" && binaryName != "telahubd" {
 		return fmt.Sprintf(`{"error":"unknown service %q"}`, binaryName)
 	}
 
-	svcCfg, err := service.LoadConfig(binaryName)
-	if err != nil {
-		return fmt.Sprintf(`{"error":"%s service is not installed"}`, binaryName)
+	status, _ := service.QueryStatus(binaryName)
+	if status.Installed && status.Running {
+		// Elevated service path. TelaVisor cannot stop the service so
+		// it cannot do the swap itself; ask the service to update from
+		// inside its own process.
+		return a.updateRunningServiceBinary(binaryName)
 	}
-	if svcCfg.BinaryPath == "" {
-		return fmt.Sprintf(`{"error":"%s service config has no binaryPath"}`, binaryName)
+
+	// No service (or service stopped). Do the local swap directly.
+	return a.updateUnmanagedBinary(binaryName)
+}
+
+// updateRunningServiceBinary delegates a binary update to the elevated
+// running service process by sending the existing 'update' mgmt action
+// over the management protocol. After dispatching, polls the on-disk
+// binary version until it changes (or times out) so the caller can
+// confirm the swap actually happened.
+func (a *App) updateRunningServiceBinary(binaryName string) string {
+	svcCfg, err := service.LoadConfig(binaryName)
+	if err != nil || svcCfg.BinaryPath == "" {
+		return fmt.Sprintf(`{"error":"%s service config not found or missing binaryPath"}`, binaryName)
 	}
 	exePath := svcCfg.BinaryPath
+	beforeVer := getBinaryVersion(exePath)
 
-	// Resolve the manifest entry for this binary on the client's channel.
+	switch binaryName {
+	case "telad":
+		// telad is reachable via the hub it is registered with. Read
+		// the control file to find that hub, then send the update
+		// command through the existing /api/admin/agents/{m}/update
+		// proxy. The hub forwards it to the running telad process,
+		// which executes downloadAndStageUpdate against its own
+		// channel manifest and exits; the OS service manager restarts
+		// the service against the freshly written binary.
+		data, err := readControlFile("telad.json")
+		if err != nil {
+			return fmt.Sprintf(`{"error":"telad service is running but its control file was not found; cannot send the update command. Stop the service and try again, or update via 'telad update' from an elevated prompt."}`)
+		}
+		var info struct {
+			PID      int      `json:"pid"`
+			Machines []string `json:"machines"`
+			Hub      string   `json:"hub"`
+		}
+		if err := json.Unmarshal(data, &info); err != nil || len(info.Machines) == 0 || info.Hub == "" {
+			return fmt.Sprintf(`{"error":"telad control file is malformed: %s"}`, jsonEscape(err.Error()))
+		}
+		resp := a.UpdateAgent(info.Hub, info.Machines[0], "")
+		var result map[string]any
+		_ = json.Unmarshal([]byte(resp), &result)
+		if errMsg, ok := result["error"].(string); ok && errMsg != "" {
+			return fmt.Sprintf(`{"error":"hub admin API: %s"}`, jsonEscape(errMsg))
+		}
+	case "telahubd":
+		// telahubd has no upstream hub to mediate through; we'd talk
+		// to it directly via its own /api/admin/update. The user
+		// would have already needed to add their local hub to TV's
+		// admin token store. Punt with a clear message until we
+		// invest in the IPC needed to make this clean.
+		return fmt.Sprintf(`{"error":"telahubd as a running service cannot be updated from an unprivileged TelaVisor yet. Run 'telahubd update' from an elevated shell, or stop the service first and click Update again."}`)
+	}
+
+	// Poll the on-disk binary's reported version until it changes.
+	// telad has to download, write, exit, and let the service manager
+	// restart it -- typically a few seconds, but allow up to 30.
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		cur := getBinaryVersion(exePath)
+		if cur != "" && cur != beforeVer {
+			return fmt.Sprintf(`{"ok":true,"version":%q,"path":%q}`, cur, exePath)
+		}
+	}
+	return fmt.Sprintf(`{"error":"update command was sent but %s did not report a new version after 30s. The update may still be in progress; click Refresh to recheck."}`, binaryName)
+}
+
+// updateUnmanagedBinary downloads the named binary from the client's
+// configured release channel and atomically replaces the on-disk file
+// at the service-config-recorded path (or, if no service config exists,
+// at the configured bin path under the canonical {name}{ext} filename).
+// Used when there is no running service and TelaVisor can do the swap
+// itself without elevation.
+func (a *App) updateUnmanagedBinary(binaryName string) string {
+	// Resolve where the binary lives. Prefer the service config's
+	// binaryPath (consistent with where the elevated service ran), and
+	// fall back to the user's configured bin path.
+	var exePath string
+	if svcCfg, err := service.LoadConfig(binaryName); err == nil && svcCfg.BinaryPath != "" {
+		exePath = svcCfg.BinaryPath
+	} else {
+		ext := ""
+		if runtime.GOOS == "windows" {
+			ext = ".exe"
+		}
+		exePath = filepath.Join(a.effectiveBinPath(), binaryName+ext)
+	}
+
 	m, err := a.clientChannelManifest()
 	if err != nil {
 		return fmt.Sprintf(`{"error":"fetch channel manifest: %s"}`, jsonEscape(err.Error()))
@@ -2461,41 +2551,22 @@ func (a *App) UpdateLocalService(binaryName string) string {
 		return fmt.Sprintf(`{"error":"%s manifest %s has no binary named %s"}`, m.Channel, m.Version, assetName)
 	}
 
-	// Stop the service so we can replace the binary.
-	wasRunning := false
-	if status, err := service.QueryStatus(binaryName); err == nil && status.Installed {
-		wasRunning = status.Running
-	}
-	if wasRunning {
-		if err := service.Stop(binaryName); err != nil {
-			return fmt.Sprintf(`{"error":"stop %s service: %s"}`, binaryName, jsonEscape(err.Error()))
-		}
-	}
-
-	// Download to a sibling tmp file in the same directory as the
-	// installed binary so the rename is atomic on the same filesystem.
 	dlURL := m.BinaryURL(assetName)
 	resp, err := http.Get(dlURL)
 	if err != nil {
-		if wasRunning {
-			service.Start(binaryName)
-		}
 		return fmt.Sprintf(`{"error":"download: %s"}`, jsonEscape(err.Error()))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		if wasRunning {
-			service.Start(binaryName)
-		}
 		return fmt.Sprintf(`{"error":"download returned HTTP %d"}`, resp.StatusCode)
 	}
 
 	dir := filepath.Dir(exePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Sprintf(`{"error":"create install dir: %s"}`, jsonEscape(err.Error()))
+	}
 	tmp, err := os.CreateTemp(dir, "."+binaryName+"-update-*.tmp")
 	if err != nil {
-		if wasRunning {
-			service.Start(binaryName)
-		}
 		return fmt.Sprintf(`{"error":"create temp file: %s"}`, jsonEscape(err.Error()))
 	}
 	tmpPath := tmp.Name()
@@ -2503,9 +2574,6 @@ func (a *App) UpdateLocalService(binaryName string) string {
 	if err := channelpkg.VerifyReader(tmp, resp.Body, entry.SHA256, entry.Size); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
-		if wasRunning {
-			service.Start(binaryName)
-		}
 		return fmt.Sprintf(`{"error":"verify download: %s"}`, jsonEscape(err.Error()))
 	}
 	tmp.Close()
@@ -2513,27 +2581,20 @@ func (a *App) UpdateLocalService(binaryName string) string {
 		os.Chmod(tmpPath, 0o755)
 	}
 
-	// Swap the binary. On Windows the running .exe can no longer be in
-	// use here because we already stopped the service.
 	if runtime.GOOS == "windows" {
 		oldPath := exePath + ".old"
 		os.Remove(oldPath)
-		if err := os.Rename(exePath, oldPath); err != nil {
-			os.Remove(tmpPath)
-			if wasRunning {
-				service.Start(binaryName)
+		if _, err := os.Stat(exePath); err == nil {
+			if err := os.Rename(exePath, oldPath); err != nil {
+				os.Remove(tmpPath)
+				return fmt.Sprintf(`{"error":"rename current binary: %s"}`, jsonEscape(err.Error()))
 			}
-			return fmt.Sprintf(`{"error":"rename current binary: %s"}`, jsonEscape(err.Error()))
 		}
 		if err := os.Rename(tmpPath, exePath); err != nil {
 			os.Rename(oldPath, exePath) // rollback
 			os.Remove(tmpPath)
-			if wasRunning {
-				service.Start(binaryName)
-			}
 			return fmt.Sprintf(`{"error":"install new binary: %s"}`, jsonEscape(err.Error()))
 		}
-		// Clean up the .old file in the background.
 		go func(p string) {
 			for range 10 {
 				if os.Remove(p) == nil {
@@ -2545,18 +2606,7 @@ func (a *App) UpdateLocalService(binaryName string) string {
 	} else {
 		if err := os.Rename(tmpPath, exePath); err != nil {
 			os.Remove(tmpPath)
-			if wasRunning {
-				service.Start(binaryName)
-			}
 			return fmt.Sprintf(`{"error":"install new binary: %s"}`, jsonEscape(err.Error()))
-		}
-	}
-
-	// Start the service again. If it was already stopped before we
-	// started, leave it stopped.
-	if wasRunning {
-		if err := service.Start(binaryName); err != nil {
-			return fmt.Sprintf(`{"error":"start %s service: %s"}`, binaryName, jsonEscape(err.Error()))
 		}
 	}
 
