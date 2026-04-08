@@ -13,7 +13,7 @@ context, current status, and design direction:
 | `DESIGN-file-sharing.md` | File sharing protocol and implementation |
 | `DESIGN-portal.md` | Portal protocol specification (the wire contract every Tela portal must implement) |
 | `STATUS.md` | Traceability matrix mapping design sections to implementation |
-| `TelaVisor.md` | TelaVisor desktop client layout, features, and UX |
+| `book/src/guide/telavisor.md` | TelaVisor desktop client (canonical chapter, comprehensive). The repo-root `TelaVisor.md` is a short overview pointing here. |
 | `TELA-DESIGN-LANGUAGE.md` | Visual design language shared across all Tela products |
 | `ACCESS-MODEL.md` | Token-based RBAC, permissions, ACL model |
 | `CONFIGURATION.md` | Config file formats for all three binaries |
@@ -24,8 +24,9 @@ context, current status, and design direction:
 
 Do not read all files upfront in every conversation. Read `CLAUDE.md` always.
 Read the others when the conversation topic requires them (e.g., read
-`DESIGN-remote-admin.md` when working on agent management, read `TelaVisor.md`
-when working on the GUI). Use your judgment to decide which files are relevant.
+`DESIGN-remote-admin.md` when working on agent management, read
+`book/src/guide/telavisor.md` when working on the GUI). Use your judgment
+to decide which files are relevant.
 
 ## Project Overview
 
@@ -108,6 +109,53 @@ Marker conventions the user will use:
 Do not add `EDIT:` notes yourself. They are an editorial channel from user
 to assistant, not the other way around. If you have questions about prose,
 ask in chat.
+
+## Documentation: book is canonical, repo-root files are overviews
+
+Tela's documentation has been deliberately inverted. The book under `book/`
+is the canonical, comprehensive, narrative source for everything about
+how to set up, configure, run, use, and operate Tela. Repo-root markdown
+files (`README.md`, `TelaVisor.md`, the `DESIGN-*.md` family, etc.) are
+*either* short overviews that point at the book, *or* tabular reference
+data with a legitimate non-book audience (`REFERENCE.md`, `CONFIGURATION.md`,
+`ACCESS-MODEL.md`, `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`).
+
+The convention:
+
+- **Narrative documentation lives in `book/src/`.** Chapters are written
+  natively in book voice with their own structure, screenshots, and
+  worked examples. They are not generated from anywhere else and do not
+  use `{{#include}}` to pull from a repo-root file.
+- **Reference data lives at the repo root.** Tabular CLI references,
+  configuration schemas, access model formal definitions, and process
+  docs (changelog, security, contributing) stay as canonical files at
+  the repo root and continue to be `{{#include}}`-d into the book where
+  the book wants them.
+- **Repo-root overview files are short on purpose.** They point at the
+  book chapter for the substance and contain only what a code reader
+  needs to know without opening the book: a one-paragraph description,
+  pointers to where things live in the source tree, build instructions,
+  license note. If an overview is growing past 50-60 lines, the new
+  content probably belongs in the book instead.
+- **Screenshots referenced by book chapters live in `book/src/screens/`**
+  so mdBook copies them into the published site automatically. Book
+  chapters reference them as relative paths (`../screens/foo.png`).
+  Repo-root files that need the same image use a relative path from
+  their location (`book/src/screens/foo.png`). No absolute GitHub raw
+  URLs except as a last resort for files that need to render outside
+  of any project context.
+- **When a feature changes**, update the book chapter, then check
+  whether the repo-root overview needs an edit too. If you find
+  yourself making the same edit in both places, the overview is too
+  long and should be slimmed down to point at the book instead.
+
+The inversion is gradual. Files are moved into the book as they need
+substantial updates, not in a big-bang migration. Today, TelaVisor is
+the prototype: the book chapter at `book/src/guide/telavisor.md` is the
+canonical reference, and `TelaVisor.md` at the repo root is an overview
+pointing at it. Other narrative files (`USE-CASES.md`, `IMPLEMENTATION.md`,
+the narrative parts of `DESIGN.md`) follow the same pattern when they
+get touched next.
 
 ## Build & Verify
 

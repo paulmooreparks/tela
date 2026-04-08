@@ -77,31 +77,31 @@ All three binaries are single-file executables with no runtime dependencies. The
 
 TelaVisor wraps the `tela` CLI in a graphical interface. It manages hub credentials, connection profiles, and real-time tunnel status without requiring terminal access. You select which services to connect to, click Connect, and monitor tunnel state as it updates live.
 
-![TelaVisor Status tab, connected](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-status-connected.png)
+![TelaVisor Status tab, connected](book/src/screens/telavisor-status-connected.png)
 
 TelaVisor uses a two-mode layout. **Clients mode** manages connections, profiles, files, and client settings. **Infrastructure mode** provides full hub and agent administration: hub settings, machines, per-identity access, tokens, history, agent configuration, remote management, and credential storage.
 
 The Hub Settings view exposes lifecycle controls (View Logs, Update, Restart) and shows version badges that compare the running hub against the latest GitHub release. The same pattern is mirrored on the Agents tab for telad instances.
 
-![TelaVisor Hub Settings, Management section](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-management.png)
+![TelaVisor Hub Settings, Management section](book/src/screens/telavisor-hub-management.png)
 
 The Tokens view lets you create identities, rotate tokens, delete identities, and generate one-time pairing codes that users or agents can exchange for permanent tokens.
 
-![TelaVisor Hubs, Tokens](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-hub-tokens.png)
+![TelaVisor Hubs, Tokens](book/src/screens/telavisor-hub-tokens.png)
 
 The Agents tab lists all telad instances visible across your configured hubs without requiring an active tunnel connection. Each agent shows version, services, file share configuration, and management controls. The Software row updates the agent binary in place by downloading from GitHub releases and restarting through the OS service manager.
 
-![TelaVisor Agents tab](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-agents.png)
+![TelaVisor Agents tab](book/src/screens/telavisor-agents.png)
 
 The Files tab provides a built-in file browser for machines with file sharing enabled. You can upload, download, rename, move, and delete files on remote machines through the encrypted tunnel. The file list updates in real time as changes happen on the remote machine.
 
-![TelaVisor Files tab](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-files-browse.png)
+![TelaVisor Files tab](book/src/screens/telavisor-files-browse.png)
 
 The persistent log panel at the bottom of the window collects output from TelaVisor itself, the tela process, the Commands log (every API call and CLI command issued), and any number of dynamic tabs you attach via the `+` button. Attaching a hub or agent log source streams the remote log buffer through the hub admin API. Open log tabs are remembered between sessions.
 
-![TelaVisor log panel attach popover](https://raw.githubusercontent.com/paulmooreparks/tela/main/screens/telavisor-log-attach-popover.png)
+![TelaVisor log panel attach popover](book/src/screens/telavisor-log-attach-popover.png)
 
-See [TelaVisor.md](TelaVisor.md) for full documentation.
+See the [TelaVisor chapter in the book](https://paulmooreparks.github.io/tela/guide/telavisor.html) for the full reference, or [TelaVisor.md](TelaVisor.md) for a short overview.
 
 ## Quick start
 
@@ -345,7 +345,7 @@ docker/            Dockerfile, docker-compose, Caddyfile
 ## Documentation
 
 - [TELA-DESIGN-LANGUAGE.md](TELA-DESIGN-LANGUAGE.md) -- Tela Design Language (visual language specification)
-- [TelaVisor.md](TelaVisor.md) -- Desktop client documentation
+- [TelaVisor chapter](https://paulmooreparks.github.io/tela/guide/telavisor.html) -- Desktop client reference (canonical), with [TelaVisor.md](TelaVisor.md) as a short overview at the repo root
 - [ACCESS-MODEL.md](ACCESS-MODEL.md) -- How tokens, roles, and machine permissions work together
 - [REFERENCE.md](REFERENCE.md) -- Comprehensive reference for all three CLIs, configuration, and APIs
 - [CONFIGURATION.md](CONFIGURATION.md) -- Configuration file schemas for hubs.yaml, telad.yaml, telahubd.yaml, and portal config
