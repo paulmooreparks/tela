@@ -468,7 +468,64 @@
               <input type="number" id="setting-logMaxLines" class="settings-short-input" min="100" max="100000" step="100" title="Maximum lines to keep in each log pane" onchange="markSettingsDirty()">
             </div>
           </div>
+          <div class="settings-group">
+            <div class="settings-group-header">Portal Sources</div>
+            <p class="section-desc portal-sources-desc">TelaVisor talks to one or more portals to find your hubs. The Local source is always present and serves the hubs you have configured on this machine. Sign in to a remote portal (such as Awan Saya) to see the hubs it manages.</p>
+            <div id="portal-sources-list"></div>
+            <div class="portal-source-add-row">
+              <button type="button" class="tb-btn" onclick="openAddPortalSourceDialog()">Add Portal Source...</button>
+            </div>
+          </div>
           <div id="settings-error" class="settings-error-msg hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Portal Source Modal -->
+  <div class="modal-overlay hidden" id="add-portal-source-modal" onclick="if(event.target===this)closeAddPortalSourceDialog()">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Add Portal Source</h3>
+        <button type="button" class="modal-close" onclick="closeAddPortalSourceDialog()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-body-padded">
+          <div id="portal-source-step-url">
+            <p class="section-desc">Enter the URL of the portal you want to sign in to. The portal must implement Tela portal protocol 1.0.</p>
+            <div class="settings-stacked-row">
+              <div class="settings-stacked-label">Portal URL</div>
+              <input type="text" id="portal-source-url-input" placeholder="https://awansaya.net" class="tb-input portal-source-input">
+            </div>
+            <div id="portal-source-error" class="settings-error-msg hidden"></div>
+            <div class="portal-source-actions">
+              <button type="button" class="tb-btn tb-save-btn" onclick="portalSourceBeginSignIn()">Sign In</button>
+              <button type="button" class="tb-btn" onclick="closeAddPortalSourceDialog()">Cancel</button>
+            </div>
+          </div>
+          <div id="portal-source-step-code" class="hidden">
+            <p class="section-desc">Your browser should have opened a verification page. If not, copy this URL: <span id="portal-source-verification-uri" class="portal-source-verification"></span></p>
+            <div class="portal-source-code-box">
+              <div class="portal-source-code-label">Enter this code in your browser:</div>
+              <div id="portal-source-user-code" class="portal-source-code-value"></div>
+            </div>
+            <div id="portal-source-poll-status" class="section-desc portal-source-poll-status">Waiting for authorization...</div>
+            <div class="portal-source-actions">
+              <button type="button" class="tb-btn" onclick="closeAddPortalSourceDialog()">Cancel</button>
+            </div>
+          </div>
+          <div id="portal-source-step-name" class="hidden">
+            <p class="section-desc">Authorization successful. Choose a name for this portal source.</p>
+            <div class="settings-stacked-row">
+              <div class="settings-stacked-label">Source name</div>
+              <input type="text" id="portal-source-name-input" placeholder="awansaya" class="tb-input portal-source-input">
+            </div>
+            <div id="portal-source-name-error" class="settings-error-msg hidden"></div>
+            <div class="portal-source-actions">
+              <button type="button" class="tb-btn tb-save-btn" onclick="portalSourceFinish()">Save</button>
+              <button type="button" class="tb-btn" onclick="closeAddPortalSourceDialog()">Cancel</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

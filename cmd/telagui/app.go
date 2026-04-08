@@ -974,53 +974,40 @@ func profilePath() string {
 	return filepath.Join(profilesDir(), name+".yaml")
 }
 
-// GetKnownHubs returns all hubs the user has configured locally.
-// Reads from credentials.yaml and hubs.yaml.
+// GetKnownHubs returns the hubs visible through the active portal
+// source. The portal owns the directory; TelaVisor no longer reads
+// hubs.yaml or credentials.yaml directly. The HasToken field is
+// always true here because the portal stores the admin token
+// internally and never exposes it to the frontend; admin operations
+// either succeed or surface a "no admin token" error from the proxy.
+// Source is the portal source name (e.g. "Local") so the frontend
+// can group hubs by source if it wants to.
 func (a *App) GetKnownHubs() []KnownHub {
-	seen := make(map[string]bool)
-	var hubs []KnownHub
-
-	// 1. Credential store -- hubs with stored tokens
-	store, err := credstore.Load(credstore.UserPath())
-	if err == nil && store != nil {
-		for url, cred := range store.Hubs {
-			name := hubNameFromURL(url)
-			hubs = append(hubs, KnownHub{
-				Name:     name,
-				URL:      url,
-				HasToken: cred.Token != "",
-				Source:   "credentials",
-			})
-			seen[url] = true
-		}
+	sourceName, err := a.PortalActiveSource()
+	if err != nil {
+		return nil
 	}
-
-	// 2. Hub aliases -- short names mapped to URLs
-	hubsFile := filepath.Join(telaConfigDir(), "hubs.yaml")
-	if data, err := os.ReadFile(hubsFile); err == nil {
-		var cfg struct {
-			Hubs map[string]string `yaml:"hubs"`
-		}
-		if yaml.Unmarshal(data, &cfg) == nil {
-			for name, url := range cfg.Hubs {
-				if !seen[url] {
-					hasToken := false
-					if store != nil {
-						_, hasToken = store.Hubs[url]
-					}
-					hubs = append(hubs, KnownHub{
-						Name:     name,
-						URL:      url,
-						HasToken: hasToken,
-						Source:   "hubs",
-					})
-					seen[url] = true
-				}
-			}
-		}
+	client, err := a.portalClientForSource(sourceName)
+	if err != nil {
+		return nil
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	return hubs
+	hubs, err := client.ListHubs(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make([]KnownHub, 0, len(hubs))
+	for _, h := range hubs {
+		out = append(out, KnownHub{
+			Name:     h.Name,
+			URL:      h.URL,
+			HasToken: true,
+			Source:   sourceName,
+		})
+	}
+	return out
 }
 
 func hubNameFromURL(url string) string {
@@ -1032,24 +1019,23 @@ func hubNameFromURL(url string) string {
 	return url
 }
 
-// GetHubStatus queries a hub for its machine/service status.
-func (a *App) GetHubStatus(hubURL string) HubStatus {
-	token := credstore.LookupToken(hubURL)
-	if token == "" {
-		return HubStatus{Error: "no token stored for this hub"}
+// GetHubStatus queries a hub for its machine/service status. The hub
+// is identified by name; the URL is resolved via the active portal
+// source. /api/status is the public hub status endpoint and is not
+// under /api/admin/, so the call goes directly to the hub rather than
+// through the portal admin proxy. Status is unauthenticated on most
+// hubs, so no token is sent.
+func (a *App) GetHubStatus(hubName string) HubStatus {
+	hubURL, err := a.lookupHubURL(hubName)
+	if err != nil {
+		return HubStatus{Error: err.Error()}
 	}
-
-	// Convert wss:// to https:// for the API call
-	apiURL := hubURL
-	apiURL = strings.Replace(apiURL, "wss://", "https://", 1)
-	apiURL = strings.Replace(apiURL, "ws://", "http://", 1)
-	apiURL = strings.TrimSuffix(apiURL, "/") + "/api/status"
+	apiURL := strings.TrimSuffix(hubURL, "/") + "/api/status"
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return HubStatus{Error: err.Error()}
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := a.doRequest(req, 15*time.Second)
 	if err != nil {
@@ -1174,43 +1160,50 @@ func maskToken(token string) string {
 	return token[:8] + "..."
 }
 
-// adminAPICall makes an authenticated request to a hub's admin API.
-// It logs every call to the command log as a curl command with the token masked.
-func (a *App) adminAPICall(hubURL, method, path string, body []byte) ([]byte, error) {
-	token := credstore.LookupToken(toWSURL(hubURL))
-	if token == "" {
-		return nil, fmt.Errorf("no token stored for this hub")
+// adminProxyCall issues an admin request against the named hub via
+// the active portal source's /api/hub-admin/{hubName}/{operation}
+// proxy. It is the only path TelaVisor uses to talk to a hub's admin
+// API: every Wails-bound admin function below is a thin wrapper
+// around this helper.
+//
+// hubName is the hub's short name as it appears in the portal
+// directory (NOT a URL; the portal owns the URL). operation is the
+// hub admin path with or without the leading "/api/admin/" prefix;
+// the helper strips it so call sites can keep their existing
+// readable strings. body is JSON-encoded bytes; pass nil for GET and
+// DELETE without bodies. The returned slice is the upstream response
+// body; non-2xx responses are translated into a Go error carrying
+// the documented {"error": "..."} message when the hub provides one.
+//
+// The helper picks the active portal source via PortalActiveSource;
+// callers do not need to know which source they are talking to. The
+// embedded source is the default on a fresh launch, so this path is
+// friction-free for users who never sign into a remote portal.
+func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]byte, error) {
+	if hubName == "" {
+		return nil, fmt.Errorf("adminProxyCall: hubName is required")
 	}
-
-	apiURL := strings.Replace(hubURL, "wss://", "https://", 1)
-	apiURL = strings.Replace(apiURL, "ws://", "http://", 1)
-	apiURL = strings.TrimSuffix(apiURL, "/") + path
-
-	// Log mutating requests automatically. GETs are logged by callers when user-initiated.
-	if method != "GET" {
-		masked := maskToken(token)
-		curlCmd := "curl -X " + method + " " + apiURL + " \\\n  -H \"Authorization: Bearer " + masked + "\""
-		if body != nil {
-			curlCmd += " \\\n  -H \"Content-Type: application/json\" \\\n  -d '" + string(body) + "'"
-		}
-		// HTTP logging handled by doRequest
+	sourceName, err := a.PortalActiveSource()
+	if err != nil {
+		return nil, fmt.Errorf("portal active source: %w", err)
 	}
-
-	var bodyReader io.Reader
-	if body != nil {
-		bodyReader = bytes.NewReader(body)
-	}
-
-	req, err := http.NewRequest(method, apiURL, bodyReader)
+	client, err := a.portalClientForSource(sourceName)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+
+	operation = strings.TrimPrefix(operation, "/api/admin/")
+	operation = strings.TrimPrefix(operation, "/")
+
+	var bodyAny any
+	if len(body) > 0 {
+		bodyAny = json.RawMessage(body)
 	}
 
-	resp, err := a.doRequestLogged(req, 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := client.HubAdmin(ctx, hubName, operation, method, bodyAny)
 	if err != nil {
 		return nil, err
 	}
@@ -1220,7 +1213,6 @@ func (a *App) adminAPICall(hubURL, method, path string, body []byte) ([]byte, er
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
-
 	if resp.StatusCode >= 400 {
 		var errResp struct {
 			Error string `json:"error"`
@@ -1230,17 +1222,16 @@ func (a *App) adminAPICall(hubURL, method, path string, body []byte) ([]byte, er
 		}
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-
 	return respBody, nil
 }
 
 // LogAdminGET is a no-op retained for frontend compatibility.
 // HTTP logging is handled automatically by doRequest.
-func (a *App) LogAdminGET(hubURL, path string) {}
+func (a *App) LogAdminGET(hubName, path string) {}
 
 // AdminListTokens returns the token list from a hub's admin API.
-func (a *App) AdminListTokens(hubURL string) string {
-	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/tokens", nil)
+func (a *App) AdminListTokens(hubName string) string {
+	data, err := a.adminProxyCall(hubName, "GET", "tokens", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1248,9 +1239,9 @@ func (a *App) AdminListTokens(hubURL string) string {
 }
 
 // AdminCreateToken creates a new token identity on a hub.
-func (a *App) AdminCreateToken(hubURL, id, role string) string {
+func (a *App) AdminCreateToken(hubName, id, role string) string {
 	body, _ := json.Marshal(map[string]string{"id": id, "role": role})
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/tokens", body)
+	data, err := a.adminProxyCall(hubName, "POST", "tokens", body)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1258,8 +1249,8 @@ func (a *App) AdminCreateToken(hubURL, id, role string) string {
 }
 
 // AdminDeleteToken removes a token identity from a hub.
-func (a *App) AdminDeleteToken(hubURL, id string) string {
-	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/access/"+url.PathEscape(id), nil)
+func (a *App) AdminDeleteToken(hubName, id string) string {
+	data, err := a.adminProxyCall(hubName, "DELETE", "access/"+url.PathEscape(id), nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1267,8 +1258,8 @@ func (a *App) AdminDeleteToken(hubURL, id string) string {
 }
 
 // AdminRotateToken regenerates a token for an identity on a hub.
-func (a *App) AdminRotateToken(hubURL, id string) string {
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/rotate/"+url.QueryEscape(id), nil)
+func (a *App) AdminRotateToken(hubName, id string) string {
+	data, err := a.adminProxyCall(hubName, "POST", "rotate/"+url.QueryEscape(id), nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1278,8 +1269,8 @@ func (a *App) AdminRotateToken(hubURL, id string) string {
 // ── Unified Access API ─────────────────────────────────────────────
 
 // AdminListAccess returns the unified access list (tokens + permissions joined).
-func (a *App) AdminListAccess(hubURL string) string {
-	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/access", nil)
+func (a *App) AdminListAccess(hubName string) string {
+	data, err := a.adminProxyCall(hubName, "GET", "access", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1287,10 +1278,10 @@ func (a *App) AdminListAccess(hubURL string) string {
 }
 
 // AdminSetMachineAccess sets permissions for an identity on a machine.
-func (a *App) AdminSetMachineAccess(hubURL, id, machineId, permissions string) string {
+func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions string) string {
 	perms := strings.Split(permissions, ",")
 	body, _ := json.Marshal(map[string]any{"permissions": perms})
-	data, err := a.adminAPICall(hubURL, "PUT", "/api/admin/access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), body)
+	data, err := a.adminProxyCall(hubName, "PUT", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), body)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1298,8 +1289,8 @@ func (a *App) AdminSetMachineAccess(hubURL, id, machineId, permissions string) s
 }
 
 // AdminRevokeMachineAccess revokes all permissions for an identity on a machine.
-func (a *App) AdminRevokeMachineAccess(hubURL, id, machineId string) string {
-	data, err := a.adminAPICall(hubURL, "DELETE", "/api/admin/access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), nil)
+func (a *App) AdminRevokeMachineAccess(hubName, id, machineId string) string {
+	data, err := a.adminProxyCall(hubName, "DELETE", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1307,9 +1298,9 @@ func (a *App) AdminRevokeMachineAccess(hubURL, id, machineId string) string {
 }
 
 // AdminRenameAccess renames a token identity.
-func (a *App) AdminRenameAccess(hubURL, id, newId string) string {
+func (a *App) AdminRenameAccess(hubName, id, newId string) string {
 	body, _ := json.Marshal(map[string]string{"id": newId})
-	data, err := a.adminAPICall(hubURL, "PATCH", "/api/admin/access/"+url.PathEscape(id), body)
+	data, err := a.adminProxyCall(hubName, "PATCH", "access/"+url.PathEscape(id), body)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1317,8 +1308,8 @@ func (a *App) AdminRenameAccess(hubURL, id, newId string) string {
 }
 
 // AdminListPortals returns the portal registrations from a hub's admin API.
-func (a *App) AdminListPortals(hubURL string) string {
-	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/portals", nil)
+func (a *App) AdminListPortals(hubName string) string {
+	data, err := a.adminProxyCall(hubName, "GET", "portals", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -1326,7 +1317,7 @@ func (a *App) AdminListPortals(hubURL string) string {
 }
 
 // AdminGeneratePairCode generates a pairing code on a hub.
-func (a *App) AdminGeneratePairCode(hubURL, pairType, role, machineId string, expiresIn string) string {
+func (a *App) AdminGeneratePairCode(hubName, pairType, role, machineId string, expiresIn string) string {
 	payload := map[string]any{"type": pairType, "role": role}
 	if machineId != "" {
 		payload["machineId"] = machineId
@@ -1335,51 +1326,116 @@ func (a *App) AdminGeneratePairCode(hubURL, pairType, role, machineId string, ex
 		payload["expiresIn"] = expiresIn
 	}
 	body, _ := json.Marshal(payload)
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/pair-code", body)
+	data, err := a.adminProxyCall(hubName, "POST", "pair-code", body)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
 	return string(data)
 }
 
-// GetHubInfo returns extended hub info from /api/status (hub metadata).
-func (a *App) GetHubInfo(hubURL string) string {
-	data, err := a.adminAPICall(hubURL, "GET", "/api/status", nil)
+// GetHubInfo returns extended hub info from the hub's /api/status
+// endpoint, fetched via the embedded portal's known URL for the hub.
+// The portal admin proxy only forwards /api/admin/* paths, so this
+// method goes around it: look up the hub URL via the active portal
+// source, then GET /api/status directly. Status is unauthenticated
+// (or viewer-token gated) so no admin token is needed.
+func (a *App) GetHubInfo(hubName string) string {
+	hubURL, err := a.lookupHubURL(hubName)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
-	return string(data)
+	apiURL := strings.TrimSuffix(hubURL, "/") + "/api/status"
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	resp, err := a.doRequestLogged(req, 15*time.Second)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	if resp.StatusCode >= 400 {
+		return `{"error":"HTTP ` + strconv.Itoa(resp.StatusCode) + `"}`
+	}
+	return string(body)
 }
 
-// GetTokenRole returns the role of the stored token by checking the token list.
-func (a *App) GetTokenRole(hubURL string) string {
-	token := credstore.LookupToken(toWSURL(hubURL))
-	if token == "" {
+// GetHubHistory fetches the hub's recent connection history. /api/history
+// is a public hub endpoint outside /api/admin/, so the call goes
+// directly to the hub URL resolved via the active portal source rather
+// than through the admin proxy.
+func (a *App) GetHubHistory(hubName string) string {
+	hubURL, err := a.lookupHubURL(hubName)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	apiURL := strings.TrimSuffix(hubURL, "/") + "/api/history"
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	resp, err := a.doRequestLogged(req, 15*time.Second)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	if resp.StatusCode >= 400 {
+		return `{"error":"HTTP ` + strconv.Itoa(resp.StatusCode) + `"}`
+	}
+	return string(body)
+}
+
+// GetTokenRole returns the role for the admin token the active portal
+// source has stored for this hub. The token is never exposed to TV
+// directly any more (it lives inside the portal store); we infer the
+// role by listing tokens via the proxy and finding the one whose
+// preview matches what the portal would have used. The proxy itself
+// strips and replaces the Authorization header, so we cannot read
+// the token directly. As a result, this method now returns "owner"
+// when the token list call succeeds (only owner/admin can list
+// tokens) and "unknown" when it fails. The frontend uses this only
+// to gate admin-only buttons; the coarser owner/unknown distinction
+// is sufficient for that.
+func (a *App) GetTokenRole(hubName string) string {
+	if _, err := a.adminProxyCall(hubName, "GET", "tokens", nil); err != nil {
 		return "unknown"
 	}
-	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/tokens", nil)
+	return "owner"
+}
+
+// lookupHubURL returns the URL for a named hub via the active portal
+// source. Used by methods that need direct access to the hub (the
+// /api/status path which is not under /api/admin/ and therefore not
+// proxied). Returns an error if no source has the hub.
+func (a *App) lookupHubURL(hubName string) (string, error) {
+	sourceName, err := a.PortalActiveSource()
 	if err != nil {
-		return "user" // can't determine, assume user
+		return "", err
 	}
-	preview := token
-	if len(preview) > 8 {
-		preview = preview[:8] + "..."
+	client, err := a.portalClientForSource(sourceName)
+	if err != nil {
+		return "", err
 	}
-	var resp struct {
-		Tokens []struct {
-			ID           string `json:"id"`
-			Role         string `json:"role"`
-			TokenPreview string `json:"tokenPreview"`
-		} `json:"tokens"`
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	hubs, err := client.ListHubs(ctx)
+	if err != nil {
+		return "", err
 	}
-	if json.Unmarshal(data, &resp) == nil {
-		for _, t := range resp.Tokens {
-			if t.TokenPreview == preview {
-				return t.Role
-			}
+	for _, h := range hubs {
+		if h.Name == hubName {
+			return h.URL, nil
 		}
 	}
-	return "user"
+	return "", fmt.Errorf("hub %q not found in portal source %q", hubName, sourceName)
 }
 
 // --- Docker Integration ---
@@ -2141,13 +2197,18 @@ func (a *App) GetControlStatus() map[string]interface{} {
 	return result
 }
 
-// AdminAPICall is the public Wails binding for adminAPICall.
-func (a *App) AdminAPICall(hubURL, method, path string, bodyJSON string) string {
+// AdminAPICall is the public Wails binding for ad-hoc admin requests
+// from the frontend. hubName is the portal hub name (not a URL);
+// operation is a path under /api/admin/ such as "tokens" or
+// "agents/{id}/restart". The legacy "/api/admin/" prefix on operation
+// is tolerated for the frontend's convenience and stripped before the
+// proxy call.
+func (a *App) AdminAPICall(hubName, method, operation string, bodyJSON string) string {
 	var body []byte
 	if bodyJSON != "" {
 		body = []byte(bodyJSON)
 	}
-	data, err := a.adminAPICall(hubURL, method, path, body)
+	data, err := a.adminProxyCall(hubName, method, operation, body)
 	if err != nil {
 		return `{"error":"` + strings.ReplaceAll(err.Error(), `"`, `'`) + `"}`
 	}
@@ -2175,97 +2236,94 @@ type AgentInfo struct {
 	Capabilities map[string]interface{}   `json:"capabilities"`
 }
 
-// GetAgentList returns agent info for all machines across all hubs
-// in the current profile.
+// GetAgentList returns agent info for every agent the active portal
+// source can see across all of its hubs. The portal's
+// /api/fleet/agents endpoint does the cross-hub aggregation server
+// side: each entry is an upstream hub's /api/status machine record
+// tagged with `hub` (hub name) and `hubUrl`. This replaces the older
+// per-profile-hub iteration; the active portal source is the source
+// of truth for which hubs to query.
 func (a *App) GetAgentList() []AgentInfo {
-	var result []AgentInfo
-
-	data, err := os.ReadFile(profilePath())
+	sourceName, err := a.PortalActiveSource()
 	if err != nil {
-		return result
+		return nil
 	}
-	var profile Profile
-	if yaml.Unmarshal(data, &profile) != nil {
-		return result
+	client, err := a.portalClientForSource(sourceName)
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	agents, err := client.FleetAgents(ctx)
+	if err != nil {
+		return nil
 	}
 
-	hubsSeen := map[string]bool{}
-	for _, conn := range profile.Connections {
-		if hubsSeen[conn.Hub] {
-			continue
+	result := make([]AgentInfo, 0, len(agents))
+	for _, m := range agents {
+		ai := AgentInfo{}
+		if v, ok := m["id"].(string); ok {
+			ai.ID = v
 		}
-		hubsSeen[conn.Hub] = true
-
-		statusData, err := a.adminAPICall(conn.Hub, "GET", "/api/status", nil)
-		if err != nil {
-			continue
+		if v, ok := m["hub"].(string); ok {
+			ai.Hub = v
 		}
-		var status struct {
-			Machines []struct {
-				ID             string                   `json:"id"`
-				AgentConnected bool                     `json:"agentConnected"`
-				AgentVersion   *string                  `json:"agentVersion"`
-				Hostname       *string                  `json:"hostname"`
-				OS             *string                  `json:"os"`
-				DisplayName    *string                  `json:"displayName"`
-				Tags           []string                 `json:"tags"`
-				Location       *string                  `json:"location"`
-				Owner          *string                  `json:"owner"`
-				SessionCount   int                      `json:"sessionCount"`
-				RegisteredAt   *string                  `json:"registeredAt"`
-				LastSeen       *string                  `json:"lastSeen"`
-				Services       []map[string]interface{} `json:"services"`
-				Capabilities   map[string]interface{}   `json:"capabilities"`
-			} `json:"machines"`
+		if v, ok := m["agentConnected"].(bool); ok {
+			ai.Online = v
 		}
-		if json.Unmarshal(statusData, &status) != nil {
-			continue
+		if v, ok := m["agentVersion"].(string); ok {
+			ai.Version = v
 		}
-
-		hubName := hubNameFromURLGo(conn.Hub)
-		for _, m := range status.Machines {
-			ai := AgentInfo{
-				ID:           m.ID,
-				Hub:          hubName,
-				Online:       m.AgentConnected,
-				SessionCount: m.SessionCount,
-				Services:     m.Services,
-				Capabilities: m.Capabilities,
-				Tags:         m.Tags,
-			}
-			if m.AgentVersion != nil {
-				ai.Version = *m.AgentVersion
-			}
-			if m.Hostname != nil {
-				ai.Hostname = *m.Hostname
-			}
-			if m.OS != nil {
-				ai.OS = *m.OS
-			}
-			if m.DisplayName != nil {
-				ai.DisplayName = *m.DisplayName
-			}
-			if m.Location != nil {
-				ai.Location = *m.Location
-			}
-			if m.Owner != nil {
-				ai.Owner = *m.Owner
-			}
-			if m.RegisteredAt != nil {
-				ai.RegisteredAt = *m.RegisteredAt
-			}
-			if m.LastSeen != nil {
-				ai.LastSeen = *m.LastSeen
-			}
-			result = append(result, ai)
+		if v, ok := m["hostname"].(string); ok {
+			ai.Hostname = v
 		}
+		if v, ok := m["os"].(string); ok {
+			ai.OS = v
+		}
+		if v, ok := m["displayName"].(string); ok {
+			ai.DisplayName = v
+		}
+		if v, ok := m["location"].(string); ok {
+			ai.Location = v
+		}
+		if v, ok := m["owner"].(string); ok {
+			ai.Owner = v
+		}
+		if v, ok := m["registeredAt"].(string); ok {
+			ai.RegisteredAt = v
+		}
+		if v, ok := m["lastSeen"].(string); ok {
+			ai.LastSeen = v
+		}
+		if v, ok := m["sessionCount"].(float64); ok {
+			ai.SessionCount = int(v)
+		}
+		if tags, ok := m["tags"].([]any); ok {
+			for _, t := range tags {
+				if s, ok := t.(string); ok {
+					ai.Tags = append(ai.Tags, s)
+				}
+			}
+		}
+		if svcs, ok := m["services"].([]any); ok {
+			for _, s := range svcs {
+				if sm, ok := s.(map[string]any); ok {
+					ai.Services = append(ai.Services, sm)
+				}
+			}
+		}
+		if caps, ok := m["capabilities"].(map[string]any); ok {
+			ai.Capabilities = caps
+		}
+		result = append(result, ai)
 	}
 	return result
 }
 
 // GetAgentConfig retrieves an agent's running configuration via the hub management API.
-func (a *App) GetAgentConfig(hubURL, machineID string) string {
-	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/agents/"+url.QueryEscape(machineID)+"/config-get", nil)
+func (a *App) GetAgentConfig(hubName, machineID string) string {
+	data, err := a.adminProxyCall(hubName, "GET", "agents/"+url.QueryEscape(machineID)+"/config-get", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2273,10 +2331,10 @@ func (a *App) GetAgentConfig(hubURL, machineID string) string {
 }
 
 // SetAgentConfig pushes a config update to an agent via the hub management API.
-func (a *App) SetAgentConfig(hubURL, machineID, fieldsJSON string) string {
-	log.Printf("[telavisor] SetAgentConfig: machine=%q hub=%q fields=%s", machineID, hubURL, fieldsJSON)
+func (a *App) SetAgentConfig(hubName, machineID, fieldsJSON string) string {
+	log.Printf("[telavisor] SetAgentConfig: machine=%q hub=%q fields=%s", machineID, hubName, fieldsJSON)
 	payload := json.RawMessage(`{"machine":"` + machineID + `","fields":` + fieldsJSON + `}`)
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/config-set", payload)
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/config-set", payload)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2284,12 +2342,12 @@ func (a *App) SetAgentConfig(hubURL, machineID, fieldsJSON string) string {
 }
 
 // GetAgentLogs retrieves recent log lines from an agent via the hub management API.
-func (a *App) GetAgentLogs(hubURL, machineID string, lines int) string {
+func (a *App) GetAgentLogs(hubName, machineID string, lines int) string {
 	if lines <= 0 {
 		lines = 100
 	}
 	payload := json.RawMessage(fmt.Sprintf(`{"lines":%d}`, lines))
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/logs", payload)
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/logs", payload)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2297,8 +2355,8 @@ func (a *App) GetAgentLogs(hubURL, machineID string, lines int) string {
 }
 
 // RestartAgent requests a remote agent restart via the hub management API.
-func (a *App) RestartAgent(hubURL, machineID string) string {
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/restart", nil)
+func (a *App) RestartAgent(hubName, machineID string) string {
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/restart", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2307,12 +2365,12 @@ func (a *App) RestartAgent(hubURL, machineID string) string {
 
 // UpdateAgent requests a remote agent self-update via the hub management API.
 // If version is empty, the agent resolves "latest" from GitHub releases.
-func (a *App) UpdateAgent(hubURL, machineID, version string) string {
+func (a *App) UpdateAgent(hubName, machineID, version string) string {
 	payload := json.RawMessage(`{}`)
 	if version != "" {
 		payload = json.RawMessage(fmt.Sprintf(`{"version":%q}`, version))
 	}
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/update", payload)
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/update", payload)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2320,12 +2378,12 @@ func (a *App) UpdateAgent(hubURL, machineID, version string) string {
 }
 
 // GetHubLogs retrieves recent log lines from a hub via the admin API.
-func (a *App) GetHubLogs(hubURL string, lines int) string {
+func (a *App) GetHubLogs(hubName string, lines int) string {
 	if lines <= 0 {
 		lines = 500
 	}
-	path := fmt.Sprintf("/api/admin/logs?lines=%d", lines)
-	data, err := a.adminAPICall(hubURL, "GET", path, nil)
+	op := fmt.Sprintf("logs?lines=%d", lines)
+	data, err := a.adminProxyCall(hubName, "GET", op, nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2333,12 +2391,12 @@ func (a *App) GetHubLogs(hubURL string, lines int) string {
 }
 
 // UpdateHub triggers a self-update on a remote hub via the admin API.
-func (a *App) UpdateHub(hubURL, version string) string {
+func (a *App) UpdateHub(hubName, version string) string {
 	payload := json.RawMessage(`{}`)
 	if version != "" {
 		payload = json.RawMessage(fmt.Sprintf(`{"version":%q}`, version))
 	}
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/update", payload)
+	data, err := a.adminProxyCall(hubName, "POST", "update", payload)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2346,8 +2404,8 @@ func (a *App) UpdateHub(hubURL, version string) string {
 }
 
 // RestartHub requests a remote hub restart via the admin API.
-func (a *App) RestartHub(hubURL string) string {
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/restart", nil)
+func (a *App) RestartHub(hubName string) string {
+	data, err := a.adminProxyCall(hubName, "POST", "restart", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2359,8 +2417,8 @@ func (a *App) RestartHub(hubURL string) string {
 //	{ channel, manifestUrl, currentVersion, latestVersion, updateAvailable }
 //
 // Returned unchanged from the hub's GET /api/admin/update response.
-func (a *App) GetHubChannelInfo(hubURL string) string {
-	data, err := a.adminAPICall(hubURL, "GET", "/api/admin/update", nil)
+func (a *App) GetHubChannelInfo(hubName string) string {
+	data, err := a.adminProxyCall(hubName, "GET", "update", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2368,9 +2426,9 @@ func (a *App) GetHubChannelInfo(hubURL string) string {
 }
 
 // SetHubChannel changes the hub's release channel via PATCH /api/admin/update.
-func (a *App) SetHubChannel(hubURL, channelName string) string {
+func (a *App) SetHubChannel(hubName, channelName string) string {
 	payload := json.RawMessage(fmt.Sprintf(`{"channel":%q}`, channelName))
-	data, err := a.adminAPICall(hubURL, "PATCH", "/api/admin/update", payload)
+	data, err := a.adminProxyCall(hubName, "PATCH", "update", payload)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2379,8 +2437,8 @@ func (a *App) SetHubChannel(hubURL, channelName string) string {
 
 // GetAgentChannelInfo reads a remote agent's channel status through the
 // hub-mediated management protocol.
-func (a *App) GetAgentChannelInfo(hubURL, machineID string) string {
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/update-status", nil)
+func (a *App) GetAgentChannelInfo(hubName, machineID string) string {
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/update-status", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2389,9 +2447,9 @@ func (a *App) GetAgentChannelInfo(hubURL, machineID string) string {
 
 // SetAgentChannel sets a remote agent's release channel through the
 // hub-mediated management protocol.
-func (a *App) SetAgentChannel(hubURL, machineID, channelName string) string {
+func (a *App) SetAgentChannel(hubName, machineID, channelName string) string {
 	payload := json.RawMessage(fmt.Sprintf(`{"channel":%q}`, channelName))
-	data, err := a.adminAPICall(hubURL, "POST", "/api/admin/agents/"+url.QueryEscape(machineID)+"/update-channel", payload)
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/update-channel", payload)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}

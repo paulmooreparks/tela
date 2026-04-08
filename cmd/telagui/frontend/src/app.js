@@ -272,11 +272,10 @@ function hubViewLogs(hubName) {
   var panel = document.getElementById('log-panel');
   if (panel.classList.contains('collapsed')) toggleLogPanel();
 
-  var wsHub = toWSURL(hubName);
   var dot = document.getElementById(paneId + '-dot');
   if (dot) dot.className = 'log-dot log-dot-warn';
 
-  goApp.GetHubLogs(wsHub, 500).then(function (resp) {
+  goApp.GetHubLogs(hubName, 500).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) {
       document.getElementById(paneId).textContent = 'Error: invalid response\n';
       if (dot) dot.className = 'log-dot log-dot-idle';
@@ -1778,7 +1777,7 @@ function renderHubInSidebar(content, hub, isConnected) {
   content.appendChild(hubContainer);
 
   if (hub.hasToken) {
-    goApp.GetHubStatus(hub.url).then(function (status) {
+    goApp.GetHubStatus(hub.name).then(function (status) {
       hubStatusCache[hub.url] = status;
       hubHeader.querySelector('.hub-dot').className = 'hub-dot ' + (status.online ? 'online' : 'offline');
 
@@ -2732,7 +2731,7 @@ function agentsShowDetail(a) {
   document.getElementById('agents-detail').innerHTML = html;
 
   if (canManage && document.getElementById('agent-channel-select')) {
-    loadAgentChannel(toWSURL(a.hub), a.id);
+    loadAgentChannel(a.hub, a.id);
   }
 }
 
@@ -2747,8 +2746,7 @@ function agentsPairAgent() {
 
   showPromptDialog('Pair Agent', 'Enter the machine name for the new agent:', '', 'Generate Code').then(function (machine) {
     if (!machine) return;
-    var wsHub = toWSURL(hub);
-    goApp.AdminAPICall(wsHub, 'POST', '/api/admin/pair-code',
+    goApp.AdminAPICall(hub, 'POST', 'pair-code',
       JSON.stringify({type: 'register', machines: [machine]}))
       .then(function (resp) {
         try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
@@ -2814,12 +2812,11 @@ function agentsSaveConfig() {
     }
   }
 
-  var wsHub = toWSURL(agentsSelectedHub);
   var saveBtn = document.getElementById('agents-save-btn');
   saveBtn.textContent = 'Saving...';
   saveBtn.disabled = true;
 
-  goApp.SetAgentConfig(wsHub, agentsSelectedId, JSON.stringify(fields)).then(function (resp) {
+  goApp.SetAgentConfig(agentsSelectedHub, agentsSelectedId, JSON.stringify(fields)).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) {}
     if (data && (data.error || data.ok === false)) {
       tvLog('Save failed: ' + (data.error || data.message || 'unknown error'));
@@ -2847,8 +2844,7 @@ function agentsSaveConfig() {
 }
 
 function agentsViewConfig(machineId, hub) {
-  var wsHub = toWSURL(hub);
-  goApp.GetAgentConfig(wsHub, machineId).then(function (resp) {
+  goApp.GetAgentConfig(hub, machineId).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
     if (data.error) { showError('Config error: ' + data.error); return; }
     var pretty = JSON.stringify(data, null, 2);
@@ -2923,11 +2919,10 @@ function agentsViewLogs(machineId, hub) {
   if (panel.classList.contains('collapsed')) toggleLogPanel();
 
   // Fetch logs
-  var wsHub = toWSURL(hub);
   var dot = document.getElementById(paneId + '-dot');
   if (dot) dot.className = 'log-dot log-dot-warn';
 
-  goApp.GetAgentLogs(wsHub, machineId, 500).then(function (resp) {
+  goApp.GetAgentLogs(hub, machineId, 500).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) {
       document.getElementById(paneId).textContent = 'Error: invalid response\n';
       if (dot) dot.className = 'log-dot log-dot-idle';
@@ -3000,8 +2995,7 @@ function restoreLogTabs(tabs) {
 function agentsRestart(machineId, hub) {
   showConfirmDialog('Restart Agent', 'Restart telad on ' + machineId + '? Active sessions will be interrupted.', 'Restart').then(function (yes) {
     if (!yes) return;
-    var wsHub = toWSURL(hub);
-    goApp.RestartAgent(wsHub, machineId).then(function (resp) {
+    goApp.RestartAgent(hub, machineId).then(function (resp) {
       try { var data = JSON.parse(resp); } catch (e) {}
       if (data && data.error) { showError('Restart failed: ' + data.error); return; }
       tvLog('Restart requested for ' + machineId);
@@ -3017,13 +3011,12 @@ function agentUpdateStatus(msg) {
 function agentsUpdate(machineId, hub) {
   showConfirmDialog('Update Agent', 'Download and install the latest telad on ' + machineId + '? The agent will restart after updating.', 'Update').then(function (yes) {
     if (!yes) return;
-    var wsHub = toWSURL(hub);
     var btn = document.getElementById('agent-update-btn');
     if (btn) btn.disabled = true;
     agentUpdateStatus('Sending update request...');
     tvLog('Updating telad on ' + machineId + '...');
 
-    goApp.UpdateAgent(wsHub, machineId, '').then(function (resp) {
+    goApp.UpdateAgent(hub, machineId, '').then(function (resp) {
       try { var data = JSON.parse(resp); } catch (e) {}
       if (data && data.error) {
         agentUpdateStatus('');
@@ -3046,7 +3039,7 @@ function agentsUpdate(machineId, hub) {
       if (verMatch) targetVer = verMatch[1];
 
       agentUpdateStatus('Agent is downloading update and restarting...');
-      pollAgentOnline(wsHub, machineId, hub, targetVer, 0);
+      pollAgentOnline(machineId, hub, targetVer, 0);
     }).catch(function (err) {
       agentUpdateStatus('');
       if (btn) btn.disabled = false;
@@ -3055,7 +3048,7 @@ function agentsUpdate(machineId, hub) {
   });
 }
 
-function pollAgentOnline(wsHub, machineId, hub, targetVer, attempt) {
+function pollAgentOnline(machineId, hub, targetVer, attempt) {
   if (attempt > 30) {
     agentUpdateStatus('Agent did not come back online.');
     tvLog(machineId + ': agent did not come back after update');
@@ -3079,11 +3072,11 @@ function pollAgentOnline(wsHub, machineId, hub, targetVer, attempt) {
         if (fresh) agentsShowDetail(fresh);
       } else {
         agentUpdateStatus('Waiting for agent to restart... (' + (attempt + 1) + ')');
-        pollAgentOnline(wsHub, machineId, hub, targetVer, attempt + 1);
+        pollAgentOnline(machineId, hub, targetVer, attempt + 1);
       }
     }).catch(function () {
       agentUpdateStatus('Waiting for agent to restart... (' + (attempt + 1) + ')');
-      pollAgentOnline(wsHub, machineId, hub, targetVer, attempt + 1);
+      pollAgentOnline(machineId, hub, targetVer, attempt + 1);
     });
   }, 2000);
 }
@@ -3961,12 +3954,12 @@ function refreshHubsTab() {
     }
     hubs.forEach(function (hub) {
       var opt = document.createElement('option');
-      opt.value = hub.url;
+      opt.value = hub.name;
       opt.textContent = hub.name;
       select.appendChild(opt);
     });
     // Restore previous selection or use first
-    if (prev && hubs.some(function (h) { return h.url === prev; })) {
+    if (prev && hubs.some(function (h) { return h.name === prev; })) {
       select.value = prev;
     }
     currentAdminHub = select.value;
@@ -4010,7 +4003,7 @@ function renderHubAdminDetail() {
 
 function renderHubSettings(pane) {
   var hub = currentAdminHub;
-  var hubName = hubNameFromUrl(hub);
+  var hubName = hub;
   pane.innerHTML = '<h2>Hub Settings</h2>'
     + '<p class="section-desc">Connection and configuration for <strong>' + escHtml(hubName) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
@@ -4147,7 +4140,7 @@ function formatUptime(secs) {
 function renderHubMachines(pane) {
   var hub = currentAdminHub;
   pane.innerHTML = '<h2>Machines</h2>'
-    + '<p class="section-desc">Registered machines on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="section-desc">Registered machines on <strong>' + escHtml(hub) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
 
@@ -4157,7 +4150,7 @@ function renderHubMachines(pane) {
       return;
     }
     var html = '<h2>Machines</h2>'
-      + '<p class="section-desc">Registered machines on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>';
+      + '<p class="section-desc">Registered machines on <strong>' + escHtml(hub) + '</strong></p>';
 
     if (!status.machines || status.machines.length === 0) {
       html += '<p class="empty-hint">No machines registered.</p>';
@@ -4193,7 +4186,7 @@ function renderHubMachines(pane) {
 function renderHubTokens(pane) {
   var hub = currentAdminHub;
   pane.innerHTML = '<h2>Tokens</h2>'
-    + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hub) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
 
@@ -4207,7 +4200,7 @@ function renderHubTokens(pane) {
     var tokens = data.tokens || [];
 
     var html = '<h2>Tokens</h2>'
-      + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>';
+      + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hub) + '</strong></p>';
 
     html += '<div class="toolbar">'
       + '<button class="btn-primary btn-sm" onclick="promptCreateToken()">Add Token</button>'
@@ -4440,7 +4433,7 @@ function accessGrantModal() {
   // Load tokens and machines for dropdowns
   Promise.all([
     goApp.AdminListTokens(currentAdminHub).then(function (r) { try { return JSON.parse(r); } catch (e) { return {}; } }),
-    goApp.GetHubStatus(toWSURL(currentAdminHub)).then(function (s) { return s; })
+    goApp.GetHubStatus(currentAdminHub).then(function (s) { return s; })
   ]).then(function (results) {
     var tokenData = results[0];
     var statusData = results[1];
@@ -4493,7 +4486,7 @@ function renderHubConsole(pane) {
   var consoleUrl = hub.replace('wss://', 'https://').replace('ws://', 'http://');
   consoleUrl = consoleUrl.replace(/\/$/, '') + '/';
   pane.innerHTML = '<h2>Hub Console</h2>'
-    + '<p class="section-desc">Embedded console for <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="section-desc">Embedded console for <strong>' + escHtml(hub) + '</strong></p>'
     + '<div style="margin-bottom:8px;"><a href="' + escAttr(consoleUrl) + '" target="_blank" rel="noopener" style="font-size:0.82rem;color:var(--accent);">Open in browser</a></div>'
     + '<iframe src="' + escAttr(consoleUrl) + '" style="width:100%;height:500px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);"></iframe>';
 }
@@ -4503,11 +4496,11 @@ function renderHubConsole(pane) {
 function renderHubHistory(pane) {
   var hub = currentAdminHub;
   pane.innerHTML = '<h2>Connection History</h2>'
-    + '<p class="section-desc">Recent sessions on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>'
+    + '<p class="section-desc">Recent sessions on <strong>' + escHtml(hub) + '</strong></p>'
     + '<p class="loading">Loading...</p>';
 
 
-  goApp.AdminAPICall(hub, 'GET', '/api/history', '').then(function (raw) {
+  goApp.GetHubHistory(hub).then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { data = {}; }
     if (data.error) {
@@ -4518,7 +4511,7 @@ function renderHubHistory(pane) {
     if (!Array.isArray(events)) events = [];
 
     var html = '<h2>Connection History</h2>'
-      + '<p class="section-desc">Recent sessions on <strong>' + escHtml(hubNameFromUrl(hub)) + '</strong></p>';
+      + '<p class="section-desc">Recent sessions on <strong>' + escHtml(hub) + '</strong></p>';
 
     if (events.length === 0) {
       html += '<p class="empty-hint">No history available.</p>';
@@ -4775,7 +4768,153 @@ function refreshTerminal() {
 
 // --- Settings ---
 
+// ── Portal sources (Settings > Portal Sources) ────────────────────
+
+// State for the in-progress device code flow.
+var portalSourceFlow = null;
+
+function refreshPortalSources() {
+  var listEl = document.getElementById('portal-sources-list');
+  if (!listEl) return;
+  Promise.all([
+    goApp.PortalListSources(),
+    goApp.PortalActiveSource()
+  ]).then(function (results) {
+    var sources = results[0] || [];
+    var active = results[1] || '';
+    if (sources.length === 0) {
+      listEl.innerHTML = '<p class="empty-hint">No portal sources configured.</p>';
+      return;
+    }
+    var html = '';
+    sources.forEach(function (s) {
+      var isActive = s.name === active;
+      var isEmbedded = s.kind === 'embedded';
+      html += '<div class="portal-sources-row">'
+        + '<div class="source-info">'
+        + '<div><span class="source-name">' + escHtml(s.name) + '</span>'
+        + (isActive ? '<span class="source-active">(active)</span>' : '')
+        + '</div>'
+        + '<div class="source-url">' + escHtml(s.url) + '</div>'
+        + '</div>'
+        + '<div class="source-actions">';
+      if (!isActive) {
+        html += '<button type="button" class="tb-btn" onclick="portalSourceSetActive(\'' + escAttr(s.name) + '\')">Use</button>';
+      }
+      if (!isEmbedded) {
+        html += '<button type="button" class="tb-btn" onclick="portalSourceRemove(\'' + escAttr(s.name) + '\')">Remove</button>';
+      }
+      html += '</div></div>';
+    });
+    listEl.innerHTML = html;
+  }).catch(function (err) {
+    listEl.innerHTML = '<p class="empty-hint">Failed to load: ' + escHtml(String(err)) + '</p>';
+  });
+}
+
+function portalSourceSetActive(name) {
+  goApp.PortalSetActiveSource(name).then(function () {
+    refreshPortalSources();
+    // The hub list depends on the active source; force a refresh.
+    if (typeof refreshHubsTab === 'function') refreshHubsTab();
+  }).catch(function (err) {
+    showError('Failed to set active source: ' + err);
+  });
+}
+
+function portalSourceRemove(name) {
+  showConfirmDialog('Remove Portal Source', 'Remove the portal source "' + name + '"? You can sign in again later.', 'Remove').then(function (yes) {
+    if (!yes) return;
+    goApp.PortalRemoveSource(name).then(function () {
+      refreshPortalSources();
+      if (typeof refreshHubsTab === 'function') refreshHubsTab();
+    }).catch(function (err) {
+      showError('Failed to remove source: ' + err);
+    });
+  });
+}
+
+function openAddPortalSourceDialog() {
+  portalSourceFlow = null;
+  document.getElementById('portal-source-step-url').classList.remove('hidden');
+  document.getElementById('portal-source-step-code').classList.add('hidden');
+  document.getElementById('portal-source-step-name').classList.add('hidden');
+  document.getElementById('portal-source-url-input').value = '';
+  document.getElementById('portal-source-error').classList.add('hidden');
+  document.getElementById('add-portal-source-modal').classList.remove('hidden');
+}
+
+function closeAddPortalSourceDialog() {
+  document.getElementById('add-portal-source-modal').classList.add('hidden');
+  portalSourceFlow = null;
+}
+
+function portalSourceBeginSignIn() {
+  var url = document.getElementById('portal-source-url-input').value.trim();
+  var errEl = document.getElementById('portal-source-error');
+  errEl.classList.add('hidden');
+  if (!url) {
+    errEl.textContent = 'Please enter a portal URL.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  errEl.textContent = 'Discovering portal...';
+  errEl.classList.remove('hidden');
+
+  goApp.PortalDeviceAuthStart(url).then(function (result) {
+    portalSourceFlow = result;
+    document.getElementById('portal-source-step-url').classList.add('hidden');
+    document.getElementById('portal-source-step-code').classList.remove('hidden');
+    document.getElementById('portal-source-user-code').textContent = result.userCode;
+    document.getElementById('portal-source-verification-uri').textContent = result.verificationURI;
+    document.getElementById('portal-source-poll-status').textContent = 'Waiting for authorization in your browser...';
+
+    // Pre-fill source name with the host portion of the URL.
+    var hostGuess = result.baseURL.replace(/^https?:\/\//, '').replace(/\/$/, '').split(':')[0];
+    document.getElementById('portal-source-name-input').value = hostGuess;
+
+    // Kick off polling. PortalDeviceAuthComplete blocks until token,
+    // denied, or expired -- one promise, no client-side loop.
+    goApp.PortalDeviceAuthComplete(hostGuess, result.baseURL, result.deviceCode, result.interval).then(function () {
+      // Backend persisted and marked the source active. Switch to the
+      // name step so the user can confirm or rename. The Save button
+      // calls PortalDeviceAuthComplete again only if the name changed.
+      document.getElementById('portal-source-step-code').classList.add('hidden');
+      document.getElementById('portal-source-step-name').classList.remove('hidden');
+      document.getElementById('portal-source-poll-status').textContent = 'Authorized.';
+    }).catch(function (err) {
+      document.getElementById('portal-source-poll-status').textContent = 'Sign-in failed: ' + err;
+    });
+  }).catch(function (err) {
+    errEl.textContent = 'Failed: ' + err;
+    errEl.classList.remove('hidden');
+  });
+}
+
+function portalSourceFinish() {
+  // The backend already persisted the source under the host-derived
+  // name during PortalDeviceAuthComplete. If the user typed a
+  // different name, rename it now via remove + re-add.
+  var name = document.getElementById('portal-source-name-input').value.trim();
+  var errEl = document.getElementById('portal-source-name-error');
+  errEl.classList.add('hidden');
+  if (!name) {
+    errEl.textContent = 'Please enter a name.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  // For now, the backend always names the source after the host. A
+  // rename round-trip would need a separate Wails method; for v1 we
+  // accept the host name and close the dialog. The user can use
+  // the embedded source as "Local" and the remote source as
+  // hostname; renaming arrives in a follow-up.
+  closeAddPortalSourceDialog();
+  refreshPortalSources();
+  if (typeof refreshHubsTab === 'function') refreshHubsTab();
+}
+
 function refreshSettings() {
+  refreshPortalSources();
   goApp.GetSettings().then(function (s) {
     document.getElementById('setting-autoConnect').checked = s.autoConnect;
     document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;

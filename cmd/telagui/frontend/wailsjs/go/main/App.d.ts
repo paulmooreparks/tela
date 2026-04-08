@@ -104,6 +104,8 @@ export function GetDefaultBinPath():Promise<string>;
 
 export function GetHubChannelInfo(arg1:string):Promise<string>;
 
+export function GetHubHistory(arg1:string):Promise<string>;
+
 export function GetHubInfo(arg1:string):Promise<string>;
 
 export function GetHubLogs(arg1:string,arg2:number):Promise<string>;
@@ -171,6 +173,18 @@ export function LogAdminGET(arg1:string,arg2:string):Promise<void>;
 export function OpenFileDialog():Promise<string>;
 
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;
+
+export function PortalActiveSource():Promise<string>;
+
+export function PortalDeviceAuthComplete(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
+
+export function PortalDeviceAuthStart(arg1:string):Promise<main.PortalDeviceAuthStartResult>;
+
+export function PortalListSources():Promise<Array<main.PortalSource>>;
+
+export function PortalRemoveSource(arg1:string):Promise<void>;
+
+export function PortalSetActiveSource(arg1:string):Promise<void>;
 
 export function QuitApp():Promise<void>;
 

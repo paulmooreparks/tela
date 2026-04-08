@@ -206,6 +206,10 @@ export function GetHubChannelInfo(arg1) {
   return window['go']['main']['App']['GetHubChannelInfo'](arg1);
 }
 
+export function GetHubHistory(arg1) {
+  return window['go']['main']['App']['GetHubHistory'](arg1);
+}
+
 export function GetHubInfo(arg1) {
   return window['go']['main']['App']['GetHubInfo'](arg1);
 }
@@ -340,6 +344,30 @@ export function OpenFileDialog() {
 
 export function PairWithCode(arg1, arg2) {
   return window['go']['main']['App']['PairWithCode'](arg1, arg2);
+}
+
+export function PortalActiveSource() {
+  return window['go']['main']['App']['PortalActiveSource']();
+}
+
+export function PortalDeviceAuthComplete(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['PortalDeviceAuthComplete'](arg1, arg2, arg3, arg4);
+}
+
+export function PortalDeviceAuthStart(arg1) {
+  return window['go']['main']['App']['PortalDeviceAuthStart'](arg1);
+}
+
+export function PortalListSources() {
+  return window['go']['main']['App']['PortalListSources']();
+}
+
+export function PortalRemoveSource(arg1) {
+  return window['go']['main']['App']['PortalRemoveSource'](arg1);
+}
+
+export function PortalSetActiveSource(arg1) {
+  return window['go']['main']['App']['PortalSetActiveSource'](arg1);
 }
 
 export function QuitApp() {

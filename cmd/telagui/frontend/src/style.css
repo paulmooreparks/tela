@@ -2194,3 +2194,25 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 [data-theme="dark"] .admin-form-row select {
   background: var(--bg); color: var(--text); border-color: var(--border);
 }
+
+/* Portal sources (Settings > Portal Sources, Add Portal Source modal) */
+.portal-sources-desc { margin: 0 0 8px 0; }
+.portal-sources-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; gap: 8px;
+}
+.portal-sources-row .source-info { display: flex; flex-direction: column; }
+.portal-sources-row .source-name { font-weight: 600; }
+.portal-sources-row .source-url { font-size: 12px; color: var(--text-muted); word-break: break-all; }
+.portal-sources-row .source-active { font-size: 11px; color: var(--accent); margin-left: 6px; }
+.portal-sources-row .source-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.portal-source-add-row { margin-top: 8px; }
+.portal-source-input { width: 100%; }
+.portal-source-actions { margin-top: 12px; display: flex; gap: 8px; }
+.portal-source-code-box { text-align: center; margin: 16px 0; }
+.portal-source-code-label { font-size: 12px; color: var(--text-muted); }
+.portal-source-code-value {
+  font-size: 28px; font-family: monospace; letter-spacing: 4px; margin: 8px 0;
+}
+.portal-source-poll-status { text-align: center; }
+.portal-source-verification { word-break: break-all; }

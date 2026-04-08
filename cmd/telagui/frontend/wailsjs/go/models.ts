@@ -361,6 +361,46 @@ export namespace main {
 	        this.localPort = source["localPort"];
 	    }
 	}
+	export class PortalDeviceAuthStartResult {
+	    baseURL: string;
+	    deviceCode: string;
+	    userCode: string;
+	    verificationURI: string;
+	    expiresIn: number;
+	    interval: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortalDeviceAuthStartResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseURL = source["baseURL"];
+	        this.deviceCode = source["deviceCode"];
+	        this.userCode = source["userCode"];
+	        this.verificationURI = source["verificationURI"];
+	        this.expiresIn = source["expiresIn"];
+	        this.interval = source["interval"];
+	    }
+	}
+	export class PortalSource {
+	    name: string;
+	    kind: string;
+	    url: string;
+	    addedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortalSource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.url = source["url"];
+	        this.addedAt = source["addedAt"];
+	    }
+	}
 	
 	export class ProfileMount {
 	    mount: string;
