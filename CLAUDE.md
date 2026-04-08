@@ -217,6 +217,19 @@ Session index is monotonically incrementing per machine (1-254 max).
 Admin API changes take effect immediately via `authStore.reload()` and are
 persisted to YAML. No hub restart needed for token/ACL/portal changes.
 
+### Portal architecture (deferred decision, see ROADMAP-1.0.md)
+The portal currently exists only as Awan Saya (a separate Node.js +
+PostgreSQL repo). There is no portal protocol spec, no Go portal package,
+and no way for TelaVisor to host a personal portal. This is a deliberate
+hold: a future scope decision under "Portal architecture: one protocol,
+many hosts" in ROADMAP-1.0.md sketches the right shape (extract
+`internal/portal` with pluggable storage, add a TelaVisor "Portal mode"
+that runs the file-backed store in-process, keep Awan Saya as the
+Postgres reference implementation). **Do not start any portal
+extraction work without writing the portal protocol spec doc first** --
+the spec is what prevents two implementations from drifting. See the
+ROADMAP entry for the full plan.
+
 ### Release channels
 Tela ships through three channels: `dev` (every commit to main), `beta`
 (promoted from dev on demand), `stable` (promoted from beta on demand).

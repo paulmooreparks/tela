@@ -104,10 +104,11 @@ These are the four ambitions a reader can reasonably project onto Tela that the 
 For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 path looks like if it is deferred.**
 
 ### Routed mesh networking
-- [ ] Decision: deferred to 1.x, or non-goal forever.
-- Tela has direct peer-to-peer as a transport tier, but it is not a routed mesh in the Tailscale or Nebula sense. Most traffic still travels client to hub to agent. Readers who hear "fabric" can reasonably expect agent-to-agent routing without the hub on the data path.
-- If deferred: sketch what it would take (routing table, multi-hop key exchange, NAT traversal beyond the current STUN cascade) and what `protocolVersion` would carry it.
-- If non-goal: name the alternatives a user should reach for instead and explain why Tela's hub-relay shape is the right design for the use cases the project is targeting.
+- [x] Decision: **non-goal for 1.0.** Post-1.0 only if real-world utility is demonstrated against the existing transport upgrade cascade.
+- Tela has direct peer-to-peer as a transport tier, but it is not a routed mesh in the Tailscale or Nebula sense. Most traffic still travels client to hub to agent. The [introduction](book/src/introduction.md) and the [glossary](book/src/glossary.md) explicitly disclaim mesh routing under the leaf-spine framing.
+- The current lean is non-goal. The use cases that make Tailscale's mesh worth its complexity (peer-to-peer LAN performance, NAT traversal independence) are mostly already covered by Tela's existing WS -> UDP relay -> direct P2P fallback. The use cases that mesh would *additionally* unlock (agent-to-agent routing without a hub on the data path, multi-hop topologies built out of agents) need to be demonstrated against real demand before the design work is justified.
+- **Distinct from the relay gateway, which is in scope for 1.0** (see *Important: Relay gateway* below). The relay gateway moves traffic between hubs while preserving the spine-and-leaves shape and the blind-relay property end to end. Mesh moves traffic between agents without a hub on the data path. They are not the same feature and the mesh decision does not constrain the relay gateway design.
+- If post-1.0 work on mesh is ever picked up: sketch what it would take (routing table, multi-hop key exchange, NAT traversal beyond the current STUN cascade) and what `protocolVersion` would carry it.
 
 ### Hub federation
 - [ ] Decision: deferred to 1.x, or non-goal forever.
@@ -127,9 +128,54 @@ For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 p
 - If deferred: define what isolation means (config, storage, audit log, admin API) and how operators would migrate from "one hub per team" to "tenants on a shared hub."
 - If non-goal: document that the project's recommended scaling pattern is hub-per-tenant, and that the portal layer is what stitches them together for end users.
 
+### Portal architecture: one protocol, many hosts
+- [ ] Decision needed before any portal-related work resumes.
+- **The question.** Today the portal exists as one thing: Awan Saya, a Node.js + PostgreSQL web app. There is no portal protocol spec, no Go portal package, and no way for TelaVisor to "be" a portal for personal use. A natural-feeling user request is "let TelaVisor host the portal so I have one-stop shopping that scales from solo to enterprise without two implementations." The naive answer (embed Awan Saya in TelaVisor) is wrong. The right answer requires extracting a portal protocol and a portal service from Awan Saya first.
+- **The shape.** Three layers stacked, currently bundled in Awan Saya:
+  1. **Directory protocol.** `/.well-known/tela`, `/api/hubs`, the sync-token registration flow. This is the portal contract -- a small wire format that any portal must speak.
+  2. **Identity store.** Accounts, organizations, teams, hub memberships, permissions. Today this is Postgres-backed in Awan Saya. A single-user portal does not need any of this beyond "the user."
+  3. **Frontend.** The HTML/CSS/JS users see. Today this is the Awan Saya web UI. TelaVisor's UI is a separate frontend that talks to hub admin proxies directly.
+- **The plan if we pursue this** (sketched here so we do not have to re-derive it later):
+  1. **Write the portal protocol spec first.** A single document under `book/src/architecture/portal-protocol.md` (or `DESIGN-portal.md`) that enumerates the directory endpoints, request/response shapes, auth model, sync-token flow, and the contract any portal implementation must satisfy. ~10 routes, an afternoon of work. **Nothing else can start until this exists** because the spec is what prevents two implementations from drifting.
+  2. **Extract `internal/portal`** from Awan Saya into the tela repo as a Go package implementing only the protocol, with pluggable storage. Reference stores: `internal/portal/store/file` (JSON or YAML on disk, single-user, zero deps) and `internal/portal/store/postgres` (multi-org, what Awan Saya already does).
+  3. **Decide where the portal service runs.** Three viable hosts that all use the same `internal/portal` package and the same wire protocol:
+     - A new fourth binary, working name `telaportal`, for standalone deployments.
+     - Folded into telahubd as `telahubd portal serve` for small deployments that want hub plus portal in one process.
+     - As a goroutine inside TelaVisor for the personal-use case ("Portal mode", see below).
+  4. **TelaVisor gains a Portal mode** alongside Clients and Infrastructure. In personal-use mode it runs the file-backed portal store as a goroutine and exposes the portal HTTP API on `127.0.0.1:NNNN` so other local clients can use it. In team mode it acts as a portal *client* against a remote portal service (Awan Saya, or a self-hosted `telaportal`). The UI is the same in both cases because both speak the same portal HTTP API.
+  5. **Awan Saya becomes a portal frontend, not a portal implementation.** The HTML/CSS/JS in `awansatu/www/` continues to exist for users who want a browser; it now talks to the same Go portal service the desktop client talks to. The Postgres + multi-org code becomes a `store/postgres` implementation of the same `internal/portal` interface.
+- **The TelaVisor mode rename.** If Portal becomes a top-nav mode, the current "Infrastructure" name needs revisiting. Two reasonable framings:
+  - **Clients / Operations / Directory**: each label says exactly what the mode does without metaphor. "Operations" for hub and agent admin (the current Infrastructure mode); "Directory" for portal pages, hub list, org/team/account, hub memberships.
+  - **Clients / Infrastructure / Fleet**: leans into the fabric framing but "Fleet" is overloaded ("many agents" vs "many hubs") and probably worse.
+  Lean toward Clients / Operations / Directory unless a better label set turns up during the actual work.
+- **Why this is the right cut, in one paragraph.** Tela's architecture is "many small things speaking small wire protocols." The hub does not bundle the agent; the agent does not bundle the client. Adding a portal that *actually* bundles the directory, the multi-org store, the web frontend, and the desktop frontend into one process would be the first time the project broke its own composition rule. Extracting the portal service the same way -- small Go package, swappable storage backend, multiple frontends -- keeps the rule and gets the "TelaVisor is one-stop shopping" outcome at the same time, *for free*, because the desktop frontend is just one of the things that can talk to the portal API. The personal-use case where the portal service runs inside TelaVisor is then a deployment topology, not a fork in the codebase.
+- **What this depends on.** This decision interacts with **Hub federation** and **Multi-tenant hub** above. If federation is non-goal, the portal becomes the only place cross-hub identity is reconciled, which raises the stakes for the protocol spec. If multi-tenant hub is deferred, the portal-stitching-many-hubs pattern remains the recommended scaling story for at least 1.x.
+- **The first concrete step when we come back.** Write the portal protocol spec doc. Not code. The spec is what prevents the two-implementation drift. Once it exists, the extraction work is mechanical.
+
 ---
 
 ## Important (seriously hurts 1.0 if not done)
+
+### Relay gateway (hub-to-hub transit)
+
+The generalization of Tela's existing gateway primitive to the relay layer. A hub forwards opaque WireGuard ciphertext on behalf of a client whose target agent is registered with a *different* hub. The WireGuard handshake remains end to end between the original client and the destination agent. The bridging hub is blind to the payload, the same way the destination hub is blind to the payload today. This is the missing rung of the gateway ladder Tela already implements at every other layer of the stack: path gateway (Layer 7), bridge gateway (Layer 4 inbound), upstream gateway (Layer 4 outbound), single-hop relay gateway (Layer 3, today's hub), multi-hop relay gateway (Layer 3, *this item*).
+
+Why this is a 1.0 deliverable rather than post-1.0 work: the architectural shape is forced now. Once the v1 wire format ships without any hop-count or routing-aware field, the relay gateway becomes harder to add later without a v2 wire bump. Forcing the design through now keeps the protocol freeze honest. The feature also unlocks the multi-customer managed-service-provider, air-gap traversal, geographic-distribution, and acquisition-merger scenarios that the introduction's *fleet* tier implicitly promises but that no other feature in the fabric actually delivers. It is the strongest single answer to "how does Tela scale beyond one hub" the project has.
+
+What it requires:
+
+- [ ] **Hub binary outbound mode.** `telahubd` learns to act as a client of another `telahubd`, dialing out and authenticating with a token, the same way `tela` does today. No new wire protocol; reuse the existing client-relay handshake.
+- [ ] **Directory schema "reachable through" field.** A hub directory entry can carry an optional pointer naming the hub that actually hosts a given machine. Clients use this for resolution; bridging hubs use it to know where to forward sessions. Backward-compatible with directories that omit the field.
+- [ ] **Session hop count (TTL).** A small field in the relay session header so that a hub receiving a session at TTL=0 refuses to bridge it. Loop prevention without a routing protocol. Must land in v1 of the wire format, not added later.
+- [ ] **Authorization model: bridging hub holds a token on the destination hub.** No new permission category. The token has the existing `connect` scope for the relevant machines. The destination hub authorizes the bridging hub the same way it authorizes any client today.
+- [ ] **Audit log entries on both sides.** The bridging hub logs *I forwarded a session for client C to hub Y.* The destination hub logs the session under the bridging hub's identity, the same way it logs any client session. Both are queryable through the existing audit endpoints. No cross-hub join required.
+- [ ] **Documentation: a chapter (or chapter section) that teaches the gateway primitive as a family**, with the relay gateway as the new instance. Repurposes the existing path-based gateway documentation as one rung instead of the only one.
+
+What it explicitly does not include:
+
+- **Routing protocols.** The bridging hub knows about the destination hub via the directory protocol. It does not learn topology dynamically. No Border Gateway Protocol (BGP), no spanning tree, no link-state algorithm.
+- **Identity federation.** A user with a token on Hub A does not automatically have a token on Hub B. Hub A's bridging token is its own credential. The four federation-shaped scope decisions above are unaffected.
+- **Mesh agent-to-agent routing.** The data path is still client to hub (to hub) to agent. See the **Routed mesh networking** scope decision above for why mesh is not in scope and why the relay gateway is not the same thing.
 
 ### In-browser fallback
 - [ ] Browser-based RDP/SSH client for cases where the user can't run binaries
@@ -214,11 +260,13 @@ This is the order I would do things in if I were running the project, biased tow
 2. **Test harness for end-to-end scenarios** — unlocks confident refactoring of everything else
 3. **Tests for the auth and access paths** — these are the security boundary
 4. **Cert pinning** — the trust anchor that everything else relies on
-5. **Protocol freeze with version field and v1 spec** — once locked, you can iterate freely
-6. **Code signing for Windows and macOS** — without this, downloads are scary
-7. **Security model document and troubleshooting guide** — the two most important user-facing docs you don't have yet
-8. **Then start polishing** — mobile UX, installers, package managers, structured logging, metrics, rate limiting, graceful shutdown, agent identity
-9. **Make and publish the scope decisions** — routed mesh, hub federation, SSO/OIDC, multi-tenant hub. Deferred or rejected, but written down. This is the step that converts ambient ambiguity into a permanent commitment, and it has to happen before the tag, not after, or the decisions get made by accident in the first issue thread that asks for one of them.
+5. **Relay gateway design and v1 wire format alignment** — hub-to-hub transit is the defining feature for the *fleet* tier and the only 1.0 item that forces specific bits into the wire format (the TTL field). Design must be done before the protocol freeze, not after, or it has to wait for v2.
+6. **Protocol freeze with version field and v1 spec** — once locked, you can iterate freely
+7. **Code signing for Windows and macOS** — without this, downloads are scary
+8. **Security model document and troubleshooting guide** — the two most important user-facing docs you don't have yet
+9. **Relay gateway implementation** — once the wire format and design are locked in step 5, the implementation work (hub outbound mode, directory schema, audit log entries, documentation chapter) can run in parallel with the polish steps
+10. **Then start polishing** — mobile UX, installers, package managers, structured logging, metrics, rate limiting, graceful shutdown, agent identity
+11. **Make and publish the scope decisions** — routed mesh, hub federation, SSO/OIDC, multi-tenant hub. Deferred or rejected, but written down. This is the step that converts ambient ambiguity into a permanent commitment, and it has to happen before the tag, not after, or the decisions get made by accident in the first issue thread that asks for one of them.
 
 ---
 
