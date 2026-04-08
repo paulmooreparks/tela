@@ -2336,14 +2336,23 @@ func runAsWindowsService() {
 
 // ── Portal management subcommand ───────────────────────────────────
 
-// telaWellKnown is the JSON shape returned by /.well-known/tela (RFC 8615).
+// telaWellKnown is the JSON shape returned by /.well-known/tela. The
+// fields match DESIGN-portal.md section 2: hub_directory points at the
+// directory base path; protocolVersion + supportedVersions carry the
+// 1.0 version-negotiation handshake.
 type telaWellKnown struct {
-	HubDirectory string `json:"hub_directory"`
+	HubDirectory      string   `json:"hub_directory"`
+	ProtocolVersion   string   `json:"protocolVersion,omitempty"`
+	SupportedVersions []string `json:"supportedVersions,omitempty"`
 }
 
-// discoverHubDirectory queries /.well-known/tela to discover the hub directory
-// endpoint. Returns the path (e.g. "/api/hubs") or falls back to the conventional
-// default if the well-known endpoint is not available.
+// discoverHubDirectory queries /.well-known/tela to discover the hub
+// directory endpoint and check the portal's protocol version. Returns
+// the directory path (e.g. "/api/hubs"), or the conventional default
+// if the well-known endpoint is unavailable. A portal that advertises
+// supportedVersions without a "1" major version is logged as an
+// incompatibility but still attempted; the registration POST will
+// surface the actual protocol mismatch (if any) as an HTTP error.
 func discoverHubDirectory(baseURL string, token string) string {
 	const fallback = "/api/hubs"
 	wkURL := strings.TrimRight(baseURL, "/") + "/.well-known/tela"
@@ -2370,6 +2379,22 @@ func discoverHubDirectory(baseURL string, token string) string {
 	var wk telaWellKnown
 	if err := json.NewDecoder(resp.Body).Decode(&wk); err != nil {
 		return fallback
+	}
+
+	if len(wk.SupportedVersions) > 0 {
+		hasMajor1 := false
+		for _, v := range wk.SupportedVersions {
+			if v == "1" || strings.HasPrefix(v, "1.") {
+				hasMajor1 = true
+				break
+			}
+		}
+		if !hasMajor1 {
+			log.Printf("[hub] portal %s advertises supportedVersions %v which does not include a 1.x major; attempting registration anyway",
+				baseURL, wk.SupportedVersions)
+		} else if wk.ProtocolVersion != "" {
+			log.Printf("[hub] portal %s speaks portal protocol %s", baseURL, wk.ProtocolVersion)
+		}
 	}
 
 	if wk.HubDirectory == "" {
@@ -2487,21 +2512,26 @@ func registerWithPortal(portalURL, adminToken, regHubName, regHubURL, viewerToke
 
 	body, _ := io.ReadAll(resp.Body)
 
+	if resp.StatusCode == 401 {
+		return registerResult{}, fmt.Errorf("unauthorized. Check your API token")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return registerResult{}, fmt.Errorf("portal returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
 	var respData struct {
 		Updated   bool   `json:"updated"`
 		SyncToken string `json:"syncToken"`
 	}
-
-	if resp.StatusCode == 401 {
-		return registerResult{}, fmt.Errorf("unauthorized. Check your API token")
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return registerResult{}, fmt.Errorf("decode portal response: %w", err)
 	}
-	if resp.StatusCode == 409 {
-		// Hub already registered -- older portals that don't support upsert
-		respData.Updated = true
-	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return registerResult{}, fmt.Errorf("portal returned HTTP %d: %s", resp.StatusCode, string(body))
-	} else {
-		json.Unmarshal(body, &respData)
+	// Per DESIGN-portal.md section 3.2, a 1.0-conformant portal MUST
+	// return a hubsync_-prefixed sync token in the registration
+	// response. If the portal omits it, refuse rather than fall back
+	// to admin-token-as-credential -- the spec dropped that path.
+	if respData.SyncToken == "" {
+		return registerResult{}, fmt.Errorf("portal at %s returned no syncToken; portal does not implement protocol 1.0", portalURL)
 	}
 
 	entry := portalEntry{
@@ -2509,11 +2539,6 @@ func registerWithPortal(portalURL, adminToken, regHubName, regHubURL, viewerToke
 		SyncToken:    respData.SyncToken,
 		HubDirectory: hubDirectory,
 	}
-	if respData.SyncToken == "" && adminToken != "" {
-		// Old portal that doesn't issue sync tokens -- keep admin token for compat
-		entry.Token = adminToken
-	}
-
 	return registerResult{Entry: entry, Updated: respData.Updated}, nil
 }
 

@@ -536,8 +536,6 @@ without portal changes because the proxy is generic.
 | `DELETE /api/hubs` | user |
 | `/api/hub-admin/{name}/...` | user, gated on `canManage` |
 | `GET /api/fleet/agents` | user |
-| `POST /api/fleet/agents/{hub}/{m}/{action}` | user, gated on `canManage` |
-| `POST /api/hubs/{name}/pair-code` | user, gated on `canManage` |
 
 The protocol does not prescribe **how** user auth works. Awan Saya uses
 session cookies + a CSRF check; a single-user portal could use a static
