@@ -482,6 +482,10 @@ export function UpdateHub(arg1, arg2) {
   return window['go']['main']['App']['UpdateHub'](arg1, arg2);
 }
 
+export function UpdateLocalService(arg1) {
+  return window['go']['main']['App']['UpdateLocalService'](arg1);
+}
+
 export function UpdateServiceAgent() {
   return window['go']['main']['App']['UpdateServiceAgent']();
 }

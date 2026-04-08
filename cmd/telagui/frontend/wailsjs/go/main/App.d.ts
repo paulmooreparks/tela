@@ -242,6 +242,8 @@ export function UpdateAgent(arg1:string,arg2:string,arg3:string):Promise<string>
 
 export function UpdateHub(arg1:string,arg2:string):Promise<string>;
 
+export function UpdateLocalService(arg1:string):Promise<string>;
+
 export function UpdateServiceAgent():Promise<string>;
 
 export function ValidateBinPath(arg1:string):Promise<string>;

@@ -1213,31 +1213,44 @@ function refreshSingleBinary(name, btn) {
   });
 }
 
-function updateServiceAgent(btn) {
+// updateLocalService self-updates a locally installed Tela service
+// (telad or telahubd) directly: stop service, download from the channel
+// manifest with SHA-256 verification, atomic swap, start service. The
+// Go side returns {ok:true, version, path} on success or {error} on
+// failure -- there is no asynchronous "is it really restarted yet?"
+// step to guess about, so we update the table immediately on return.
+function updateLocalService(name, btn) {
   btn.disabled = true;
   btn.textContent = 'Updating...';
-  tvLog('Sending update command to local telad service...');
-  goApp.UpdateServiceAgent().then(function (resp) {
-    try { var data = JSON.parse(resp); } catch (e) {}
-    if (data && data.error) {
+  tvLog('Updating local ' + name + ' service...');
+  goApp.UpdateLocalService(name).then(function (resp) {
+    var data = {};
+    try { data = JSON.parse(resp); } catch (e) {}
+    if (data.error) {
       btn.disabled = false;
       btn.textContent = 'Retry';
-      showError('Service update failed: ' + data.error);
+      tvLog(name + ' update failed: ' + data.error);
+      showError(name + ' update failed: ' + data.error);
       return;
     }
-    btn.textContent = 'Restarting...';
-    tvLog('Update: ' + (data && data.message ? data.message : 'update sent'));
-    // Wait for the service to restart, then refresh.
-    setTimeout(function () {
-      btn.textContent = 'Done';
-      refreshBinStatus();
-      refreshUpdateTable();
-    }, 10000);
+    btn.textContent = 'Done';
+    tvLog(name + ' updated to ' + (data.version || 'unknown') + ' at ' + (data.path || ''));
+    refreshBinStatus();
+    refreshUpdateTable();
+    refreshClientToolVersions();
+    checkForUpdate();
   }).catch(function (err) {
     btn.disabled = false;
     btn.textContent = 'Retry';
-    showError('Service update failed: ' + err);
+    tvLog(name + ' update failed: ' + err);
+    showError(name + ' update failed: ' + err);
   });
+}
+
+// Backwards-compatible alias kept for any HTML still calling the old
+// telad-only entry point.
+function updateServiceAgent(btn) {
+  updateLocalService('telad', btn);
 }
 
 // Shared: render a tools table with optional per-binary action buttons.
@@ -1290,7 +1303,7 @@ function renderToolsTable(container, showActions, onDone) {
             if (b.found) {
               action = b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>';
             } else if (svcOnly && !mainUpToDate) {
-              action = '<button class="tb-btn tools-action-btn" onclick="updateServiceAgent(this)">Update</button>';
+              action = '<button class="tb-btn tools-action-btn" onclick="updateLocalService(\'' + escAttr(b.name) + '\', this)">Update</button>';
             } else if (!svcOnly) {
               action = '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
             }

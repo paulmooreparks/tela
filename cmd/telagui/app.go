@@ -2410,26 +2410,168 @@ func (a *App) SetClientChannel(channelName string) string {
 	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(store.Update.ManifestBase, ch))
 }
 
-// UpdateServiceAgent triggers a self-update on the locally running telad service
-// by reading the control file to find the hub and machine, then sending the
-// update command through the management API.
+// UpdateServiceAgent self-updates the locally installed telad service
+// from the channel manifest. Kept for frontend compatibility; equivalent
+// to UpdateLocalService("telad").
 func (a *App) UpdateServiceAgent() string {
-	data, err := readControlFile("telad.json")
+	return a.UpdateLocalService("telad")
+}
+
+// UpdateLocalService stops the named service ("telad" or "telahubd"),
+// downloads the new binary from the client's configured channel manifest,
+// verifies its SHA-256 against the manifest entry, atomically replaces
+// the on-disk binary at the path the service is installed from, and
+// starts the service again.
+//
+// Returns a JSON string with one of:
+//
+//	{"ok":true,"version":"vX.Y.Z","path":"/usr/local/bin/telad"}
+//	{"error":"..."}
+//
+// This is a fully local operation -- no admin tokens, no hub
+// indirection, no waiting on a remote agent to obey a mgmt command.
+// The frontend can therefore tell the user "the binary on disk is now
+// vX.Y.Z" with confidence the moment this call returns.
+func (a *App) UpdateLocalService(binaryName string) string {
+	if binaryName != "telad" && binaryName != "telahubd" {
+		return fmt.Sprintf(`{"error":"unknown service %q"}`, binaryName)
+	}
+
+	svcCfg, err := service.LoadConfig(binaryName)
 	if err != nil {
-		return `{"error":"no local telad control file found"}`
+		return fmt.Sprintf(`{"error":"%s service is not installed"}`, binaryName)
 	}
-	var info struct {
-		PID      int      `json:"pid"`
-		Machines []string `json:"machines"`
-		Hub      string   `json:"hub"`
+	if svcCfg.BinaryPath == "" {
+		return fmt.Sprintf(`{"error":"%s service config has no binaryPath"}`, binaryName)
 	}
-	if err := json.Unmarshal(data, &info); err != nil || len(info.Machines) == 0 || info.Hub == "" {
-		return `{"error":"invalid telad control file"}`
+	exePath := svcCfg.BinaryPath
+
+	// Resolve the manifest entry for this binary on the client's channel.
+	m, err := a.clientChannelManifest()
+	if err != nil {
+		return fmt.Sprintf(`{"error":"fetch channel manifest: %s"}`, jsonEscape(err.Error()))
 	}
-	if info.PID <= 0 || !processAlive(info.PID) {
-		return `{"error":"telad service is not running"}`
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
 	}
-	return a.UpdateAgent(info.Hub, info.Machines[0], "")
+	assetName := fmt.Sprintf("%s-%s-%s%s", binaryName, runtime.GOOS, runtime.GOARCH, ext)
+	entry, ok := m.Binaries[assetName]
+	if !ok {
+		return fmt.Sprintf(`{"error":"%s manifest %s has no binary named %s"}`, m.Channel, m.Version, assetName)
+	}
+
+	// Stop the service so we can replace the binary.
+	wasRunning := false
+	if status, err := service.QueryStatus(binaryName); err == nil && status.Installed {
+		wasRunning = status.Running
+	}
+	if wasRunning {
+		if err := service.Stop(binaryName); err != nil {
+			return fmt.Sprintf(`{"error":"stop %s service: %s"}`, binaryName, jsonEscape(err.Error()))
+		}
+	}
+
+	// Download to a sibling tmp file in the same directory as the
+	// installed binary so the rename is atomic on the same filesystem.
+	dlURL := m.BinaryURL(assetName)
+	resp, err := http.Get(dlURL)
+	if err != nil {
+		if wasRunning {
+			service.Start(binaryName)
+		}
+		return fmt.Sprintf(`{"error":"download: %s"}`, jsonEscape(err.Error()))
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if wasRunning {
+			service.Start(binaryName)
+		}
+		return fmt.Sprintf(`{"error":"download returned HTTP %d"}`, resp.StatusCode)
+	}
+
+	dir := filepath.Dir(exePath)
+	tmp, err := os.CreateTemp(dir, "."+binaryName+"-update-*.tmp")
+	if err != nil {
+		if wasRunning {
+			service.Start(binaryName)
+		}
+		return fmt.Sprintf(`{"error":"create temp file: %s"}`, jsonEscape(err.Error()))
+	}
+	tmpPath := tmp.Name()
+
+	if err := channelpkg.VerifyReader(tmp, resp.Body, entry.SHA256, entry.Size); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		if wasRunning {
+			service.Start(binaryName)
+		}
+		return fmt.Sprintf(`{"error":"verify download: %s"}`, jsonEscape(err.Error()))
+	}
+	tmp.Close()
+	if runtime.GOOS != "windows" {
+		os.Chmod(tmpPath, 0o755)
+	}
+
+	// Swap the binary. On Windows the running .exe can no longer be in
+	// use here because we already stopped the service.
+	if runtime.GOOS == "windows" {
+		oldPath := exePath + ".old"
+		os.Remove(oldPath)
+		if err := os.Rename(exePath, oldPath); err != nil {
+			os.Remove(tmpPath)
+			if wasRunning {
+				service.Start(binaryName)
+			}
+			return fmt.Sprintf(`{"error":"rename current binary: %s"}`, jsonEscape(err.Error()))
+		}
+		if err := os.Rename(tmpPath, exePath); err != nil {
+			os.Rename(oldPath, exePath) // rollback
+			os.Remove(tmpPath)
+			if wasRunning {
+				service.Start(binaryName)
+			}
+			return fmt.Sprintf(`{"error":"install new binary: %s"}`, jsonEscape(err.Error()))
+		}
+		// Clean up the .old file in the background.
+		go func(p string) {
+			for range 10 {
+				if os.Remove(p) == nil {
+					return
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+		}(oldPath)
+	} else {
+		if err := os.Rename(tmpPath, exePath); err != nil {
+			os.Remove(tmpPath)
+			if wasRunning {
+				service.Start(binaryName)
+			}
+			return fmt.Sprintf(`{"error":"install new binary: %s"}`, jsonEscape(err.Error()))
+		}
+	}
+
+	// Start the service again. If it was already stopped before we
+	// started, leave it stopped.
+	if wasRunning {
+		if err := service.Start(binaryName); err != nil {
+			return fmt.Sprintf(`{"error":"start %s service: %s"}`, binaryName, jsonEscape(err.Error()))
+		}
+	}
+
+	return fmt.Sprintf(`{"ok":true,"version":%q,"path":%q}`, m.Version, exePath)
+}
+
+// jsonEscape returns s with the few characters that need escaping inside
+// a double-quoted JSON string replaced. Used by the handcrafted JSON
+// responses above so an error message containing a quote or backslash
+// does not break the response shape.
+func jsonEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	return s
 }
 
 // hubNameFromURLGo extracts a short hub name from a URL (Go-side equivalent).

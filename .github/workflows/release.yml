@@ -48,7 +48,115 @@ env:
   GO_VERSION: "1.25.0"
 
 jobs:
+  # Resolve the tag exactly once at the top of the run, then reserve it
+  # by creating it on the remote immediately. This eliminates two races:
+  #
+  #  1. The "two pushes in flight, both compute the same dev counter"
+  #     race that previously let one run silently force-overwrite the
+  #     other's tag (because of force:true on the updateRef path).
+  #
+  #  2. The "different jobs in the same run compute different counters"
+  #     race that could happen if the build matrix and the release job
+  #     each ran their own git-rev-list-count.
+  #
+  # The dev counter is now derived from the highest existing dev tag
+  # for the current MAJOR.MINOR (queried from the GitHub API) plus one,
+  # not from the local commit count. That makes it monotonic across
+  # runs and immune to fast-forward / rebase weirdness.
+  compute-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      is_new_tag: ${{ steps.version.outputs.is_new_tag }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Compute and reserve tag
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            # Called via workflow_call (from promote.yml). The caller
+            # already created and pushed the tag; we just use it.
+            TAG="${{ inputs.tag }}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "is_new_tag=false" >> "$GITHUB_OUTPUT"
+            echo "Using caller-supplied tag: $TAG"
+            exit 0
+          fi
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Manual tag push: use the tag verbatim.
+            TAG="${{ github.ref_name }}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "is_new_tag=false" >> "$GITHUB_OUTPUT"
+            echo "Using pushed tag: $TAG"
+            exit 0
+          fi
+
+          # Main-branch push: synthesize a dev tag of the form
+          # vX.Y.0-dev.N where N is one greater than the highest
+          # existing -dev tag for the same MAJOR.MINOR. The previous
+          # implementation used `git rev-list --count` which is racy
+          # across concurrent runs and produces gaps when commits land
+          # quickly. Using the GitHub API for "what tags exist on the
+          # remote right now" makes the answer authoritative.
+          BASE=$(cat VERSION | tr -d '[:space:]')
+          PREFIX="v${BASE}.0-dev."
+          # Page through the repo's tags. 100 per page is the API max.
+          # MAJOR.MINOR cycles in ~100 commits between version bumps so
+          # one page is enough; if it isn't, the loop will catch it.
+          MAX=0
+          PAGE=1
+          while :; do
+            RESULT=$(gh api -X GET "repos/$REPO/tags" -F per_page=100 -F page=$PAGE --jq '.[].name' || true)
+            if [ -z "$RESULT" ]; then
+              break
+            fi
+            while IFS= read -r tag; do
+              case "$tag" in
+                "${PREFIX}"*)
+                  N="${tag#$PREFIX}"
+                  if [[ "$N" =~ ^[0-9]+$ ]] && [ "$N" -gt "$MAX" ]; then
+                    MAX="$N"
+                  fi
+                  ;;
+              esac
+            done <<< "$RESULT"
+            COUNT=$(echo "$RESULT" | wc -l)
+            if [ "$COUNT" -lt 100 ]; then
+              break
+            fi
+            PAGE=$((PAGE + 1))
+            if [ "$PAGE" -gt 20 ]; then
+              echo "::error::tag pagination ran past 2000 entries; aborting to avoid an infinite loop"
+              exit 1
+            fi
+          done
+          NEXT=$((MAX + 1))
+          TAG="${PREFIX}${NEXT}"
+          echo "Highest existing dev tag for v${BASE}: ${MAX} -> next: ${NEXT}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "is_new_tag=true" >> "$GITHUB_OUTPUT"
+
+          # Reserve the tag by creating it now. If a concurrent run
+          # picked the same number, the second createRef call will
+          # fail with 422 and the whole workflow will fail noisily --
+          # which is what we want, instead of a silent overwrite.
+          SHA=$(git rev-parse HEAD)
+          echo "Reserving tag $TAG at $SHA"
+          gh api -X POST "repos/$REPO/git/refs" \
+            -f ref="refs/tags/$TAG" \
+            -f sha="$SHA"
+
   build:
+    needs: compute-version
     strategy:
       matrix:
         include:
@@ -80,30 +188,10 @@ jobs:
           fetch-depth: 0  # full history needed for version computation
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Compute version
+      - name: Resolve version
         id: version
         run: |
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            # Called via workflow_call (from promote.yml). The caller
-            # already created and pushed the tag; we just build it.
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            # Manual tag push: use the tag verbatim.
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          else
-            # Main-branch push: synthesize a dev tag of the form
-            # vX.Y.0-dev.N where N counts commits since the most recent
-            # plain-stable anchor tag (vA.B.C with no prerelease suffix).
-            # This makes dev tags semver-comparable: v0.5.0-dev.42 < v0.5.0.
-            BASE=$(cat VERSION | tr -d '[:space:]')
-            ANCHOR=$(git tag --list 'v*' | grep -Ev -- '-' | sort -V | tail -1)
-            if [ -n "$ANCHOR" ]; then
-              PATCH=$(git rev-list --count "${ANCHOR}..HEAD")
-            else
-              PATCH=$(git rev-list --count HEAD)
-            fi
-            echo "tag=v${BASE}.0-dev.${PATCH}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "tag=${{ needs.compute-version.outputs.tag }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -147,6 +235,7 @@ jobs:
           path: dist/
 
   build-gui:
+    needs: compute-version
     strategy:
       fail-fast: false
       matrix:
@@ -189,31 +278,11 @@ jobs:
           fetch-depth: 0  # full history needed for version computation
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Compute version
+      - name: Resolve version
         id: version
         shell: bash
         run: |
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            # Called via workflow_call (from promote.yml). The caller
-            # already created and pushed the tag; we just build it.
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            # Manual tag push: use the tag verbatim.
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          else
-            # Main-branch push: synthesize a dev tag of the form
-            # vX.Y.0-dev.N where N counts commits since the most recent
-            # plain-stable anchor tag (vA.B.C with no prerelease suffix).
-            # This makes dev tags semver-comparable: v0.5.0-dev.42 < v0.5.0.
-            BASE=$(cat VERSION | tr -d '[:space:]')
-            ANCHOR=$(git tag --list 'v*' | grep -Ev -- '-' | sort -V | tail -1)
-            if [ -n "$ANCHOR" ]; then
-              PATCH=$(git rev-list --count "${ANCHOR}..HEAD")
-            else
-              PATCH=$(git rev-list --count HEAD)
-            fi
-            echo "tag=v${BASE}.0-dev.${PATCH}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "tag=${{ needs.compute-version.outputs.tag }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -324,7 +393,7 @@ jobs:
           path: dist/
 
   release:
-    needs: [build, build-gui]
+    needs: [compute-version, build, build-gui]
     if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
 
@@ -335,30 +404,10 @@ jobs:
           fetch-depth: 0  # full history needed for version computation
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Compute version
+      - name: Resolve version
         id: version
         run: |
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            # Called via workflow_call (from promote.yml). The caller
-            # already created and pushed the tag; we just build it.
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            # Manual tag push: use the tag verbatim.
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          else
-            # Main-branch push: synthesize a dev tag of the form
-            # vX.Y.0-dev.N where N counts commits since the most recent
-            # plain-stable anchor tag (vA.B.C with no prerelease suffix).
-            # This makes dev tags semver-comparable: v0.5.0-dev.42 < v0.5.0.
-            BASE=$(cat VERSION | tr -d '[:space:]')
-            ANCHOR=$(git tag --list 'v*' | grep -Ev -- '-' | sort -V | tail -1)
-            if [ -n "$ANCHOR" ]; then
-              PATCH=$(git rev-list --count "${ANCHOR}..HEAD")
-            else
-              PATCH=$(git rev-list --count HEAD)
-            fi
-            echo "tag=v${BASE}.0-dev.${PATCH}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "tag=${{ needs.compute-version.outputs.tag }}" >> "$GITHUB_OUTPUT"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -440,36 +489,11 @@ jobs:
           mv "${CHANNEL}-pretty.json" "${CHANNEL}.json"
           cat "${CHANNEL}.json"
 
-      - name: Create or update tag (for main branch builds)
-        # Only when triggered by a push to main. Tag pushes already have a
-        # tag, and workflow_call invocations from promote.yml are handed
-        # an existing tag created by the caller.
-        if: startsWith(github.ref, 'refs/heads/') && inputs.tag == ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tag = 'refs/tags/${{ steps.version.outputs.tag }}';
-            try {
-              await github.rest.git.createRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: tag,
-                sha: context.sha,
-              });
-            } catch (e) {
-              if (e.status === 422) {
-                // Tag already exists -- update it to this commit
-                await github.rest.git.updateRef({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ref: 'tags/${{ steps.version.outputs.tag }}',
-                  sha: context.sha,
-                  force: true,
-                });
-              } else {
-                throw e;
-              }
-            }
+      # The tag is already reserved by the compute-version job at the
+      # top of the run, so we no longer need a Create-or-update-tag step
+      # here. Concurrent runs that picked the same dev counter would
+      # have failed in compute-version, not silently overwritten each
+      # other here.
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
