@@ -5004,6 +5004,26 @@ function installBinary(name) {
   });
 }
 
+// restartToUpdate triggers TelaVisor's own self-update path: stage the
+// new binary next to the running one, install the new tela CLI, then
+// relaunch. The Go side does the heavy lifting; we just disable the
+// button while it runs and surface any error to the log panel.
+function restartToUpdate(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating...'; }
+  tvLog('Updating TelaVisor...');
+  goApp.RestartToUpdate().then(function () {
+    // On success the Go side calls os.Exit(0) so we never get here for
+    // a real self-update. The package-managed branch does return; in
+    // that case the tela CLI was updated but TelaVisor itself was not.
+    tvLog('Update completed (TelaVisor itself is package-managed; restart it via your package manager).');
+    if (btn) { btn.disabled = false; btn.textContent = 'Update & Restart'; }
+    refreshBinStatus();
+  }).catch(function (err) {
+    tvLog('Update failed: ' + err);
+    if (btn) { btn.disabled = false; btn.textContent = 'Update & Restart'; }
+  });
+}
+
 function browseBinPath() {
   goApp.BrowseBinPath().then(function (dir) {
     if (dir) {

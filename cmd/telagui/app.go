@@ -489,32 +489,39 @@ func (a *App) GetUpdateInfo() UpdateInfo {
 }
 
 // RestartToUpdate downloads updates for all binaries and relaunches.
+// Reads from the client's configured channel manifest end-to-end so
+// dev/beta/stable users get the right tag and SHA-256 verification.
 func (a *App) RestartToUpdate() error {
-	a.mu.Lock()
-	ver := a.updateVersion
-	a.mu.Unlock()
-
-	if ver == "" {
-		return fmt.Errorf("no update available")
+	m, err := a.clientChannelManifest()
+	if err != nil {
+		return fmt.Errorf("fetch channel manifest: %w", err)
 	}
+	ver := m.Version
 
-	// Disconnect if connected and wait for process to exit
+	// Disconnect if connected and wait for process to exit.
 	a.Disconnect()
 	a.waitForProcessExit(5 * time.Second)
 
-	// Update tela CLI
-	a.installTool("tela", ver)
+	// Update tela CLI from the same manifest. installTool re-reads the
+	// manifest internally; that's fine, the Fetcher cache makes it free.
+	if _, err := a.installTool("tela", ver); err != nil {
+		log.Printf("[update] installTool tela failed: %v", err)
+		return fmt.Errorf("update tela: %w", err)
+	}
 
 	if isPackageManaged() {
-		// Package-managed: CLI updated, GUI must be updated via package manager
+		// Package-managed: CLI updated, GUI must be updated via package manager.
 		a.mu.Lock()
 		a.updatePending = false
 		a.mu.Unlock()
 		return nil
 	}
 
-	// Download telavisor update to staging path (next to running binary)
-	a.downloadSelfUpdate(ver)
+	// Stage the new TelaVisor binary next to the running one.
+	if err := a.downloadSelfUpdate(m); err != nil {
+		log.Printf("[update] downloadSelfUpdate failed: %v", err)
+		return fmt.Errorf("download telavisor: %w", err)
+	}
 
 	exe := selfExePath()
 	if exe == "" {
@@ -524,7 +531,7 @@ func (a *App) RestartToUpdate() error {
 	// Apply the update now before relaunching.
 	a.applyPendingSelfUpdate()
 
-	// Relaunch from the same path (which is now the new binary)
+	// Relaunch from the same path (which is now the new binary).
 	cmd := exec.Command(exe)
 	cmd.Start()
 
@@ -532,45 +539,60 @@ func (a *App) RestartToUpdate() error {
 	return nil // unreachable
 }
 
-// downloadSelfUpdate downloads the telavisor binary for the current platform.
-func (a *App) downloadSelfUpdate(ver string) {
+// downloadSelfUpdate stages a new TelaVisor binary for the current platform
+// from the supplied channel manifest. The download is verified against the
+// manifest's SHA-256 before being written to selfUpdatePath().
+func (a *App) downloadSelfUpdate(m *channelpkg.Manifest) error {
 	ext := ""
 	if runtime.GOOS == "windows" {
 		ext = ".exe"
 	}
 	binaryName := fmt.Sprintf("telavisor-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
-	url := fmt.Sprintf("https://github.com/paulmooreparks/tela/releases/download/%s/%s", ver, binaryName)
+	entry, ok := m.Binaries[binaryName]
+	if !ok {
+		return fmt.Errorf("%s manifest %s has no binary named %s", m.Channel, m.Version, binaryName)
+	}
+	url := m.BinaryURL(binaryName)
 
-	os.MkdirAll(telaInstallDir(), 0755)
 	updatePath := selfUpdatePath()
+	if updatePath == "" {
+		return fmt.Errorf("cannot determine self-update staging path")
+	}
+	if err := os.MkdirAll(filepath.Dir(updatePath), 0755); err != nil {
+		return fmt.Errorf("create staging dir: %w", err)
+	}
 
 	resp, err := http.Get(url)
-	if err != nil || resp.StatusCode != 200 {
-		if resp != nil {
-			resp.Body.Close()
-		}
-		return
+	if err != nil {
+		return fmt.Errorf("download: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("download returned HTTP %d", resp.StatusCode)
+	}
 
 	tmpPath := updatePath + ".tmp"
 	f, err := os.Create(tmpPath)
 	if err != nil {
-		return
+		return fmt.Errorf("create staging file: %w", err)
 	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	if err := channelpkg.VerifyReader(f, resp.Body, entry.SHA256, entry.Size); err != nil {
 		f.Close()
 		os.Remove(tmpPath)
-		return
+		return fmt.Errorf("verify download: %w", err)
 	}
 	f.Close()
 
 	os.Remove(updatePath)
-	os.Rename(tmpPath, updatePath)
-
+	if err := os.Rename(tmpPath, updatePath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("install staging: %w", err)
+	}
 	if runtime.GOOS != "windows" {
 		os.Chmod(updatePath, 0755)
 	}
+	log.Printf("[update] staged %s at %s (sha256 verified)", m.Version, updatePath)
+	return nil
 }
 
 // saveWindowGeometry persists the current window position and size.
