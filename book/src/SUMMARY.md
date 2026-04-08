@@ -51,4 +51,5 @@
 
 ---
 
+[Glossary](glossary.md)
 [Contributing](contributing.md)

@@ -111,13 +111,16 @@ deployment changes; the protocol does not.
 | **Team cloud** | Named identities, per-machine permissions, pairing codes for onboarding, remote admin from the desktop client, audit history on the hub. |
 | **Fleet** | Multiple hubs registered with a portal, identities and permissions managed centrally, agents updating themselves through release channels, lifecycle controls from the portal. |
 
-The honest limit of this book and the project as it stands today is the
-word *mesh* in the network-engineering sense. The protocol is mesh-capable,
-and clients can negotiate direct peer-to-peer connections when the network
-allows it, but Tela is not a routed mesh in the way that some competitors
-are. Most traffic still travels client to hub to agent. If your design
-requires agent-to-agent routing without the hub on the path, that is a
-property to evaluate carefully against the chapters in the
+A note on the word *fabric*. Tela is a fabric in the leaf-spine sense, not
+a mesh in the Tailscale sense. The hub is the spine. The agents and clients
+are the leaves. Most traffic travels client to hub to agent, the same way a
+leaf-spine data center fabric routes most traffic leaf to spine to leaf.
+Clients and agents can negotiate direct peer-to-peer connections when the
+network allows it, but those connections are an optimization, not the
+default, and they do not turn Tela into a routed mesh in the way that
+Tailscale, Nebula, or ZeroTier are. If your design requires agent-to-agent
+routing without the hub on the data path as a first-class feature, that is
+a property to evaluate carefully against the chapters in the
 [Architecture](architecture/design.md) section.
 
 ## How this book is organized
