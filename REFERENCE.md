@@ -57,21 +57,43 @@ All three are single Go binaries. No runtime dependencies.
 
 ## 3. Installation
 
-Download the binaries for your OS and architecture from the [GitHub Releases page](https://github.com/paulmooreparks/tela/releases).
+Download the binaries for your OS and architecture from the [GitHub Releases page](https://github.com/paulmooreparks/tela/releases) or directly from a channel manifest.
 
-Each binary is a self-contained executable. Copy it to a directory on your `PATH` and make it executable:
+The fastest way to install on a fresh box is to download one binary by hand,
+then let it self-update from the channel manifest forever after:
 
 ```bash
-# Linux / macOS example
-chmod +x tela telad telahubd
-sudo mv tela telad telahubd /usr/local/bin/
+# Linux: pull telad from the dev channel manifest in one line
+curl -fsSL https://github.com/paulmooreparks/tela/releases/download/channels/dev.json \
+  | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m["downloadBase"]+"telad-linux-amd64")' \
+  | xargs curl -fLO
+chmod +x telad-linux-amd64
+sudo mv telad-linux-amd64 /usr/local/bin/telad
 ```
 
-On Windows, copy the `.exe` files to a folder in your `PATH`.
+After that, every subsequent update is one command:
 
-`tela` (the client) does not require administrator or root privileges on any platform.
+```bash
+telad update                # follows the configured channel
+telahubd update             # same
+tela update                 # same
+```
 
-`telad` and `telahubd` may need elevated privileges depending on the ports they bind to. Ports above 1024 do not require elevation on Linux/macOS.
+Each binary is a self-contained executable. `tela` (the client) does not require
+administrator or root privileges on any platform. `telad` and `telahubd` may need
+elevated privileges depending on the ports they bind to. Ports above 1024 do not
+require elevation on Linux/macOS.
+
+Tela ships through three release channels:
+
+| Channel | What it is | Tag form |
+|---------|------------|----------|
+| `dev`   | Latest unstable build, every commit to main | `v0.6.0-dev.42` |
+| `beta`  | Promoted dev build that has soaked | `v0.6.0-beta.3` |
+| `stable`| Promoted beta build, the conservative line | `v0.6.0`, `v0.6.1` |
+
+See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model and
+how promotions work.
 
 ---
 
@@ -486,6 +508,40 @@ System config paths (written by `service install`):
 | Linux / macOS | `/etc/tela/telahubd.yaml` |
 | Windows | `%ProgramData%\Tela\telahubd.yaml` |
 
+### Self-update
+
+`telahubd update` self-updates the on-disk telahubd binary from the configured
+release channel without going through the admin API. Same shape as `telad update`
+and `tela update`.
+
+```bash
+telahubd update                                          # update from the configured channel
+telahubd update -config /etc/tela/telahubd.yaml          # explicit config path
+telahubd update -channel beta                            # one-shot channel override
+telahubd update -dry-run                                 # show what would happen, don't touch disk
+```
+
+The new binary is downloaded to a sibling tmp file, SHA-256-verified against
+the channel manifest entry, and atomically renamed into place. Restart of the
+service is left to the caller.
+
+To configure the channel persistently, set `update.channel` in `telahubd.yaml`:
+
+```yaml
+update:
+  channel: dev    # or beta, stable
+```
+
+The hub also exposes a channel-aware admin API:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/admin/update` | GET | Returns `{channel, manifestUrl, currentVersion, latestVersion, updateAvailable}` |
+| `/api/admin/update` | PATCH | Set the channel: `{"channel":"beta"}` |
+| `/api/admin/update` | POST | Trigger an update to the channel HEAD |
+
+See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
+
 ---
 
 ## 6. telad: running a daemon
@@ -842,6 +898,35 @@ telad logout -hub wss://hub.example.com
 
 System-level credentials are preferred for service mode (persists across service restarts). User-level credentials are used if system-level storage is not available.
 
+### Self-update
+
+`telad update` self-updates the on-disk telad binary from the configured release
+channel without going through the hub admin API. Useful for bootstrapping new
+boxes, bridging old binaries onto the channel system, or running an update from
+a shell where setting up admin tokens would be overkill.
+
+```bash
+telad update                                             # update from the configured channel
+telad update -config /etc/tela/telad.yaml                # explicit config path
+telad update -channel beta                               # one-shot channel override
+telad update -dry-run                                    # show what would happen, don't touch disk
+```
+
+The new binary is downloaded to a sibling tmp file in the running binary's
+directory, verified against the channel manifest's SHA-256, and atomically
+renamed into place. Restart of the service is left to the caller (the OS service
+manager, the user, or a wrapper script). When telad runs as a managed OS
+service, the service will pick up the new binary on next restart.
+
+To configure the channel persistently, set `update.channel` in `telad.yaml`:
+
+```yaml
+update:
+  channel: dev    # or beta, stable
+```
+
+See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
+
 ---
 
 ## 7. tela: the client CLI
@@ -966,42 +1051,69 @@ tela pair -hub <hub-url> -code <code> # exchange a pairing code for a token
 
 #### tela admin
 
-Remote hub management. Requires an owner or admin token.
+Remote hub management. Requires an owner or admin token. Resources are organized
+as nouns: `access`, `tokens`, `portals`, `agent`, `hub`, plus the standalone
+`rotate` and `pair-code` commands.
 
-**Unified access management** (recommended for viewing and modifying permissions):
+**Access** (the unified per-identity, per-machine permissions view):
 
 ```bash
-tela admin access                                        # list all identities + permissions
+tela admin access                                        # list all identities and permissions
 tela admin access grant <id> <machineId> <perms>         # set permissions (connect,register,manage)
 tela admin access revoke <id> <machineId>                # revoke all permissions on a machine
 tela admin access rename <id> <newId>                    # rename an identity
 tela admin access remove <id>                            # delete identity entirely
 ```
 
-**Token management:**
+**Tokens** (token identity CRUD):
 
 ```bash
-tela admin list-tokens   -hub <hub> [-token <token>]
-tela admin add-token <id> -hub <hub> [-token <token>]
-tela admin remove-token <id> -hub <hub> [-token <token>]
-tela admin rotate <id> -hub <hub> [-token <token>]
+tela admin tokens list                                   # list all token identities
+tela admin tokens add <id> [-role owner|admin]           # create a token identity (returned once)
+tela admin tokens remove <id>                            # remove a token identity
+tela admin rotate <id>                                   # regenerate a token (standalone command)
 ```
 
-**Portal management:**
+**Portals** (portal registrations on the hub):
 
 ```bash
-tela admin list-portals -hub <hub> [-token <token>]
-tela admin add-portal <name> -hub <hub> [-token <token>] -portal-url <url> [-hub-url <url>] [-portal-token <token>]
-tela admin remove-portal <name> -hub <hub> [-token <token>]
-
-tela admin agent list     -hub <hub> [-token <token>]
-tela admin agent config   -hub <hub> [-token <token>] -machine <id>
-tela admin agent set      -hub <hub> [-token <token>] -machine <id> <json-fields>
-tela admin agent logs     -hub <hub> [-token <token>] -machine <id> [-n 100]
-tela admin agent restart  -hub <hub> [-token <token>] -machine <id>
+tela admin portals list                                  # list portal registrations
+tela admin portals add <name> -portal-url <url>          # register the hub with a portal
+tela admin portals remove <name>                         # remove a portal registration
 ```
 
-Token resolution for admin commands: `-token` flag, then `TELA_OWNER_TOKEN` env var, then `TELA_TOKEN` env var.
+**Pairing codes** (one-time codes for onboarding agents or clients):
+
+```bash
+tela admin pair-code <machine>                           # generate a one-time pairing code
+```
+
+**Agent** (remote management of telad through the hub):
+
+```bash
+tela admin agent list                                    # list agents registered with the hub
+tela admin agent config -machine <id>                    # show an agent's running configuration
+tela admin agent set -machine <id> <json-fields>         # push a partial config update
+tela admin agent logs -machine <id> [-n 100]             # retrieve recent log lines
+tela admin agent restart -machine <id>                   # request a graceful restart
+tela admin agent update -machine <id> [-version vX.Y.Z]  # download a new release and restart
+tela admin agent channel -machine <id>                   # show the agent's release channel
+tela admin agent channel -machine <id> set <ch>          # switch agent to dev|beta|stable
+```
+
+**Hub** (lifecycle management of the hub itself):
+
+```bash
+tela admin hub status                                    # show channel + current/latest versions
+tela admin hub logs [-n 100]                             # retrieve recent hub log lines
+tela admin hub restart                                   # request a graceful hub restart
+tela admin hub update [-version vX.Y.Z]                  # download a new release and restart
+tela admin hub channel                                   # show the hub's release channel
+tela admin hub channel set <dev|beta|stable>             # switch the hub's release channel
+```
+
+Token resolution for admin commands: `-token` flag, then `TELA_OWNER_TOKEN` env
+var, then `TELA_TOKEN` env var, then the user credential store via `tela login`.
 
 You can set environment variables to avoid repeating flags:
 
@@ -1009,10 +1121,58 @@ You can set environment variables to avoid repeating flags:
 export TELA_HUB=wss://hub.example.com
 export TELA_OWNER_TOKEN=<owner-token>
 
-tela admin list-tokens
-tela admin add-token alice
-tela admin grant alice web01
+tela admin tokens list
+tela admin tokens add alice
+tela admin access grant alice web01 connect,manage
+tela admin hub channel set beta
 ```
+
+#### tela channel
+
+Show, set, inspect, or download from the release channel. The client's
+configured channel is stored in the user credential store
+(`~/.tela/credentials.yaml` on Unix, `%APPDATA%\tela\credentials.yaml` on
+Windows) and is independent of the channels configured on hubs and agents.
+
+```bash
+tela channel                                             # show the current channel and latest version
+tela channel set <dev|beta|stable>                       # switch the client's release channel
+tela channel set <ch> -manifest-base <url>               # override the upstream manifest URL prefix
+tela channel show [-channel <ch>]                        # pretty-print the parsed channel manifest
+tela channel download <binary> [-channel <ch>] [-o path] [-force]
+```
+
+`tela channel download` resolves the named binary against the channel manifest,
+fetches it, verifies its SHA-256 against the manifest entry, and writes it
+atomically to disk. Useful for bootstrapping new boxes or pulling specific
+binaries without setting up admin tokens.
+
+Examples:
+
+```bash
+tela channel                                             # what am I tracking?
+tela channel set beta                                    # switch to beta
+tela channel show -channel stable                        # peek at stable without switching
+tela channel download telahubd-linux-amd64               # bootstrap a new hub binary
+tela channel download telavisor-windows-amd64-setup.exe -channel stable -o ./TelaVisor-Setup.exe
+```
+
+#### tela update
+
+Self-update the running tela binary from the configured release channel.
+Mirrors `telad update` and `telahubd update` so every Tela binary has the same
+one-command self-update story.
+
+```bash
+tela update                                              # update from the configured channel
+tela update -channel <name>                              # one-shot channel override
+tela update -dry-run                                     # show what would happen, don't touch disk
+```
+
+The download is verified against the channel manifest's SHA-256 before being
+written. On Windows the running `tela.exe` is renamed to `tela.exe.old` before
+the new binary is moved into place; the `.old` file is removed in the
+background after the new process is running. On Unix the rename is atomic.
 
 #### tela version
 

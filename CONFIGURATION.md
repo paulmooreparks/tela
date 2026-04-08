@@ -126,6 +126,13 @@ hubs:
   wss://hub.example.com:
     token: 7bf042ceb070136fec15fdd49797c486225fbe62b6cfd3bb4649f04b32446d62
     identity: alice
+
+# Optional: which release channel the tela client (and TelaVisor) follows
+# for self-update. Hub and agent channels are configured separately in
+# their own YAML files.
+update:
+  channel: dev    # dev (default) | beta | stable
+  # manifestBase: https://my-fork.example.com/channels/
 ```
 
 Notes:
@@ -133,6 +140,10 @@ Notes:
 - The `hubs` mapping stores credentials by hub URL (normalized: trailing slashes removed, schemes lowercased).
 - `token` is required; `identity` is optional but helpful for tracking.
 - File permissions: 0600 (user-level) or 0644 (system-level, for SYSTEM account read access).
+- The `update` block is read by `tela channel`, `tela update`, and TelaVisor's
+  Application Settings → Release channel selector. It is the *client's* channel
+  preference; hubs and agents have their own under their respective YAML files.
+- Set or change with `tela channel set <name>` (no need to edit by hand).
 
 **Using the credential store:**
 
@@ -176,12 +187,28 @@ Notes:
 hub: ws://localhost
 token: ""         # optional default token for all machines
 
+# Optional: which release channel telad's self-update follows.
+# See RELEASE-PROCESS.md for the channel model.
+update:
+  channel: dev    # dev (default) | beta | stable
+  # manifestBase: https://my-fork.example.com/channels/   # optional override
+
 machines:
   - name: barn
     # ports: [22, 3389]
     # services: [{ port: 22, name: SSH }]
     # target: 127.0.0.1
 ```
+
+**Update block (`update:`)**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `channel` | string | `dev` | Release channel for self-update: `dev`, `beta`, or `stable`. |
+| `manifestBase` | string | upstream | Override the channel manifest URL prefix. Used when running a fork against a self-hosted release host. Default is `https://github.com/paulmooreparks/tela/releases/download/channels/`. |
+
+The configured channel is read by the `update` mgmt action, the `telad update`
+CLI subcommand, and TelaVisor's Agent Settings → Release channel dropdown.
 
 **Machine fields:**
 
@@ -279,6 +306,12 @@ udpPort: 41820
 udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
 name: owlsnest
 wwwDir: ./www
+
+# Optional: which release channel telahubd's self-update follows.
+# See RELEASE-PROCESS.md for the channel model.
+update:
+  channel: dev    # dev (default) | beta | stable
+  # manifestBase: https://my-fork.example.com/channels/
 
 auth:
   tokens:

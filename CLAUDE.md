@@ -17,6 +17,8 @@ context, current status, and design direction:
 | `ACCESS-MODEL.md` | Token-based RBAC, permissions, ACL model |
 | `CONFIGURATION.md` | Config file formats for all three binaries |
 | `REFERENCE.md` | CLI reference for tela, telad, and telahubd |
+| `RELEASE-PROCESS.md` | Channel model (dev/beta/stable), promotion, manifests |
+| `ROADMAP-1.0.md` | 1.0 readiness checklist (blockers, important, polish) |
 | `TODO.md` | Current task list and priorities |
 
 Do not read all files upfront in every conversation. Read `CLAUDE.md` always.
@@ -36,8 +38,18 @@ Three binaries, one Go module (`github.com/paulmooreparks/tela`):
 | `telahubd` | `cmd/telahubd/` | Hub server (HTTP + WebSocket + UDP relay on a single port) |
 
 Supporting packages:
+- `internal/channel/` -- Release channel manifest fetcher, validator, and SHA-256 stream verifier. Used by every binary's self-update path.
+- `internal/credstore/` -- User-level credential store (`~/.tela/credentials.yaml` on Unix, `%APPDATA%\tela\credentials.yaml` on Windows). Stores hub tokens and the client's own channel preference.
 - `internal/service/` -- Cross-platform OS service management (Windows SCM, systemd, launchd)
+- `internal/telelog/` -- Logging primitives shared across binaries
+- `internal/wsbind/` -- WebSocket transport binding helpers
 - `console/` -- Embedded static files for the hub's web console
+- `cmd/telagui/` -- TelaVisor desktop GUI (Wails v2: Go backend + vanilla JS frontend)
+
+GitHub Actions workflows:
+- `.github/workflows/ci.yml` -- Build, vet, test, gofmt, mod tidy, cross-compile sanity check on every push and PR
+- `.github/workflows/release.yml` -- Build matrix that produces dev/beta/stable releases. Compute-version job at the top reserves the tag atomically, downstream jobs all build against it. Publishes to a rolling `channels` GitHub Release.
+- `.github/workflows/promote.yml` -- Manual `workflow_dispatch` that promotes a dev tag to beta or a beta tag to stable, then invokes release.yml via `workflow_call` to build the new tag.
 
 Related project: **Awan Saya** (`c:\Users\paul\source\repos\awansatu`) -- portal/registry that discovers and lists hubs. Changes to tela's auth, portal sync, or API contracts may affect Awan Saya.
 
@@ -56,11 +68,24 @@ Related project: **Awan Saya** (`c:\Users\paul\source\repos\awansatu`) -- portal
 ```bash
 go build ./...          # Build all three binaries
 go vet ./...            # Static analysis
-go test ./...           # Run tests (if any)
+go test ./...           # Run unit tests
+gofmt -l .              # Should print nothing -- the tree must be gofmt-clean
 ```
 
-All three binaries must compile cleanly after any change. Always run both
-`go build ./...` and `go vet ./...` before considering work complete.
+All three binaries must compile cleanly after any change. Always run all four
+checks before considering work complete. CI runs the same set on Linux with
+`-race` enabled; race-clean tests are required for merge.
+
+To rebuild TelaVisor specifically (the JS/HTML/CSS get bundled into the Go
+binary at build time, not at runtime, so editing the frontend requires a
+rebuild):
+
+```bash
+cd cmd/telagui && wails build
+```
+
+The output is at `cmd/telagui/build/bin/telavisor.exe` (Windows) or the
+equivalent path on other platforms.
 
 ## Guiding Principles
 
@@ -146,6 +171,36 @@ Session index is monotonically incrementing per machine (1-254 max).
 ### Hot reload
 Admin API changes take effect immediately via `authStore.reload()` and are
 persisted to YAML. No hub restart needed for token/ACL/portal changes.
+
+### Release channels
+Tela ships through three channels: `dev` (every commit to main), `beta`
+(promoted from dev on demand), `stable` (promoted from beta on demand).
+Each channel is described by a JSON manifest hosted as an asset on a
+rolling `channels` GitHub Release: `dev.json`, `beta.json`, `stable.json`.
+The manifest names the current tag for that channel and lists every
+binary published under it with its SHA-256 and size.
+
+Every Tela binary fetches its configured channel manifest on self-update,
+compares its current version, downloads the appropriate binary from the
+manifest's `downloadBase`, and verifies the SHA-256 before installing.
+The fetcher and verifier live in `internal/channel`. The configured
+channel for telad and telahubd is in their YAML config under `update.channel`;
+for the tela client and TelaVisor it's in `~/.tela/credentials.yaml` under
+`update.channel`.
+
+Self-update is exposed three ways on every binary so users can pick their
+preferred ergonomics:
+1. CLI: `tela update`, `telad update`, `telahubd update`. All accept
+   `-channel <name>` and `-dry-run`.
+2. API: `GET /api/admin/update` (status), `PATCH /api/admin/update` (set
+   channel), `POST /api/admin/update` (trigger update) on telahubd.
+   Same shape on the agent management proxy via the `update-status` and
+   `update-channel` mgmt actions.
+3. UI: Channel dropdowns in TelaVisor (Hub Settings, Agent Settings,
+   Application Settings) and Awan Saya (hub and fleet management cards).
+
+See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the model end-to-end
+and `internal/channel/channel.go` for the implementation.
 
 ## Coding Conventions
 

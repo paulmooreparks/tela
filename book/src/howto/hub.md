@@ -1,0 +1,1 @@
+{{#include ../../../howto/hub.md}}

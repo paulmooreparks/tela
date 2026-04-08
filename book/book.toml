@@ -1,0 +1,44 @@
+# mdBook configuration for the Tela documentation site.
+#
+# Build with `mdbook build` (output to ./book/), preview with `mdbook serve`.
+# CI publishes to GitHub Pages on every push to main via
+# .github/workflows/docs.yml.
+#
+# All chapter files in src/ either contain content directly or include the
+# canonical .md file from the repository root via mdBook's {{#include}}
+# preprocessor. The repo-root files remain the single source of truth so
+# the docs can never drift from the code.
+
+[book]
+title = "Tela"
+description = "FOSS encrypted remote-access fabric using WireGuard tunnels"
+authors = ["Paul Parks"]
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/paulmooreparks/tela"
+edit-url-template = "https://github.com/paulmooreparks/tela/edit/main/{path}"
+site-url = "/tela/"
+mathjax-support = false
+
+[output.html.search]
+enable = true
+limit-results = 30
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 2
+boost-paragraph = 1
+expand = true
+heading-split-level = 3
+
+[output.html.fold]
+enable = true
+level = 1
+
+[preprocessor.index]
+
+[preprocessor.links]

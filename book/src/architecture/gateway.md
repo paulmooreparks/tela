@@ -1,0 +1,1 @@
+{{#include ../../../DESIGN-gateway.md}}

@@ -125,7 +125,9 @@ The tab contains the following sections:
 
 **Binary Location** -- controls where TelaVisor looks for managed binaries (tela, telad, telahubd). The default is the platform's local application directory. You can use Browse to select a different folder, or Restore Default to reset.
 
-**Installed Tools** -- shows the version of each binary (TelaVisor, tela, telad, telahubd) alongside the latest available version. Binaries that are out of date show an Update button. Missing binaries show an Install button. A Refresh button re-checks all versions.
+**Installed Tools** -- shows the version of each binary (TelaVisor, tela, telad, telahubd) alongside the version available on the client's configured release channel. Binaries that are out of date show an Update button; missing binaries show an Install button. The "Available" column reflects whichever channel TelaVisor itself is configured to follow (set in Application Settings → Updates → Release channel), so a TelaVisor on dev compares against `dev.json` and a TelaVisor on stable compares against `stable.json`. Every download is verified against the channel manifest's SHA-256 before being written to disk. A Refresh button re-checks all versions.
+
+When telad or telahubd is installed as a managed OS service, the Installed Tools row shows `service (running)` or `service (stopped)` next to the binary name and the Update button delegates to the elevated service process to perform the swap (TelaVisor itself does not need to be elevated). After the service restarts against the new binary, the table polls the on-disk version until it changes, so the Installed column reflects the actual installed version with no guesswork.
 
 ![Client Settings, scrolled](screens/telavisor-client-settings2.png)
 
@@ -147,12 +149,13 @@ The Hub Settings view shows connection details, hub metadata, portal registratio
 
 The Connection section shows the hub URL, online status, your role, and a link to the hub's web console. The Hub Info section displays the hub name, hostname, platform, version, Go version, and uptime, all retrieved from the hub's `/api/status` endpoint.
 
-The Version row shows a live indicator: green with `(latest: vX.Y.Z)` when the hub is current, amber with `update available: vX.Y.Z` when behind. The latest available version is fetched once at startup from the GitHub releases API and is reused across all hub and agent version badges.
+The Version row shows a live indicator: green with `(latest: vX.Y.Z)` when the hub is current, amber with `update available: vX.Y.Z` when behind. The "available" version comes from the hub's own release channel manifest, so a hub running on the dev channel is compared against `dev.json`, a hub on stable against `stable.json`, and so on.
 
 The Portals section lists registered portal associations. The Management section provides hub lifecycle controls (visible to owners and admins):
 
 - **Log output** -- View Logs opens a new log panel tab streaming the hub's recent log buffer
-- **Software** -- shows whether the hub is up to date or behind the latest release; the button label reads either `Up to date` (disabled) or `Update to vX.Y.Z` (active). Clicking it asks the hub to download the new release, replace its binary, and restart. Progress is shown inline (`Hub is downloading update and restarting...`, `Waiting for hub to restart... (1)`, `Updated to vX.Y.Z`) and the page re-renders when the hub comes back online.
+- **Release channel** -- a dropdown showing the hub's currently configured channel (`dev`, `beta`, or `stable`) with a status string showing the current and latest versions on that channel. Changing the dropdown opens a confirmation dialog and, on confirm, sends `PATCH /api/admin/update` to the hub to switch its channel persistently. The Software button below updates immediately to reflect the new channel's HEAD. If the hub is too old to support channels (returns HTTP 405 for the new endpoint), the row hides itself and the Software button shows `pre-channel build (update first via legacy path)`.
+- **Software** -- shows whether the hub is up to date or behind the channel's HEAD; the button label reads either `Up to date` (disabled) or `Update to vX.Y.Z` (active). Clicking it asks the hub to download the new release, verify it against the channel manifest's SHA-256, replace its binary, and restart. Progress is shown inline (`Hub is downloading update and restarting...`, `Waiting for hub to restart... (1)`, `Updated to vX.Y.Z`) and the page re-renders when the hub comes back online. The label and disabled state are derived from the channel manifest, not from the GitHub `/releases/latest` API, so a hub on dev cannot be told to "update to v0.5.0" (the stable HEAD).
 - **Restart** -- requests an immediate graceful restart of the hub process
 
 ![Hub Settings, Management section and Danger Zone](screens/telavisor-hub-management.png)
@@ -225,7 +228,8 @@ The Management card mirrors the hub Management card layout:
 
 - **Configuration** -- View Config opens the agent's running configuration in a dialog
 - **Log output** -- View Logs opens a new log panel tab and fetches the agent's recent log buffer through the hub's mediated management protocol
-- **Software** -- shows whether the agent is up to date or behind the latest release; the button label reads `Up to date` (disabled) or `Update to vX.Y.Z` (active). The agent downloads the new release from GitHub, replaces its own binary, and restarts. Progress is shown inline and the sidebar updates when the new version registers.
+- **Release channel** -- a dropdown showing the agent's currently configured channel (`dev`, `beta`, or `stable`) with a status string showing the current and latest versions on that channel. Changing the dropdown opens a confirmation dialog; on confirm, TelaVisor sends the `update-channel` mgmt action through the hub-mediated proxy to switch the agent's channel persistently. Pre-channel agents (telad versions that don't recognize the action) hide the row and show `pre-channel build (update first via legacy path)` next to the Software button.
+- **Software** -- shows whether the agent is up to date or behind the channel's HEAD. Label, title, and disabled state are derived from the channel manifest (via the agent's `update-status` mgmt action), so an agent on dev never gets offered a stable build. Clicking Update sends the existing `update` mgmt action to the agent, which downloads the new release, verifies it against the channel manifest's SHA-256, atomically swaps its binary, and either exits (under a service manager) or relaunches itself (when running standalone).
 - **Restart** -- requests a graceful agent restart
 
 ![Agent Management card and Danger Zone](screens/telavisor-agents-management.png)
@@ -316,6 +320,7 @@ The settings are organized into sections:
 **Updates:**
 
 - **Check for updates automatically** -- checks for new versions at startup
+- **Release channel** -- a dropdown that selects which release channel TelaVisor (and the tela CLI) follows for self-update: `dev`, `beta`, or `stable`. The preference is stored in the user credential store (`~/.tela/credentials.yaml` on Unix, `%APPDATA%\tela\credentials.yaml` on Windows) and shared with the tela CLI; running `tela channel set <name>` from a shell and changing the dropdown here are equivalent. Hubs and agents have their own channels, configured separately in their YAML files or through the Hub Settings / Agent Settings dropdowns.
 
 **Logging:**
 

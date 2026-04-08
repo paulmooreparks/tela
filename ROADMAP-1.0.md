@@ -37,7 +37,9 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 - [ ] Auth store unit tests: `canRegister`, `canConnect`, `canViewMachine`, `canManage` edge cases, including wildcard ACL behavior
 - [ ] Admin API endpoint tests: token CRUD, access PUT/DELETE, agent management proxy, hub log retrieval, hub update flow
 - [ ] Ring buffer tests: wrap-around, snapshot ordering, concurrent writes
-- [ ] `permuteArgs` flag reordering tests
+- [x] `permuteArgs` flag reordering tests (`cmd/tela/admin_test.go`, 16 sub-tests)
+- [x] `internal/channel` tests: manifest parsing/validation, URL helpers, Fetcher cache + stale-on-failure, VerifyReader (94.4% coverage)
+- [x] `internal/credstore` tests: round-trip, normalization, permission bits, edge cases (62.7% coverage)
 - [ ] Portal registration and sync token flow tests
 - [ ] WireGuard handshake-on-reconnect end-to-end test
 - [ ] wsbind transport test (WS, UDP relay, direct UDP)
@@ -51,7 +53,13 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 - [x] Versioned binary naming convention enforced (`{tool}-{goos}-{goarch}{ext}`) so the existing self-update code keeps working
 - [x] CI workflow runs build, vet, test, gofmt, and `go mod tidy` checks on every push and PR (`ci.yml`)
 - [x] Cross-compile sanity check across all 6 target triples on every push
-- [ ] Tag schedule and semver discipline established before the first 1.0 tag
+- [x] Tag schedule and semver discipline established. Three release channels (dev / beta / stable) with documented promotion model. See [RELEASE-PROCESS.md](RELEASE-PROCESS.md).
+- [x] Channel manifests (`dev.json`, `beta.json`, `stable.json`) hosted on a rolling `channels` GitHub Release. Every binary follows its configured channel via `internal/channel` and verifies SHA-256 against the manifest before installing.
+- [x] Promotion workflow (`promote.yml`) wired to `release.yml` via `workflow_call` so promoted tags actually build (the GITHUB_TOKEN tag-push restriction is sidestepped).
+- [x] Tag race fix: a `compute-version` job at the top of `release.yml` reserves the dev counter atomically against the GitHub API, eliminating the silent force-overwrite class of bug.
+- [x] Self-update CLI on every binary: `tela update`, `telad update`, `telahubd update`. All accept `-channel` and `-dry-run`.
+- [x] Self-update API on telahubd: `GET /api/admin/update` (status), `PATCH /api/admin/update` (set channel), `POST /api/admin/update` (trigger). Same shape mirrored on the agent management proxy via `update-status` and `update-channel` mgmt actions.
+- [x] Channel selectors in TelaVisor (Hub Settings, Agent Settings, Application Settings) and Awan Saya (hub and fleet management cards).
 
 ### Code signing
 - [ ] Authenticode certificate for Windows binaries (telavisor.exe, telad.exe, tela.exe, telahubd.exe)
