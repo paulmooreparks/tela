@@ -27,11 +27,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/paulmooreparks/tela/internal/credstore"
 	"github.com/paulmooreparks/tela/internal/portal"
 	"github.com/paulmooreparks/tela/internal/portal/store/file"
+	"gopkg.in/yaml.v3"
 )
 
 // portalEndpoint is the JSON shape of ~/.tela/run/portal-endpoint.json.
@@ -101,6 +104,18 @@ func startEmbeddedPortal(ctx context.Context) (*portalEmbed, error) {
 	store, err := file.Open(storePath)
 	if err != nil {
 		return nil, fmt.Errorf("portal embed: open store %s: %w", storePath, err)
+	}
+
+	// Import any hubs the user already had configured under the
+	// pre-portal layout (~/.tela/hubs.yaml + credentials.yaml). The
+	// import is idempotent: hubs already present in the embedded store
+	// are left alone, so re-running TV does not duplicate or overwrite
+	// records. This is what makes the rewire of Infrastructure mode
+	// onto the portal client friction-free for existing users.
+	if n, err := importLegacyHubs(ctx, store); err != nil {
+		fmt.Fprintf(os.Stderr, "[telavisor] portal embed: legacy hub import failed: %v\n", err)
+	} else if n > 0 {
+		fmt.Fprintf(os.Stderr, "[telavisor] portal embed: imported %d hub(s) from legacy config\n", n)
 	}
 
 	bearer, err := generatePortalBearerToken()
@@ -222,4 +237,142 @@ func (p *portalEmbed) stop() {
 		p.listener = nil
 	}
 	_ = os.Remove(embeddedPortalEndpointPath())
+}
+
+// importLegacyHubs walks the pre-portal hub config (~/.tela/hubs.yaml
+// for the alias-to-URL map and the credstore for per-URL admin tokens)
+// and writes anything missing into the embedded portal store. Returns
+// the number of new records imported.
+//
+// Idempotent: hubs already present in the store (matched by name) are
+// left alone, so the function is safe to call on every TV launch.
+// That is the intended call site: a one-shot import each startup,
+// short-circuited as soon as the store has caught up.
+//
+// The legacy layout has two sources for one hub. hubs.yaml maps a
+// short name to a URL; credentials.yaml maps a URL to an admin token.
+// We join the two on URL to produce {name, url, adminToken} triples.
+// Hubs that have a token but no alias get a synthesized name from the
+// URL host. Hubs that have an alias but no token are imported with an
+// empty admin token (the user can paste one in later); they will fail
+// the admin proxy until a token is supplied but they remain visible
+// in the directory, which matches today's TV behavior.
+func importLegacyHubs(ctx context.Context, store *file.Store) (int, error) {
+	credStore, _ := credstore.Load(credstore.UserPath())
+
+	type legacyHub struct {
+		name        string
+		url         string
+		adminToken  string
+		fromAliases bool
+	}
+	hubs := make(map[string]*legacyHub) // keyed by url
+
+	// hubs.yaml: short name -> URL
+	hubsFile := filepath.Join(telaConfigDir(), "hubs.yaml")
+	if data, err := os.ReadFile(hubsFile); err == nil {
+		var cfg struct {
+			Hubs map[string]string `yaml:"hubs"`
+		}
+		if err := yaml.Unmarshal(data, &cfg); err == nil {
+			for name, hubURL := range cfg.Hubs {
+				canonical := canonicalHubURL(hubURL)
+				hubs[canonical] = &legacyHub{
+					name:        name,
+					url:         canonical,
+					fromAliases: true,
+				}
+			}
+		}
+	}
+
+	// credentials.yaml: URL -> token. Joins onto hubs.yaml on URL,
+	// creating a fresh entry with a host-derived name when the URL
+	// has no alias.
+	if credStore != nil {
+		for hubURL, cred := range credStore.Hubs {
+			canonical := canonicalHubURL(hubURL)
+			if existing, ok := hubs[canonical]; ok {
+				existing.adminToken = cred.Token
+				continue
+			}
+			hubs[canonical] = &legacyHub{
+				name:       hostFromURL(canonical),
+				url:        canonical,
+				adminToken: cred.Token,
+			}
+		}
+	}
+
+	if len(hubs) == 0 {
+		return 0, nil
+	}
+
+	// Skip names already present in the embedded store. Listing as
+	// the local user is fine: the file store treats every request as
+	// the local operator.
+	existing, err := store.ListHubsForUser(ctx, file.LocalUser)
+	if err != nil {
+		return 0, fmt.Errorf("list existing hubs: %w", err)
+	}
+	have := make(map[string]bool, len(existing))
+	for _, h := range existing {
+		have[h.Name] = true
+	}
+
+	imported := 0
+	for _, h := range hubs {
+		if h.name == "" || h.url == "" {
+			continue
+		}
+		if have[h.name] {
+			continue
+		}
+		_, _, err := store.AddHub(ctx, file.LocalUser, portal.Hub{
+			Name:       h.name,
+			URL:        h.url,
+			AdminToken: h.adminToken,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[telavisor] portal embed: import hub %q: %v\n", h.name, err)
+			continue
+		}
+		imported++
+	}
+	return imported, nil
+}
+
+// canonicalHubURL normalizes a hub URL to the http(s) form the portal
+// store will use. Legacy TV stores hubs as wss://host or ws://host;
+// the portal admin proxy needs https:// or http://. The two are the
+// same hub, just different schemes; collapse them so the credstore
+// join works regardless of which scheme the user originally typed.
+func canonicalHubURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "wss://") {
+		raw = "https://" + strings.TrimPrefix(raw, "wss://")
+	} else if strings.HasPrefix(raw, "ws://") {
+		raw = "http://" + strings.TrimPrefix(raw, "ws://")
+	}
+	return strings.TrimSuffix(raw, "/")
+}
+
+// hostFromURL extracts a host[:port] from a URL for use as a hub
+// short name when no alias is configured. Falls back to the raw input
+// if parsing fails so the import never produces an empty name.
+func hostFromURL(rawURL string) string {
+	s := canonicalHubURL(rawURL)
+	for _, prefix := range []string{"https://", "http://"} {
+		if strings.HasPrefix(s, prefix) {
+			s = strings.TrimPrefix(s, prefix)
+			break
+		}
+	}
+	if i := strings.IndexAny(s, "/?#"); i >= 0 {
+		s = s[:i]
+	}
+	return s
 }
