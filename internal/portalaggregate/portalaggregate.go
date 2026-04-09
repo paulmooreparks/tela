@@ -67,6 +67,10 @@ type MergedAgent struct {
 	// HubID is the hub this agent registration belongs to.
 	HubID string
 
+	// HubName is the human-readable name of the hub. Useful when
+	// rendering an agent record without joining back to the hub list.
+	HubName string
+
 	// MachineRegistrationID is the hub-local UUID for this
 	// (agentId, machineName) pair.
 	MachineRegistrationID string
@@ -78,12 +82,35 @@ type MergedAgent struct {
 	// connected.
 	Online bool
 
-	// Hostname, OS are optional metadata from the agent status.
-	Hostname string
-	OS       string
+	// SessionCount is the number of active client sessions on this
+	// agent. When merged across multiple sources, the maximum value
+	// from any source wins.
+	SessionCount int
+
+	// Hostname, OS, AgentVersion are optional metadata from the agent
+	// status (first non-empty source wins on merge).
+	Hostname     string
+	OS           string
+	AgentVersion string
+
+	// Tags, Location, Owner are operator-supplied metadata from the
+	// agent's machine config (first non-empty source wins on merge).
+	Tags     []string
+	Location string
+	Owner    string
+
+	// RegisteredAt and LastSeen are RFC3339 timestamps from the hub
+	// (first non-empty source wins on merge).
+	RegisteredAt string
+	LastSeen     string
 
 	// Services is the list of forwarded services the agent exposes.
 	Services []ServiceInfo
+
+	// Capabilities is the agent's reported feature set (e.g.
+	// management, fileShare). Shape mirrors the agent's capabilities
+	// JSON object verbatim.
+	Capabilities map[string]any
 
 	// LinkedAgentIDs lists the AgentID+HubID keys of other
 	// MergedAgents that share the same AgentID but belong to a
@@ -98,7 +125,7 @@ type MergedAgent struct {
 // ServiceInfo describes one forwarded service on an agent.
 type ServiceInfo struct {
 	Port     int    `json:"port"`
-	Label    string `json:"label,omitempty"`
+	Name     string `json:"name,omitempty"`
 	Protocol string `json:"protocol,omitempty"`
 }
 
@@ -216,13 +243,61 @@ func merge(ctx context.Context, sources map[string]source) (Result, error) {
 				ma = &MergedAgent{
 					AgentID:               fa.AgentID,
 					HubID:                 fa.HubID,
+					HubName:               fa.Hub,
 					MachineRegistrationID: fa.MachineRegistrationID,
 					DisplayName:           agentDisplayName(fa),
 					Hostname:              derefStr(fa.Hostname),
 					OS:                    derefStr(fa.OS),
+					AgentVersion:          derefStr(fa.AgentVersion),
+					Tags:                  fa.Tags,
+					Location:              derefStr(fa.Location),
+					Owner:                 derefStr(fa.Owner),
+					RegisteredAt:          derefStr(fa.RegisteredAt),
+					LastSeen:              derefStr(fa.LastSeen),
+					SessionCount:          fa.SessionCount,
 					Services:              convertServices(fa.Services),
+					Capabilities:          fa.Capabilities,
 				}
 				agentMap[key] = ma
+			} else {
+				// Subsequent source for the same agent: first non-empty
+				// scalar wins, max session count wins.
+				if ma.HubName == "" {
+					ma.HubName = fa.Hub
+				}
+				if ma.Hostname == "" {
+					ma.Hostname = derefStr(fa.Hostname)
+				}
+				if ma.OS == "" {
+					ma.OS = derefStr(fa.OS)
+				}
+				if ma.AgentVersion == "" {
+					ma.AgentVersion = derefStr(fa.AgentVersion)
+				}
+				if len(ma.Tags) == 0 && len(fa.Tags) > 0 {
+					ma.Tags = fa.Tags
+				}
+				if ma.Location == "" {
+					ma.Location = derefStr(fa.Location)
+				}
+				if ma.Owner == "" {
+					ma.Owner = derefStr(fa.Owner)
+				}
+				if ma.RegisteredAt == "" {
+					ma.RegisteredAt = derefStr(fa.RegisteredAt)
+				}
+				if ma.LastSeen == "" {
+					ma.LastSeen = derefStr(fa.LastSeen)
+				}
+				if fa.SessionCount > ma.SessionCount {
+					ma.SessionCount = fa.SessionCount
+				}
+				if len(ma.Services) == 0 {
+					ma.Services = convertServices(fa.Services)
+				}
+				if ma.Capabilities == nil && fa.Capabilities != nil {
+					ma.Capabilities = fa.Capabilities
+				}
 			}
 			// Online if any source says connected.
 			if fa.AgentConnected {
@@ -378,8 +453,8 @@ func convertServices(raw []map[string]any) []ServiceInfo {
 		if v, ok := m["port"].(float64); ok {
 			si.Port = int(v)
 		}
-		if v, ok := m["label"].(string); ok {
-			si.Label = v
+		if v, ok := m["name"].(string); ok {
+			si.Name = v
 		}
 		if v, ok := m["protocol"].(string); ok {
 			si.Protocol = v

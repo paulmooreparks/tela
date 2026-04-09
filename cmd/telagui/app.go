@@ -2418,12 +2418,13 @@ func (a *App) GetAgentList() []AgentInfo {
 	result := make([]AgentInfo, 0, len(merged.Agents))
 	for _, m := range merged.Agents {
 		// Convert []ServiceInfo to []map[string]interface{} so the
-		// existing frontend shape is unchanged.
+		// existing frontend shape is unchanged. Frontend reads svc.name
+		// and svc.port; emit those keys exactly.
 		var svcMaps []map[string]interface{}
 		for _, svc := range m.Services {
 			svcMaps = append(svcMaps, map[string]interface{}{
 				"port":     svc.Port,
-				"label":    svc.Label,
+				"name":     svc.Name,
 				"protocol": svc.Protocol,
 			})
 		}
@@ -2438,11 +2439,20 @@ func (a *App) GetAgentList() []AgentInfo {
 			AgentID:               m.AgentID,
 			HubID:                 m.HubID,
 			MachineRegistrationID: m.MachineRegistrationID,
+			Hub:                   m.HubName,
 			DisplayName:           m.DisplayName,
 			Hostname:              m.Hostname,
 			OS:                    m.OS,
+			Version:               m.AgentVersion,
+			Tags:                  m.Tags,
+			Location:              m.Location,
+			Owner:                 m.Owner,
 			Online:                m.Online,
+			SessionCount:          m.SessionCount,
+			RegisteredAt:          m.RegisteredAt,
+			LastSeen:              m.LastSeen,
 			Services:              svcMaps,
+			Capabilities:          m.Capabilities,
 			LinkedAgentIDs:        m.LinkedAgentIDs,
 			Sources:               m.Sources,
 		})
