@@ -1461,69 +1461,32 @@ func (a *App) GetHubHistory(hubName string) string {
 	return string(body)
 }
 
-// fetchHubPublicEndpoint resolves the hub via the active portal
-// source, then issues a GET against the hub URL + path with the
-// stored token (viewer if present, otherwise admin) on the
-// Authorization header. Used for public hub endpoints like
-// /api/status and /api/history that the admin proxy cannot forward
-// but that auth-enabled hubs still gate behind a token.
+// fetchHubPublicEndpoint fetches a public hub endpoint (/api/status
+// or /api/history) through the portal's public-hub proxy so the
+// portal supplies the stored token. This works for both embedded and
+// remote portal sources without the caller needing direct access to
+// the hub or its credentials.
 func (a *App) fetchHubPublicEndpoint(hubName, path string) ([]byte, error) {
-	hubURL, token, err := a.lookupHubAuth(hubName)
-	if err != nil {
-		return nil, err
-	}
-	apiURL := strings.TrimSuffix(hubURL, "/") + path
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := a.doRequestLogged(req, 15*time.Second)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	return body, nil
-}
-
-// lookupHubAuth returns the hub URL AND a token suitable for public
-// hub endpoints (status, history) by reaching directly into the
-// embedded portal store. Remote portal sources do not expose the
-// stored token over the wire (a future portal protocol passthrough
-// will fix this for remote sources), so for now this only works for
-// the embedded source. When the active source is remote, the
-// returned token is empty and the caller falls back to no auth.
-func (a *App) lookupHubAuth(hubName string) (string, string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	sourceName, hubURL, err := a.sourceForHub(ctx, hubName)
+
+	sourceName, _, err := a.sourceForHub(ctx, hubName)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
-	// For the embedded source, reach into the file store directly
-	// for the stored token. For remote sources, return the URL with
-	// no token (the admin proxy path handles auth for those).
-	if (sourceName == "" || sourceName == embeddedSourceName) && a.portal != nil {
-		hub, _, err := a.portal.store.LookupHubForUser(context.Background(), nil, hubName)
-		if err != nil {
-			return hubURL, "", err
-		}
-		token := hub.ViewerToken
-		if token == "" {
-			token = hub.AdminToken
-		}
-		return hub.URL, token, nil
+	client, err := a.portalClientForSource(sourceName)
+	if err != nil {
+		return nil, err
 	}
-	return hubURL, "", nil
+
+	switch path {
+	case "/api/status":
+		return client.HubStatus(ctx, hubName)
+	case "/api/history":
+		return client.HubHistory(ctx, hubName)
+	default:
+		return nil, fmt.Errorf("unsupported public endpoint: %s", path)
+	}
 }
 
 // GetTokenRole returns the role for the admin token the active portal
@@ -1542,17 +1505,6 @@ func (a *App) GetTokenRole(hubName string) string {
 		return "unknown"
 	}
 	return "owner"
-}
-
-// lookupHubURL returns the URL for a named hub by querying all
-// enabled sources and returning the URL from the best (canManage)
-// source. Used by methods that need direct access to the hub (the
-// /api/status path which is not proxied through the portal).
-func (a *App) lookupHubURL(hubName string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_, hubURL, err := a.sourceForHub(ctx, hubName)
-	return hubURL, err
 }
 
 // --- Docker Integration ---

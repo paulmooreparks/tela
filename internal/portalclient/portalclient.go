@@ -282,6 +282,54 @@ func (c *Client) HubAdminJSON(ctx context.Context, hubName, operation, method st
 	return decodeOrError(resp, out)
 }
 
+// ── Public hub endpoint proxies ────────────────────────────────────
+
+// HubStatus fetches the named hub's /api/status through the portal's
+// /api/hub-status/{hubName} proxy. The portal authenticates against
+// the hub with its stored token; the caller does not need direct
+// access to the hub or its token.
+func (c *Client) HubStatus(ctx context.Context, hubName string) ([]byte, error) {
+	return c.hubPublicProxy(ctx, hubName, "/api/hub-status/")
+}
+
+// HubHistory fetches the named hub's /api/history through the portal's
+// /api/hub-history/{hubName} proxy.
+func (c *Client) HubHistory(ctx context.Context, hubName string) ([]byte, error) {
+	return c.hubPublicProxy(ctx, hubName, "/api/hub-history/")
+}
+
+// hubPublicProxy issues a GET against a portal public-hub proxy
+// endpoint and returns the raw response body.
+func (c *Client) hubPublicProxy(ctx context.Context, hubName, prefix string) ([]byte, error) {
+	if hubName == "" {
+		return nil, errors.New("portalclient: hubName is required")
+	}
+	path := prefix + url.PathEscape(hubName)
+	req, err := c.newRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return body, nil
+}
+
 // ── OAuth 2.0 device authorization grant (RFC 8628) ────────────────
 
 // DeviceAuthorization is the response from POST /api/oauth/device.

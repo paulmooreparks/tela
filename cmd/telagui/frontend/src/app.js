@@ -4163,7 +4163,10 @@ function renderHubSettings(pane) {
   }
 
   goApp.GetHubInfo(hub).then(function (raw) {
-    try { hubInfoData = JSON.parse(raw); } catch (e) { hubInfoData = null; }
+    try {
+      var parsed = JSON.parse(raw);
+      hubInfoData = (parsed && parsed.error) ? null : parsed;
+    } catch (e) { hubInfoData = null; }
     tryRender();
   }).catch(function () { tryRender(); });
 

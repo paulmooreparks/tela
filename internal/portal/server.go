@@ -54,6 +54,10 @@ func (s *Server) Handler() http.Handler {
 	// Admin proxy (user auth, gated on canManage).
 	mux.HandleFunc("/api/hub-admin/", s.handleAdminProxy)
 
+	// Public hub endpoint proxies (user auth, viewer token).
+	mux.HandleFunc("GET /api/hub-status/", s.handleHubStatusProxy)
+	mux.HandleFunc("GET /api/hub-history/", s.handleHubHistoryProxy)
+
 	// Fleet aggregation (user auth).
 	mux.HandleFunc("GET /api/fleet/agents", s.handleFleetAgents)
 
