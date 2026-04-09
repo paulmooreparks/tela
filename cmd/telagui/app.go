@@ -1257,6 +1257,11 @@ func (a *App) GetStoredToken(hubURL string) string {
 // the profile connections from the portal and writes it to the local
 // credential store so the tela CLI can authenticate. Best-effort:
 // failures are logged but do not block the connection attempt.
+//
+// Profile connections store the hub as a WebSocket URL (e.g.,
+// wss://owlsnest.parkscomputing.com). The portal knows hubs by short
+// name (e.g., "owlsnest"). This method tries the known hubs list to
+// find the portal name for each connection URL.
 func (a *App) syncHubTokensToCredstore(connectionsJSON string) {
 	var connections []ProfileConnection
 	if json.Unmarshal([]byte(connectionsJSON), &connections) != nil {
@@ -1270,21 +1275,36 @@ func (a *App) syncHubTokensToCredstore(connectionsJSON string) {
 	if store == nil {
 		store = &credstore.Store{}
 	}
-	changed := false
 
+	// Build a URL-to-name index from the known hubs so we can map
+	// profile connection URLs back to portal hub names.
+	hubs := a.GetKnownHubs()
+	urlToName := make(map[string]string)
+	for _, h := range hubs {
+		// Index by both the HTTPS URL and its WSS equivalent so
+		// either form matches the profile connection URL.
+		normalized := strings.TrimRight(strings.ToLower(h.URL), "/")
+		urlToName[normalized] = h.Name
+		wss := strings.Replace(normalized, "https://", "wss://", 1)
+		wss = strings.Replace(wss, "http://", "ws://", 1)
+		urlToName[wss] = h.Name
+	}
+
+	changed := false
 	for _, conn := range connections {
-		hubName := conn.Hub
-		if hubName == "" {
+		connURL := conn.Hub
+		if connURL == "" {
 			continue
 		}
-		// Already have a token for this hub? Skip.
-		hubURL := conn.Hub
-		// Resolve hub name to URL through the portal.
-		_, resolvedURL, err := a.sourceForHub(ctx, hubName)
-		if err == nil && resolvedURL != "" {
-			hubURL = resolvedURL
+		// Already have a token for this hub URL? Skip.
+		if _, ok := store.Get(connURL); ok {
+			continue
 		}
-		if _, ok := store.Get(hubURL); ok {
+
+		// Find the portal hub name for this connection URL.
+		normalized := strings.TrimRight(strings.ToLower(connURL), "/")
+		hubName, ok := urlToName[normalized]
+		if !ok {
 			continue
 		}
 
@@ -1298,7 +1318,7 @@ func (a *App) syncHubTokensToCredstore(connectionsJSON string) {
 		if err != nil || token == "" {
 			continue
 		}
-		store.Set(hubURL, credstore.Credential{Token: token})
+		store.Set(connURL, credstore.Credential{Token: token})
 		changed = true
 	}
 
