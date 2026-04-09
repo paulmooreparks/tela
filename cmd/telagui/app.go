@@ -29,6 +29,7 @@ import (
 	"github.com/gorilla/websocket"
 	channelpkg "github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/credstore"
+	"github.com/paulmooreparks/tela/internal/portalaggregate"
 	"github.com/paulmooreparks/tela/internal/portalclient"
 	"github.com/paulmooreparks/tela/internal/service"
 	"gopkg.in/yaml.v3"
@@ -984,28 +985,24 @@ func profilePath() string {
 // Source is the portal source name (e.g. "Local") so the frontend
 // can group hubs by source if it wants to.
 func (a *App) GetKnownHubs() []KnownHub {
-	sourceName, err := a.firstEnabledSourceName()
-	if err != nil {
-		return nil
-	}
-	client, err := a.portalClientForSource(sourceName)
+	clients, err := a.enabledPortalClients()
 	if err != nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	hubs, err := client.ListHubs(ctx)
+	result, err := portalaggregate.Merge(ctx, clients)
 	if err != nil {
 		return nil
 	}
-	out := make([]KnownHub, 0, len(hubs))
-	for _, h := range hubs {
+	out := make([]KnownHub, 0, len(result.Hubs))
+	for _, h := range result.Hubs {
 		out = append(out, KnownHub{
 			Name:     h.Name,
 			URL:      h.URL,
 			HasToken: true,
-			Source:   sourceName,
+			Source:   h.PreferredSource,
 		})
 	}
 	return out
@@ -2268,83 +2265,76 @@ func (a *App) AdminAPICall(hubName, method, operation string, bodyJSON string) s
 
 // AgentInfo contains the data for one agent displayed in Agents mode.
 type AgentInfo struct {
-	ID           string                   `json:"id"`
-	Hub          string                   `json:"hub"`
-	Online       bool                     `json:"online"`
-	Version      string                   `json:"version"`
-	Hostname     string                   `json:"hostname"`
-	OS           string                   `json:"os"`
-	DisplayName  string                   `json:"displayName"`
-	Tags         []string                 `json:"tags"`
-	Location     string                   `json:"location"`
-	Owner        string                   `json:"owner"`
-	SessionCount int                      `json:"sessionCount"`
-	RegisteredAt string                   `json:"registeredAt"`
-	LastSeen     string                   `json:"lastSeen"`
-	Services     []map[string]interface{} `json:"services"`
-	Capabilities map[string]interface{}   `json:"capabilities"`
+	ID                    string                   `json:"id"`
+	AgentID               string                   `json:"agentId,omitempty"`
+	HubID                 string                   `json:"hubId,omitempty"`
+	MachineRegistrationID string                   `json:"machineRegistrationId,omitempty"`
+	Hub                   string                   `json:"hub"`
+	Online                bool                     `json:"online"`
+	Version               string                   `json:"version"`
+	Hostname              string                   `json:"hostname"`
+	OS                    string                   `json:"os"`
+	DisplayName           string                   `json:"displayName"`
+	Tags                  []string                 `json:"tags"`
+	Location              string                   `json:"location"`
+	Owner                 string                   `json:"owner"`
+	SessionCount          int                      `json:"sessionCount"`
+	RegisteredAt          string                   `json:"registeredAt"`
+	LastSeen              string                   `json:"lastSeen"`
+	Services              []map[string]interface{} `json:"services"`
+	Capabilities          map[string]interface{}   `json:"capabilities"`
+	LinkedAgentIDs        []string                 `json:"linkedAgentIds,omitempty"`
+	Sources               []string                 `json:"sources,omitempty"`
 }
 
-// GetAgentList returns agent info for every agent the active portal
-// source can see across all of its hubs. The portal's
-// /api/fleet/agents endpoint does the cross-hub aggregation server
-// side: each entry is an upstream hub's /api/status machine record
-// tagged with `hub` (hub name) and `hubUrl`. This replaces the older
-// per-profile-hub iteration; the active portal source is the source
-// of truth for which hubs to query.
+// GetAgentList returns agent info for every agent visible across all
+// enabled portal sources. portalaggregate.Merge deduplicates agents
+// by (hubId, agentId) and sets LinkedAgentIDs when the same agent
+// appears on multiple hubs.
 func (a *App) GetAgentList() []AgentInfo {
-	sourceName, err := a.firstEnabledSourceName()
-	if err != nil {
-		return nil
-	}
-	client, err := a.portalClientForSource(sourceName)
+	clients, err := a.enabledPortalClients()
 	if err != nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	agents, err := client.FleetAgents(ctx)
+	merged, err := portalaggregate.Merge(ctx, clients)
 	if err != nil {
 		return nil
 	}
 
-	result := make([]AgentInfo, 0, len(agents))
-	for _, m := range agents {
-		ai := AgentInfo{
-			ID:           m.ID,
-			Hub:          m.Hub,
-			Online:       m.AgentConnected,
-			SessionCount: m.SessionCount,
-			Tags:         m.Tags,
-			Services:     m.Services,
-			Capabilities: m.Capabilities,
+	result := make([]AgentInfo, 0, len(merged.Agents))
+	for _, m := range merged.Agents {
+		// Convert []ServiceInfo to []map[string]interface{} so the
+		// existing frontend shape is unchanged.
+		var svcMaps []map[string]interface{}
+		for _, svc := range m.Services {
+			svcMaps = append(svcMaps, map[string]interface{}{
+				"port":     svc.Port,
+				"label":    svc.Label,
+				"protocol": svc.Protocol,
+			})
 		}
-		if m.AgentVersion != nil {
-			ai.Version = *m.AgentVersion
+		// ID is the hub-local machine name (legacy field). Use
+		// DisplayName as the nearest equivalent from the aggregate.
+		id := m.DisplayName
+		if id == "" {
+			id = m.AgentID
 		}
-		if m.Hostname != nil {
-			ai.Hostname = *m.Hostname
-		}
-		if m.OS != nil {
-			ai.OS = *m.OS
-		}
-		if m.DisplayName != nil {
-			ai.DisplayName = *m.DisplayName
-		}
-		if m.Location != nil {
-			ai.Location = *m.Location
-		}
-		if m.Owner != nil {
-			ai.Owner = *m.Owner
-		}
-		if m.RegisteredAt != nil {
-			ai.RegisteredAt = *m.RegisteredAt
-		}
-		if m.LastSeen != nil {
-			ai.LastSeen = *m.LastSeen
-		}
-		result = append(result, ai)
+		result = append(result, AgentInfo{
+			ID:                    id,
+			AgentID:               m.AgentID,
+			HubID:                 m.HubID,
+			MachineRegistrationID: m.MachineRegistrationID,
+			DisplayName:           m.DisplayName,
+			Hostname:              m.Hostname,
+			OS:                    m.OS,
+			Online:                m.Online,
+			Services:              svcMaps,
+			LinkedAgentIDs:        m.LinkedAgentIDs,
+			Sources:               m.Sources,
+		})
 	}
 	return result
 }
