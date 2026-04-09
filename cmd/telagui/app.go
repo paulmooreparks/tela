@@ -2311,59 +2311,38 @@ func (a *App) GetAgentList() []AgentInfo {
 
 	result := make([]AgentInfo, 0, len(agents))
 	for _, m := range agents {
-		ai := AgentInfo{}
-		if v, ok := m["id"].(string); ok {
-			ai.ID = v
+		ai := AgentInfo{
+			ID:           m.ID,
+			Hub:          m.Hub,
+			Online:       m.AgentConnected,
+			SessionCount: m.SessionCount,
+			Tags:         m.Tags,
+			Services:     m.Services,
+			Capabilities: m.Capabilities,
 		}
-		if v, ok := m["hub"].(string); ok {
-			ai.Hub = v
+		if m.AgentVersion != nil {
+			ai.Version = *m.AgentVersion
 		}
-		if v, ok := m["agentConnected"].(bool); ok {
-			ai.Online = v
+		if m.Hostname != nil {
+			ai.Hostname = *m.Hostname
 		}
-		if v, ok := m["agentVersion"].(string); ok {
-			ai.Version = v
+		if m.OS != nil {
+			ai.OS = *m.OS
 		}
-		if v, ok := m["hostname"].(string); ok {
-			ai.Hostname = v
+		if m.DisplayName != nil {
+			ai.DisplayName = *m.DisplayName
 		}
-		if v, ok := m["os"].(string); ok {
-			ai.OS = v
+		if m.Location != nil {
+			ai.Location = *m.Location
 		}
-		if v, ok := m["displayName"].(string); ok {
-			ai.DisplayName = v
+		if m.Owner != nil {
+			ai.Owner = *m.Owner
 		}
-		if v, ok := m["location"].(string); ok {
-			ai.Location = v
+		if m.RegisteredAt != nil {
+			ai.RegisteredAt = *m.RegisteredAt
 		}
-		if v, ok := m["owner"].(string); ok {
-			ai.Owner = v
-		}
-		if v, ok := m["registeredAt"].(string); ok {
-			ai.RegisteredAt = v
-		}
-		if v, ok := m["lastSeen"].(string); ok {
-			ai.LastSeen = v
-		}
-		if v, ok := m["sessionCount"].(float64); ok {
-			ai.SessionCount = int(v)
-		}
-		if tags, ok := m["tags"].([]any); ok {
-			for _, t := range tags {
-				if s, ok := t.(string); ok {
-					ai.Tags = append(ai.Tags, s)
-				}
-			}
-		}
-		if svcs, ok := m["services"].([]any); ok {
-			for _, s := range svcs {
-				if sm, ok := s.(map[string]any); ok {
-					ai.Services = append(ai.Services, sm)
-				}
-			}
-		}
-		if caps, ok := m["capabilities"].(map[string]any); ok {
-			ai.Capabilities = caps
+		if m.LastSeen != nil {
+			ai.LastSeen = *m.LastSeen
 		}
 		result = append(result, ai)
 	}

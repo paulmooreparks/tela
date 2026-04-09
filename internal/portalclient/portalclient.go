@@ -1,6 +1,6 @@
 // Package portalclient is a Go client for the portal protocol
 // described in DESIGN-portal.md. It speaks to any portal that
-// implements protocol version 1.0: the in-process embedded portal
+// implements protocol version 1.1: the in-process embedded portal
 // shipped inside TelaVisor, the standalone telaportal binary, and
 // remote multi-tenant portals like Awan Saya.
 //
@@ -70,6 +70,7 @@ type Discovery struct {
 	HubDirectory      string   `json:"hub_directory"`
 	ProtocolVersion   string   `json:"protocolVersion"`
 	SupportedVersions []string `json:"supportedVersions"`
+	PortalID          string   `json:"portalId,omitempty"`
 }
 
 // Discover fetches /.well-known/tela. No authentication is sent.
@@ -188,13 +189,47 @@ func (c *Client) DeleteHub(ctx context.Context, name string) ([]portal.HubVisibi
 
 // ── Fleet aggregation ───────────────────────────────────────────────
 
+// FleetAgent is one entry from GET /api/fleet/agents (DESIGN-portal.md
+// section 5). Each entry mirrors a hub's /api/status machine record,
+// tagged with the hub identity fields the portal adds.
+//
+// Fields marked "(1.1)" are present only when both the portal and the
+// upstream hub speak protocol version 1.1. Callers MUST tolerate empty
+// strings for those fields when talking to a mix of 1.0 and 1.1 hubs.
+type FleetAgent struct {
+	// Machine identity (from the hub's /api/status machine record).
+	ID                    string `json:"id"`                              // machineName; always present
+	AgentID               string `json:"agentId,omitempty"`               // (1.1) stable telad UUID
+	MachineRegistrationID string `json:"machineRegistrationId,omitempty"` // (1.1) hub-local UUID
+
+	// Machine status (from the hub's /api/status machine record).
+	AgentConnected bool             `json:"agentConnected"`
+	SessionCount   int              `json:"sessionCount"`
+	DisplayName    *string          `json:"displayName,omitempty"`
+	Hostname       *string          `json:"hostname,omitempty"`
+	OS             *string          `json:"os,omitempty"`
+	AgentVersion   *string          `json:"agentVersion,omitempty"`
+	Tags           []string         `json:"tags,omitempty"`
+	Location       *string          `json:"location,omitempty"`
+	Owner          *string          `json:"owner,omitempty"`
+	RegisteredAt   *string          `json:"registeredAt,omitempty"`
+	LastSeen       *string          `json:"lastSeen,omitempty"`
+	Services       []map[string]any `json:"services,omitempty"`
+	Capabilities   map[string]any   `json:"capabilities,omitempty"`
+
+	// Hub identity (added by the portal aggregation layer).
+	Hub    string `json:"hub"`             // portal-assigned hub name
+	HubURL string `json:"hubUrl"`          // hub's public URL
+	HubID  string `json:"hubId,omitempty"` // (1.1) hub's stable UUID
+}
+
 // FleetAgents returns the merged agent list across every hub the
 // authenticated user can manage. Each entry is the upstream hub's
-// /api/status machine record tagged with `hub` and `hubUrl` fields.
+// /api/status machine record tagged with hub identity fields.
 // Wraps GET /api/fleet/agents.
-func (c *Client) FleetAgents(ctx context.Context) ([]map[string]any, error) {
+func (c *Client) FleetAgents(ctx context.Context) ([]FleetAgent, error) {
 	var resp struct {
-		Agents []map[string]any `json:"agents"`
+		Agents []FleetAgent `json:"agents"`
 	}
 	req, err := c.newRequest(ctx, http.MethodGet, "/api/fleet/agents", nil)
 	if err != nil {
