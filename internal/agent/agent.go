@@ -85,16 +85,26 @@ func newUUID() string {
 // agentState holds the telad identity state. It lives in telad.state
 // alongside telad.yaml. Operators should not edit it -- the file is
 // managed by telad itself.
+//
+// AgentID is one stable UUID per telad install. Machines holds one
+// machineRegistrationId per machine name configured for this telad,
+// so a single telad managing multiple machines presents a distinct
+// regId for each one.
 type agentState struct {
-	AgentID               string `yaml:"agentId"`
+	AgentID  string                   `yaml:"agentId"`
+	Machines map[string]*machineState `yaml:"machines,omitempty"`
+}
+
+type machineState struct {
 	MachineRegistrationID string `yaml:"machineRegistrationId"`
 }
 
 // loadOrCreateAgentState loads telad.state from the same directory as
 // configPath, or from the default tela config directory when configPath
-// is empty. If the file does not exist or has no agentId, a new UUID is
-// generated and written. Returns the loaded state and the path used.
-func loadOrCreateAgentState(configPath string) (agentState, string) {
+// is empty. It ensures the file has an agentId and a machineRegistrationId
+// for every machine name in machineNames, generating new UUIDs for any
+// that are missing. The file is written back if anything changed.
+func loadOrCreateAgentState(configPath string, machineNames []string) (agentState, string) {
 	var dir string
 	if configPath != "" {
 		dir = filepath.Dir(configPath)
@@ -113,10 +123,19 @@ func loadOrCreateAgentState(configPath string) (agentState, string) {
 		log.Printf("[agent] generated agentId %s", st.AgentID)
 		dirty = true
 	}
-	if st.MachineRegistrationID == "" {
-		st.MachineRegistrationID = newUUID()
-		log.Printf("[agent] generated machineRegistrationId %s", st.MachineRegistrationID)
-		dirty = true
+	if st.Machines == nil {
+		st.Machines = make(map[string]*machineState)
+	}
+	for _, name := range machineNames {
+		if name == "" {
+			continue
+		}
+		if _, ok := st.Machines[name]; !ok {
+			id := newUUID()
+			st.Machines[name] = &machineState{MachineRegistrationID: id}
+			log.Printf("[agent] generated machineRegistrationId %s for machine %q", id, name)
+			dirty = true
+		}
 	}
 	if dirty {
 		data, _ := yaml.Marshal(&st)
@@ -124,6 +143,20 @@ func loadOrCreateAgentState(configPath string) (agentState, string) {
 		_ = os.WriteFile(statePath, data, 0o600)
 	}
 	return st, statePath
+}
+
+// regIDFor returns the machineRegistrationId for a given machine name.
+// Returns empty string if loadOrCreateAgentState was not called with
+// that name (which would indicate a programming error).
+func (s *agentState) regIDFor(machineName string) string {
+	if s.Machines == nil {
+		return ""
+	}
+	m, ok := s.Machines[machineName]
+	if !ok || m == nil {
+		return ""
+	}
+	return m.MachineRegistrationID
 }
 
 // writeControlFile writes telad's control file so TelaVisor can detect
@@ -1006,11 +1039,11 @@ func Main() {
 	}
 
 	hostname, _ := os.Hostname()
-	state, _ := loadOrCreateAgentState(*configPath)
+	state, _ := loadOrCreateAgentState(*configPath, []string{*machineID})
 	reg := registration{
 		MachineName:           *machineID,
 		AgentID:               state.AgentID,
-		MachineRegistrationID: state.MachineRegistrationID,
+		MachineRegistrationID: state.regIDFor(*machineID),
 		Hostname:              hostname,
 		OS:                    runtime.GOOS,
 		AgentVersion:          version,
@@ -1463,7 +1496,11 @@ func Run(ctx context.Context, cfg *Config) error {
 // Pass "" to fall back to the default tela config directory.
 func runMultiMachine(cfg *configFile, configPath string) {
 	log.Printf("config: %d machine(s), hub %s", len(cfg.Machines), cfg.Hub)
-	state, _ := loadOrCreateAgentState(configPath)
+	machineNames := make([]string, len(cfg.Machines))
+	for i, m := range cfg.Machines {
+		machineNames[i] = m.Name
+	}
+	state, _ := loadOrCreateAgentState(configPath, machineNames)
 	var wg sync.WaitGroup
 	for _, m := range cfg.Machines {
 		wg.Add(1)
@@ -1493,7 +1530,7 @@ func runMultiMachine(cfg *configFile, configPath string) {
 			reg := registration{
 				MachineName:           mc.Name,
 				AgentID:               state.AgentID,
-				MachineRegistrationID: state.MachineRegistrationID,
+				MachineRegistrationID: state.regIDFor(mc.Name),
 				DisplayName:           mc.DisplayName,
 				Hostname:              hostname,
 				OS:                    machineOS,

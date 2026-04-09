@@ -1083,7 +1083,12 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 			// Agent has re-registered under a new name. Move the entry.
 			entry := machines[oldKey]
 			if entry != nil {
+				// MachineName is mutated below under entry.mu, so read it
+				// under entry.mu too. Lock order: machinesMu (already held)
+				// then entry.mu, matching the section further down.
+				entry.mu.Lock()
 				oldName := entry.MachineName
+				entry.mu.Unlock()
 				delete(machines, oldKey)
 				machines[machineKey] = entry
 				machinesByRegID[regID] = machineKey
