@@ -2598,10 +2598,13 @@ function agentsRenderSidebar() {
     var active = a.id === agentsSelectedId ? ' active' : '';
     var dotClass = a.online ? 'online' : 'offline';
     var ver = a.version || 'unknown';
+    var linkedBadge = (a.linkedAgentIds && a.linkedAgentIds.length)
+      ? ' <span class="chip" title="Registered on ' + (a.linkedAgentIds.length + 1) + ' hubs">' + (a.linkedAgentIds.length + 1) + ' hubs</span>'
+      : '';
     html += '<div class="agents-sidebar-item' + active + '" onclick="agentsSelect(\'' + escAttr(a.id) + '\')">'
       + '<span class="machine-status-dot ' + dotClass + '"></span>'
       + '<div>'
-      + '<div class="agents-sidebar-name">' + escHtml(a.id) + '</div>'
+      + '<div class="agents-sidebar-name">' + escHtml(a.id) + linkedBadge + '</div>'
       + '<div class="agents-sidebar-version version-badge-sidebar" data-ver="' + escAttr(ver) + '"' + (latestVersion && ver !== latestVersion ? ' style="color:#f39c12"' : '') + '>' + escHtml(ver) + '</div>'
       + '</div>'
       + '</div>';
@@ -2657,8 +2660,22 @@ function agentsShowDetail(a) {
     + '<tr><td>Hostname</td><td>' + escHtml(a.hostname || '-') + '</td></tr>'
     + '<tr><td>Platform</td><td>' + escHtml(a.os || '-') + '</td></tr>'
     + '<tr><td>Last seen</td><td>' + escHtml(a.lastSeen ? agentFormatDate(a.lastSeen) : '-') + '</td></tr>'
-    + '<tr><td>Active sessions</td><td>' + String(a.sessionCount || 0) + '</td></tr>'
-    + '</table></div>';
+    + '<tr><td>Active sessions</td><td>' + String(a.sessionCount || 0) + '</td></tr>';
+
+  // Linked registrations: same agent on other hubs.
+  if (a.linkedAgentIds && a.linkedAgentIds.length) {
+    var linkedNames = a.linkedAgentIds.map(function (key) {
+      // key is "hubId|agentId" from portalaggregate. Find the matching
+      // agent in agentsData by hubId to surface its hub name.
+      var sibling = agentsData.find(function (other) {
+        return other !== a && other.agentId && a.agentId && other.agentId === a.agentId;
+      });
+      return sibling ? escHtml(sibling.hub) : escHtml(key);
+    });
+    html += '<tr><td>Also on</td><td>' + linkedNames.join(', ') + '</td></tr>';
+  }
+
+  html += '</table></div>';
 
   // Display Name (editable)
   var displayName = a.displayName || '';

@@ -294,6 +294,71 @@ func (a *App) enabledPortalClients() (map[string]*portalclient.Client, error) {
 	return out, nil
 }
 
+// sourceForHub returns the preferred source name and hub URL for a
+// named hub by querying every enabled source in parallel and picking
+// the first canManage=true result, preferring "Local". Falls back to
+// any result (canManage=false) when no manageable source knows the
+// hub. Returns firstEnabledSourceName on error so callers degrade
+// gracefully.
+func (a *App) sourceForHub(ctx context.Context, hubName string) (sourceName, hubURL string, err error) {
+	clients, err := a.enabledPortalClients()
+	if err != nil {
+		n, _ := a.firstEnabledSourceName()
+		return n, "", err
+	}
+
+	type result struct {
+		source    string
+		url       string
+		canManage bool
+	}
+	ch := make(chan result, len(clients))
+
+	for name, c := range clients {
+		name, c := name, c
+		go func() {
+			hubs, err := c.ListHubs(ctx)
+			if err != nil {
+				ch <- result{}
+				return
+			}
+			for _, h := range hubs {
+				if h.Name == hubName {
+					ch <- result{source: name, url: h.URL, canManage: h.CanManage}
+					return
+				}
+			}
+			ch <- result{}
+		}()
+	}
+
+	var best result
+	for range clients {
+		r := <-ch
+		if r.source == "" {
+			continue
+		}
+		if best.source == "" {
+			best = r
+		}
+		// "Local" with canManage beats everything.
+		if r.canManage && r.source == embeddedSourceName {
+			best = r
+			break
+		}
+		// canManage beats non-canManage.
+		if r.canManage && !best.canManage {
+			best = r
+		}
+	}
+
+	if best.source == "" {
+		n, _ := a.firstEnabledSourceName()
+		return n, "", fmt.Errorf("hub %q not found in any enabled source", hubName)
+	}
+	return best.source, best.url, nil
+}
+
 // ── Wails-bound methods ────────────────────────────────────────────
 
 // PortalListSources returns every portal source TV knows about. The

@@ -1197,10 +1197,10 @@ func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]
 	if hubName == "" {
 		return nil, fmt.Errorf("adminProxyCall: hubName is required")
 	}
-	sourceName, err := a.firstEnabledSourceName()
-	if err != nil {
-		return nil, fmt.Errorf("portal active source: %w", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	sourceName, _, _ := a.sourceForHub(ctx, hubName)
 	client, err := a.portalClientForSource(sourceName)
 	if err != nil {
 		return nil, err
@@ -1213,9 +1213,6 @@ func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]
 	if len(body) > 0 {
 		bodyAny = json.RawMessage(body)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	resp, err := client.HubAdmin(ctx, hubName, operation, method, bodyAny)
 	if err != nil {
@@ -1417,17 +1414,19 @@ func (a *App) fetchHubPublicEndpoint(hubName, path string) ([]byte, error) {
 // the embedded source. When the active source is remote, the
 // returned token is empty and the caller falls back to no auth.
 func (a *App) lookupHubAuth(hubName string) (string, string, error) {
-	sourceName, err := a.firstEnabledSourceName()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sourceName, hubURL, err := a.sourceForHub(ctx, hubName)
 	if err != nil {
 		return "", "", err
 	}
 	// For the embedded source, reach into the file store directly
-	// for the stored token. For remote sources, fall back to a URL
-	// lookup with no token.
+	// for the stored token. For remote sources, return the URL with
+	// no token (the admin proxy path handles auth for those).
 	if (sourceName == "" || sourceName == embeddedSourceName) && a.portal != nil {
 		hub, _, err := a.portal.store.LookupHubForUser(context.Background(), nil, hubName)
 		if err != nil {
-			return "", "", err
+			return hubURL, "", err
 		}
 		token := hub.ViewerToken
 		if token == "" {
@@ -1435,8 +1434,7 @@ func (a *App) lookupHubAuth(hubName string) (string, string, error) {
 		}
 		return hub.URL, token, nil
 	}
-	hubURL, err := a.lookupHubURL(hubName)
-	return hubURL, "", err
+	return hubURL, "", nil
 }
 
 // GetTokenRole returns the role for the admin token the active portal
@@ -1457,31 +1455,15 @@ func (a *App) GetTokenRole(hubName string) string {
 	return "owner"
 }
 
-// lookupHubURL returns the URL for a named hub via the active portal
+// lookupHubURL returns the URL for a named hub by querying all
+// enabled sources and returning the URL from the best (canManage)
 // source. Used by methods that need direct access to the hub (the
-// /api/status path which is not under /api/admin/ and therefore not
-// proxied). Returns an error if no source has the hub.
+// /api/status path which is not proxied through the portal).
 func (a *App) lookupHubURL(hubName string) (string, error) {
-	sourceName, err := a.firstEnabledSourceName()
-	if err != nil {
-		return "", err
-	}
-	client, err := a.portalClientForSource(sourceName)
-	if err != nil {
-		return "", err
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	hubs, err := client.ListHubs(ctx)
-	if err != nil {
-		return "", err
-	}
-	for _, h := range hubs {
-		if h.Name == hubName {
-			return h.URL, nil
-		}
-	}
-	return "", fmt.Errorf("hub %q not found in portal source %q", hubName, sourceName)
+	_, hubURL, err := a.sourceForHub(ctx, hubName)
+	return hubURL, err
 }
 
 // --- Docker Integration ---
