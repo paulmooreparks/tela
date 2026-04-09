@@ -713,7 +713,7 @@ function refreshStatus() {
       var g = groups[gk];
       html += '<div class="settings-group">'
         + '<div class="settings-group-header">'
-        + escHtml(g.machine.toUpperCase())
+        + escHtml(g.machine)
         + '<span class="status-hub-label">on ' + escHtml(g.hubName) + '</span>'
         + '</div>';
 
