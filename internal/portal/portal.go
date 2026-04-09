@@ -97,7 +97,7 @@ type HubVisibility struct {
 	// Clients SHOULD prefer this over Name as the primary identity key
 	// when correlating hubs across portal sources. Omitted when the
 	// portal does not yet know the hub's UUID (pre-1.1 hubs).
-	ID        string `json:"id,omitempty"`
+	ID        string `json:"hubId,omitempty"`
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	CanManage bool   `json:"canManage"`

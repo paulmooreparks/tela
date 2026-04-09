@@ -3978,6 +3978,14 @@ function formatFileDate(iso) {
 
 var currentAdminHub = '';
 var currentAdminView = 'hub-settings';
+var knownHubsData = []; // populated by refreshHubsTab, keyed by .name
+
+// hubURLFor returns the actual hub URL for a given hub name, falling
+// back to the name itself if no hub record is found.
+function hubURLFor(hubName) {
+  var h = knownHubsData.find(function (x) { return x.name === hubName; });
+  return (h && h.url) ? h.url : hubName;
+}
 
 function refreshHubsTab() {
   var select = document.getElementById('hub-admin-select');
@@ -3988,6 +3996,7 @@ function refreshHubsTab() {
   // in-session selection so a manual switch sticks until next refresh).
   Promise.all([goApp.GetKnownHubs(), goApp.GetSettings()]).then(function (results) {
     var hubs = results[0] || [];
+    knownHubsData = hubs;
     var settings = results[1] || {};
     var prev = select.value || settings.lastSelectedHub || '';
     select.innerHTML = '';
@@ -4065,14 +4074,15 @@ function renderHubSettings(pane) {
   function tryRender() {
     done++;
     if (done < 3) return;
-    var consoleUrl = toConsoleURL(hub);
+    var hubUrl = hubURLFor(hub);
+    var consoleUrl = toConsoleURL(hubUrl);
 
     var html = '<h2>Hub Settings</h2>'
       + '<p class="section-desc">Connection and configuration for <strong>' + escHtml(hubName) + '</strong></p>';
 
     // Connection group
     html += '<div class="settings-group"><div class="settings-group-header">Connection</div>';
-    html += '<div class="settings-row"><div class="settings-label">URL</div><div class="settings-value">' + escHtml(hub) + '</div></div>';
+    html += '<div class="settings-row"><div class="settings-label">URL</div><div class="settings-value">' + escHtml(hubUrl) + '</div></div>';
 
     var statusDot = hubInfoData ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;"></span>Online'
       : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#95a5a6;margin-right:6px;vertical-align:middle;"></span>Offline';
@@ -4542,7 +4552,7 @@ function toConsoleURL(hub) {
 
 function renderHubConsole(pane) {
   var hub = currentAdminHub;
-  var consoleUrl = toConsoleURL(hub);
+  var consoleUrl = toConsoleURL(hubURLFor(hub));
   pane.innerHTML = '<h2>Hub Console</h2>'
     + '<p class="section-desc">Embedded console for <strong>' + escHtml(hub) + '</strong></p>'
     + '<div style="margin-bottom:8px;"><a href="' + escAttr(consoleUrl) + '" target="_blank" rel="noopener" style="font-size:0.82rem;color:var(--accent);">Open in browser</a></div>'

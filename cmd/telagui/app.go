@@ -1110,6 +1110,11 @@ func (a *App) AddHub(rawURL, token string) error {
 	name := hostFromURL(hubURL)
 	a.logCommand("Add hub "+hubURL, "tela login "+hubURL)
 
+	// Probe the hub's /api/status to capture its hubId. Best-effort:
+	// if the probe fails (hub offline, auth required, pre-identity
+	// hub) we still add the entry without a hubId.
+	hubID := probeHubID(hubURL, token)
+
 	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return err
@@ -1124,8 +1129,40 @@ func (a *App) AddHub(rawURL, token string) error {
 		Name:       name,
 		URL:        hubURL,
 		AdminToken: token,
+		HubID:      hubID,
 	})
 	return err
+}
+
+// probeHubID queries a hub's /api/status and returns its hubId.
+// Returns empty string on any failure (hub offline, no auth, pre-
+// identity hub). Callers should treat an empty return as "unknown"
+// and not block on it.
+func probeHubID(hubURL, token string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, hubURL+"/api/status", nil)
+	if err != nil {
+		return ""
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var status struct {
+		HubID string `json:"hubId"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return ""
+	}
+	return status.HubID
 }
 
 // resolveHubNameByURL finds the portal-registry name for a hub given
