@@ -210,6 +210,8 @@ export function SaveFileDialog(arg1:string):Promise<string>;
 
 export function SaveHubsSidebarWidth(arg1:number):Promise<void>;
 
+export function SaveLastSelectedHub(arg1:string):Promise<void>;
+
 export function SaveProfile(arg1:string):Promise<string>;
 
 export function SaveSettings(arg1:string):Promise<void>;

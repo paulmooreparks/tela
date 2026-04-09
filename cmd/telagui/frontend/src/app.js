@@ -3983,10 +3983,15 @@ function refreshHubsTab() {
   var select = document.getElementById('hub-admin-select');
   if (!select) return;
 
-  goApp.GetKnownHubs().then(function (hubs) {
-    var prev = select.value;
+  // Load hubs and settings in parallel; restore last-selected hub from
+  // settings on first paint of this session (after that, prefer the
+  // in-session selection so a manual switch sticks until next refresh).
+  Promise.all([goApp.GetKnownHubs(), goApp.GetSettings()]).then(function (results) {
+    var hubs = results[0] || [];
+    var settings = results[1] || {};
+    var prev = select.value || settings.lastSelectedHub || '';
     select.innerHTML = '';
-    if (!hubs || hubs.length === 0) {
+    if (hubs.length === 0) {
       select.innerHTML = '<option value="">No hubs configured</option>';
       currentAdminHub = '';
       renderHubAdminDetail();
@@ -3998,7 +4003,6 @@ function refreshHubsTab() {
       opt.textContent = hub.name;
       select.appendChild(opt);
     });
-    // Restore previous selection or use first
     if (prev && hubs.some(function (h) { return h.name === prev; })) {
       select.value = prev;
     }
@@ -4009,6 +4013,7 @@ function refreshHubsTab() {
 
 function onHubAdminSelect() {
   currentAdminHub = document.getElementById('hub-admin-select').value;
+  goApp.SaveLastSelectedHub(currentAdminHub).catch(function () { /* best effort */ });
   renderHubAdminDetail();
 }
 

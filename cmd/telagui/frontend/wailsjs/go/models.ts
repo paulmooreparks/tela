@@ -477,6 +477,7 @@ export namespace main {
 	    windowWidth: number;
 	    windowHeight: number;
 	    openLogTabs: LogTabInfo[];
+	    lastSelectedHub: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -508,6 +509,7 @@ export namespace main {
 	        this.windowWidth = source["windowWidth"];
 	        this.windowHeight = source["windowHeight"];
 	        this.openLogTabs = this.convertValues(source["openLogTabs"], LogTabInfo);
+	        this.lastSelectedHub = source["lastSelectedHub"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

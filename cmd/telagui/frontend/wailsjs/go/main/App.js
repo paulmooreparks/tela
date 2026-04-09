@@ -418,6 +418,10 @@ export function SaveHubsSidebarWidth(arg1) {
   return window['go']['main']['App']['SaveHubsSidebarWidth'](arg1);
 }
 
+export function SaveLastSelectedHub(arg1) {
+  return window['go']['main']['App']['SaveLastSelectedHub'](arg1);
+}
+
 export function SaveProfile(arg1) {
   return window['go']['main']['App']['SaveProfile'](arg1);
 }

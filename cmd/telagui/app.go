@@ -1128,6 +1128,40 @@ func (a *App) AddHub(rawURL, token string) error {
 	return err
 }
 
+// resolveHubNameByURL finds the portal-registry name for a hub given
+// its URL (e.g. "wss://owlsnest.parkscomputing.com" → "owlsnest.parkscomputing.com").
+// Used to bridge between code paths that hold a hub URL (control
+// files, telad.yaml) and the admin proxy which keys hubs by name.
+// Queries the first enabled portal source. Returns an error if no
+// enabled source knows a hub at that URL.
+func (a *App) resolveHubNameByURL(rawURL string) (string, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return "", fmt.Errorf("empty hub URL")
+	}
+	canonical := canonicalHubURL(rawURL)
+	sourceName, err := a.firstEnabledSourceName()
+	if err != nil {
+		return "", err
+	}
+	client, err := a.portalClientForSource(sourceName)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	hubs, err := client.ListHubs(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, h := range hubs {
+		if canonicalHubURL(h.URL) == canonical {
+			return h.Name, nil
+		}
+	}
+	return "", fmt.Errorf("no hub at %s in portal source %q", canonical, sourceName)
+}
+
 // RemoveHub removes a hub from the active portal source's directory.
 // Accepts either a hub name or a URL the frontend may still hand in
 // (legacy code paths in the dashboard pass hub.url); URLs are
@@ -2712,7 +2746,15 @@ func (a *App) updateRunningServiceBinary(binaryName string) string {
 		if err := json.Unmarshal(data, &info); err != nil || len(info.Machines) == 0 || info.Hub == "" {
 			return fmt.Sprintf(`{"error":"telad control file is malformed: %s"}`, jsonEscape(err.Error()))
 		}
-		resp := a.UpdateAgent(info.Hub, info.Machines[0], "")
+		// info.Hub is the URL form from telad.yaml (e.g.
+		// "wss://owlsnest.parkscomputing.com"), but UpdateAgent expects
+		// the hub NAME from the portal registry. Reverse-lookup against
+		// the active portal source so the proxy can find the hub.
+		hubName, lookupErr := a.resolveHubNameByURL(info.Hub)
+		if lookupErr != nil {
+			return fmt.Sprintf(`{"error":"telad is registered with %s but no enabled portal source knows that hub: %s"}`, jsonEscape(info.Hub), jsonEscape(lookupErr.Error()))
+		}
+		resp := a.UpdateAgent(hubName, info.Machines[0], "")
 		var result map[string]any
 		_ = json.Unmarshal([]byte(resp), &result)
 		if errMsg, ok := result["error"].(string); ok && errMsg != "" {
@@ -3725,6 +3767,7 @@ type Settings struct {
 	WindowWidth             int          `yaml:"windowWidth" json:"windowWidth"`
 	WindowHeight            int          `yaml:"windowHeight" json:"windowHeight"`
 	OpenLogTabs             []LogTabInfo `yaml:"openLogTabs,omitempty" json:"openLogTabs"`
+	LastSelectedHub         string       `yaml:"lastSelectedHub,omitempty" json:"lastSelectedHub"`
 }
 
 // LogTabInfo describes an open log tab to restore on startup.
@@ -3816,6 +3859,15 @@ func (a *App) SaveSidebarWidth(width int) {
 func (a *App) SaveHubsSidebarWidth(width int) {
 	s := a.GetSettings()
 	s.HubsSidebarWidth = width
+	data, _ := yaml.Marshal(&s)
+	os.WriteFile(settingsPath(), data, 0600)
+}
+
+// SaveLastSelectedHub persists the most recently selected hub in the
+// Hubs tab so it can be restored on next launch.
+func (a *App) SaveLastSelectedHub(hubName string) {
+	s := a.GetSettings()
+	s.LastSelectedHub = hubName
 	data, _ := yaml.Marshal(&s)
 	os.WriteFile(settingsPath(), data, 0600)
 }
