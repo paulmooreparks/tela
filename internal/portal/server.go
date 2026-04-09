@@ -51,6 +51,9 @@ func (s *Server) Handler() http.Handler {
 	// Hub-driven sync (sync token auth, NOT user auth).
 	mux.HandleFunc("PATCH "+HubDirectoryPath+"/sync", s.handleHubSync)
 
+	// Hub token endpoint (user auth, gated on canManage).
+	mux.HandleFunc("GET /api/hub-token/", s.handleHubToken)
+
 	// Admin proxy (user auth, gated on canManage).
 	mux.HandleFunc("/api/hub-admin/", s.handleAdminProxy)
 

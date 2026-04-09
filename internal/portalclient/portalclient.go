@@ -330,6 +330,29 @@ func (c *Client) hubPublicProxy(ctx context.Context, hubName, prefix string) ([]
 	return body, nil
 }
 
+// ── Hub token retrieval ────────────────────────────────────────────
+
+// HubToken retrieves the stored admin token for a hub through the
+// portal's /api/hub-token/{hubName} endpoint. The caller must have
+// manage permission on the hub. Returns the raw token string.
+func (c *Client) HubToken(ctx context.Context, hubName string) (string, error) {
+	if hubName == "" {
+		return "", errors.New("portalclient: hubName is required")
+	}
+	path := "/api/hub-token/" + url.PathEscape(hubName)
+	req, err := c.newRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Token string `json:"token"`
+	}
+	if err := c.doJSON(req, &out); err != nil {
+		return "", err
+	}
+	return out.Token, nil
+}
+
 // ── OAuth 2.0 device authorization grant (RFC 8628) ────────────────
 
 // DeviceAuthorization is the response from POST /api/oauth/device.

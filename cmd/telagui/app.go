@@ -1253,6 +1253,62 @@ func (a *App) GetStoredToken(hubURL string) string {
 	return ""
 }
 
+// syncHubTokensToCredstore retrieves the admin token for each hub in
+// the profile connections from the portal and writes it to the local
+// credential store so the tela CLI can authenticate. Best-effort:
+// failures are logged but do not block the connection attempt.
+func (a *App) syncHubTokensToCredstore(connectionsJSON string) {
+	var connections []ProfileConnection
+	if json.Unmarshal([]byte(connectionsJSON), &connections) != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	store, _ := credstore.Load(credstore.UserPath())
+	if store == nil {
+		store = &credstore.Store{}
+	}
+	changed := false
+
+	for _, conn := range connections {
+		hubName := conn.Hub
+		if hubName == "" {
+			continue
+		}
+		// Already have a token for this hub? Skip.
+		hubURL := conn.Hub
+		// Resolve hub name to URL through the portal.
+		_, resolvedURL, err := a.sourceForHub(ctx, hubName)
+		if err == nil && resolvedURL != "" {
+			hubURL = resolvedURL
+		}
+		if _, ok := store.Get(hubURL); ok {
+			continue
+		}
+
+		// Fetch the token from the portal.
+		sourceName, _, _ := a.sourceForHub(ctx, hubName)
+		client, err := a.portalClientForSource(sourceName)
+		if err != nil {
+			continue
+		}
+		token, err := client.HubToken(ctx, hubName)
+		if err != nil || token == "" {
+			continue
+		}
+		store.Set(hubURL, credstore.Credential{Token: token})
+		changed = true
+	}
+
+	if changed {
+		if err := store.Save(credstore.UserPath()); err != nil {
+			log.Printf("[tv] sync hub tokens: %v", err)
+		}
+	}
+}
+
 // --- Hub Admin API ---
 
 // maskToken returns a masked version of a token for logging: "7bf042ce..."
@@ -1932,6 +1988,11 @@ func (a *App) Connect(connectionsJSON string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Sync hub tokens from the portal store to the local credential
+	// store so tela connect can authenticate. The portal owns the
+	// admin tokens; the tela CLI reads from ~/.tela/credentials.yaml.
+	a.syncHubTokensToCredstore(connectionsJSON)
 
 	cmdStr := "tela connect -profile " + path
 	a.logCommand("Connect using profile", cmdStr)

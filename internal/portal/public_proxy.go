@@ -94,3 +94,41 @@ func (s *Server) proxyHubPublicEndpoint(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(resp.StatusCode)
 	_, _ = copyBody(w, resp.Body)
 }
+
+// handleHubToken returns the stored admin token for a hub so that
+// TelaVisor can write it to the local credential store before
+// launching tela connect. The token is the portal's stored admin
+// credential for the hub, which has connect permission on any machine.
+//
+// Gated on canManage: only users who can administer the hub may
+// retrieve its token. The response is {"token":"..."} with
+// Cache-Control: no-store so the token is never cached.
+func (s *Server) handleHubToken(w http.ResponseWriter, r *http.Request) {
+	hubName := strings.TrimPrefix(r.URL.Path, "/api/hub-token/")
+	if hubName == "" {
+		s.writeError(w, http.StatusBadRequest, "hub name required")
+		return
+	}
+
+	user, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+
+	hub, canManage, err := s.Store.LookupHubForUser(r.Context(), user, hubName)
+	if err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
+	if !canManage {
+		s.writeError(w, http.StatusForbidden, "manage permission required")
+		return
+	}
+	if hub.AdminToken == "" {
+		s.writeError(w, http.StatusNotFound, "no admin token stored for this hub")
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	s.writeJSON(w, http.StatusOK, map[string]string{"token": hub.AdminToken})
+}
