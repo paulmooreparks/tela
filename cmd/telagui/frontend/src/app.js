@@ -5049,7 +5049,7 @@ function applySettings() {
   errEl.classList.add('hidden');
   errEl.textContent = '';
 
-  goApp.SaveSettings(JSON.stringify(s)).then(function () {
+  return goApp.SaveSettings(JSON.stringify(s)).then(function () {
       settingsDirty = false;
       setSettingsButtonsDisabled(true);
       if (s.logMaxLines) logMaxLines = s.logMaxLines;
@@ -5570,10 +5570,11 @@ function undoClientSettings() {
 }
 
 function saveClientSettings() {
-  applySettings();
-  clearCSDirty();
-  // Refresh the Installed Tools section so it reflects any binPath change.
-  refreshClientToolVersions();
+  applySettings().then(function () {
+    clearCSDirty();
+    // Refresh the Installed Tools section so it reflects any binPath change.
+    refreshClientToolVersions();
+  });
 }
 
 function refreshClientSettings() {
