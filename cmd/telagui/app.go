@@ -2380,6 +2380,7 @@ type AgentInfo struct {
 	AgentID               string                   `json:"agentId,omitempty"`
 	HubID                 string                   `json:"hubId,omitempty"`
 	MachineRegistrationID string                   `json:"machineRegistrationId,omitempty"`
+	MachineName           string                   `json:"machineName,omitempty"`
 	Hub                   string                   `json:"hub"`
 	Online                bool                     `json:"online"`
 	Version               string                   `json:"version"`
@@ -2428,9 +2429,10 @@ func (a *App) GetAgentList() []AgentInfo {
 				"protocol": svc.Protocol,
 			})
 		}
-		// ID is the hub-local machine name (legacy field). Use
-		// DisplayName as the nearest equivalent from the aggregate.
-		id := m.DisplayName
+		// ID is the canonical machine name the hub admin API uses for
+		// lookup. The frontend renders DisplayName||ID for the human
+		// label but always passes ID into admin call sites.
+		id := m.MachineName
 		if id == "" {
 			id = m.AgentID
 		}
@@ -2439,6 +2441,7 @@ func (a *App) GetAgentList() []AgentInfo {
 			AgentID:               m.AgentID,
 			HubID:                 m.HubID,
 			MachineRegistrationID: m.MachineRegistrationID,
+			MachineName:           m.MachineName,
 			Hub:                   m.HubName,
 			DisplayName:           m.DisplayName,
 			Hostname:              m.Hostname,

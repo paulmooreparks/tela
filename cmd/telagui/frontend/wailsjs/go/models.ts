@@ -5,6 +5,7 @@ export namespace main {
 	    agentId?: string;
 	    hubId?: string;
 	    machineRegistrationId?: string;
+	    machineName?: string;
 	    hub: string;
 	    online: boolean;
 	    version: string;
@@ -32,6 +33,7 @@ export namespace main {
 	        this.agentId = source["agentId"];
 	        this.hubId = source["hubId"];
 	        this.machineRegistrationId = source["machineRegistrationId"];
+	        this.machineName = source["machineName"];
 	        this.hub = source["hub"];
 	        this.online = source["online"];
 	        this.version = source["version"];

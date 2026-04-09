@@ -229,8 +229,9 @@ function openAttachDialog() {
       html += '<div class="attach-log-section">Agents</div>';
       agents.forEach(function (a) {
         var dotClass = a.online ? 'log-dot-live' : 'log-dot-idle';
+        var label = a.displayName || a.id;
         html += '<button class="attach-log-item" onclick="agentsViewLogs(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\');this.closest(\'.attach-log-popover\').remove()">'
-          + '<span class="log-dot ' + dotClass + '"></span>' + escHtml(a.id) + '</button>';
+          + '<span class="log-dot ' + dotClass + '"></span>' + escHtml(label) + '</button>';
       });
     }
     if (!html) html = '<div class="attach-log-empty">No log sources available.</div>';
@@ -2601,10 +2602,11 @@ function agentsRenderSidebar() {
     var linkedBadge = (a.linkedAgentIds && a.linkedAgentIds.length)
       ? ' <span class="chip" title="Registered on ' + (a.linkedAgentIds.length + 1) + ' hubs">' + (a.linkedAgentIds.length + 1) + ' hubs</span>'
       : '';
+    var label = a.displayName || a.id;
     html += '<div class="agents-sidebar-item' + active + '" onclick="agentsSelect(\'' + escAttr(a.id) + '\')">'
       + '<span class="machine-status-dot ' + dotClass + '"></span>'
       + '<div>'
-      + '<div class="agents-sidebar-name">' + escHtml(a.id) + linkedBadge + '</div>'
+      + '<div class="agents-sidebar-name">' + escHtml(label) + linkedBadge + '</div>'
       + '<div class="agents-sidebar-version version-badge-sidebar" data-ver="' + escAttr(ver) + '"' + (latestVersion && ver !== latestVersion ? ' style="color:#f39c12"' : '') + '>' + escHtml(ver) + '</div>'
       + '</div>'
       + '</div>';
@@ -2644,8 +2646,9 @@ function agentsShowDetail(a) {
   document.getElementById('agents-logs-btn').disabled = !canManage;
   agentsSelectedHub = a.hub;
 
+  var label = a.displayName || a.id;
   var html = '<div class="detail-header">'
-    + '<div class="detail-title">' + escHtml(a.id)
+    + '<div class="detail-title">' + escHtml(label)
     + ' <span class="' + (isOnline ? 'badge-online' : 'badge-offline') + '">'
     + (isOnline ? 'Online' : 'Offline') + '</span></div>'
     + '<div class="detail-subtitle">On ' + escHtml(a.hub) + '</div>'

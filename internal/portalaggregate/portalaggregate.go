@@ -75,7 +75,14 @@ type MergedAgent struct {
 	// (agentId, machineName) pair.
 	MachineRegistrationID string
 
-	// DisplayName is the operator-assigned machine name (machineName).
+	// MachineName is the canonical machine identifier the hub uses for
+	// admin API calls (the entry's name in the agent's machines config).
+	// Always present.
+	MachineName string
+
+	// DisplayName is the optional human-readable label set by the
+	// operator in the agent's machine config. Falls back to MachineName
+	// when the operator did not set one.
 	DisplayName string
 
 	// Online is true when at least one source reports the agent as
@@ -245,6 +252,7 @@ func merge(ctx context.Context, sources map[string]source) (Result, error) {
 					HubID:                 fa.HubID,
 					HubName:               fa.Hub,
 					MachineRegistrationID: fa.MachineRegistrationID,
+					MachineName:           fa.ID,
 					DisplayName:           agentDisplayName(fa),
 					Hostname:              derefStr(fa.Hostname),
 					OS:                    derefStr(fa.OS),
