@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -37,19 +38,22 @@ var LocalUser portal.User = localUser{}
 // On-disk format:
 //
 //	# portal.yaml
+//	portalId: 550e8400-e29b-41d4-a716-446655440000
+//
 //	# Optional: SHA-256 hex of the admin token. When present, the
 //	# Authenticator requires Bearer auth on every request and
 //	# matches the presented token's hash against this value.
-//	admin_token_hash: 5b3d...e9
+//	adminTokenHash: 5b3d...e9
 //
 //	# Hubs registered with the portal.
 //	hubs:
 //	  - name: myhub
+//	    hubId: 550e8400-e29b-41d4-a716-446655440001
 //	    url: https://hub.example.com
-//	    viewer_token: <hex>
-//	    admin_token: <hex>          # the hub's admin token (secret)
-//	    sync_token_hash: <sha256>   # SHA-256 of the issued sync token
-//	    org_name: ""
+//	    viewerToken: <hex>
+//	    adminToken: <hex>        # the hub's admin token (secret)
+//	    syncTokenHash: <sha256>  # SHA-256 of the issued sync token
+//	    orgName: ""
 //
 // All file mutations are atomic: writes go to a temp file in the
 // same directory and are renamed into place.
@@ -57,34 +61,36 @@ type Store struct {
 	path string
 
 	mu             sync.RWMutex
+	portalID       string                // stable UUID, generated once on first Open
 	adminTokenHash string                // empty when no auth required
 	hubs           map[string]*storedHub // hubName -> record
 }
 
-// storedHub is the on-disk shape of one hub. The portal.Hub
-// equivalent is a public type with cleaner field names; storedHub
-// uses snake_case YAML tags so the file is comfortable to edit by
-// hand.
+// storedHub is the on-disk shape of one hub. Field names use
+// camelCase YAML tags to match the portal wire convention
+// (Principle 7 of DESIGN-identity.md).
 type storedHub struct {
 	Name          string `yaml:"name"`
+	HubID         string `yaml:"hubId,omitempty"`
 	URL           string `yaml:"url"`
-	ViewerToken   string `yaml:"viewer_token,omitempty"`
-	AdminToken    string `yaml:"admin_token,omitempty"`
-	SyncTokenHash string `yaml:"sync_token_hash,omitempty"`
-	OrgName       string `yaml:"org_name,omitempty"`
+	ViewerToken   string `yaml:"viewerToken,omitempty"`
+	AdminToken    string `yaml:"adminToken,omitempty"`
+	SyncTokenHash string `yaml:"syncTokenHash,omitempty"`
+	OrgName       string `yaml:"orgName,omitempty"`
 }
 
 // fileShape is the top-level YAML document.
 type fileShape struct {
-	AdminTokenHash string       `yaml:"admin_token_hash,omitempty"`
+	PortalID       string       `yaml:"portalId,omitempty"`
+	AdminTokenHash string       `yaml:"adminTokenHash,omitempty"`
 	Hubs           []*storedHub `yaml:"hubs,omitempty"`
 }
 
 // Open reads the portal store from path. If the file does not exist,
-// Open creates an empty in-memory store and returns it without
-// touching the disk; the file is created on the first successful
-// mutation. If the file exists but is malformed, Open returns an
-// error and does not return a Store.
+// Open creates an empty in-memory store, generates a portalId, and
+// returns without touching the disk; the file is created on the first
+// successful mutation. If the file exists but is malformed, Open
+// returns an error and does not return a Store.
 func Open(path string) (*Store, error) {
 	s := &Store{
 		path: path,
@@ -94,6 +100,11 @@ func Open(path string) (*Store, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			id, err := newUUID()
+			if err != nil {
+				return nil, fmt.Errorf("portal/file: generate portalId: %w", err)
+			}
+			s.portalID = id
 			return s, nil
 		}
 		return nil, fmt.Errorf("portal/file: read %s: %w", path, err)
@@ -105,6 +116,18 @@ func Open(path string) (*Store, error) {
 	}
 
 	s.adminTokenHash = shape.AdminTokenHash
+
+	// Generate a portalId if the file predates identity support.
+	if shape.PortalID == "" {
+		id, err := newUUID()
+		if err != nil {
+			return nil, fmt.Errorf("portal/file: generate portalId: %w", err)
+		}
+		s.portalID = id
+	} else {
+		s.portalID = shape.PortalID
+	}
+
 	for _, h := range shape.Hubs {
 		if h == nil || h.Name == "" {
 			continue
@@ -115,6 +138,15 @@ func Open(path string) (*Store, error) {
 		s.hubs[h.Name] = &copy
 	}
 	return s, nil
+}
+
+// PortalID returns the stable UUID that identifies this portal
+// instance. Generated once on first Open and persisted to the YAML
+// file on the next mutation.
+func (s *Store) PortalID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.portalID
 }
 
 // SetAdminToken installs a fresh admin token. The store hashes the
@@ -384,6 +416,7 @@ func (s *Store) saveLocked() error {
 	}
 
 	shape := fileShape{
+		PortalID:       s.portalID,
 		AdminTokenHash: s.adminTokenHash,
 		Hubs:           make([]*storedHub, 0, len(s.hubs)),
 	}
@@ -447,6 +480,7 @@ func (s *Store) reloadLocked() error {
 	if err := yaml.Unmarshal(data, &shape); err != nil {
 		return err
 	}
+	s.portalID = shape.PortalID
 	s.adminTokenHash = shape.AdminTokenHash
 	s.hubs = make(map[string]*storedHub, len(shape.Hubs))
 	for _, h := range shape.Hubs {
@@ -457,6 +491,24 @@ func (s *Store) reloadLocked() error {
 		s.hubs[h.Name] = &copy
 	}
 	return nil
+}
+
+// newUUID returns a random UUID v4 formatted as
+// "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx". Uses crypto/rand.
+func newUUID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
+	return fmt.Sprintf("%s-%s-%s-%s-%s",
+		hex.EncodeToString(b[0:4]),
+		hex.EncodeToString(b[4:6]),
+		hex.EncodeToString(b[6:8]),
+		hex.EncodeToString(b[8:10]),
+		hex.EncodeToString(b[10:16]),
+	), nil
 }
 
 // hashHex returns the lowercase hex SHA-256 of s. Used for the admin
