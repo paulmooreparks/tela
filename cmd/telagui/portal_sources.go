@@ -3,21 +3,37 @@ package main
 // portal_sources.go is the TelaVisor side of the portal-source
 // concept. A "portal source" is one portal endpoint TV knows how to
 // talk to: the embedded loopback portal that ships inside TV (always
-// present, always selected by default), plus any number of remote
-// portals the user has signed into via the OAuth 2.0 device
-// authorization grant (RFC 8628; spec: tela/DESIGN-portal.md
-// section 6.3).
+// present), plus any number of remote portals the user has signed into
+// via the OAuth 2.0 device authorization grant (RFC 8628; spec:
+// tela/DESIGN-portal.md section 6.3).
+//
+// Any number of sources may be enabled at once. Phase 5b feeds every
+// enabled source into portalaggregate.Merge to produce the unified
+// hub/agent views shown in Infrastructure mode.
 //
 // The remote-source list is persisted at
-// ~/.tela/portal-sources.yaml and is loaded eagerly into memory at
-// startup. The embedded source is *not* in the file: it is
-// synthesized at every PortalListSources call from the live
-// portalEmbed so the bearer token tracks the per-process value.
+// ~/.tela/portal-sources.yaml. The embedded source is synthesized at
+// every PortalListSources call from the live portalEmbed so the
+// bearer token tracks the per-process value.
 //
-// The Wails-bound methods at the bottom of this file are what the
-// frontend dialog calls. The frontend lives separately and lands in
-// a follow-up commit alongside the Infrastructure-mode rewire that
-// actually consumes the active source.
+// On-disk format (post-5a):
+//
+//	embeddedEnabled: true
+//	remote:
+//	  - name: portal.example.com
+//	    kind: remote
+//	    url: https://portal.example.com
+//	    bearerToken: <token>
+//	    enabled: true
+//	    addedAt: 2025-01-01T00:00:00Z
+//
+// Migration: pre-5a files have an activeName field. On first load of
+// an old file the migration logic converts it:
+//   - activeName refers to a remote: that remote becomes enabled=true,
+//     all others and the embedded source become enabled=false.
+//   - activeName is empty (embedded was selected): embedded becomes
+//     enabled=true, all remotes become enabled=true (they are still
+//     registered so keep them accessible).
 
 import (
 	"context"
@@ -47,23 +63,33 @@ const (
 
 // PortalSource is one portal endpoint TV can talk to. The embedded
 // source is synthesized at runtime; remote sources are persisted to
-// portal-sources.yaml. BearerToken is omitted from JSON exposed to
-// the frontend so it never leaks into the DOM.
+// portal-sources.yaml. BearerToken is omitted from JSON so it never
+// leaks into the DOM.
 type PortalSource struct {
 	Name        string           `yaml:"name" json:"name"`
 	Kind        PortalSourceKind `yaml:"kind" json:"kind"`
 	URL         string           `yaml:"url" json:"url"`
 	BearerToken string           `yaml:"bearerToken" json:"-"`
+	Enabled     bool             `yaml:"enabled" json:"enabled"`
 	AddedAt     string           `yaml:"addedAt,omitempty" json:"addedAt,omitempty"`
 }
 
-// portalSourcesFile is the on-disk shape. ActiveName is the name of
-// the source the user has currently selected; an empty value means
-// "use the embedded source." Remote is the list of signed-in remote
-// portals.
+// portalSourcesFile is the on-disk shape.
+//
+// EmbeddedEnabled controls whether the embedded in-process portal is
+// included in merge operations. A nil pointer means the file predates
+// 5a and migration is needed. ActiveName is present only for reading
+// pre-5a files during migration; it is always cleared before writing.
 type portalSourcesFile struct {
-	ActiveName string         `yaml:"activeName,omitempty"`
-	Remote     []PortalSource `yaml:"remote"`
+	// ActiveName is the pre-5a "single active source" field. Read
+	// only during migration; never written after migration.
+	ActiveName string `yaml:"activeName,omitempty"`
+
+	// EmbeddedEnabled controls whether the always-present embedded
+	// portal participates in merge. Nil means the file predates 5a.
+	EmbeddedEnabled *bool `yaml:"embeddedEnabled,omitempty"`
+
+	Remote []PortalSource `yaml:"remote"`
 }
 
 // portalSourcesPath is the absolute path of the persisted file.
@@ -75,18 +101,19 @@ func portalSourcesPath() string {
 // in-process portal. Reserved: a remote portal MUST NOT use this name.
 const embeddedSourceName = "Local"
 
-// portalSourcesMu guards reads and writes of the persisted file. The
-// file is small and rarely written, so a single mutex is sufficient.
+// portalSourcesMu guards reads and writes of the persisted file.
 var portalSourcesMu sync.Mutex
 
-// loadPortalSources reads the persisted file. A missing file returns
-// the zero value (no remote sources, no active selection) without an
-// error so first launch is friction-free.
+// loadPortalSources reads the persisted file and applies migration if
+// needed. A missing file returns zero value without error.
 func loadPortalSources() (portalSourcesFile, error) {
 	var out portalSourcesFile
 	data, err := os.ReadFile(portalSourcesPath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			// Fresh install: embedded enabled by default.
+			t := true
+			out.EmbeddedEnabled = &t
 			return out, nil
 		}
 		return out, fmt.Errorf("portal sources: read: %w", err)
@@ -94,7 +121,36 @@ func loadPortalSources() (portalSourcesFile, error) {
 	if err := yaml.Unmarshal(data, &out); err != nil {
 		return out, fmt.Errorf("portal sources: parse: %w", err)
 	}
+	// Migration: EmbeddedEnabled == nil means this is a pre-5a file.
+	if out.EmbeddedEnabled == nil {
+		out = migratePortalSources(out)
+		// Persist the migrated file immediately so subsequent loads
+		// skip migration. Ignore write errors here; migration is
+		// best-effort and the in-memory state is correct either way.
+		_ = savePortalSources(out)
+	}
 	return out, nil
+}
+
+// migratePortalSources converts a pre-5a file (has ActiveName, no
+// EmbeddedEnabled) to the 5a format.
+func migratePortalSources(old portalSourcesFile) portalSourcesFile {
+	embEnabled := old.ActiveName == "" || old.ActiveName == embeddedSourceName
+
+	t := embEnabled
+	old.EmbeddedEnabled = &t
+
+	for i := range old.Remote {
+		if old.ActiveName != "" && old.ActiveName != embeddedSourceName {
+			old.Remote[i].Enabled = (old.Remote[i].Name == old.ActiveName)
+		} else {
+			// Embedded was active: keep all registered remotes enabled.
+			old.Remote[i].Enabled = true
+		}
+	}
+	// Clear the migration field so it is not written back.
+	old.ActiveName = ""
+	return old
 }
 
 // savePortalSources writes the file atomically (temp + rename) at
@@ -133,8 +189,18 @@ func savePortalSources(file portalSourcesFile) error {
 	return nil
 }
 
-// embeddedSource returns the synthetic source for the in-process
-// portal, or nil if the embedded portal failed to start.
+// embeddedIsEnabled reports whether the embedded portal is currently
+// marked as enabled in the persisted file. Callers must hold
+// portalSourcesMu or pass the already-loaded file.
+func embeddedIsEnabledIn(file portalSourcesFile) bool {
+	if file.EmbeddedEnabled == nil {
+		return true // safe default; migration should have run already
+	}
+	return *file.EmbeddedEnabled
+}
+
+// embeddedSource returns the synthetic PortalSource for the
+// in-process portal, or nil if the embedded portal failed to start.
 func (a *App) embeddedSource() *PortalSource {
 	if a.portal == nil {
 		return nil
@@ -144,14 +210,14 @@ func (a *App) embeddedSource() *PortalSource {
 		Kind:        PortalSourceKindEmbedded,
 		URL:         a.portal.endpointURL,
 		BearerToken: a.portal.bearerToken,
+		Enabled:     true, // populated by PortalListSources with real value
 	}
 }
 
 // portalClientForSource returns a configured *portalclient.Client
 // pointing at the named source, or an error if the name is unknown.
-// Looking up "" or embeddedSourceName returns the embedded source.
-// This is the function the Infrastructure-mode rewire will call to
-// build the client it issues every admin call through.
+// "" or embeddedSourceName routes to the embedded portal. Used by
+// per-hub admin calls (5d) and by the firstEnabledSourceName shim.
 func (a *App) portalClientForSource(name string) (*portalclient.Client, error) {
 	if name == "" || name == embeddedSourceName {
 		emb := a.embeddedSource()
@@ -174,74 +240,107 @@ func (a *App) portalClientForSource(name string) (*portalclient.Client, error) {
 	return nil, fmt.Errorf("portal sources: %q not found", name)
 }
 
+// firstEnabledSourceName returns the name of the first enabled
+// source. Embedded "Local" wins if enabled; otherwise the first
+// enabled remote is returned. Returns embeddedSourceName if nothing
+// is enabled (so callers get a graceful empty result rather than an
+// error).
+//
+// This is a 5a shim. Phase 5b replaces the single-source calls in
+// app.go with enabledPortalClients() + portalaggregate.Merge.
+func (a *App) firstEnabledSourceName() (string, error) {
+	portalSourcesMu.Lock()
+	file, err := loadPortalSources()
+	portalSourcesMu.Unlock()
+	if err != nil {
+		return embeddedSourceName, err
+	}
+	if embeddedIsEnabledIn(file) {
+		return embeddedSourceName, nil
+	}
+	for _, s := range file.Remote {
+		if s.Enabled {
+			return s.Name, nil
+		}
+	}
+	// Nothing enabled: fall back to embedded so callers still function.
+	return embeddedSourceName, nil
+}
+
+// enabledPortalClients returns a client for every currently enabled
+// source, keyed by source name. Used by Phase 5b to feed
+// portalaggregate.Merge.
+func (a *App) enabledPortalClients() (map[string]*portalclient.Client, error) {
+	portalSourcesMu.Lock()
+	file, err := loadPortalSources()
+	portalSourcesMu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]*portalclient.Client)
+
+	if embeddedIsEnabledIn(file) {
+		emb := a.embeddedSource()
+		if emb != nil {
+			out[embeddedSourceName] = portalclient.New(emb.URL, emb.BearerToken)
+		}
+	}
+	for _, s := range file.Remote {
+		if s.Enabled {
+			out[s.Name] = portalclient.New(s.URL, s.BearerToken)
+		}
+	}
+	return out, nil
+}
+
 // ── Wails-bound methods ────────────────────────────────────────────
 
 // PortalListSources returns every portal source TV knows about. The
 // embedded source is always first if it is running. Bearer tokens
 // are stripped via the json:"-" tag on PortalSource.BearerToken.
 func (a *App) PortalListSources() ([]PortalSource, error) {
-	var out []PortalSource
-	if emb := a.embeddedSource(); emb != nil {
-		out = append(out, *emb)
-	}
 	portalSourcesMu.Lock()
 	file, err := loadPortalSources()
 	portalSourcesMu.Unlock()
 	if err != nil {
-		return out, err
+		return nil, err
+	}
+
+	var out []PortalSource
+	if emb := a.embeddedSource(); emb != nil {
+		emb.Enabled = embeddedIsEnabledIn(file)
+		out = append(out, *emb)
 	}
 	out = append(out, file.Remote...)
 	return out, nil
 }
 
-// PortalActiveSource returns the name of the currently selected
-// source. An empty string means the embedded source.
-func (a *App) PortalActiveSource() (string, error) {
-	portalSourcesMu.Lock()
-	defer portalSourcesMu.Unlock()
-	file, err := loadPortalSources()
-	if err != nil {
-		return "", err
-	}
-	if file.ActiveName == "" {
-		return embeddedSourceName, nil
-	}
-	return file.ActiveName, nil
-}
-
-// PortalSetActiveSource records which source the user has selected.
-// The Infrastructure-mode rewire reads this on every list/admin call
-// to know which client to use.
-func (a *App) PortalSetActiveSource(name string) error {
+// PortalSetSourceEnabled enables or disables a portal source by name.
+// Use embeddedSourceName ("Local") to toggle the embedded portal.
+func (a *App) PortalSetSourceEnabled(name string, enabled bool) error {
 	portalSourcesMu.Lock()
 	defer portalSourcesMu.Unlock()
 	file, err := loadPortalSources()
 	if err != nil {
 		return err
 	}
-	if name == embeddedSourceName {
-		file.ActiveName = ""
-	} else {
-		// Verify it exists.
-		found := false
-		for _, s := range file.Remote {
-			if s.Name == name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("portal sources: %q not found", name)
-		}
-		file.ActiveName = name
+	if name == "" || name == embeddedSourceName {
+		file.EmbeddedEnabled = &enabled
+		return savePortalSources(file)
 	}
-	return savePortalSources(file)
+	for i, s := range file.Remote {
+		if s.Name == name {
+			file.Remote[i].Enabled = enabled
+			return savePortalSources(file)
+		}
+	}
+	return fmt.Errorf("portal sources: %q not found", name)
 }
 
 // PortalRemoveSource deletes a remote source by name. Removing the
-// embedded source is forbidden (the embedded portal lives for the
-// lifetime of the TV process). If the removed source was active, the
-// embedded source becomes active.
+// embedded source is forbidden. Removing an enabled source is allowed;
+// no automatic fallback occurs.
 func (a *App) PortalRemoveSource(name string) error {
 	if name == "" || name == embeddedSourceName {
 		return errors.New("portal sources: cannot remove the embedded source")
@@ -265,22 +364,15 @@ func (a *App) PortalRemoveSource(name string) error {
 		return fmt.Errorf("portal sources: %q not found", name)
 	}
 	file.Remote = kept
-	if file.ActiveName == name {
-		file.ActiveName = ""
-	}
 	return savePortalSources(file)
 }
 
 // PortalDeviceAuthStart begins the device code flow against a remote
-// portal. It calls Discover to verify the URL implements protocol
-// 1.0, then POST /api/oauth/device to mint a fresh device code, then
-// opens VerificationURI (or VerificationURIComplete if present) in
-// the system browser. Returns the user code, the verification URL,
-// and the device code so the frontend can display the code to the
-// user and poll PortalDeviceAuthComplete.
+// portal. It calls Discover to verify protocol support, then POST
+// /api/oauth/device to mint a fresh device code, then opens
+// VerificationURI in the system browser.
 //
-// rawURL accepts both bare hostnames and full http(s):// URLs; the
-// helper normalizes a missing scheme to https.
+// rawURL accepts both bare hostnames and full http(s):// URLs.
 func (a *App) PortalDeviceAuthStart(rawURL string) (PortalDeviceAuthStartResult, error) {
 	var out PortalDeviceAuthStartResult
 	baseURL, err := normalizePortalURL(rawURL)
@@ -325,8 +417,7 @@ func (a *App) PortalDeviceAuthStart(rawURL string) (PortalDeviceAuthStartResult,
 }
 
 // PortalDeviceAuthStartResult is the JSON-friendly shape returned to
-// the frontend. DeviceCode is opaque to the user but the frontend
-// must hold it and pass it back on PortalDeviceAuthComplete.
+// the frontend.
 type PortalDeviceAuthStartResult struct {
 	BaseURL         string `json:"baseURL"`
 	DeviceCode      string `json:"deviceCode"`
@@ -336,17 +427,9 @@ type PortalDeviceAuthStartResult struct {
 	Interval        int    `json:"interval"`
 }
 
-// PortalDeviceAuthComplete polls /api/oauth/token in a loop until
-// the user authorizes the request, denies it, or the device code
-// expires. On success it persists a new PortalSource (using sourceName
-// as the user-visible label) and marks it active. The poll budget is
-// the device code TTL plus a small grace period.
-//
-// Polling happens server-side (in this Go method) rather than in the
-// frontend so the frontend dialog only has to await one promise. The
-// trade-off is that the dialog cannot show fine-grained polling
-// state, but the device code TTL is short enough (15 minutes) that
-// blocking is acceptable.
+// PortalDeviceAuthComplete polls /api/oauth/token until the user
+// authorizes, denies, or the device code expires. On success it
+// persists a new PortalSource (enabled=true) under sourceName.
 func (a *App) PortalDeviceAuthComplete(sourceName, baseURL, deviceCode string, intervalSeconds int) error {
 	sourceName = strings.TrimSpace(sourceName)
 	if sourceName == "" {
@@ -399,10 +482,7 @@ func (a *App) PortalDeviceAuthComplete(sourceName, baseURL, deviceCode string, i
 }
 
 // savePortalSourceFromToken persists a freshly authorized remote
-// source. Called from PortalDeviceAuthComplete on the success path.
-// A name collision with an existing remote source is treated as an
-// upsert: the URL and bearer token are replaced. The new source
-// becomes active.
+// source with Enabled=true. A name collision is treated as an upsert.
 func (a *App) savePortalSourceFromToken(name, baseURL, bearer string) error {
 	portalSourcesMu.Lock()
 	defer portalSourcesMu.Unlock()
@@ -417,6 +497,7 @@ func (a *App) savePortalSourceFromToken(name, baseURL, bearer string) error {
 			file.Remote[i].URL = baseURL
 			file.Remote[i].BearerToken = bearer
 			file.Remote[i].AddedAt = now
+			file.Remote[i].Enabled = true
 			updated = true
 			break
 		}
@@ -427,10 +508,10 @@ func (a *App) savePortalSourceFromToken(name, baseURL, bearer string) error {
 			Kind:        PortalSourceKindRemote,
 			URL:         baseURL,
 			BearerToken: bearer,
+			Enabled:     true,
 			AddedAt:     now,
 		})
 	}
-	file.ActiveName = name
 	return savePortalSources(file)
 }
 

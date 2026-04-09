@@ -984,7 +984,7 @@ func profilePath() string {
 // Source is the portal source name (e.g. "Local") so the frontend
 // can group hubs by source if it wants to.
 func (a *App) GetKnownHubs() []KnownHub {
-	sourceName, err := a.PortalActiveSource()
+	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return nil
 	}
@@ -1095,7 +1095,7 @@ func (a *App) AddHub(rawURL, token string) error {
 	name := hostFromURL(hubURL)
 	a.logCommand("Add hub "+hubURL, "tela login "+hubURL)
 
-	sourceName, err := a.PortalActiveSource()
+	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return err
 	}
@@ -1124,7 +1124,7 @@ func (a *App) RemoveHub(hubNameOrURL string) error {
 	}
 	a.logCommand("Remove hub "+hubNameOrURL, "tela logout "+hubNameOrURL)
 
-	sourceName, err := a.PortalActiveSource()
+	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return err
 	}
@@ -1192,15 +1192,15 @@ func maskToken(token string) string {
 // body; non-2xx responses are translated into a Go error carrying
 // the documented {"error": "..."} message when the hub provides one.
 //
-// The helper picks the active portal source via PortalActiveSource;
-// callers do not need to know which source they are talking to. The
-// embedded source is the default on a fresh launch, so this path is
-// friction-free for users who never sign into a remote portal.
+// The helper picks the first enabled portal source; callers do not
+// need to know which source they are talking to. The embedded source
+// is the default on a fresh launch, so this path is friction-free for
+// users who never sign into a remote portal.
 func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]byte, error) {
 	if hubName == "" {
 		return nil, fmt.Errorf("adminProxyCall: hubName is required")
 	}
-	sourceName, err := a.PortalActiveSource()
+	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return nil, fmt.Errorf("portal active source: %w", err)
 	}
@@ -1420,7 +1420,7 @@ func (a *App) fetchHubPublicEndpoint(hubName, path string) ([]byte, error) {
 // the embedded source. When the active source is remote, the
 // returned token is empty and the caller falls back to no auth.
 func (a *App) lookupHubAuth(hubName string) (string, string, error) {
-	sourceName, err := a.PortalActiveSource()
+	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return "", "", err
 	}
@@ -1465,7 +1465,7 @@ func (a *App) GetTokenRole(hubName string) string {
 // /api/status path which is not under /api/admin/ and therefore not
 // proxied). Returns an error if no source has the hub.
 func (a *App) lookupHubURL(hubName string) (string, error) {
-	sourceName, err := a.PortalActiveSource()
+	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return "", err
 	}
@@ -2293,7 +2293,7 @@ type AgentInfo struct {
 // per-profile-hub iteration; the active portal source is the source
 // of truth for which hubs to query.
 func (a *App) GetAgentList() []AgentInfo {
-	sourceName, err := a.PortalActiveSource()
+	sourceName, err := a.firstEnabledSourceName()
 	if err != nil {
 		return nil
 	}

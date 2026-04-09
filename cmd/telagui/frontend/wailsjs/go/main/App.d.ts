@@ -174,8 +174,6 @@ export function OpenFileDialog():Promise<string>;
 
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;
 
-export function PortalActiveSource():Promise<string>;
-
 export function PortalDeviceAuthComplete(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
 
 export function PortalDeviceAuthStart(arg1:string):Promise<main.PortalDeviceAuthStartResult>;
@@ -184,7 +182,7 @@ export function PortalListSources():Promise<Array<main.PortalSource>>;
 
 export function PortalRemoveSource(arg1:string):Promise<void>;
 
-export function PortalSetActiveSource(arg1:string):Promise<void>;
+export function PortalSetSourceEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function QuitApp():Promise<void>;
 

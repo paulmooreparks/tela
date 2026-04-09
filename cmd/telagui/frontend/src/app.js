@@ -4793,21 +4793,20 @@ function refreshTerminal() {
 // The Remotes tab in Infrastructure mode is the portal-sources UI.
 // "Local" is the embedded in-process portal that ships inside TV;
 // remote entries are portals the user has signed into via the
-// OAuth 2.0 device authorization grant. portalSourceSetActive,
+// OAuth 2.0 device authorization grant. portalSourceToggleEnabled,
 // portalSourceRemove, and the openAddPortalSourceDialog flow below
 // are the documented entry points the Remotes tab calls.
 
 // State for the in-progress device code flow.
 var portalSourceFlow = null;
 
-function portalSourceSetActive(name) {
-  goApp.PortalSetActiveSource(name).then(function () {
+function portalSourceToggleEnabled(name, enabled) {
+  goApp.PortalSetSourceEnabled(name, enabled).then(function () {
     refreshRemotesList();
-    // The hub list depends on the active source; force a refresh.
     if (typeof refreshHubsTab === 'function') refreshHubsTab();
     if (typeof refreshAll === 'function') refreshAll();
   }).catch(function (err) {
-    showError('Failed to set active remote: ' + err);
+    showError('Failed to update remote: ' + err);
   });
 }
 
@@ -5223,32 +5222,29 @@ function renderRemotesView(pane) {
 function refreshRemotesList() {
   var el = document.getElementById('remotes-list-pane');
   if (!el) return;
-  Promise.all([
-    goApp.PortalListSources(),
-    goApp.PortalActiveSource()
-  ]).then(function (results) {
-    var sources = results[0] || [];
-    var active = results[1] || '';
+  goApp.PortalListSources().then(function (sources) {
+    sources = sources || [];
     if (sources.length === 0) {
       el.innerHTML = '<p class="empty-hint">No remotes configured.</p>';
       return;
     }
     var html = '';
     sources.forEach(function (s) {
-      var isActive = s.name === active;
       var isEmbedded = s.kind === 'embedded';
+      var cbId = 'ps-en-' + s.name.replace(/[^a-zA-Z0-9]/g, '_');
       html += '<div class="portal-sources-row">'
         + '<div class="source-info">'
         + '<div class="source-name-line">'
         + '<span class="source-name">' + escHtml(s.name) + '</span>'
-        + (isActive ? '<span class="source-active">Active</span>' : '')
         + '</div>'
         + '<div class="source-url">' + escHtml(s.url) + '</div>'
         + '</div>'
-        + '<div class="source-actions">';
-      if (!isActive) {
-        html += '<button type="button" class="tb-btn" onclick="portalSourceSetActive(\'' + escAttr(s.name) + '\')">Use</button>';
-      }
+        + '<div class="source-actions">'
+        + '<label class="settings-checkbox-label">'
+        + '<input type="checkbox" id="' + escAttr(cbId) + '"'
+        + (s.enabled ? ' checked' : '')
+        + ' onchange="portalSourceToggleEnabled(\'' + escAttr(s.name) + '\', this.checked)">'
+        + ' Enabled</label>';
       if (!isEmbedded) {
         html += '<button type="button" class="tb-btn tb-delete-btn" onclick="portalSourceRemove(\'' + escAttr(s.name) + '\')">Remove</button>';
       }
@@ -5260,9 +5256,6 @@ function refreshRemotesList() {
   });
 }
 
-// addRemote / removeRemote are kept as thin shims so any frontend
-// caller that has not been migrated to the dialog still resolves.
-// The dialog is the documented path; these names are deprecated.
 function addRemote() { openAddPortalSourceDialog(); }
 function removeRemote(name) { portalSourceRemove(name); }
 

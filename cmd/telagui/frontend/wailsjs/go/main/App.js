@@ -346,10 +346,6 @@ export function PairWithCode(arg1, arg2) {
   return window['go']['main']['App']['PairWithCode'](arg1, arg2);
 }
 
-export function PortalActiveSource() {
-  return window['go']['main']['App']['PortalActiveSource']();
-}
-
 export function PortalDeviceAuthComplete(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['PortalDeviceAuthComplete'](arg1, arg2, arg3, arg4);
 }
@@ -366,8 +362,8 @@ export function PortalRemoveSource(arg1) {
   return window['go']['main']['App']['PortalRemoveSource'](arg1);
 }
 
-export function PortalSetActiveSource(arg1) {
-  return window['go']['main']['App']['PortalSetActiveSource'](arg1);
+export function PortalSetSourceEnabled(arg1, arg2) {
+  return window['go']['main']['App']['PortalSetSourceEnabled'](arg1, arg2);
 }
 
 export function QuitApp() {
