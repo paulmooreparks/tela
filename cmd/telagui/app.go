@@ -1463,9 +1463,9 @@ func (a *App) GetHubHistory(hubName string) string {
 
 // fetchHubPublicEndpoint fetches a public hub endpoint (/api/status
 // or /api/history) through the portal's public-hub proxy so the
-// portal supplies the stored token. This works for both embedded and
-// remote portal sources without the caller needing direct access to
-// the hub or its credentials.
+// portal supplies the stored token. Falls back to the admin proxy
+// path when the public proxy fails (e.g. missing viewer token on the
+// portal side -- the admin token still works).
 func (a *App) fetchHubPublicEndpoint(hubName, path string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1479,14 +1479,35 @@ func (a *App) fetchHubPublicEndpoint(hubName, path string) ([]byte, error) {
 		return nil, err
 	}
 
+	// Try the public-hub proxy first (uses the viewer token).
+	var body []byte
 	switch path {
 	case "/api/status":
-		return client.HubStatus(ctx, hubName)
+		body, err = client.HubStatus(ctx, hubName)
 	case "/api/history":
-		return client.HubHistory(ctx, hubName)
+		body, err = client.HubHistory(ctx, hubName)
 	default:
 		return nil, fmt.Errorf("unsupported public endpoint: %s", path)
 	}
+	if err == nil {
+		return body, nil
+	}
+
+	// Public proxy failed. Fall back to the admin proxy, which uses
+	// the admin token and can reach the same data. Strip the /api/
+	// prefix -- adminProxyCall prepends /api/admin/ so we pass just
+	// the endpoint name. The hub serves /api/admin/status and
+	// /api/admin/history as aliases for /api/status and /api/history
+	// when the caller has an admin token.
+	//
+	// If the hub does not have /api/admin/{name} aliases, this will
+	// 404 and we return the original public-proxy error.
+	adminOp := strings.TrimPrefix(path, "/api/")
+	fallback, adminErr := a.adminProxyCall(hubName, "GET", adminOp, nil)
+	if adminErr == nil {
+		return fallback, nil
+	}
+	return nil, err // return original error, not the fallback error
 }
 
 // GetTokenRole returns the role for the admin token the active portal
