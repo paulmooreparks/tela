@@ -56,6 +56,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/internal/credstore"
+	"github.com/paulmooreparks/tela/internal/relay"
 	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/telelog"
 	"github.com/paulmooreparks/tela/internal/wsbind"
@@ -1996,12 +1997,19 @@ persistent_keepalive_interval=25
 	}
 	lg.Printf("WireGuard tunnel up -- agent=%s helper=%s", sessionAgentIP, sessionHelperIP)
 
+	// Start in-band session keepalive (end-to-end, distinct from WS ping/pong).
+	keepaliveRespCh, stopKeepalive := bind.StartSessionKeepalive(func() {
+		lg.Printf("session keepalive timeout -- tearing down")
+		ws.Close()
+	})
+	defer stopKeepalive()
+
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
 	sessionEnded := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		wsReader(lg, ws, bind, hubURL, sessionEnded)
+		wsReader(lg, ws, bind, hubURL, sessionEnded, keepaliveRespCh)
 	}()
 
 	// Send periodic data-frame keepalive to prevent proxy idle timeouts
@@ -2054,7 +2062,7 @@ persistent_keepalive_interval=25
 // wsReader reads from the WebSocket and dispatches:
 //   - Binary messages → wsBind.RecvCh (WireGuard datagrams)
 //   - Text messages → parsed for control commands (udp-offer, peer-endpoint), else logged
-func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL string, sessionEnded chan struct{}) {
+func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL string, sessionEnded chan struct{}, keepaliveRespCh chan<- struct{}) {
 	for {
 		msgType, data, err := ws.ReadMessage()
 		if err != nil {
@@ -2062,10 +2070,33 @@ func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL stri
 			return
 		}
 		if msgType == websocket.BinaryMessage {
+			_, flags, _, payload, ok := relay.ParseHeader(data)
+			if !ok {
+				lg.Printf("relay frame: bad header (got %dB)", len(data))
+				continue
+			}
+			if flags == relay.FlagControl {
+				if len(payload) > 0 {
+					switch payload[0] {
+					case relay.ControlKeepaliveReq:
+						bind.SendControlFrame([]byte{relay.ControlKeepaliveResp})
+					case relay.ControlKeepaliveResp:
+						select {
+						case keepaliveRespCh <- struct{}{}:
+						default:
+						}
+					}
+					// Unknown control types ignored per spec.
+				}
+				continue
+			}
+			// Copy payload so it is not aliased to the websocket read buffer.
+			pkt := make([]byte, len(payload))
+			copy(pkt, payload)
 			select {
-			case bind.RecvCh <- data:
+			case bind.RecvCh <- pkt:
 			default:
-				lg.Printf("wsBind recv buffer full, dropping %dB", len(data))
+				lg.Printf("wsBind recv buffer full, dropping %dB", len(pkt))
 			}
 		} else {
 			var msg controlMessage

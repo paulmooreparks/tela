@@ -102,6 +102,16 @@ type machineSpec struct {
 // the agent and removes the temp directory.
 func New(t *testing.T) *Stack {
 	t.Helper()
+	return NewWithConfig(t, &hub.Config{Name: "teststack-hub"})
+}
+
+// NewWithConfig constructs a Stack like New but uses the supplied hub
+// configuration instead of the default. This lets tests configure bridge
+// entries, custom hub names, or other hub settings before the hub starts.
+// The config must not set Port or UDPPort; the harness always binds to
+// random ports so concurrent tests do not collide.
+func NewWithConfig(t *testing.T, cfg *hub.Config) *Stack {
+	t.Helper()
 
 	tempDir, err := os.MkdirTemp("", "tela-stack-*")
 	if err != nil {
@@ -113,26 +123,24 @@ func New(t *testing.T) *Stack {
 		tempDir:   tempDir,
 		agentYAML: filepath.Join(tempDir, "telad.yaml"),
 	}
-	s.startHub()
+	s.startHubWithConfig(cfg)
 	t.Cleanup(s.Close)
 	return s
 }
 
-// startHub launches the hub goroutine on 127.0.0.1:0 and waits for it
-// to report its actual bound address.
-func (s *Stack) startHub() {
+// startHubWithConfig launches the hub goroutine on 127.0.0.1:0 using the
+// supplied config and waits for it to report its actual bound address.
+func (s *Stack) startHubWithConfig(cfg *hub.Config) {
 	s.t.Helper()
 
 	// Reset hub package state from any previous test in the same
 	// process so we always start from a clean slate.
 	hub.ResetForTesting()
 
-	// Disable auth in tests so we don't have to manage tokens. The
-	// auth store unit tests cover the auth boundary; the harness is
-	// for end-to-end behavior.
-	hub.SetTestConfig(&hub.Config{
-		Name: "teststack-hub",
-	})
+	// Install the caller's config. SetTestConfig calls applyHubConfig
+	// internally, which populates the bridge directory and auth store.
+	// Auth is disabled when cfg has no tokens (the default for tests).
+	hub.SetTestConfig(cfg)
 
 	// Tell the UDP relay to bind to a random port. Without this, two
 	// tests in the same process collide on the default udpPort 41820.

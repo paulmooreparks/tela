@@ -33,6 +33,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"golang.zx2c4.com/wireguard/conn"
+
+	"github.com/paulmooreparks/tela/internal/relay"
 )
 
 const (
@@ -56,12 +58,13 @@ const (
 // (e.g. Up). The bind must support this cycle -- Close/Open are
 // re-entrant and reset the receive path each time.
 type Bind struct {
-	ws      *websocket.Conn
-	writeMu sync.Mutex  // gorilla/websocket requires serialized writes
-	RecvCh  chan []byte // binary WG datagrams from the reader goroutine(s)
-	mu      sync.Mutex  // protects closed, open
-	closed  chan struct{}
-	open    bool
+	ws        *websocket.Conn
+	writeMu   sync.Mutex  // gorilla/websocket requires serialized writes
+	RecvCh    chan []byte // binary WG datagrams from the reader goroutine(s)
+	mu        sync.Mutex  // protects closed, open
+	closed    chan struct{}
+	open      bool
+	sessionID uint32 // v1 relay frame session identifier (constant per connection)
 
 	// UDP relay (activated by UpgradeUDP)
 	udpMu      sync.RWMutex
@@ -82,13 +85,17 @@ type Bind struct {
 
 // New creates a Bind using the given WebSocket connection.
 // bufSize controls the receive channel buffer depth.
+// A random session ID is generated for v1 relay frame headers.
 func New(ws *websocket.Conn, bufSize int) *Bind {
+	var sid [4]byte
+	crand.Read(sid[:]) //nolint:errcheck -- rand.Read never fails
 	return &Bind{
-		ws:      ws,
-		RecvCh:  make(chan []byte, bufSize),
-		closed:  make(chan struct{}),
-		stunCh:  make(chan []byte, 2),
-		punchCh: make(chan *net.UDPAddr, 1),
+		ws:        ws,
+		sessionID: binary.BigEndian.Uint32(sid[:]),
+		RecvCh:    make(chan []byte, bufSize),
+		closed:    make(chan struct{}),
+		stunCh:    make(chan []byte, 2),
+		punchCh:   make(chan *net.UDPAddr, 1),
 	}
 }
 
@@ -107,11 +114,14 @@ func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 	token := b.udpToken
 	b.udpMu.RUnlock()
 
-	// 1. Direct (raw WG datagrams to peer, no token prefix)
+	// 1. Direct ([header][WG datagram] to peer, no token prefix).
+	// The frame header is present on the direct path for diagnostics;
+	// hops are not decremented since no hub is in the middle.
 	if useDirect && dAddr != nil && udpConn != nil {
 		allOk := true
 		for _, buf := range bufs {
-			if _, err := udpConn.WriteToUDP(buf, dAddr); err != nil {
+			framed := relay.BuildDataFrame(buf, 0, b.sessionID)
+			if _, err := udpConn.WriteToUDP(framed, dAddr); err != nil {
 				log.Printf("[wsbind] direct send failed, falling back: %v", err)
 				b.directMu.Lock()
 				b.directActive = false
@@ -126,12 +136,16 @@ func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 		// Direct failed -- fall through to relay
 	}
 
-	// 2. UDP relay (token-prefixed datagrams via hub)
+	// 2. UDP relay ([token][header][WG datagram] via hub).
 	if useUDP && udpConn != nil {
 		for _, buf := range bufs {
-			pkt := make([]byte, tokenLen+len(buf))
+			pkt := make([]byte, tokenLen+relay.HeaderLen+len(buf))
 			copy(pkt, token)
-			copy(pkt[tokenLen:], buf)
+			pkt[tokenLen] = relay.Magic
+			pkt[tokenLen+1] = 0 // hop: hub overwrites on first relay
+			pkt[tokenLen+2] = relay.FlagData
+			binary.BigEndian.PutUint32(pkt[tokenLen+3:], b.sessionID)
+			copy(pkt[tokenLen+relay.HeaderLen:], buf)
 			if _, err := udpConn.WriteToUDP(pkt, hubAddr); err != nil {
 				log.Printf("[wsbind] UDP send failed, falling back to WebSocket: %v", err)
 				b.udpMu.Lock()
@@ -147,13 +161,15 @@ func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 	return b.sendWS(bufs)
 }
 
-// sendWS writes datagrams through the WebSocket.
+// sendWS writes datagrams through the WebSocket, each prefixed with the
+// v1 relay frame header. hop is 0; the hub overwrites it on first relay.
 func (b *Bind) sendWS(bufs [][]byte) error {
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
 
 	for _, buf := range bufs {
-		if err := b.ws.WriteMessage(websocket.BinaryMessage, buf); err != nil {
+		framed := relay.BuildDataFrame(buf, 0, b.sessionID)
+		if err := b.ws.WriteMessage(websocket.BinaryMessage, framed); err != nil {
 			return err
 		}
 	}
@@ -255,16 +271,20 @@ func (b *Bind) udpReader() {
 			return // socket closed
 		}
 
-		// 1. From hub relay? (token-prefixed WG datagram)
+		// 1. From hub relay? ([token][header][WG datagram])
 		b.udpMu.RLock()
 		hubAddr := b.udpHubAddr
 		b.udpMu.RUnlock()
 		if hubAddr != nil && addr.IP.Equal(hubAddr.IP) && addr.Port == hubAddr.Port {
-			if n <= tokenLen {
+			if n <= tokenLen+relay.HeaderLen {
 				continue
 			}
-			datagram := make([]byte, n-tokenLen)
-			copy(datagram, buf[tokenLen:n])
+			if buf[tokenLen] != relay.Magic {
+				log.Printf("[wsbind] UDP relay: bad magic byte 0x%02x", buf[tokenLen])
+				continue
+			}
+			datagram := make([]byte, n-tokenLen-relay.HeaderLen)
+			copy(datagram, buf[tokenLen+relay.HeaderLen:n])
 			select {
 			case b.RecvCh <- datagram:
 			default:
@@ -302,13 +322,16 @@ func (b *Bind) udpReader() {
 			continue
 		}
 
-		// 4. Direct WG datagram from known peer?
+		// 4. Direct WG datagram from known peer? ([header][WG datagram])
 		b.directMu.RLock()
 		dAddr := b.directAddr
 		b.directMu.RUnlock()
 		if dAddr != nil && addr.IP.Equal(dAddr.IP) && addr.Port == dAddr.Port {
-			datagram := make([]byte, n)
-			copy(datagram, buf[:n])
+			if n <= relay.HeaderLen || buf[0] != relay.Magic {
+				continue
+			}
+			datagram := make([]byte, n-relay.HeaderLen)
+			copy(datagram, buf[relay.HeaderLen:n])
 			select {
 			case b.RecvCh <- datagram:
 			default:
@@ -547,6 +570,52 @@ func (b *Bind) SendText(data []byte) error {
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
 	return b.ws.WriteMessage(websocket.TextMessage, data)
+}
+
+// SendControlFrame builds and sends a CONTROL relay frame through the
+// WebSocket, serialized with other writes via writeMu.
+func (b *Bind) SendControlFrame(payload []byte) error {
+	framed := relay.BuildControlFrame(payload, 0, b.sessionID)
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+	return b.ws.WriteMessage(websocket.BinaryMessage, framed)
+}
+
+// StartSessionKeepalive starts a goroutine that sends periodic in-band
+// session keepalive requests (CONTROL frame, payload 0x01) and calls
+// closeFn if no response arrives within relay.KeepaliveTimeout.
+//
+// Returns (respCh, stop):
+//   - respCh: the caller sends on this channel when a keepalive response (0x02) is received.
+//   - stop: call to cancel the keepalive goroutine.
+func (b *Bind) StartSessionKeepalive(closeFn func()) (chan<- struct{}, func()) {
+	respCh := make(chan struct{}, 1)
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(relay.KeepaliveInterval)
+		defer ticker.Stop()
+		var lastReqAt time.Time
+		waiting := false
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if waiting && time.Since(lastReqAt) >= relay.KeepaliveTimeout {
+					closeFn()
+					return
+				}
+				if err := b.SendControlFrame([]byte{relay.ControlKeepaliveReq}); err != nil {
+					return // WebSocket is closing
+				}
+				lastReqAt = time.Now()
+				waiting = true
+			case <-respCh:
+				waiting = false
+			}
+		}
+	}()
+	return respCh, func() { close(stop) }
 }
 
 // StartDataKeepalive sends a periodic text-frame keepalive over the

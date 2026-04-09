@@ -61,6 +61,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/console"
+	"github.com/paulmooreparks/tela/internal/relay"
 	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/telelog"
 )
@@ -210,6 +211,7 @@ type hubConfig struct {
 	Auth    authConfig             `yaml:"auth,omitempty"`    // Token-based access control
 	Portals map[string]portalEntry `yaml:"portals,omitempty"` // Registered portals
 	Update  updateConfig           `yaml:"update,omitempty"`  // Self-update channel selection
+	Bridges []bridgeConfig         `yaml:"bridges,omitempty"` // Hub-to-hub transit bridges
 }
 
 // updateConfig controls which release channel this binary follows for
@@ -275,6 +277,11 @@ func applyHubConfig(cfg *hubConfig) {
 			wwwDir = v
 			wwwDirOverride = true
 		}
+	}
+
+	// Populate bridge machine directory from config.
+	if cfg != nil {
+		initBridgeDir(cfg)
 	}
 }
 
@@ -389,6 +396,10 @@ type wsState struct {
 	// SessionDetail is a human-friendly summary for portals/console.
 	// Example: "services=SSH:22,RDP:3389".
 	SessionDetail string
+
+	// BridgeWS is set for clients whose session is routed through another hub.
+	// handleDisconnect closes it when the client disconnects.
+	BridgeWS *safeConn
 }
 
 // udpSession tracks one side of a UDP relay pair.
@@ -628,6 +639,11 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	machinesMu.RLock()
+	type reachableThroughInfo struct {
+		HubID   string `json:"hubId,omitempty"`
+		HubName string `json:"hubName,omitempty"`
+		HubURL  string `json:"hubUrl"`
+	}
 	type statusMachine struct {
 		ID                    string                 `json:"id"`
 		AgentID               string                 `json:"agentId,omitempty"`
@@ -645,6 +661,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		LastSeen              *string                `json:"lastSeen"`
 		Services              []serviceDesc          `json:"services"`
 		Capabilities          map[string]interface{} `json:"capabilities,omitempty"`
+		ReachableThrough      *reachableThroughInfo  `json:"reachableThrough,omitempty"`
 	}
 
 	list := make([]statusMachine, 0, len(machines))
@@ -703,6 +720,24 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		list = append(list, sm)
 	}
 	machinesMu.RUnlock()
+
+	// Append bridged machines (machines reachable through another hub).
+	// These are not locally registered; they appear with agentConnected=false
+	// and a reachableThrough pointer so clients know to use a bridge.
+	bridgeDirMu.RLock()
+	for machineName, bc := range bridgeDir {
+		if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, machineName) {
+			continue
+		}
+		rt := &reachableThroughInfo{HubID: bc.HubID, HubURL: bc.URL}
+		list = append(list, statusMachine{
+			ID:               machineName,
+			Tags:             []string{},
+			Services:         []serviceDesc{},
+			ReachableThrough: rt,
+		})
+	}
+	bridgeDirMu.RUnlock()
 
 	hostname, _ := os.Hostname()
 	payload := map[string]any{
@@ -985,6 +1020,27 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			if msgType == websocket.TextMessage && len(data) < 64 && bytes.Contains(data, []byte(`"keepalive"`)) {
 				continue // proxy keepalive; do not relay
 			}
+			if msgType == websocket.BinaryMessage {
+				// Validate and advance the relay frame header.
+				// Bad magic means a pre-v1 peer; close with protocol error.
+				if len(data) < relay.HeaderLen || data[0] != relay.Magic {
+					log.Printf("[hub] relay frame: bad magic from %s (got 0x%02x)", state.Role, func() byte {
+						if len(data) > 0 {
+							return data[0]
+						}
+						return 0
+					}())
+					sc.WriteMessage(websocket.CloseMessage,
+						websocket.FormatCloseMessage(websocket.CloseProtocolError, "relay frame: unsupported version"))
+					return
+				}
+				var ok bool
+				data, ok = relay.ForwardFrame(data, relay.DefaultMaxHops)
+				if !ok {
+					log.Printf("[hub] relay frame dropped: TTL exhausted from %s", state.Role)
+					continue
+				}
+			}
 			wsStatesMu.RLock()
 			peer := state.Peer
 			wsStatesMu.RUnlock()
@@ -998,7 +1054,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 						peerRole = ps.Role
 					}
 					wsStatesMu.RUnlock()
-					log.Printf("[hub] relay %s→%s %dB binary=%v", state.Role, peerRole, len(data), msgType == websocket.BinaryMessage)
+					log.Printf("[hub] relay %s->%s %dB binary=%v", state.Role, peerRole, len(data), msgType == websocket.BinaryMessage)
 				}
 			}
 			continue
@@ -1205,6 +1261,14 @@ func handleConnect(ws *safeConn, state *wsState, msg *signalingMsg) {
 	machinesMu.RUnlock()
 
 	if !exists || entry == nil {
+		// Check bridge directory before giving up.
+		bridgeDirMu.RLock()
+		bc, inBridge := bridgeDir[machineName]
+		bridgeDirMu.RUnlock()
+		if inBridge {
+			handleBridgeConnect(ws, state, msg, bc)
+			return
+		}
 		sendError(ws, "Machine not found")
 		return
 	}
@@ -1452,7 +1516,17 @@ func handleDisconnect(ws *safeConn) {
 	wsStatesMu.RLock()
 	state, ok := wsStates[ws.Conn]
 	wsStatesMu.RUnlock()
-	if !ok || state.MachineID == "" {
+	if !ok {
+		return
+	}
+
+	// Bridge client: closing the bridge WS causes runBridgeReader to exit
+	// and clean up the leg-1 UDP token and bridge wsState entry.
+	if state.BridgeWS != nil {
+		state.BridgeWS.Close()
+	}
+
+	if state.MachineID == "" {
 		return
 	}
 
@@ -1668,7 +1742,7 @@ func runUDPRelay(ctx context.Context) {
 		// Record sender's address
 		session.Addr = raddr
 
-		// Check if this is a PROBE
+		// Check if this is a PROBE (sent before any frame header is negotiated)
 		if string(payload) == probeWord {
 			// Send READY back: [same token]["READY"]
 			resp := make([]byte, udpTokenLen+len(readyWord))
@@ -1680,7 +1754,30 @@ func runUDPRelay(ctx context.Context) {
 			continue
 		}
 
-		// Relay WG datagram to peer
+		// Validate and advance the relay frame header.
+		forwarded, frameOK := relay.ForwardFrame(payload, relay.DefaultMaxHops)
+		if !frameOK {
+			if len(payload) > 0 && payload[0] != relay.Magic {
+				log.Printf("[hub] UDP relay: bad magic 0x%02x from %s", payload[0], session.MachineID)
+			} else {
+				log.Printf("[hub] UDP relay: frame dropped (TTL exhausted) from %s", session.MachineID)
+			}
+			udpSessionsMu.Unlock()
+			continue
+		}
+
+		// Bridge session: PeerTokenHex is empty and PeerWS is the bridge WS.
+		// Write directly to the bridge WebSocket instead of looking up a peer token.
+		if session.PeerTokenHex == "" {
+			bridgeWS := session.PeerWS
+			udpSessionsMu.Unlock()
+			if bridgeWS != nil {
+				bridgeWS.WriteMessage(websocket.BinaryMessage, forwarded)
+			}
+			continue
+		}
+
+		// Relay to peer (normal session)
 		peer, peerOK := udpSessions[session.PeerTokenHex]
 		udpSessionsMu.Unlock()
 
@@ -1689,16 +1786,16 @@ func runUDPRelay(ctx context.Context) {
 		}
 
 		if peer.Addr != nil {
-			// Peer is on UDP -- forward via UDP
+			// Peer is on UDP -- forward [peerToken][header+payload]
 			peerTokenBytes, _ := hex.DecodeString(session.PeerTokenHex)
 			relayBuf := udpBufPool.Get().([]byte)[:0]
 			relayBuf = append(relayBuf, peerTokenBytes...)
-			relayBuf = append(relayBuf, payload...)
+			relayBuf = append(relayBuf, forwarded...)
 			conn.WriteToUDP(relayBuf, peer.Addr)
 			udpBufPool.Put(relayBuf)
 		} else if peer.PeerWS != nil {
 			// Peer hasn't upgraded to UDP -- fall back to WebSocket relay
-			peer.PeerWS.WriteMessage(websocket.BinaryMessage, payload)
+			peer.PeerWS.WriteMessage(websocket.BinaryMessage, forwarded)
 		}
 	}
 }
