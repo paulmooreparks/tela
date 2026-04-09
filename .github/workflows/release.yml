@@ -155,8 +155,54 @@ jobs:
             -f ref="refs/tags/$TAG" \
             -f sha="$SHA"
 
+  # Gate the build on the CI workflow completing successfully for the
+  # same commit. Without this, a passing Build can produce downloadable
+  # binaries from code that fails CI (e.g. race conditions caught by
+  # -race). Uses the gh CLI to poll for the CI run status.
+  wait-for-ci:
+    runs-on: ubuntu-latest
+    # Skip for workflow_call (promote) and tag pushes: those commits
+    # already passed CI when they were on main.
+    if: inputs.tag == '' && !startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Wait for CI to complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="${{ github.sha }}"
+          REPO="${{ github.repository }}"
+          echo "Waiting for CI workflow to complete on $SHA..."
+          for i in $(seq 1 60); do
+            STATUS=$(gh api "repos/$REPO/commits/$SHA/check-runs" \
+              --jq '.check_runs[] | select(.name == "Build, vet, test") | .status + ":" + .conclusion' \
+              2>/dev/null || echo "")
+            if [ -z "$STATUS" ]; then
+              echo "  CI check not found yet (attempt $i/60)..."
+              sleep 5
+              continue
+            fi
+            case "$STATUS" in
+              completed:success)
+                echo "CI passed."
+                exit 0
+                ;;
+              completed:*)
+                echo "::error::CI failed ($STATUS). Aborting build."
+                exit 1
+                ;;
+              *)
+                echo "  CI still running ($STATUS, attempt $i/60)..."
+                sleep 5
+                ;;
+            esac
+          done
+          echo "::error::Timed out waiting for CI after 5 minutes."
+          exit 1
+
   build:
-    needs: compute-version
+    needs: [compute-version, wait-for-ci]
+    # Always run when wait-for-ci was skipped (tag/promote paths).
+    if: always() && (needs.wait-for-ci.result == 'success' || needs.wait-for-ci.result == 'skipped')
     strategy:
       matrix:
         include:

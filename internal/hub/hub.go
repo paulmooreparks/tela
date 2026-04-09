@@ -53,6 +53,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -248,7 +249,7 @@ func applyHubConfig(cfg *hubConfig) {
 			httpPort = cfg.Port
 		}
 		if cfg.UDPPort != 0 {
-			udpPort = cfg.UDPPort
+			udpPort.Store(int32(cfg.UDPPort))
 		}
 		if cfg.UDPHost != "" {
 			udpHost = cfg.UDPHost
@@ -269,7 +270,7 @@ func applyHubConfig(cfg *hubConfig) {
 
 	// Env vars override config file
 	httpPort = envInt("TELAHUBD_PORT", httpPort)
-	udpPort = envInt("TELAHUBD_UDP_PORT", udpPort)
+	udpPort.Store(int32(envInt("TELAHUBD_UDP_PORT", int(udpPort.Load()))))
 	udpHost = envStr("TELAHUBD_UDP_HOST", udpHost)
 	hubName = envStr("TELAHUBD_NAME", hubName)
 	if v := os.Getenv("TELAHUBD_WWW_DIR"); v != "" {
@@ -301,9 +302,15 @@ func envStr(key, def string) string {
 	return def
 }
 
+// udpPort is the UDP relay listen port. Accessed atomically because
+// runUDPRelay writes it when the OS assigns a random port (port=0 in
+// tests) and HTTP handler goroutines read it for udp-offer messages.
+var udpPort atomic.Int32
+
+func init() { udpPort.Store(41820) }
+
 var (
 	httpPort       = 80
-	udpPort        = 41820
 	udpHost        = "" // if set, included in udp-offer for proxy setups
 	hubID          = "" // stable UUID; set at startup from config or generated
 	hubName        = ""
@@ -1496,7 +1503,7 @@ func pairSession(machineKey string, entry *machineEntry, session *clientSession)
 	entry.mu.Unlock()
 
 	// Send udp-offer to both sides
-	offer := map[string]any{"type": "udp-offer", "port": udpPort}
+	offer := map[string]any{"type": "udp-offer", "port": int(udpPort.Load())}
 	if udpHost != "" {
 		offer["host"] = udpHost
 	}
@@ -1509,7 +1516,7 @@ func pairSession(machineKey string, entry *machineEntry, session *clientSession)
 	clientOffer, _ := json.Marshal(offer)
 	clientWS.WriteMessage(websocket.TextMessage, clientOffer)
 
-	log.Printf("[hub] sent udp-offer to both sides for: %s session=%s (port %d)", machineID, session.SessionID[:8], udpPort)
+	log.Printf("[hub] sent udp-offer to both sides for: %s session=%s (port %d)", machineID, session.SessionID[:8], udpPort.Load())
 }
 
 func handleDisconnect(ws *safeConn) {
@@ -1689,23 +1696,24 @@ var udpBufPool = sync.Pool{
 }
 
 func runUDPRelay(ctx context.Context) {
-	addr := &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: udpPort}
+	port := int(udpPort.Load())
+	addr := &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: port}
 	conn, err := net.ListenUDP("udp4", addr)
 	if err != nil {
 		// Log and return rather than killing the process. The hub
 		// continues to function as a WebSocket relay; only the UDP
 		// transport tier is unavailable.
-		log.Printf("[hub] UDP listen failed on port %d: %v (UDP relay disabled)", udpPort, err)
+		log.Printf("[hub] UDP listen failed on port %d: %v (UDP relay disabled)", port, err)
 		return
 	}
 	// If we requested port 0, learn the actual port we got and pin it
 	// for the udp-offer messages so clients can find us.
-	if udpPort == 0 {
+	if port == 0 {
 		if a, ok := conn.LocalAddr().(*net.UDPAddr); ok {
-			udpPort = a.Port
+			udpPort.Store(int32(a.Port))
 		}
 	}
-	log.Printf("[hub] UDP relay on port %d", udpPort)
+	log.Printf("[hub] UDP relay on port %d", udpPort.Load())
 
 	// Close the socket when ctx fires so this goroutine exits cleanly.
 	go func() {
@@ -1985,7 +1993,7 @@ func Main() {
 
 	// Initialize the auth store (nil cfg => open/disabled).
 	if cfg == nil {
-		cfg = &hubConfig{Port: httpPort, UDPPort: udpPort, WWWDir: wwwDir}
+		cfg = &hubConfig{Port: httpPort, UDPPort: int(udpPort.Load()), WWWDir: wwwDir}
 	}
 
 	// Env-var bootstrap: TELA_OWNER_TOKEN
@@ -3875,7 +3883,7 @@ func ResetForTesting() {
 	// teststack helper overrides them to 0 (random) right after this
 	// reset, so each test gets a fresh OS-assigned port.
 	httpPort = 80
-	udpPort = 41820
+	udpPort.Store(41820)
 	udpHost = ""
 	hubID = ""
 	hubName = ""
@@ -3914,5 +3922,5 @@ func SetTestConfig(cfg *Config) {
 // way to do it because applyHubConfig deliberately ignores zero values
 // (production callers use zero to mean "use the default").
 func SetUDPPortForTesting(p int) {
-	udpPort = p
+	udpPort.Store(int32(p))
 }

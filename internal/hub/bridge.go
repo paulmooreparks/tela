@@ -221,7 +221,7 @@ func handleBridgeConnect(clientSC *safeConn, state *wsState, msg *signalingMsg, 
 	clientSC.WriteMessage(websocket.TextMessage, ready)
 
 	// Send leg-1 udp-offer to client (client <-> Hub-A UDP relay).
-	offer := map[string]any{"type": "udp-offer", "port": udpPort, "token": clientTokenHex}
+	offer := map[string]any{"type": "udp-offer", "port": int(udpPort.Load()), "token": clientTokenHex}
 	if udpHost != "" {
 		offer["host"] = udpHost
 	}
