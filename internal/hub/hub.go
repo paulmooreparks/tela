@@ -430,9 +430,10 @@ func (sc *safeConn) WriteControl(messageType int, data []byte, deadline time.Tim
 // ── Global state ───────────────────────────────────────────────────
 
 var (
-	machines       = make(map[string]*machineEntry) // agentId → entry
-	machinesByName = make(map[string]string)        // machineName → agentId
-	machinesMu     sync.RWMutex
+	machines        = make(map[string]*machineEntry) // machineKey → entry
+	machinesByName  = make(map[string]string)        // machineName → machineKey
+	machinesByRegID = make(map[string]string)        // machineRegistrationId → machineKey
+	machinesMu      sync.RWMutex
 
 	// Per-WebSocket state, keyed by connection pointer.
 	wsStates   = make(map[*websocket.Conn]*wsState)
@@ -908,21 +909,22 @@ var upgrader = websocket.Upgrader{
 
 // JSON messages from agents and clients during signaling.
 type signalingMsg struct {
-	Type         string        `json:"type"`
-	MachineID    string        `json:"machineId,omitempty"`   // session-join / client connect (machine name)
-	MachineName  string        `json:"machineName,omitempty"` // register: display name
-	AgentID      string        `json:"agentId,omitempty"`     // register: stable agent identity UUID
-	Token        string        `json:"token,omitempty"`
-	WGPubKey     string        `json:"wgPubKey,omitempty"`
-	Ports        []int         `json:"ports,omitempty"`
-	Services     []serviceDesc `json:"services,omitempty"`
-	DisplayName  string        `json:"displayName,omitempty"`
-	Hostname     string        `json:"hostname,omitempty"`
-	OS           string        `json:"os,omitempty"`
-	AgentVersion string        `json:"agentVersion,omitempty"`
-	Tags         []string      `json:"tags,omitempty"`
-	Location     string        `json:"location,omitempty"`
-	Owner        string        `json:"owner,omitempty"`
+	Type                  string        `json:"type"`
+	MachineID             string        `json:"machineId,omitempty"`             // session-join / client connect (machine name)
+	MachineName           string        `json:"machineName,omitempty"`           // register: display name
+	AgentID               string        `json:"agentId,omitempty"`               // register: stable agent identity UUID
+	MachineRegistrationID string        `json:"machineRegistrationId,omitempty"` // register: stable per-machine UUID from telad.state
+	Token                 string        `json:"token,omitempty"`
+	WGPubKey              string        `json:"wgPubKey,omitempty"`
+	Ports                 []int         `json:"ports,omitempty"`
+	Services              []serviceDesc `json:"services,omitempty"`
+	DisplayName           string        `json:"displayName,omitempty"`
+	Hostname              string        `json:"hostname,omitempty"`
+	OS                    string        `json:"os,omitempty"`
+	AgentVersion          string        `json:"agentVersion,omitempty"`
+	Tags                  []string      `json:"tags,omitempty"`
+	Location              string        `json:"location,omitempty"`
+	Owner                 string        `json:"owner,omitempty"`
 
 	SessionID string `json:"sessionId,omitempty"`
 
@@ -1064,20 +1066,50 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	}
 
 	now := time.Now()
-	// Composite key: one entry per (agentId, machineName) pair. This lets a
-	// single telad installation manage multiple machines while still storing
-	// agentId on each entry for cross-hub correlation.
+	regID := msg.MachineRegistrationID
+
+	// Composite key: one entry per (agentId, machineName) pair so a single
+	// telad install can manage multiple machines on one hub.
 	machineKey := agentID + ":" + machineName
 
 	machinesMu.Lock()
+
+	// If the agent presented a stable machineRegistrationId, look for an
+	// existing entry by that ID. This handles renames: the agent's name
+	// changed but its registration UUID is the same, so we reuse the entry
+	// and update the name indexes rather than creating a new orphan.
+	if regID != "" {
+		if oldKey, found := machinesByRegID[regID]; found && oldKey != machineKey {
+			// Agent has re-registered under a new name. Move the entry.
+			entry := machines[oldKey]
+			if entry != nil {
+				oldName := entry.MachineName
+				delete(machines, oldKey)
+				machines[machineKey] = entry
+				machinesByRegID[regID] = machineKey
+				if oldName != "" && machinesByName[oldName] == oldKey {
+					delete(machinesByName, oldName)
+				}
+				log.Printf("[hub] agent renamed: %q → %q (regId %s)", oldName, machineName, regID)
+			}
+		}
+	}
+
 	entry, exists := machines[machineKey]
 	if !exists {
+		regUUID := regID
+		if regUUID == "" {
+			regUUID = newUUID() // pre-5g agents get a hub-generated ID
+		}
 		entry = &machineEntry{
 			AgentID:               agentID,
-			MachineRegistrationID: newUUID(),
+			MachineRegistrationID: regUUID,
 			RegisteredAt:          now,
 		}
 		machines[machineKey] = entry
+		if regID != "" {
+			machinesByRegID[regID] = machineKey
+		}
 	}
 	// Update the name index so connect/session-join can resolve name → machineKey.
 	if machineName != "" {
@@ -3705,6 +3737,7 @@ func ResetForTesting() {
 	machinesMu.Lock()
 	machines = make(map[string]*machineEntry)
 	machinesByName = make(map[string]string)
+	machinesByRegID = make(map[string]string)
 	machinesMu.Unlock()
 
 	wsStatesMu.Lock()

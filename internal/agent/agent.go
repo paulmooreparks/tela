@@ -86,7 +86,8 @@ func newUUID() string {
 // alongside telad.yaml. Operators should not edit it -- the file is
 // managed by telad itself.
 type agentState struct {
-	AgentID string `yaml:"agentId"`
+	AgentID               string `yaml:"agentId"`
+	MachineRegistrationID string `yaml:"machineRegistrationId"`
 }
 
 // loadOrCreateAgentState loads telad.state from the same directory as
@@ -106,12 +107,21 @@ func loadOrCreateAgentState(configPath string) (agentState, string) {
 	if data, err := os.ReadFile(statePath); err == nil {
 		_ = yaml.Unmarshal(data, &st)
 	}
+	dirty := false
 	if st.AgentID == "" {
 		st.AgentID = newUUID()
+		log.Printf("[agent] generated agentId %s", st.AgentID)
+		dirty = true
+	}
+	if st.MachineRegistrationID == "" {
+		st.MachineRegistrationID = newUUID()
+		log.Printf("[agent] generated machineRegistrationId %s", st.MachineRegistrationID)
+		dirty = true
+	}
+	if dirty {
 		data, _ := yaml.Marshal(&st)
 		_ = os.MkdirAll(dir, 0o700)
 		_ = os.WriteFile(statePath, data, 0o600)
-		log.Printf("[agent] generated agentId %s", st.AgentID)
 	}
 	return st, statePath
 }
@@ -204,27 +214,28 @@ type capabilities struct {
 }
 
 type controlMessage struct {
-	Type         string              `json:"type"`
-	MachineID    string              `json:"machineId,omitempty"`   // session-join and hub responses
-	MachineName  string              `json:"machineName,omitempty"` // register: display name (replaces machineId on register)
-	AgentID      string              `json:"agentId,omitempty"`     // register: stable agent identity UUID
-	DisplayName  string              `json:"displayName,omitempty"`
-	Hostname     string              `json:"hostname,omitempty"`
-	OS           string              `json:"os,omitempty"`
-	AgentVersion string              `json:"agentVersion,omitempty"`
-	Tags         []string            `json:"tags,omitempty"`
-	Location     string              `json:"location,omitempty"`
-	Owner        string              `json:"owner,omitempty"`
-	Message      string              `json:"message,omitempty"`
-	WGPubKey     string              `json:"wgPubKey,omitempty"`
-	Ports        []uint16            `json:"ports,omitempty"`
-	Services     []serviceDescriptor `json:"services,omitempty"`
-	Token        string              `json:"token,omitempty"`
-	Port         int                 `json:"port,omitempty"` // single port (udp-offer)
-	Host         string              `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
-	SessionID    string              `json:"sessionId,omitempty"`
-	SessionIdx   int                 `json:"sessionIdx,omitempty"`
-	Capabilities *capabilities       `json:"capabilities,omitempty"`
+	Type                  string              `json:"type"`
+	MachineID             string              `json:"machineId,omitempty"`             // session-join and hub responses
+	MachineName           string              `json:"machineName,omitempty"`           // register: display name (replaces machineId on register)
+	AgentID               string              `json:"agentId,omitempty"`               // register: stable agent identity UUID
+	MachineRegistrationID string              `json:"machineRegistrationId,omitempty"` // register: stable per-machine UUID from telad.state
+	DisplayName           string              `json:"displayName,omitempty"`
+	Hostname              string              `json:"hostname,omitempty"`
+	OS                    string              `json:"os,omitempty"`
+	AgentVersion          string              `json:"agentVersion,omitempty"`
+	Tags                  []string            `json:"tags,omitempty"`
+	Location              string              `json:"location,omitempty"`
+	Owner                 string              `json:"owner,omitempty"`
+	Message               string              `json:"message,omitempty"`
+	WGPubKey              string              `json:"wgPubKey,omitempty"`
+	Ports                 []uint16            `json:"ports,omitempty"`
+	Services              []serviceDescriptor `json:"services,omitempty"`
+	Token                 string              `json:"token,omitempty"`
+	Port                  int                 `json:"port,omitempty"` // single port (udp-offer)
+	Host                  string              `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
+	SessionID             string              `json:"sessionId,omitempty"`
+	SessionIdx            int                 `json:"sessionIdx,omitempty"`
+	Capabilities          *capabilities       `json:"capabilities,omitempty"`
 
 	// Management protocol fields (mgmt-request / mgmt-response)
 	RequestID string          `json:"requestId,omitempty"`
@@ -281,20 +292,21 @@ type machineConfig struct {
 }
 
 type registration struct {
-	MachineName  string // display name (formerly MachineID)
-	AgentID      string // stable identity UUID from telad.state
-	DisplayName  string
-	Hostname     string
-	OS           string
-	AgentVersion string
-	Tags         []string
-	Location     string
-	Owner        string
-	Token        string
-	Ports        []uint16
-	Services     []serviceDescriptor
-	FileShare    *parsedFileShareConfig
-	Gateway      *gatewayConfig
+	MachineName           string // display name (formerly MachineID)
+	AgentID               string // stable identity UUID from telad.state
+	MachineRegistrationID string // stable per-machine UUID from telad.state
+	DisplayName           string
+	Hostname              string
+	OS                    string
+	AgentVersion          string
+	Tags                  []string
+	Location              string
+	Owner                 string
+	Token                 string
+	Ports                 []uint16
+	Services              []serviceDescriptor
+	FileShare             *parsedFileShareConfig
+	Gateway               *gatewayConfig
 }
 
 var verbose bool
@@ -996,14 +1008,15 @@ func Main() {
 	hostname, _ := os.Hostname()
 	state, _ := loadOrCreateAgentState(*configPath)
 	reg := registration{
-		MachineName:  *machineID,
-		AgentID:      state.AgentID,
-		Hostname:     hostname,
-		OS:           runtime.GOOS,
-		AgentVersion: version,
-		Token:        *token,
-		Ports:        portsFromServices(services),
-		Services:     services,
+		MachineName:           *machineID,
+		AgentID:               state.AgentID,
+		MachineRegistrationID: state.MachineRegistrationID,
+		Hostname:              hostname,
+		OS:                    runtime.GOOS,
+		AgentVersion:          version,
+		Token:                 *token,
+		Ports:                 portsFromServices(services),
+		Services:              services,
 	}
 
 	// Fall back to credential store if token is empty
@@ -1478,20 +1491,21 @@ func runMultiMachine(cfg *configFile, configPath string) {
 			}
 
 			reg := registration{
-				MachineName:  mc.Name,
-				AgentID:      state.AgentID,
-				DisplayName:  mc.DisplayName,
-				Hostname:     hostname,
-				OS:           machineOS,
-				AgentVersion: version,
-				Tags:         mc.Tags,
-				Location:     mc.Location,
-				Owner:        mc.Owner,
-				Token:        mc.Token,
-				Ports:        mc.Ports,
-				Services:     mc.Services,
-				FileShare:    fsCfg,
-				Gateway:      mc.Gateway,
+				MachineName:           mc.Name,
+				AgentID:               state.AgentID,
+				MachineRegistrationID: state.MachineRegistrationID,
+				DisplayName:           mc.DisplayName,
+				Hostname:              hostname,
+				OS:                    machineOS,
+				AgentVersion:          version,
+				Tags:                  mc.Tags,
+				Location:              mc.Location,
+				Owner:                 mc.Owner,
+				Token:                 mc.Token,
+				Ports:                 mc.Ports,
+				Services:              mc.Services,
+				FileShare:             fsCfg,
+				Gateway:               mc.Gateway,
 			}
 			mergeGatewayIntoRegistration(&reg, mc.Gateway)
 
@@ -1708,20 +1722,21 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	// Register with hub (include ports/services + metadata for the registry)
 	lg.Printf("connected, registering as: %s (agentId %s)", reg.MachineName, reg.AgentID)
 	regMsg := controlMessage{
-		Type:         "register",
-		MachineName:  reg.MachineName,
-		AgentID:      reg.AgentID,
-		DisplayName:  reg.DisplayName,
-		Hostname:     reg.Hostname,
-		OS:           reg.OS,
-		AgentVersion: reg.AgentVersion,
-		Tags:         reg.Tags,
-		Location:     reg.Location,
-		Owner:        reg.Owner,
-		Token:        reg.Token,
-		Ports:        reg.Ports,
-		Services:     reg.Services,
-		Capabilities: buildCapabilities(reg.FileShare),
+		Type:                  "register",
+		MachineName:           reg.MachineName,
+		AgentID:               reg.AgentID,
+		MachineRegistrationID: reg.MachineRegistrationID,
+		DisplayName:           reg.DisplayName,
+		Hostname:              reg.Hostname,
+		OS:                    reg.OS,
+		AgentVersion:          reg.AgentVersion,
+		Tags:                  reg.Tags,
+		Location:              reg.Location,
+		Owner:                 reg.Owner,
+		Token:                 reg.Token,
+		Ports:                 reg.Ports,
+		Services:              reg.Services,
+		Capabilities:          buildCapabilities(reg.FileShare),
 	}
 	if err := ws.WriteJSON(&regMsg); err != nil {
 		lg.Printf("register failed: %v", err)
