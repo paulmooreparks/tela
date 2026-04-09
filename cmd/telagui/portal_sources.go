@@ -403,6 +403,40 @@ func (a *App) PortalSetSourceEnabled(name string, enabled bool) error {
 	return fmt.Errorf("portal sources: %q not found", name)
 }
 
+// PortalRenameSource renames a remote source from oldName to newName.
+// The embedded source cannot be renamed. newName must not collide with
+// an existing source or the reserved embedded name.
+func (a *App) PortalRenameSource(oldName, newName string) error {
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" || newName == "" {
+		return errors.New("portal sources: old and new names are required")
+	}
+	if oldName == embeddedSourceName || newName == embeddedSourceName {
+		return fmt.Errorf("portal sources: %q is reserved for the embedded source", embeddedSourceName)
+	}
+	portalSourcesMu.Lock()
+	defer portalSourcesMu.Unlock()
+	file, err := loadPortalSources()
+	if err != nil {
+		return err
+	}
+	idx := -1
+	for i, s := range file.Remote {
+		if s.Name == oldName {
+			idx = i
+		}
+		if s.Name == newName {
+			return fmt.Errorf("portal sources: %q already exists", newName)
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("portal sources: %q not found", oldName)
+	}
+	file.Remote[idx].Name = newName
+	return savePortalSources(file)
+}
+
 // PortalRemoveSource deletes a remote source by name. Removing the
 // embedded source is forbidden. Removing an enabled source is allowed;
 // no automatic fallback occurs.

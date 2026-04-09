@@ -1094,6 +1094,27 @@ function dismissConnectTooltip() {
   if (tip) tip.classList.add('hidden');
 }
 
+// Position the connect tooltip arrow centered under #connect-btn.
+function positionConnectTooltip() {
+  var tip = document.getElementById('connect-tooltip');
+  var btn = document.getElementById('connect-btn');
+  var arrow = tip ? tip.querySelector('.connect-tooltip-arrow') : null;
+  if (!tip || !btn || !arrow || tip.classList.contains('hidden')) return;
+  var btnRect = btn.getBoundingClientRect();
+  var tipW = tip.offsetWidth;
+  var btnCenterX = btnRect.left + btnRect.width / 2;
+  var tipLeft = btnCenterX - tipW / 2;
+  if (tipLeft < 8) tipLeft = 8;
+  if (tipLeft + tipW > window.innerWidth - 8) tipLeft = window.innerWidth - 8 - tipW;
+  tip.style.top = (btnRect.bottom + 6) + 'px';
+  tip.style.left = tipLeft + 'px';
+  tip.style.right = 'auto';
+  arrow.style.left = (btnCenterX - tipLeft - 6) + 'px';
+  arrow.style.right = 'auto';
+}
+window.addEventListener('resize', positionConnectTooltip);
+setTimeout(positionConnectTooltip, 100);
+
 // Check for updates after a short delay (versions need time to fetch)
 // Fetch latest version early so all views have it.
 checkForUpdate();
@@ -4850,6 +4871,8 @@ function refreshTerminal() {
 
 // State for the in-progress device code flow.
 var portalSourceFlow = null;
+// The host-derived name that PortalDeviceAuthComplete persisted.
+var portalSourceOriginalName = '';
 
 function portalSourceToggleEnabled(name, enabled) {
   goApp.PortalSetSourceEnabled(name, enabled).then(function () {
@@ -4915,10 +4938,10 @@ function portalSourceBeginSignIn() {
 
     // Kick off polling. PortalDeviceAuthComplete blocks until token,
     // denied, or expired -- one promise, no client-side loop.
+    portalSourceOriginalName = hostGuess;
     goApp.PortalDeviceAuthComplete(hostGuess, result.baseURL, result.deviceCode, result.interval).then(function () {
       // Backend persisted and marked the source active. Switch to the
-      // name step so the user can confirm or rename. The Save button
-      // calls PortalDeviceAuthComplete again only if the name changed.
+      // name step so the user can confirm or rename.
       document.getElementById('portal-source-step-code').classList.add('hidden');
       document.getElementById('portal-source-step-name').classList.remove('hidden');
       document.getElementById('portal-source-poll-status').textContent = 'Authorized.';
@@ -4934,7 +4957,7 @@ function portalSourceBeginSignIn() {
 function portalSourceFinish() {
   // The backend already persisted the source under the host-derived
   // name during PortalDeviceAuthComplete. If the user typed a
-  // different name, rename it now via remove + re-add.
+  // different name, rename it via PortalRenameSource.
   var name = document.getElementById('portal-source-name-input').value.trim();
   var errEl = document.getElementById('portal-source-name-error');
   errEl.classList.add('hidden');
@@ -4943,14 +4966,24 @@ function portalSourceFinish() {
     errEl.classList.remove('hidden');
     return;
   }
-  // For now, the backend always names the source after the host. A
-  // rename round-trip would need a separate Wails method; for v1 we
-  // accept the host name and close the dialog. The user can use
-  // the embedded source as "Local" and the remote source as
-  // hostname; renaming arrives in a follow-up.
-  closeAddPortalSourceDialog();
-  refreshRemotesList();
-  if (typeof refreshHubsTab === 'function') refreshHubsTab();
+
+  function finish() {
+    portalSourceOriginalName = '';
+    closeAddPortalSourceDialog();
+    refreshRemotesList();
+    if (typeof refreshHubsTab === 'function') refreshHubsTab();
+  }
+
+  if (portalSourceOriginalName && name !== portalSourceOriginalName) {
+    goApp.PortalRenameSource(portalSourceOriginalName, name).then(function () {
+      finish();
+    }).catch(function (err) {
+      errEl.textContent = 'Rename failed: ' + err;
+      errEl.classList.remove('hidden');
+    });
+  } else {
+    finish();
+  }
 }
 
 function refreshSettings() {
@@ -5325,7 +5358,29 @@ function refreshCredentialsList() {
     var el = document.getElementById('credentials-list-pane');
     if (!el) return;
     if (!creds || creds.length === 0) {
-      el.innerHTML = '<p class="empty-hint">No stored credentials.</p>';
+      // Check whether any remote portal sources are enabled. If so,
+      // those portals manage hub credentials on the user's behalf,
+      // which is why the local credential store may be empty.
+      goApp.PortalListSources().then(function (sources) {
+        var hasRemote = false;
+        if (sources) {
+          for (var i = 0; i < sources.length; i++) {
+            if (sources[i].kind === 'remote' && sources[i].enabled) {
+              hasRemote = true;
+              break;
+            }
+          }
+        }
+        if (hasRemote) {
+          el.innerHTML = '<p class="empty-hint">No locally stored credentials. '
+            + 'Hubs discovered through a remote portal use tokens managed by the portal. '
+            + 'Use <code>tela login</code> to store a token locally for direct hub access.</p>';
+        } else {
+          el.innerHTML = '<p class="empty-hint">No stored credentials.</p>';
+        }
+      }).catch(function () {
+        el.innerHTML = '<p class="empty-hint">No stored credentials.</p>';
+      });
       return;
     }
     var html = '<table class="admin-table"><thead><tr><th>Hub</th><th>Identity</th><th></th></tr></thead><tbody>';
@@ -5517,6 +5572,8 @@ function undoClientSettings() {
 function saveClientSettings() {
   applySettings();
   clearCSDirty();
+  // Refresh the Installed Tools section so it reflects any binPath change.
+  refreshClientToolVersions();
 }
 
 function refreshClientSettings() {
@@ -5788,13 +5845,57 @@ function genericDialogCancel() {
   }
 }
 
-// Allow Enter to submit and Escape to cancel
+// Allow Enter to submit and Escape to cancel on the generic dialog
 document.addEventListener('keydown', function (e) {
   var overlay = document.getElementById('generic-dialog-overlay');
   if (!overlay || overlay.classList.contains('hidden')) return;
   if (e.key === 'Enter') { e.preventDefault(); genericDialogOk(); }
   if (e.key === 'Escape') { e.preventDefault(); genericDialogCancel(); }
 });
+
+// Enter/Escape for all other modal overlays that are NOT form-based.
+// Form-based modals (create-token, pair-code, grant-access, add-hub)
+// already submit on Enter via their <form onsubmit> handler.
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' && e.key !== 'Escape') return;
+  // Do not interfere with the generic dialog (handled above).
+  var genOverlay = document.getElementById('generic-dialog-overlay');
+  if (genOverlay && !genOverlay.classList.contains('hidden')) return;
+
+  // Map of non-form modal overlay IDs to their primary-action and
+  // cancel functions.
+  var modals = [
+    { id: 'disconnect-overlay',       ok: confirmDisconnect,          cancel: cancelDisconnect },
+    { id: 'mtu-dialog',               ok: saveMTUDialog,              cancel: closeMTUDialog },
+    { id: 'result-modal',             ok: copyResultAndClose,         cancel: function () { closeModal('result-modal'); } },
+    { id: 'add-portal-source-modal',  ok: portalSourceModalEnter,     cancel: closeAddPortalSourceDialog }
+  ];
+
+  for (var i = 0; i < modals.length; i++) {
+    var m = modals[i];
+    var el = document.getElementById(m.id);
+    if (!el || el.classList.contains('hidden')) continue;
+    // If the focused element is a button, let native click handle
+    // Enter so we do not double-fire.
+    if (e.key === 'Enter' && document.activeElement &&
+        document.activeElement.tagName === 'BUTTON') return;
+    e.preventDefault();
+    if (e.key === 'Enter') { m.ok(); } else { m.cancel(); }
+    return;
+  }
+});
+
+// Dispatch Enter to the correct step inside the Add Remote dialog.
+function portalSourceModalEnter() {
+  var stepUrl  = document.getElementById('portal-source-step-url');
+  var stepName = document.getElementById('portal-source-step-name');
+  if (stepUrl && !stepUrl.classList.contains('hidden')) {
+    portalSourceBeginSignIn();
+  } else if (stepName && !stepName.classList.contains('hidden')) {
+    portalSourceFinish();
+  }
+  // step-code has no primary action (it is waiting for the browser).
+}
 
 // DEL key in Files tab triggers delete on selected items
 document.addEventListener('keydown', function (e) {

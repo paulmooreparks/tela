@@ -116,9 +116,9 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .topbar-mount-btn.mounted { border-color: var(--accent); color: var(--accent); background: rgba(94,232,158,0.1); }
 .topbar-mount-btn.mounted:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
 
-/* First-run connect tooltip */
+/* First-run connect tooltip -- positioned dynamically by positionConnectTooltip() */
 .connect-tooltip {
-  position: absolute; top: 44px; right: 120px;
+  position: absolute;
   background: var(--surface); border: 1px solid var(--accent); border-radius: 6px;
   padding: 8px 14px; font-size: 12px; color: var(--text);
   box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100;
@@ -126,7 +126,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .connect-tooltip.hidden { display: none; }
 .connect-tooltip-arrow {
-  position: absolute; top: -7px; right: 72px;
+  position: absolute; top: -7px;
   width: 12px; height: 12px; background: var(--surface);
   border-left: 1px solid var(--accent); border-top: 1px solid var(--accent);
   transform: rotate(45deg);
