@@ -970,6 +970,8 @@ func cmdProfile(args []string) {
 		cmdProfileCreate(args[1:])
 	case "delete", "rm":
 		cmdProfileDelete(args[1:])
+	case "migrate":
+		cmdProfileMigrate()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown profile subcommand: %s\n\n", args[0])
 		fmt.Fprintln(os.Stderr, `Usage:
@@ -977,7 +979,8 @@ func cmdProfile(args []string) {
   tela profile list                   List saved profiles
   tela profile show <name>            Show profile contents
   tela profile create <name>          Create a new profile
-  tela profile delete <name>          Delete a profile`)
+  tela profile delete <name>          Delete a profile
+  tela profile migrate                Assign stable IDs to all profiles`)
 		os.Exit(1)
 	}
 }
@@ -1083,6 +1086,84 @@ connections: []
 	}
 
 	fmt.Printf("Created profile %q at %s\n", name, path)
+}
+
+func cmdProfileMigrate() {
+	dir := profilesDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("No profiles found.")
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Error reading profiles directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	var total, migrated, failed int
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+		total++
+		path := filepath.Join(dir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  skip %s: %v\n", name, err)
+			failed++
+			continue
+		}
+
+		var profile connectionProfile
+		if err := yaml.Unmarshal(data, &profile); err != nil {
+			fmt.Fprintf(os.Stderr, "  skip %s: %v\n", name, err)
+			failed++
+			continue
+		}
+
+		dirty := false
+		if profile.ID == "" {
+			profile.ID = newProfileUUID()
+			dirty = true
+		}
+		expectedName := strings.TrimSuffix(name, filepath.Ext(name))
+		if profile.Name != expectedName {
+			profile.Name = expectedName
+			dirty = true
+		}
+
+		if !dirty {
+			continue
+		}
+		out, err := yaml.Marshal(&profile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  skip %s: marshal error: %v\n", name, err)
+			failed++
+			continue
+		}
+		if err := os.WriteFile(path, out, 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "  skip %s: write error: %v\n", name, err)
+			failed++
+			continue
+		}
+		fmt.Printf("  migrated %s\n", strings.TrimSuffix(name, filepath.Ext(name)))
+		migrated++
+	}
+
+	switch {
+	case total == 0:
+		fmt.Println("No profiles found.")
+	case failed > 0:
+		fmt.Printf("Migrated %d of %d profiles (%d errors).\n", migrated, total, failed)
+	case migrated == 0:
+		fmt.Printf("All %d profiles are already up to date.\n", total)
+	default:
+		fmt.Printf("Migrated %d of %d profiles.\n", migrated, total)
+	}
 }
 
 func cmdProfileDelete(args []string) {

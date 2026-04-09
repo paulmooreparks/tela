@@ -3489,6 +3489,60 @@ var (
 	profileMu          sync.RWMutex
 )
 
+// MigrateAllProfiles runs the 5e lazy migration eagerly across every
+// profile in the profiles directory. Each profile receives a stable ID
+// (if missing) and has its connection HubIDs populated from the current
+// merged hub view (if resolvable). Returns a summary string suitable for
+// display in a toast or dialog.
+func (a *App) MigrateAllProfiles() string {
+	dir := profilesDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Sprintf("error reading profiles directory: %v", err)
+	}
+
+	var total, migrated, failed int
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+		total++
+		path := filepath.Join(dir, name)
+		profile, dirty, err := loadProfileFile(path)
+		if err != nil {
+			log.Printf("[migrate] skipping %s: %v", name, err)
+			failed++
+			continue
+		}
+		if a.fillConnectionHubIDs(profile.Connections) {
+			dirty = true
+		}
+		if dirty {
+			if err := writeProfileFile(path, profile); err != nil {
+				log.Printf("[migrate] failed to write %s: %v", name, err)
+				failed++
+				continue
+			}
+			migrated++
+		}
+	}
+
+	switch {
+	case total == 0:
+		return "No profiles found."
+	case failed > 0:
+		return fmt.Sprintf("Migrated %d of %d profiles (%d errors -- see log).", migrated, total, failed)
+	case migrated == 0:
+		return fmt.Sprintf("All %d profiles are already up to date.", total)
+	default:
+		return fmt.Sprintf("Migrated %d of %d profiles.", migrated, total)
+	}
+}
+
 // ListProfiles returns all available profile names.
 func (a *App) ListProfiles() []string {
 	dir := profilesDir()

@@ -338,6 +338,10 @@ export function LogAdminGET(arg1, arg2) {
   return window['go']['main']['App']['LogAdminGET'](arg1, arg2);
 }
 
+export function MigrateAllProfiles() {
+  return window['go']['main']['App']['MigrateAllProfiles']();
+}
+
 export function OpenFileDialog() {
   return window['go']['main']['App']['OpenFileDialog']();
 }

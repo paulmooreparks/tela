@@ -2,6 +2,9 @@ export namespace main {
 	
 	export class AgentInfo {
 	    id: string;
+	    agentId?: string;
+	    hubId?: string;
+	    machineRegistrationId?: string;
 	    hub: string;
 	    online: boolean;
 	    version: string;
@@ -16,6 +19,8 @@ export namespace main {
 	    lastSeen: string;
 	    services: any[];
 	    capabilities: Record<string, any>;
+	    linkedAgentIds?: string[];
+	    sources?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AgentInfo(source);
@@ -24,6 +29,9 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.agentId = source["agentId"];
+	        this.hubId = source["hubId"];
+	        this.machineRegistrationId = source["machineRegistrationId"];
 	        this.hub = source["hub"];
 	        this.online = source["online"];
 	        this.version = source["version"];
@@ -38,6 +46,8 @@ export namespace main {
 	        this.lastSeen = source["lastSeen"];
 	        this.services = source["services"];
 	        this.capabilities = source["capabilities"];
+	        this.linkedAgentIds = source["linkedAgentIds"];
+	        this.sources = source["sources"];
 	    }
 	}
 	export class BinaryInfo {
@@ -105,7 +115,9 @@ export namespace main {
 	    }
 	}
 	export class ProfileConnection {
+	    hubId?: string;
 	    hub: string;
+	    agentId?: string;
 	    machine: string;
 	    token?: string;
 	    services: ProfileService[];
@@ -116,7 +128,9 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hubId = source["hubId"];
 	        this.hub = source["hub"];
+	        this.agentId = source["agentId"];
 	        this.machine = source["machine"];
 	        this.token = source["token"];
 	        this.services = this.convertValues(source["services"], ProfileService);
@@ -387,6 +401,7 @@ export namespace main {
 	    name: string;
 	    kind: string;
 	    url: string;
+	    enabled: boolean;
 	    addedAt?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -398,6 +413,7 @@ export namespace main {
 	        this.name = source["name"];
 	        this.kind = source["kind"];
 	        this.url = source["url"];
+	        this.enabled = source["enabled"];
 	        this.addedAt = source["addedAt"];
 	    }
 	}

@@ -5541,6 +5541,14 @@ function exportProfile() {
   });
 }
 
+function migrateAllProfiles() {
+  goApp.MigrateAllProfiles().then(function (msg) {
+    tvLog(msg);
+  }).catch(function (err) {
+    showError('Migrate failed: ' + err);
+  });
+}
+
 // --- About ---
 
 function refreshAbout() {

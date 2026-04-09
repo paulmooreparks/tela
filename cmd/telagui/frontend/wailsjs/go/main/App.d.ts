@@ -170,6 +170,8 @@ export function LoadProfile():Promise<Array<main.ProfileConnection>>;
 
 export function LogAdminGET(arg1:string,arg2:string):Promise<void>;
 
+export function MigrateAllProfiles():Promise<string>;
+
 export function OpenFileDialog():Promise<string>;
 
 export function PairWithCode(arg1:string,arg2:string):Promise<void>;
