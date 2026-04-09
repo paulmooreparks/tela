@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -68,6 +69,7 @@ type wellKnownResponse struct {
 	HubDirectory      string   `json:"hub_directory"`
 	ProtocolVersion   string   `json:"protocolVersion"`
 	SupportedVersions []string `json:"supportedVersions"`
+	PortalID          string   `json:"portalId,omitempty"`
 }
 
 func (s *Server) handleWellKnown(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +83,7 @@ func (s *Server) handleWellKnown(w http.ResponseWriter, r *http.Request) {
 		HubDirectory:      HubDirectoryPath,
 		ProtocolVersion:   ProtocolVersion,
 		SupportedVersions: SupportedVersions,
+		PortalID:          s.Store.PortalID(),
 	}
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(body)
@@ -113,6 +116,7 @@ func (s *Server) handleHubsList(w http.ResponseWriter, r *http.Request) {
 // addHubRequest is the JSON shape POST /api/hubs accepts.
 type addHubRequest struct {
 	Name        string `json:"name"`
+	HubID       string `json:"hubId"`
 	URL         string `json:"url"`
 	ViewerToken string `json:"viewerToken"`
 	AdminToken  string `json:"adminToken"`
@@ -146,8 +150,23 @@ func (s *Server) handleHubsAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve hubId: use the value in the request body (context 1,
+	// hub-bootstrap) or discover it via /.well-known/tela on the hub
+	// URL (context 2, user-add). A 1.1 portal MUST NOT store a hub
+	// record without a hubId; refuse if neither path yields one.
+	hubID := body.HubID
+	if hubID == "" {
+		discovered, err := discoverHubID(r.Context(), body.URL)
+		if err != nil || discovered == "" {
+			s.writeError(w, http.StatusBadRequest, "hubId required: provide it in the request body or ensure the hub serves /.well-known/tela with a hubId")
+			return
+		}
+		hubID = discovered
+	}
+
 	created, syncToken, err := s.Store.AddHub(r.Context(), user, Hub{
 		Name:        body.Name,
+		HubID:       hubID,
 		URL:         body.URL,
 		ViewerToken: body.ViewerToken,
 		AdminToken:  body.AdminToken,
@@ -373,6 +392,34 @@ func bearerToken(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return tok, true
+}
+
+// discoverHubID fetches /.well-known/tela on hubURL and returns the
+// hubId field. Returns an empty string (and no error) when the
+// document is reachable but lacks a hubId (1.0 hub). Returns an error
+// only for transport failures and malformed JSON. Used by
+// handleHubsAdd for context-2 (user-add) requests that omit hubId.
+func discoverHubID(ctx context.Context, hubURL string) (string, error) {
+	target := strings.TrimRight(hubURL, "/") + "/.well-known/tela"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := fleetClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer drainAndClose(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", nil
+	}
+	var doc struct {
+		HubID string `json:"hubId"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		return "", err
+	}
+	return doc.HubID, nil
 }
 
 // drainAndClose reads anything left in r and closes it. Used by the

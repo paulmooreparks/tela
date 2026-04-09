@@ -135,10 +135,13 @@ func (s *Server) fetchHubAgents(parent *http.Request, hub *Hub) []map[string]any
 
 	out := make([]map[string]any, 0, len(status.Machines))
 	for _, m := range status.Machines {
-		// Add the two fields the spec requires; everything else is
-		// passthrough from the hub status shape.
+		// Tag with the hub identity fields the spec requires;
+		// everything else is passthrough from the hub status shape.
 		m["hub"] = hub.Name
 		m["hubUrl"] = hub.URL
+		if hub.HubID != "" {
+			m["hubId"] = hub.HubID
+		}
 		out = append(out, m)
 	}
 	return out

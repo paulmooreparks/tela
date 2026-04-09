@@ -2051,6 +2051,15 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 		listenAddr = fmt.Sprintf("0.0.0.0:%d", httpPort)
 	}
 
+	// Hub identity: ensure hubId is set before the server accepts
+	// requests. In production, Main() or serviceRunHub() generate and
+	// persist the ID before calling Run; this fallback handles callers
+	// (e.g. test harnesses) that invoke Run() directly.
+	if hubID == "" {
+		hubID = newUUID()
+		log.Printf("[hub] generated hubId %s", hubID)
+	}
+
 	// Register HTTP handlers
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/tela", handleWellKnown)

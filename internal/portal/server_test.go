@@ -100,6 +100,9 @@ func TestWellKnown_GETReturnsExpectedShape(t *testing.T) {
 	if supported[0] != portal.ProtocolVersion {
 		t.Errorf("supportedVersions[0] = %v, want %q", supported[0], portal.ProtocolVersion)
 	}
+	if portalID, _ := body["portalId"].(string); portalID == "" {
+		t.Error("portalId missing or empty in /.well-known/tela response")
+	}
 }
 
 func TestWellKnown_HEADReturns200(t *testing.T) {
@@ -181,8 +184,9 @@ func TestGetHubs_RedactsSecrets(t *testing.T) {
 func TestPostHubs_AddNewReturnsSyncToken(t *testing.T) {
 	base, _ := newTestServer(t)
 	status, body := doJSON(t, http.MethodPost, base+"/api/hubs", map[string]any{
-		"name": "myhub",
-		"url":  "https://hub.example.com",
+		"name":  "myhub",
+		"url":   "https://hub.example.com",
+		"hubId": "test-hub-0000-0000-0000-000000000001",
 	})
 	if status != 200 {
 		t.Fatalf("status = %d, want 200", status)
@@ -204,11 +208,11 @@ func TestPostHubs_AddNewReturnsSyncToken(t *testing.T) {
 func TestPostHubs_UpsertReturnsUpdated(t *testing.T) {
 	base, _ := newTestServer(t)
 	doJSON(t, http.MethodPost, base+"/api/hubs", map[string]any{
-		"name": "myhub", "url": "https://a",
+		"name": "myhub", "url": "https://a", "hubId": "test-hub-0000-0000-0000-000000000001",
 	})
 
 	_, body := doJSON(t, http.MethodPost, base+"/api/hubs", map[string]any{
-		"name": "myhub", "url": "https://b",
+		"name": "myhub", "url": "https://b", "hubId": "test-hub-0000-0000-0000-000000000001",
 	})
 	if updated, _ := body["updated"].(bool); !updated {
 		t.Error("second POST should set updated=true")
@@ -252,6 +256,7 @@ func TestPatchHubs_PartialUpdate(t *testing.T) {
 	base, _ := newTestServer(t)
 	doJSON(t, http.MethodPost, base+"/api/hubs", map[string]any{
 		"name": "myhub", "url": "https://old", "viewerToken": "old-vt",
+		"hubId": "test-hub-0000-0000-0000-000000000001",
 	})
 
 	status, body := doJSON(t, http.MethodPatch, base+"/api/hubs", map[string]any{
@@ -295,7 +300,7 @@ func TestPatchHubs_404OnMissingHub(t *testing.T) {
 func TestDeleteHubs_Existing(t *testing.T) {
 	base, _ := newTestServer(t)
 	doJSON(t, http.MethodPost, base+"/api/hubs", map[string]any{
-		"name": "myhub", "url": "https://x",
+		"name": "myhub", "url": "https://x", "hubId": "test-hub-0000-0000-0000-000000000001",
 	})
 
 	status, body := doJSON(t, http.MethodDelete, base+"/api/hubs?name=myhub", nil)
@@ -330,6 +335,7 @@ func TestHubSync_HappyPath(t *testing.T) {
 	base, _ := newTestServer(t)
 	_, body := doJSON(t, http.MethodPost, base+"/api/hubs", map[string]any{
 		"name": "myhub", "url": "https://x", "viewerToken": "old",
+		"hubId": "test-hub-0000-0000-0000-000000000001",
 	})
 	syncToken := body["syncToken"].(string)
 
@@ -349,7 +355,7 @@ func TestHubSync_HappyPath(t *testing.T) {
 func TestHubSync_RejectsWrongToken(t *testing.T) {
 	base, _ := newTestServer(t)
 	doJSON(t, http.MethodPost, base+"/api/hubs", map[string]any{
-		"name": "myhub", "url": "https://x",
+		"name": "myhub", "url": "https://x", "hubId": "test-hub-0000-0000-0000-000000000001",
 	})
 
 	wrong, _ := portal.GenerateSyncToken()

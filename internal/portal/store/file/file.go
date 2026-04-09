@@ -225,6 +225,7 @@ func (s *Store) ListHubsForUser(_ context.Context, _ portal.User) ([]portal.HubV
 	out := make([]portal.HubVisibility, 0, len(s.hubs))
 	for _, h := range s.hubs {
 		out = append(out, portal.HubVisibility{
+			ID:        h.HubID,
 			Name:      h.Name,
 			URL:       h.URL,
 			CanManage: true,
@@ -272,6 +273,7 @@ func (s *Store) AddHub(_ context.Context, _ portal.User, hub portal.Hub) (bool, 
 	_, existed := s.hubs[hub.Name]
 	s.hubs[hub.Name] = &storedHub{
 		Name:          hub.Name,
+		HubID:         hub.HubID,
 		URL:           hub.URL,
 		ViewerToken:   hub.ViewerToken,
 		AdminToken:    hub.AdminToken,
@@ -522,6 +524,7 @@ func hashHex(s string) string {
 func toPublicHub(h *storedHub) *portal.Hub {
 	return &portal.Hub{
 		Name:        h.Name,
+		HubID:       h.HubID,
 		URL:         h.URL,
 		ViewerToken: h.ViewerToken,
 		AdminToken:  h.AdminToken,

@@ -111,6 +111,7 @@ func (c *Client) ListHubs(ctx context.Context) ([]portal.HubVisibility, error) {
 // shape in internal/portal.addHubRequest.
 type AddHubRequest struct {
 	Name        string `json:"name"`
+	HubID       string `json:"hubId,omitempty"`
 	URL         string `json:"url"`
 	ViewerToken string `json:"viewerToken,omitempty"`
 	AdminToken  string `json:"adminToken,omitempty"`

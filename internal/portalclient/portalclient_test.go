@@ -74,6 +74,7 @@ func TestClient_HubsCRUD(t *testing.T) {
 	// Add one.
 	addResp, err := c.AddHub(ctx, portalclient.AddHubRequest{
 		Name:        "myhub",
+		HubID:       "test-hub-0000-0000-0000-000000000001",
 		URL:         "http://hub.example:8080",
 		ViewerToken: "viewer-tok",
 		AdminToken:  "admin-tok",
