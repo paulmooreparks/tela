@@ -4057,7 +4057,7 @@ function renderHubSettings(pane) {
   function tryRender() {
     done++;
     if (done < 3) return;
-    var consoleUrl = hub.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '') + '/';
+    var consoleUrl = toConsoleURL(hub);
 
     var html = '<h2>Hub Settings</h2>'
       + '<p class="section-desc">Connection and configuration for <strong>' + escHtml(hubName) + '</strong></p>';
@@ -4518,10 +4518,23 @@ function submitAccessGrant(event) {
 
 // --- Hub Console View ---
 
+// toConsoleURL turns a hub identifier (which may be a bare host name
+// like "owlsnest.parkscomputing.com" or a wss:// URL) into an absolute
+// https:// URL with a trailing slash, suitable for an <a href> the
+// system browser can open.
+function toConsoleURL(hub) {
+  var s = (hub || '').trim();
+  if (s.indexOf('wss://') === 0) s = 'https://' + s.substring(6);
+  else if (s.indexOf('ws://') === 0) s = 'http://' + s.substring(5);
+  else if (s.indexOf('http://') !== 0 && s.indexOf('https://') !== 0) {
+    s = 'https://' + s;
+  }
+  return s.replace(/\/$/, '') + '/';
+}
+
 function renderHubConsole(pane) {
   var hub = currentAdminHub;
-  var consoleUrl = hub.replace('wss://', 'https://').replace('ws://', 'http://');
-  consoleUrl = consoleUrl.replace(/\/$/, '') + '/';
+  var consoleUrl = toConsoleURL(hub);
   pane.innerHTML = '<h2>Hub Console</h2>'
     + '<p class="section-desc">Embedded console for <strong>' + escHtml(hub) + '</strong></p>'
     + '<div style="margin-bottom:8px;"><a href="' + escAttr(consoleUrl) + '" target="_blank" rel="noopener" style="font-size:0.82rem;color:var(--accent);">Open in browser</a></div>'
