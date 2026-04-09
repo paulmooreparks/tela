@@ -664,6 +664,12 @@ func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 
 // connectionProfile is the YAML schema for ~/.tela/profiles/<name>.yaml.
 type connectionProfile struct {
+	// ID is the profile's stable v4 UUID. Generated on first load
+	// of a pre-5e profile and persisted on the next save.
+	ID string `yaml:"id,omitempty"`
+	// Name is the human-readable profile name. Filename remains the
+	// primary key on disk; this field is informational.
+	Name        string              `yaml:"name,omitempty"`
 	Connections []profileConnection `yaml:"connections"`
 	MTU         int                 `yaml:"mtu,omitempty"`
 	Mount       profileMount        `yaml:"mount,omitempty"`
@@ -671,7 +677,15 @@ type connectionProfile struct {
 
 // profileConnection defines one hub+machine+services entry in a profile.
 type profileConnection struct {
-	Hub      string           `yaml:"hub"`
+	// HubID is the stable v4 UUID of the hub this connection points
+	// at, when known. Empty for legacy profiles; populated lazily.
+	HubID string `yaml:"hubId,omitempty"`
+	// Hub is the hub display label or URL. When HubID is set the
+	// label is informational; when HubID is empty Hub is authoritative.
+	Hub string `yaml:"hub"`
+	// AgentID is the stable v4 UUID of the agent for this connection,
+	// when known. Optional; populated lazily.
+	AgentID  string           `yaml:"agentId,omitempty"`
 	Machine  string           `yaml:"machine"`
 	Token    string           `yaml:"token"`
 	Services []profileService `yaml:"services,omitempty"`
@@ -696,7 +710,22 @@ func profilesDir() string {
 	return filepath.Join(telaConfigDir(), "profiles")
 }
 
+// newProfileUUID returns a v4 UUID for use as connectionProfile.ID.
+// Uses crypto/rand so the result is suitable as a stable identity.
+func newProfileUUID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("0-0-0-0-%x", time.Now().UnixNano())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	s := hex.EncodeToString(b[:])
+	return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
+}
+
 // loadProfile reads a connection profile from ~/.tela/profiles/<name>.yaml.
+// Pre-5e profiles are migrated in place: a v4 UUID is generated and the
+// file is rewritten so subsequent loads skip migration.
 func loadProfile(name string) (*connectionProfile, error) {
 	// Try exact path first, then profiles directory
 	path := name
@@ -719,6 +748,26 @@ func loadProfile(name string) (*connectionProfile, error) {
 	if len(profile.Connections) == 0 {
 		return nil, fmt.Errorf("profile %q has no connections defined", path)
 	}
+
+	// Lazy 5e migration: populate ID and Name on first touch.
+	dirty := false
+	if profile.ID == "" {
+		profile.ID = newProfileUUID()
+		dirty = true
+	}
+	expectedName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if profile.Name != expectedName {
+		profile.Name = expectedName
+		dirty = true
+	}
+	if dirty {
+		// Best-effort persist; failure is non-fatal because the
+		// in-memory copy is correct and the next save will catch up.
+		if out, err := yaml.Marshal(&profile); err == nil {
+			_ = os.WriteFile(path, out, 0o600)
+		}
+	}
+
 	return &profile, nil
 }
 

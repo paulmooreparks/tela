@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -117,7 +118,17 @@ type ServiceInfo struct {
 
 // ProfileConnection represents one connection entry in the profile YAML.
 type ProfileConnection struct {
-	Hub      string           `yaml:"hub" json:"hub"`
+	// HubID is the stable v4 UUID of the hub this connection points
+	// at, when known. Empty for legacy profiles; populated lazily by
+	// the loader the first time the connection is resolved against
+	// the merged hub view.
+	HubID string `yaml:"hubId,omitempty" json:"hubId,omitempty"`
+	// Hub is the hub display label or URL. When HubID is set the
+	// label is informational; when HubID is empty Hub is authoritative.
+	Hub string `yaml:"hub" json:"hub"`
+	// AgentID is the stable v4 UUID of the agent for this connection,
+	// when known. Optional; populated lazily.
+	AgentID  string           `yaml:"agentId,omitempty" json:"agentId,omitempty"`
 	Machine  string           `yaml:"machine" json:"machine"`
 	Token    string           `yaml:"token,omitempty" json:"token,omitempty"`
 	Services []ProfileService `yaml:"services" json:"services"`
@@ -139,6 +150,13 @@ type ProfileMount struct {
 
 // Profile is the top-level profile YAML structure.
 type Profile struct {
+	// ID is the profile's stable v4 UUID. Generated on first load
+	// of a pre-5e profile and persisted on the next save.
+	ID string `yaml:"id,omitempty" json:"id,omitempty"`
+	// Name is the human-readable profile name. Filename remains
+	// the primary key on disk; this field is informational and is
+	// kept in sync with the filename at write time.
+	Name        string              `yaml:"name,omitempty" json:"name,omitempty"`
 	Connections []ProfileConnection `yaml:"connections" json:"connections"`
 	MTU         int                 `yaml:"mtu,omitempty" json:"mtu,omitempty"`
 	Mount       ProfileMount        `yaml:"mount,omitempty" json:"mount"`
@@ -1609,17 +1627,133 @@ func isPortAvailable(port int) bool {
 	return true
 }
 
+// newProfileUUID returns a v4 UUID for use as Profile.ID. Uses
+// crypto/rand so the result is suitable as a stable identity.
+func newProfileUUID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand failure is exceptional; fall back to a
+		// timestamp-derived value so the caller still gets a
+		// non-empty string.
+		return fmt.Sprintf("0-0-0-0-%x", time.Now().UnixNano())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
+	s := hex.EncodeToString(b[:])
+	return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
+}
+
+// loadProfileFile reads a profile YAML and applies the lazy 5e
+// migration: if Profile.ID is empty, generate one. Returns the
+// (possibly mutated) profile, the path it was loaded from, and a
+// dirty flag. Callers that observe dirty=true should rewrite the
+// file at the next opportunity.
+func loadProfileFile(path string) (Profile, bool, error) {
+	var profile Profile
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return profile, false, err
+	}
+	if err := yaml.Unmarshal(data, &profile); err != nil {
+		return profile, false, err
+	}
+
+	dirty := false
+	if profile.ID == "" {
+		profile.ID = newProfileUUID()
+		dirty = true
+	}
+	expectedName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if profile.Name != expectedName {
+		profile.Name = expectedName
+		dirty = true
+	}
+	return profile, dirty, nil
+}
+
+// writeProfileFile marshals a profile and writes it atomically to
+// path. The on-disk permissions are 0600.
+func writeProfileFile(path string, profile Profile) error {
+	data, err := yaml.Marshal(&profile)
+	if err != nil {
+		return fmt.Errorf("marshal profile: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create profiles dir: %w", err)
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
 // LoadProfile reads the saved profile and returns its connections.
+// Pre-5e profiles are migrated in place: a UUID is generated, hub
+// labels are resolved against the merged hub view to populate HubID,
+// and the file is rewritten so subsequent loads skip migration.
 func (a *App) LoadProfile() []ProfileConnection {
-	data, err := os.ReadFile(profilePath())
+	path := profilePath()
+	profile, dirty, err := loadProfileFile(path)
 	if err != nil {
 		return nil
 	}
-	var profile Profile
-	if err := yaml.Unmarshal(data, &profile); err != nil {
-		return nil
+	// Lazy 5e identity: populate HubID for any connection that
+	// lacks one but whose Hub label matches a hub in the merged view.
+	if a.fillConnectionHubIDs(profile.Connections) {
+		dirty = true
+	}
+	if dirty {
+		_ = writeProfileFile(path, profile)
 	}
 	return profile.Connections
+}
+
+// fillConnectionHubIDs runs the merged hub view from
+// portalaggregate.Merge and populates HubID for any connection that
+// is missing one but whose Hub label matches a known hub. Returns
+// true when any connection was modified. Errors are non-fatal: a
+// failed lookup just leaves HubID empty for the next attempt.
+func (a *App) fillConnectionHubIDs(conns []ProfileConnection) bool {
+	needsFill := false
+	for _, c := range conns {
+		if c.HubID == "" {
+			needsFill = true
+			break
+		}
+	}
+	if !needsFill {
+		return false
+	}
+
+	clients, err := a.enabledPortalClients()
+	if err != nil || len(clients) == 0 {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	merged, err := portalaggregate.Merge(ctx, clients)
+	if err != nil {
+		return false
+	}
+
+	// Build a name → hubId index. Skip empty hubIds (pre-1.1 hubs).
+	byName := make(map[string]string, len(merged.Hubs))
+	for _, h := range merged.Hubs {
+		if h.HubID != "" {
+			byName[h.Name] = h.HubID
+		}
+	}
+
+	changed := false
+	for i, c := range conns {
+		if c.HubID != "" || c.Hub == "" {
+			continue
+		}
+		// Match by display name; URL-form Hub fields are left for
+		// the user to convert via the editor.
+		if id, ok := byName[c.Hub]; ok {
+			conns[i].HubID = id
+			changed = true
+		}
+	}
+	return changed
 }
 
 // SaveProfile writes the profile YAML and returns its path.
@@ -1636,34 +1770,29 @@ func (a *App) SaveProfile(connectionsJSON string) (string, error) {
 		connections[i].Token = ""
 	}
 
-	// Preserve MTU and mount config from existing profile
-	existingMTU := 0
-	existingMount := ProfileMount{}
-	if existingData, err := os.ReadFile(profilePath()); err == nil {
-		var existing Profile
-		if yaml.Unmarshal(existingData, &existing) == nil {
-			existingMTU = existing.MTU
-			existingMount = existing.Mount
-		}
-	}
-
-	profile := Profile{Connections: connections, MTU: existingMTU, Mount: existingMount}
-
-	data, err := yaml.Marshal(profile)
-	if err != nil {
-		return "", fmt.Errorf("marshal profile: %w", err)
-	}
-
-	dir := profilesDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", fmt.Errorf("create profiles dir: %w", err)
-	}
-
+	// Load the existing profile (if any) to preserve MTU, mount,
+	// and the stable ID. loadProfileFile generates an ID for
+	// pre-5e files; we want to keep it.
 	path := profilePath()
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	existing, _, _ := loadProfileFile(path)
+	if existing.ID == "" {
+		existing.ID = newProfileUUID()
+	}
+	if existing.Name == "" {
+		existing.Name = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	}
+
+	profile := Profile{
+		ID:          existing.ID,
+		Name:        existing.Name,
+		Connections: connections,
+		MTU:         existing.MTU,
+		Mount:       existing.Mount,
+	}
+
+	if err := writeProfileFile(path, profile); err != nil {
 		return "", fmt.Errorf("write profile: %w", err)
 	}
-
 	return path, nil
 }
 
