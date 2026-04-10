@@ -366,6 +366,10 @@ export function PortalRemoveSource(arg1) {
   return window['go']['main']['App']['PortalRemoveSource'](arg1);
 }
 
+export function PortalRenameSource(arg1, arg2) {
+  return window['go']['main']['App']['PortalRenameSource'](arg1, arg2);
+}
+
 export function PortalSetSourceEnabled(arg1, arg2) {
   return window['go']['main']['App']['PortalSetSourceEnabled'](arg1, arg2);
 }

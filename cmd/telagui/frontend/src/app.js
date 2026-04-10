@@ -1717,6 +1717,7 @@ function toggleHubInclusion(hubURL, included) {
     updateConnectButton();
   }
   checkDirty();
+  refreshMountPreview();
   refreshAll();
 }
 
@@ -1922,12 +1923,14 @@ function renderProfileSettings() {
           + '</div></div>';
 
         html += '<div class="settings-group">'
-          + '<div class="settings-group-header">Mount</div>'
+          + '<div class="settings-group-header">File Share Mount</div>'
+          + '<div class="setting-card-desc">Mounts a local drive that contains all file shares from connected machines. Each machine appears as a folder under the mount point.</div>'
           + '<div class="settings-group-body"><div class="mount-config-form">'
           + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-enable"' + (mountEnabled ? ' checked' : '') + allDis + ' onchange="onPsMountEnableToggle(this.checked)"> Enable</label></div>'
-          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-point">Mount point:</label><input type="text" id="ps-mount-point" class="form-input mono" value="' + escAttr(mc.mount || '') + '" data-required="Mount point is required when mount is enabled"' + mountFieldDis + ' onchange="onPsMountChange()" onblur="validatePsMount()"></div>'
-          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-port">Port:</label><input type="number" id="ps-mount-port" class="form-input mono mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '"' + mountFieldDis + ' onchange="onPsMountChange()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-point">Mount point</label><input type="text" id="ps-mount-point" placeholder="' + (navigator.platform.indexOf('Win') >= 0 ? 'T:' : '/mnt/tela') + '" class="form-input mono" value="' + escAttr(mc.mount || '') + '" data-required="Mount point is required when mount is enabled"' + mountFieldDis + ' onchange="onPsMountChange()" onblur="validatePsMount()"></div>'
+          + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-port">WebDAV port</label><input type="number" id="ps-mount-port" class="form-input mono mount-config-port" min="1024" max="65535" value="' + (mc.port || 18080) + '"' + mountFieldDis + ' onchange="onPsMountChange()"></div>'
           + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-auto"' + (mc.auto ? ' checked' : '') + mountFieldDis + ' onchange="onPsMountChange()"> Auto-mount on connect</label></div>'
+          + '<div id="mount-preview-container"></div>'
           + '</div></div></div>';
 
         html += '<div class="settings-group">'
@@ -1938,6 +1941,7 @@ function renderProfileSettings() {
           + '</div></div></div>';
 
         pane.innerHTML = html;
+        refreshMountPreview();
       });
     });
   });
@@ -2006,6 +2010,7 @@ function onPsMountEnableToggle(checked) {
       updateMountButtonState();
     });
   }
+  refreshMountPreview();
   markProfileDirty();
 }
 
@@ -2027,7 +2032,65 @@ function onPsMountChange() {
   goApp.SetMountConfig({mount: point, port: port, auto: auto}).then(function () {
     updateMountButtonState();
   });
+  refreshMountPreview();
   markProfileDirty();
+}
+
+var mountDriveIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="3" width="12" height="10" rx="1.5"/><line x1="2" y1="9" x2="14" y2="9"/><circle cx="12" cy="11.5" r="0.8" fill="currentColor" stroke="none"/></svg>';
+var mountFolderIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 3V13H14.5V5H6.5L5 3H1.5Z"/></svg>';
+
+function refreshMountPreview() {
+  var container = document.getElementById('mount-preview-container');
+  if (!container) return;
+
+  var enableEl = document.getElementById('ps-mount-enable');
+  if (!enableEl || !enableEl.checked) {
+    container.innerHTML = '<div class="mount-preview"><div class="mount-preview-empty">File share mount is disabled.</div></div>';
+    return;
+  }
+
+  var mountPoint = (document.getElementById('ps-mount-point').value || '').trim();
+  var isWin = navigator.platform.indexOf('Win') >= 0;
+  var sep = isWin ? '\\' : '/';
+  var driveDisplay;
+  if (mountPoint) {
+    driveDisplay = mountPoint.replace(/[\/\\]+$/, '') + sep;
+  } else {
+    driveDisplay = isWin ? 'T:\\' : '/mnt/tela/';
+  }
+
+  // Collect machines with file sharing from included hubs. Any machine
+  // on an included hub that offers file sharing appears in the preview,
+  // regardless of whether the user selected services on that machine.
+  // buildConnections() adds connection entries for these machines so
+  // tela opens a tunnel to them even without TCP service mappings.
+  var fsNames = [];
+  var seen = {};
+  Object.keys(hubStatusCache).forEach(function (hubURL) {
+    if (!isHubIncluded(hubURL)) return;
+    var status = hubStatusCache[hubURL];
+    if (!status || !status.machines) return;
+    status.machines.forEach(function (m) {
+      var mId = m.id || m.hostname;
+      var fs = m.capabilities && m.capabilities.fileShare;
+      if (fs && fs.enabled && !seen[mId]) {
+        seen[mId] = true;
+        fsNames.push(mId);
+      }
+    });
+  });
+
+  var html = '<div class="mount-preview">';
+  if (fsNames.length === 0) {
+    html += '<div class="mount-preview-empty">No selected machines offer file sharing.</div>';
+  } else {
+    html += '<div class="mp-row"><span class="mp-icon">' + mountDriveIcon + '</span><span class="mp-drive">' + escHtml(driveDisplay) + '</span></div>';
+    fsNames.forEach(function (name) {
+      html += '<div class="mp-row mp-indent"><span class="mp-icon">' + mountFolderIcon + '</span><span class="mp-name">' + escHtml(name) + '</span></div>';
+    });
+  }
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 function onPsMtuDefaultToggle(checked) {
@@ -2205,6 +2268,7 @@ function resolveAllPortsAndUpdate() {
     updateConnectButton();
     checkDirty();
     refreshCurrentPane();
+    refreshMountPreview();
     return;
   }
 
@@ -2219,6 +2283,7 @@ function resolveAllPortsAndUpdate() {
     updateConnectButton();
     checkDirty();
     refreshCurrentPane();
+    refreshMountPreview();
   });
 }
 
@@ -5697,6 +5762,28 @@ function buildConnections() {
     }
     groups[groupKey].services.push({ name: sel.service, local: sel.localPort, remote: sel.servicePort });
   });
+
+  // When file share mount is enabled, add connection entries for
+  // machines that offer file sharing but have no selected services.
+  // tela opens a tunnel to these machines so the WebDAV mount can
+  // access their file shares.
+  var mountEl = document.getElementById('ps-mount-enable');
+  if (mountEl && mountEl.checked) {
+    Object.keys(hubStatusCache).forEach(function (hubURL) {
+      if (!isHubIncluded(hubURL)) return;
+      var status = hubStatusCache[hubURL];
+      if (!status || !status.machines) return;
+      status.machines.forEach(function (m) {
+        var mId = m.id || m.hostname;
+        var fs = m.capabilities && m.capabilities.fileShare;
+        if (!fs || !fs.enabled) return;
+        var gk = hubURL + '||' + mId;
+        if (!groups[gk]) {
+          groups[gk] = { hub: hubURL, machine: mId, services: [] };
+        }
+      });
+    });
+  }
 
   var connections = [];
   Object.keys(groups).forEach(function (k) {

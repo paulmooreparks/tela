@@ -2314,3 +2314,41 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-family: var(--mono);
   font-size: 0.85rem;
 }
+
+/* Mount preview */
+.mount-preview {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mount-preview-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.mp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+.mp-indent { padding-left: 22px; }
+.mp-icon {
+  flex-shrink: 0;
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.mp-icon svg { width: 14px; height: 14px; }
+.mp-drive {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--accent); font-weight: 600;
+}
+.mp-name {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+}

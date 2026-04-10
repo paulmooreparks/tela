@@ -184,6 +184,8 @@ export function PortalListSources():Promise<Array<main.PortalSource>>;
 
 export function PortalRemoveSource(arg1:string):Promise<void>;
 
+export function PortalRenameSource(arg1:string,arg2:string):Promise<void>;
+
 export function PortalSetSourceEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function QuitApp():Promise<void>;
