@@ -1504,19 +1504,32 @@ func pairSession(machineKey string, entry *machineEntry, session *clientSession)
 
 	log.Printf("[hub] UDP tokens created for %s (key=%s): agent=%s... client=%s...", machineID, machineKey, agentTokenHex[:8], clientTokenHex[:8])
 
-	// Send udp-offer to both sides
-	offer := map[string]any{"type": "udp-offer", "port": int(udpPort.Load())}
-	if udpHost != "" {
-		offer["host"] = udpHost
+	// Send udp-offer to both sides. When the peer is on the same LAN
+	// as the hub (private IP), use the hub's own LAN address instead
+	// of the public udpHost to avoid NAT hairpinning.
+	sendUDPOffer := func(ws *safeConn, token string) {
+		offer := map[string]any{"type": "udp-offer", "port": int(udpPort.Load()), "token": token}
+		host := udpHost
+		if host != "" {
+			// Check if the peer is on the same LAN. If so, use the
+			// hub's local address (from the WS connection) so UDP
+			// traffic stays on-LAN instead of hairpinning through NAT.
+			if peerHost, _, err := net.SplitHostPort(ws.RemoteAddr().String()); err == nil {
+				if ip := net.ParseIP(peerHost); ip != nil && ip.IsPrivate() {
+					if localHost, _, err := net.SplitHostPort(ws.LocalAddr().String()); err == nil {
+						host = localHost
+					}
+				}
+			}
+		}
+		if host != "" {
+			offer["host"] = host
+		}
+		data, _ := json.Marshal(offer)
+		ws.WriteMessage(websocket.TextMessage, data)
 	}
-
-	offer["token"] = agentTokenHex
-	agentOffer, _ := json.Marshal(offer)
-	agentWS.WriteMessage(websocket.TextMessage, agentOffer)
-
-	offer["token"] = clientTokenHex
-	clientOffer, _ := json.Marshal(offer)
-	clientWS.WriteMessage(websocket.TextMessage, clientOffer)
+	sendUDPOffer(agentWS, agentTokenHex)
+	sendUDPOffer(clientWS, clientTokenHex)
 
 	log.Printf("[hub] sent udp-offer to both sides for: %s session=%s (port %d)", machineID, session.SessionID[:8], udpPort.Load())
 }

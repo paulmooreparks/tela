@@ -22,6 +22,11 @@ patch-level dev builds are too granular to list individually.
   (used by WebDAV mount to discover file-sharing machines)
 
 ### Fixed
+- UDP relay hairpin avoidance: when a client connects from a
+  private IP (same LAN as the hub), the udp-offer now sends the
+  hub's LAN address instead of the public hostname, keeping UDP
+  traffic on-LAN and avoiding unreliable NAT hairpinning that
+  caused tunnels to die after a few minutes
 - UDP session reaper killing active sessions after 5 minutes
   (regression from identity model changes: reaper looked up machine
   by display name instead of composite key, never found it, and
