@@ -1295,8 +1295,8 @@ function renderToolsTable(container, showActions, onDone) {
 
       // TelaVisor
       html += '<tr><td>' + (showActions ? '<span class="bin-dot bin-dot-ok"></span>' : '') + 'TelaVisor</td>'
-        + '<td class="tools-version">' + escHtml(guiVer || 'dev') + '</td>'
-        + '<td class="tools-version ' + (tvUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(latest || guiVer || 'dev') + '</td>';
+        + '<td class="tools-version ' + (tvUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(guiVer || 'dev') + '</td>'
+        + '<td class="tools-version">' + escHtml(latest || guiVer || 'dev') + '</td>';
       if (showActions) {
         var tvAction = tvUpToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="restartToUpdate(this)">Update &amp; Restart</button>';
         html += '<td>' + tvAction + '</td>';
@@ -1312,7 +1312,7 @@ function renderToolsTable(container, showActions, onDone) {
           var mainVer = b.found ? (b.version || 'unknown') : (svcOnly ? (b.serviceVersion || 'unknown') : 'not installed');
           var mainUpToDate = svcOnly ? (b.serviceVersion === b.latest) : b.upToDate;
           var dotClass = (b.found || svcOnly) ? 'bin-dot-ok' : 'bin-dot-missing';
-          var availClass = (b.found || svcOnly) ? (mainUpToDate ? 'tools-status-ok' : 'tools-status-warn') : '';
+          var installedClass = (b.found || svcOnly) ? (mainUpToDate ? 'tools-status-ok' : 'tools-status-warn') : '';
 
           // Label: show "service (running/stopped)" when the service is the only installation.
           var nameLabel = escHtml(b.name);
@@ -1322,8 +1322,8 @@ function renderToolsTable(container, showActions, onDone) {
           }
 
           html += '<tr><td>' + (showActions ? '<span class="bin-dot ' + dotClass + '"></span>' : '') + nameLabel + '</td>'
-            + '<td class="tools-version">' + escHtml(mainVer) + '</td>'
-            + '<td class="tools-version ' + availClass + '">' + escHtml(b.latest || '?') + '</td>';
+            + '<td class="tools-version ' + installedClass + '">' + escHtml(mainVer) + '</td>'
+            + '<td class="tools-version">' + escHtml(b.latest || '?') + '</td>';
           if (showActions) {
             var action = '';
             if (b.found) {
@@ -1342,11 +1342,11 @@ function renderToolsTable(container, showActions, onDone) {
             var svcVer = b.serviceVersion || 'unknown';
             var svcState = b.serviceRunning ? 'running' : 'stopped';
             var svcUpToDate = b.serviceVersion === b.latest;
-            var svcAvailClass = svcUpToDate ? 'tools-status-ok' : 'tools-status-warn';
+            var svcInstalledClass = svcUpToDate ? 'tools-status-ok' : 'tools-status-warn';
             html += '<tr class="tools-service-row"><td>' + (showActions ? '<span class="bin-dot ' + (b.serviceRunning ? 'bin-dot-ok' : 'bin-dot-missing') + '"></span>' : '')
               + '<span class="tools-service-label">service (' + svcState + ')</span></td>'
-              + '<td class="tools-version">' + escHtml(svcVer) + '</td>'
-              + '<td class="tools-version ' + svcAvailClass + '">' + escHtml(b.latest || '?') + '</td>';
+              + '<td class="tools-version ' + svcInstalledClass + '">' + escHtml(svcVer) + '</td>'
+              + '<td class="tools-version">' + escHtml(b.latest || '?') + '</td>';
             if (showActions) html += '<td></td>';
             html += '</tr>';
           }
