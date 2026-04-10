@@ -225,13 +225,25 @@
 
         <div class="settings-card-block">
           <h3>System Service</h3>
-          <p class="settings-card-desc">Run the default profile as an always-on background service that starts with the OS.</p>
+          <p class="settings-card-desc">Run the default profile as an always-on background service that starts with the OS. Requires administrator privileges.</p>
           <div class="service-status-row">Status: <strong id="cs-service-status">checking...</strong></div>
           <div class="settings-service-actions">
             <button type="button" class="tb-btn" id="svc-install-btn" onclick="installService()">Install</button>
             <button type="button" class="tb-btn" id="svc-start-btn" onclick="startService()" disabled>Start</button>
             <button type="button" class="tb-btn" id="svc-stop-btn" onclick="stopService()" disabled>Stop</button>
             <button type="button" class="tb-btn tb-delete-btn" id="svc-uninstall-btn" onclick="uninstallService()" disabled>Uninstall</button>
+          </div>
+        </div>
+
+        <div class="settings-card-block">
+          <h3>User Autostart</h3>
+          <p class="settings-card-desc">Run the default profile automatically when you log in. No administrator privileges required.</p>
+          <div class="service-status-row">Status: <strong id="cs-user-task-status">checking...</strong></div>
+          <div class="settings-service-actions">
+            <button type="button" class="tb-btn" id="utask-install-btn" onclick="installUserTask()">Install</button>
+            <button type="button" class="tb-btn" id="utask-start-btn" onclick="startUserTask()" disabled>Start</button>
+            <button type="button" class="tb-btn" id="utask-stop-btn" onclick="stopUserTask()" disabled>Stop</button>
+            <button type="button" class="tb-btn tb-delete-btn" id="utask-uninstall-btn" onclick="uninstallUserTask()" disabled>Uninstall</button>
           </div>
         </div>
 

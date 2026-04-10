@@ -43,6 +43,7 @@ type Config struct {
 type Status struct {
 	Installed bool
 	Running   bool
+	UserMode  bool   // true when installed as a user-level autostart task
 	Info      string // platform-specific status detail
 }
 
@@ -72,6 +73,72 @@ func ConfigDir() string {
 // ConfigPath returns the full path to the service config JSON file.
 func ConfigPath(binaryName string) string {
 	return filepath.Join(ConfigDir(), binaryName+"-service.json")
+}
+
+// UserConfigDir returns the user-level config directory for autostart
+// tasks that do not require admin/root privileges.
+// Windows: %APPDATA%\Tela
+// Linux:   ~/.tela
+// macOS:   ~/.tela
+func UserConfigDir() string {
+	switch runtime.GOOS {
+	case "windows":
+		if ad := os.Getenv("APPDATA"); ad != "" {
+			return filepath.Join(ad, "Tela")
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "AppData", "Roaming", "Tela")
+	default:
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".tela")
+	}
+}
+
+// UserConfigPath returns the path to the user-level service config JSON.
+func UserConfigPath(binaryName string) string {
+	return filepath.Join(UserConfigDir(), binaryName+"-service.json")
+}
+
+// UserBinaryConfigPath returns the path to the user-level binary YAML
+// config (e.g., ~/.tela/tela.yaml).
+func UserBinaryConfigPath(binaryName string) string {
+	return filepath.Join(UserConfigDir(), binaryName+".yaml")
+}
+
+// UserLogPath returns the path to the user-level log file.
+func UserLogPath(binaryName string) string {
+	return filepath.Join(UserConfigDir(), binaryName+".log")
+}
+
+// SaveUserConfig writes the service configuration to the user dir.
+func SaveUserConfig(binaryName string, cfg *Config) error {
+	dir := UserConfigDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create user config dir %s: %w", dir, err)
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	path := UserConfigPath(binaryName)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+// LoadUserConfig reads the service configuration from the user dir.
+func LoadUserConfig(binaryName string) (*Config, error) {
+	path := UserConfigPath(binaryName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return &cfg, nil
 }
 
 // ConfigDirPerm returns the permission mode for the service config directory.

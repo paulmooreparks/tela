@@ -162,3 +162,110 @@ func run(name string, args ...string) error {
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
+
+// ── User-level autostart (LaunchAgent) ────────────────────────────
+
+func userPlistDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Library", "LaunchAgents")
+}
+
+func userPlistPath(binaryName string) string {
+	return filepath.Join(userPlistDir(), plistLabel(binaryName)+".plist")
+}
+
+func userLogDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Library", "Logs", "tela")
+}
+
+// UserInstall creates a LaunchAgent plist and loads it. No root required.
+func UserInstall(binaryName string, cfg *Config) error {
+	if err := SaveUserConfig(binaryName, cfg); err != nil {
+		return err
+	}
+
+	dir := userPlistDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create LaunchAgents dir: %w", err)
+	}
+	logDir := userLogDir()
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("create log dir: %w", err)
+	}
+
+	label := plistLabel(binaryName)
+	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>%s</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>%s</string>
+        <string>service</string>
+        <string>run</string>
+        <string>--user</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>%s</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>%s/%s.log</string>
+    <key>StandardErrorPath</key>
+    <string>%s/%s.err</string>
+</dict>
+</plist>
+`, label, cfg.BinaryPath, cfg.WorkingDir, logDir, binaryName, logDir, binaryName)
+
+	if err := os.WriteFile(userPlistPath(binaryName), []byte(plist), 0644); err != nil {
+		return fmt.Errorf("write plist: %w", err)
+	}
+
+	if err := run("launchctl", "load", userPlistPath(binaryName)); err != nil {
+		return fmt.Errorf("launchctl load: %w", err)
+	}
+	return nil
+}
+
+// UserUninstall unloads and removes the LaunchAgent plist.
+func UserUninstall(binaryName string) error {
+	path := userPlistPath(binaryName)
+	_ = run("launchctl", "unload", path)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove %s: %w", path, err)
+	}
+	return nil
+}
+
+// UserStart starts the LaunchAgent.
+func UserStart(binaryName string) error {
+	return run("launchctl", "start", plistLabel(binaryName))
+}
+
+// UserStop stops the LaunchAgent.
+func UserStop(binaryName string) error {
+	return run("launchctl", "stop", plistLabel(binaryName))
+}
+
+// QueryUserStatus returns the status of the user-level LaunchAgent.
+func QueryUserStatus(binaryName string) (*Status, error) {
+	if _, err := os.Stat(userPlistPath(binaryName)); os.IsNotExist(err) {
+		return &Status{Installed: false, UserMode: true, Info: "not installed"}, nil
+	}
+
+	label := plistLabel(binaryName)
+	_, err := exec.Command("launchctl", "list", label).Output()
+	running := err == nil
+
+	return &Status{
+		Installed: true,
+		Running:   running,
+		UserMode:  true,
+		Info:      "launch agent",
+	}, nil
+}

@@ -378,3 +378,126 @@ func grantSystemAccess(path string) {
 		_ = exec.Command("icacls", dir, "/grant", "SYSTEM:(OI)(CI)(RX)", "/Q").Run()
 	}
 }
+
+// ── User-level autostart (Windows Scheduled Task) ─────────────────
+
+// taskName returns the scheduled task name for a Tela binary.
+func taskName(binaryName string) string {
+	return `Tela\` + binaryName
+}
+
+// UserInstall creates a Windows Scheduled Task that runs at logon
+// under the current user's account. No admin privileges required.
+func UserInstall(binaryName string, cfg *Config) error {
+	if err := SaveUserConfig(binaryName, cfg); err != nil {
+		return err
+	}
+
+	tn := taskName(binaryName)
+	tr := fmt.Sprintf(`"%s" service run --user`, cfg.BinaryPath)
+
+	cmd := exec.Command("schtasks", "/Create",
+		"/TN", tn,
+		"/TR", tr,
+		"/SC", "ONLOGON",
+		"/RL", "LIMITED",
+		"/F",
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("create scheduled task %s: %w", tn, err)
+	}
+	return nil
+}
+
+// UserUninstall removes the scheduled task.
+func UserUninstall(binaryName string) error {
+	tn := taskName(binaryName)
+	cmd := exec.Command("schtasks", "/Delete", "/TN", tn, "/F")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("delete scheduled task %s: %w", tn, err)
+	}
+	return nil
+}
+
+// UserStart runs the scheduled task immediately.
+func UserStart(binaryName string) error {
+	tn := taskName(binaryName)
+	cmd := exec.Command("schtasks", "/Run", "/TN", tn)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run scheduled task %s: %w", tn, err)
+	}
+	return nil
+}
+
+// UserStop ends the running scheduled task.
+func UserStop(binaryName string) error {
+	tn := taskName(binaryName)
+	cmd := exec.Command("schtasks", "/End", "/TN", tn)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("end scheduled task %s: %w", tn, err)
+	}
+	return nil
+}
+
+// QueryUserStatus checks whether a user-level scheduled task exists
+// and whether it is currently running.
+func QueryUserStatus(binaryName string) (*Status, error) {
+	tn := taskName(binaryName)
+	out, err := exec.Command("schtasks", "/Query", "/TN", tn, "/FO", "LIST").Output()
+	if err != nil {
+		return &Status{Installed: false, UserMode: true, Info: "not installed"}, nil
+	}
+
+	info := string(out)
+	running := false
+	for _, line := range splitLines(info) {
+		// schtasks LIST format: "Status:          Running"
+		if len(line) > 7 && line[:7] == "Status:" {
+			state := trimLeftSpace(line[7:])
+			if state == "Running" {
+				running = true
+			}
+		}
+	}
+
+	return &Status{
+		Installed: true,
+		Running:   running,
+		UserMode:  true,
+		Info:      "scheduled task",
+	}, nil
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			line := s[start:i]
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+			lines = append(lines, line)
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+func trimLeftSpace(s string) string {
+	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
+		s = s[1:]
+	}
+	return s
+}

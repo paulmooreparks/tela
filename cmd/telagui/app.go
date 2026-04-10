@@ -4267,6 +4267,79 @@ func (a *App) ServiceStop() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// IsElevated returns true if the process has admin/root privileges.
+func (a *App) IsElevated() bool {
+	return service.IsElevated()
+}
+
+// InstallAsUserTask installs the current profile as a user-level autostart task.
+func (a *App) InstallAsUserTask() (string, error) {
+	profilePath := profilePath()
+	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("no profile to install (save a profile first)")
+	}
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "install", "--user", "-config", profilePath)
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Install user autostart", telaPath+" service install --user -config "+profilePath)
+	return strings.TrimSpace(string(out)), nil
+}
+
+// UninstallUserTask removes the user-level autostart task.
+func (a *App) UninstallUserTask() (string, error) {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "uninstall", "--user")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Uninstall user autostart", telaPath+" service uninstall --user")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// UserTaskStart starts the user-level autostart task.
+func (a *App) UserTaskStart() (string, error) {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "start", "--user")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Start user autostart", telaPath+" service start --user")
+	return strings.TrimSpace(string(out)), nil
+}
+
+// UserTaskStop stops the user-level autostart task.
+func (a *App) UserTaskStop() (string, error) {
+	telaPath := a.findTool("tela")
+	if telaPath == "" {
+		return "", fmt.Errorf("tela binary not found")
+	}
+	cmd := exec.Command(telaPath, "service", "stop", "--user")
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	a.logCommand("Stop user autostart", telaPath+" service stop --user")
+	return strings.TrimSpace(string(out)), nil
+}
+
 // ── Mount (WebDAV) child process management ──────────────────────
 
 // StartMount launches "tela mount" as a child process and streams its output.

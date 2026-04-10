@@ -1924,7 +1924,7 @@ function renderProfileSettings() {
 
         html += '<div class="settings-group">'
           + '<div class="settings-group-header">File Share Mount</div>'
-          + '<div class="setting-card-desc">Mounts a local drive that contains all file shares from connected machines. Each machine appears as a folder under the mount point.</div>'
+          + '<div class="settings-group-desc">Mounts a local drive that contains all file shares from connected machines. Each machine appears as a folder under the mount point.</div>'
           + '<div class="settings-group-body"><div class="mount-config-form">'
           + '<div class="mount-config-row"><label class="mount-config-check"><input type="checkbox" id="ps-mount-enable"' + (mountEnabled ? ' checked' : '') + allDis + ' onchange="onPsMountEnableToggle(this.checked)"> Enable</label></div>'
           + '<div class="mount-config-row"><label class="mount-config-label" for="ps-mount-point">Mount point</label><input type="text" id="ps-mount-point" placeholder="' + (navigator.platform.indexOf('Win') >= 0 ? 'T:' : '/mnt/tela') + '" class="form-input mono" value="' + escAttr(mc.mount || '') + '" data-required="Mount point is required when mount is enabled"' + mountFieldDis + ' onchange="onPsMountChange()" onblur="validatePsMount()"></div>'
@@ -5488,32 +5488,66 @@ function clearAllCredentials() {
 
 function refreshServiceStatus() {
   goApp.GetServiceStatus().then(function (raw) {
+    var s = (raw || '');
+    var lower = s.toLowerCase();
+
+    // Parse system service section (appears before "User autostart:")
+    var sysSection = lower.split('user autostart:')[0] || '';
+    var sysInstalled = sysSection.indexOf('installed: true') !== -1;
+    var sysRunning = sysSection.indexOf('running: true') !== -1;
+
+    // Parse user autostart section (appears after "User autostart:")
+    var userSection = lower.split('user autostart:')[1] || '';
+    var userInstalled = userSection.indexOf('installed: true') !== -1;
+    var userRunning = userSection.indexOf('running: true') !== -1;
+
+    // System service UI
     var el = document.getElementById('cs-service-status');
-    if (!el) return;
-    var s = (raw || '').toLowerCase();
-    var installed = s.indexOf('installed: true') !== -1;
-    var running = s.indexOf('running: true') !== -1;
-    var notInstalled = s.indexOf('not installed') !== -1 || s === '';
-
-    if (notInstalled) {
-      el.innerHTML = '<span style="color:var(--text-muted);">Not installed</span>';
-    } else if (running) {
-      el.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
-    } else if (installed) {
-      el.innerHTML = '<span class="bin-dot bin-dot-missing"></span> Installed (stopped)';
-    } else {
-      el.innerHTML = '<span style="color:var(--text-muted);">' + escHtml(raw) + '</span>';
+    if (el) {
+      if (!sysInstalled) {
+        el.innerHTML = '<span style="color:var(--text-muted);">Not installed</span>';
+      } else if (sysRunning) {
+        el.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
+      } else {
+        el.innerHTML = '<span class="bin-dot bin-dot-missing"></span> Installed (stopped)';
+      }
     }
-
-    // Enable/disable buttons
     var installBtn = document.getElementById('svc-install-btn');
     var startBtn = document.getElementById('svc-start-btn');
     var stopBtn = document.getElementById('svc-stop-btn');
     var uninstallBtn = document.getElementById('svc-uninstall-btn');
-    if (installBtn) installBtn.disabled = installed || running;
-    if (startBtn) startBtn.disabled = !installed || running;
-    if (stopBtn) stopBtn.disabled = !running;
-    if (uninstallBtn) uninstallBtn.disabled = !installed && !running;
+    if (installBtn) installBtn.disabled = sysInstalled || sysRunning;
+    if (startBtn) startBtn.disabled = !sysInstalled || sysRunning;
+    if (stopBtn) stopBtn.disabled = !sysRunning;
+    if (uninstallBtn) uninstallBtn.disabled = !sysInstalled && !sysRunning;
+
+    // User autostart UI
+    var uel = document.getElementById('cs-user-task-status');
+    if (uel) {
+      if (!userInstalled) {
+        uel.innerHTML = '<span style="color:var(--text-muted);">Not installed</span>';
+      } else if (userRunning) {
+        uel.innerHTML = '<span class="bin-dot bin-dot-ok"></span> Running';
+      } else {
+        uel.innerHTML = '<span class="bin-dot bin-dot-missing"></span> Installed (stopped)';
+      }
+    }
+    var uInstallBtn = document.getElementById('utask-install-btn');
+    var uStartBtn = document.getElementById('utask-start-btn');
+    var uStopBtn = document.getElementById('utask-stop-btn');
+    var uUninstallBtn = document.getElementById('utask-uninstall-btn');
+    if (uInstallBtn) uInstallBtn.disabled = userInstalled || userRunning;
+    if (uStartBtn) uStartBtn.disabled = !userInstalled || userRunning;
+    if (uStopBtn) uStopBtn.disabled = !userRunning;
+    if (uUninstallBtn) uUninstallBtn.disabled = !userInstalled && !userRunning;
+
+    // Disable system service install when not elevated
+    goApp.IsElevated().then(function (elevated) {
+      if (!elevated && installBtn) {
+        installBtn.disabled = true;
+        installBtn.title = 'Requires administrator privileges';
+      }
+    });
   });
 }
 
@@ -5553,6 +5587,48 @@ function stopService() {
     refreshServiceStatus();
   }).catch(function (err) {
     tvLog('Stop service failed: ' + err);
+  });
+}
+
+// ── User autostart management ─────────────────────────────────────
+
+function installUserTask() {
+  goApp.InstallAsUserTask().then(function (msg) {
+    tvLog('User autostart installed: ' + msg);
+    refreshServiceStatus();
+  }).catch(function (err) {
+    tvLog('Install user autostart failed: ' + err);
+    showError('Install failed: ' + err);
+  });
+}
+
+function uninstallUserTask() {
+  showConfirmDialog('Uninstall User Autostart', 'Remove the user autostart task?', 'Uninstall').then(function (yes) {
+    if (!yes) return;
+    goApp.UninstallUserTask().then(function (msg) {
+      tvLog('User autostart uninstalled: ' + msg);
+      refreshServiceStatus();
+    }).catch(function (err) {
+      tvLog('Uninstall user autostart failed: ' + err);
+    });
+  });
+}
+
+function startUserTask() {
+  goApp.UserTaskStart().then(function (msg) {
+    tvLog('User autostart started: ' + msg);
+    refreshServiceStatus();
+  }).catch(function (err) {
+    tvLog('Start user autostart failed: ' + err);
+  });
+}
+
+function stopUserTask() {
+  goApp.UserTaskStop().then(function (msg) {
+    tvLog('User autostart stopped: ' + msg);
+    refreshServiceStatus();
+  }).catch(function (err) {
+    tvLog('Stop user autostart failed: ' + err);
   });
 }
 

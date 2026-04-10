@@ -2182,34 +2182,30 @@ func logVerbose(format string, args ...any) {
 func handleServiceCommand() {
 	if len(os.Args) < 3 {
 		cfgPath := service.BinaryConfigPath("tela")
-		fmt.Fprintf(os.Stderr, `tela service -- manage tela as an OS service
+		userPath := service.UserBinaryConfigPath("tela")
+		fmt.Fprintf(os.Stderr, `tela service -- manage tela as an OS service or user autostart task
 
 Usage:
-  tela service install -config <file>  Install service (copies config to system dir)
-  tela service uninstall               Remove the service
-  tela service start                   Start the installed service
-  tela service stop                    Stop the running service
-  tela service restart                 Restart the service
-  tela service status                  Show service status
-  tela service run                     Run in service mode (used by the service manager)
+  tela service install -config <file>  Install as system service (requires admin/root)
+  tela service install --user -config <file>
+                                       Install as user autostart (no admin required)
+  tela service uninstall [--user]      Remove the service or autostart task
+  tela service start [--user]          Start the installed service or task
+  tela service stop [--user]           Stop the running service or task
+  tela service restart [--user]        Restart the service or task
+  tela service status                  Show status of both system and user installations
+  tela service run [--user]            Run in service mode (used by the service manager)
 
-The service reads its configuration from:
-  %s
+System service config: %s
+User autostart config: %s
 
-The configuration file uses the connection profile YAML format:
-  connections:
-    - hub: wss://hub.example.com
-      machine: mybox
-      token: mytoken
-      services:
-        - remote: 22
-          local: 2222
-
-Edit that file and run "tela service restart" to reconfigure.
+The --user flag selects user-level autostart instead of a system
+service. User autostart runs at login under your own account and
+does not require administrator or root privileges.
 
 Install example:
-  tela service install -config myprofile.yaml
-`, cfgPath)
+  tela service install --user -config myprofile.yaml
+`, cfgPath, userPath)
 		os.Exit(1)
 	}
 
@@ -2237,18 +2233,17 @@ Install example:
 }
 
 func serviceInstall() {
-	// Parse flags after "service install"
 	fs := flag.NewFlagSet("service install", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to YAML config file (required)")
+	userMode := fs.Bool("user", false, "Install as user autostart (no admin required)")
 	fs.Parse(os.Args[3:])
 
 	if *configPath == "" {
 		fmt.Fprintf(os.Stderr, "error: -config is required\n")
-		fmt.Fprintf(os.Stderr, "usage: tela service install -config <file>\n")
+		fmt.Fprintf(os.Stderr, "usage: tela service install [-user] -config <file>\n")
 		os.Exit(1)
 	}
 
-	// Validate the config file
 	absConfig, _ := filepath.Abs(*configPath)
 	profile, err := loadProfile(absConfig)
 	if err != nil {
@@ -2256,7 +2251,7 @@ func serviceInstall() {
 		os.Exit(1)
 	}
 
-	// Validate: service mode requires full WebSocket URLs (no hub name resolution)
+	// Validate: service mode requires full WebSocket URLs
 	for i, conn := range profile.Connections {
 		lower := strings.ToLower(conn.Hub)
 		if !strings.HasPrefix(lower, "ws://") && !strings.HasPrefix(lower, "wss://") {
@@ -2264,7 +2259,6 @@ func serviceInstall() {
 			fmt.Fprintf(os.Stderr, "Hub name resolution is not available in service mode.\n")
 			os.Exit(1)
 		}
-		// Validate: service mode requires numeric ports, not name-based resolution
 		for j, svc := range conn.Services {
 			if svc.Name != "" && svc.Remote == 0 {
 				fmt.Fprintf(os.Stderr, "error: connections[%d].services[%d] uses name-based resolution (%q) which is not supported in service mode. Use 'remote: <port>' instead.\n", i, j, svc.Name)
@@ -2273,37 +2267,47 @@ func serviceInstall() {
 		}
 	}
 
-	// Copy the config to the system-wide location
-	destPath := service.BinaryConfigPath("tela")
-	if err := copyFile(absConfig, destPath); err != nil {
-		fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Get the absolute path to the current executable
 	exePath, err := os.Executable()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot determine executable path: %v\n", err)
 		os.Exit(1)
 	}
 	exePath, _ = filepath.Abs(exePath)
-
 	wd, _ := os.Getwd()
+
 	cfg := &service.Config{
 		BinaryPath:  exePath,
 		Description: "Tela Client -- encrypted tunnel client",
 		WorkingDir:  wd,
 	}
 
-	if err := service.Install("tela", cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	if *userMode {
+		destPath := service.UserBinaryConfigPath("tela")
+		if err := copyFile(absConfig, destPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
+			os.Exit(1)
+		}
+		if err := service.UserInstall("tela", cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("tela user autostart installed successfully")
+		fmt.Printf("  config: %s\n", destPath)
+		fmt.Println("  start:  tela service start --user")
+	} else {
+		destPath := service.BinaryConfigPath("tela")
+		if err := copyFile(absConfig, destPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error copying config: %v\n", err)
+			os.Exit(1)
+		}
+		if err := service.Install("tela", cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("tela system service installed successfully")
+		fmt.Printf("  config: %s\n", destPath)
+		fmt.Println("  start:  tela service start")
 	}
-	fmt.Println("tela service installed successfully")
-	fmt.Printf("  config: %s\n", destPath)
-	fmt.Println("  start:  tela service start")
-	fmt.Println("")
-	fmt.Println("Edit the config file and run \"tela service restart\" to reconfigure.")
 }
 
 // copyFile copies src to dst, creating parent directories as needed.
@@ -2321,54 +2325,113 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
+func serviceHasUserFlag() bool {
+	for _, arg := range os.Args[3:] {
+		if arg == "--user" || arg == "-user" {
+			return true
+		}
+	}
+	return false
+}
+
 func serviceUninstall() {
+	if serviceHasUserFlag() {
+		if err := service.UserUninstall("tela"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("tela user autostart uninstalled")
+		return
+	}
 	if err := service.Uninstall("tela"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("tela service uninstalled")
+	fmt.Println("tela system service uninstalled")
 	fmt.Printf("  config retained: %s\n", service.BinaryConfigPath("tela"))
 }
 
 func serviceStart() {
+	if serviceHasUserFlag() {
+		if err := service.UserStart("tela"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("tela user autostart started")
+		return
+	}
 	if err := service.Start("tela"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("tela service started")
+	fmt.Println("tela system service started")
 }
 
 func serviceStop() {
+	if serviceHasUserFlag() {
+		if err := service.UserStop("tela"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("tela user autostart stopped")
+		return
+	}
 	if err := service.Stop("tela"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("tela service stopped")
+	fmt.Println("tela system service stopped")
 }
 
 func serviceRestart() {
-	fmt.Println("stopping tela service...")
-	_ = service.Stop("tela")
-	// Brief pause to let the service fully stop
-	time.Sleep(time.Second)
-	if err := service.Start("tela"); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	userMode := serviceHasUserFlag()
+	fmt.Println("stopping tela...")
+	if userMode {
+		_ = service.UserStop("tela")
+	} else {
+		_ = service.Stop("tela")
 	}
-	fmt.Println("tela service restarted")
+	time.Sleep(time.Second)
+	if userMode {
+		if err := service.UserStart("tela"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		if err := service.Start("tela"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	fmt.Println("tela restarted")
 }
 
 func serviceStatus() {
+	// Show both system and user status.
 	st, err := service.QueryStatus("tela")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("installed: %v\n", st.Installed)
-	fmt.Printf("running:   %v\n", st.Running)
-	fmt.Printf("status:    %s\n", st.Info)
+	fmt.Println("System service:")
+	fmt.Printf("  installed: %v\n", st.Installed)
+	fmt.Printf("  running:   %v\n", st.Running)
+	fmt.Printf("  status:    %s\n", st.Info)
 	if st.Installed {
-		fmt.Printf("config:    %s\n", service.BinaryConfigPath("tela"))
+		fmt.Printf("  config:    %s\n", service.BinaryConfigPath("tela"))
+	}
+
+	ust, err := service.QueryUserStatus("tela")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("User autostart:")
+	fmt.Printf("  installed: %v\n", ust.Installed)
+	fmt.Printf("  running:   %v\n", ust.Running)
+	fmt.Printf("  status:    %s\n", ust.Info)
+	if ust.Installed {
+		fmt.Printf("  config:    %s\n", service.UserBinaryConfigPath("tela"))
 	}
 }
 
@@ -2489,7 +2552,107 @@ func serviceRun() {
 		close(svcStop)
 	}()
 
-	serviceRunDaemon(svcStop)
+	if serviceHasUserFlag() {
+		serviceRunUserDaemon(svcStop)
+	} else {
+		serviceRunDaemon(svcStop)
+	}
+}
+
+// serviceRunUserDaemon is the user-mode variant of serviceRunDaemon.
+// It loads config from the user directory instead of the system directory.
+func serviceRunUserDaemon(svcStop <-chan struct{}) {
+	stopCh = make(chan struct{})
+	go func() {
+		<-svcStop
+		close(stopCh)
+	}()
+
+	telelog.Init("tela", os.Stderr)
+
+	svcCfg, err := service.LoadUserConfig("tela")
+	if err != nil {
+		log.Fatalf("user service config: %v", err)
+	}
+
+	if svcCfg.WorkingDir != "" {
+		os.Chdir(svcCfg.WorkingDir)
+	}
+
+	yamlPath := service.UserBinaryConfigPath("tela")
+	profile, err := loadProfile(yamlPath)
+	if err != nil {
+		log.Fatalf("config %s: %v", yamlPath, err)
+	}
+
+	log.Printf("loaded %d connection(s) from %s (user mode)", len(profile.Connections), yamlPath)
+
+	var wg sync.WaitGroup
+	for i, conn := range profile.Connections {
+		hubURL := conn.Hub
+		token := conn.Token
+		machine := conn.Machine
+
+		if hubURL == "" || machine == "" {
+			log.Printf("[svc:%d] skipping: hub and machine are required", i+1)
+			continue
+		}
+
+		if token == "" {
+			token = credstore.LookupToken(hubURL)
+		}
+
+		var mappings []portMapping
+		for _, svc := range conn.Services {
+			if svc.Remote > 0 {
+				local := svc.Local
+				if local == 0 {
+					local = svc.Remote
+				}
+				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote)})
+			}
+		}
+
+		wg.Add(1)
+		go func(idx int, hub, mach, tok string, maps []portMapping) {
+			defer wg.Done()
+			log.Printf("[svc:%d] connecting to %s -> %s", idx, hub, mach)
+
+			var bridge *tunnelBridge
+			if len(maps) > 0 {
+				bridge = newTunnelBridge()
+				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopCh)
+				defer closeListeners()
+			}
+
+			const maxDelay = 5 * time.Minute
+			attempt := 0
+			for {
+				err := runSession(hub, mach, tok, maps, bridge)
+				if errors.Is(err, errFatal) {
+					log.Printf("[svc:%d] fatal error, stopping", idx)
+					return
+				}
+				select {
+				case <-stopCh:
+					return
+				default:
+				}
+				delay := reconnectDelay(attempt, maxDelay)
+				log.Printf("[svc:%d] reconnecting in %s...", idx, delay.Round(time.Second))
+				select {
+				case <-time.After(delay):
+				case <-stopCh:
+					return
+				}
+				attempt++
+			}
+		}(i+1, hubURL, machine, token, mappings)
+	}
+
+	<-svcStop
+	log.Println("service stopping")
+	wg.Wait()
 }
 
 func runAsWindowsService() {

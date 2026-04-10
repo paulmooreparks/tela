@@ -11,6 +11,13 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Added
+- User-level autostart: `tela service install --user` registers an
+  autostart task that runs at login without admin/root privileges.
+  Windows uses Scheduled Tasks, Linux uses systemd --user units,
+  macOS uses LaunchAgents. TelaVisor shows both system service and
+  user autostart options in Client Settings.
+
 ## [0.7] - 2026-04-10 (in development)
 
 The "hardening" release. Focus on polish, onboarding reliability,
