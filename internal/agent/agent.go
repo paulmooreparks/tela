@@ -2098,12 +2098,8 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	bind := wsbind.New(ws, 256)
 
 	// Create WireGuard device
-	wgVerbose := silentLogger{}.Printf
-	if verbose {
-		wgVerbose = lg.Printf
-	}
 	logger := &device.Logger{
-		Verbosef: wgVerbose,
+		Verbosef: lg.Printf,
 		Errorf:   lg.Printf,
 	}
 	dev := device.NewDevice(tunDev, bind, logger)

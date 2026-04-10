@@ -1845,12 +1845,8 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping,
 	bind := wsbind.New(wsConn, 256)
 
 	// Create WireGuard device
-	wgVerbose := func(string, ...any) {}
-	if verbose {
-		wgVerbose = log.Printf
-	}
 	logger := &device.Logger{
-		Verbosef: wgVerbose,
+		Verbosef: log.Printf,
 		Errorf:   log.Printf,
 	}
 	dev := device.NewDevice(tunDev, bind, logger)
