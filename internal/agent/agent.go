@@ -1065,28 +1065,32 @@ func Main() {
 
 func handleServiceCommand() {
 	if len(os.Args) < 3 {
-		fmt.Fprintf(os.Stderr, `telad service -- manage telad as an OS service
+		fmt.Fprintf(os.Stderr, `telad service -- manage telad as an OS service or user autostart task
 
 Usage:
   telad service install -config <file>
-      Install service with YAML config file
+      Install as system service (requires admin/root)
+
+  telad service install --user -config <file>
+      Install as user autostart (no admin required)
 
   telad service install -hub <url> -machine <id> -ports <spec>
-      Install service with inline configuration
+      Install system service with inline configuration
 
-  telad service uninstall               Remove the service
-  telad service start                   Start the installed service
-  telad service stop                    Stop the running service
-  telad service restart                 Restart the service
-  telad service status                  Show service status
-  telad service run                     Run in service mode (used by the service manager)
+  telad service uninstall [--user]      Remove the service or autostart task
+  telad service start [--user]          Start the installed service or task
+  telad service stop [--user]           Stop the running service or task
+  telad service restart [--user]        Restart the service or task
+  telad service status                  Show status of both system and user installations
+  telad service run [--user]            Run in service mode (used by the service manager)
 
-Reconfigure:
-  Edit the YAML config file and run "telad service restart", or
-  reinstall with new parameters using "telad service install".
+The --user flag selects user-level autostart instead of a system
+service. User autostart runs at login under your own account and
+does not require administrator or root privileges.
 
 Install examples:
   telad service install -config telad.yaml
+  telad service install --user -config telad.yaml
   telad service install -hub ws://hub:8080 -machine barn -ports 22:SSH,3389:RDP
 `)
 		os.Exit(1)
@@ -1119,10 +1123,19 @@ Install examples:
 	}
 }
 
+func serviceHasUserFlag() bool {
+	for _, arg := range os.Args[3:] {
+		if arg == "--user" || arg == "-user" {
+			return true
+		}
+	}
+	return false
+}
+
 func serviceInstall() {
-	// Parse flags after "service install"
 	fs := flag.NewFlagSet("service install", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to YAML config file (mutually exclusive with -hub/-machine)")
+	userMode := fs.Bool("user", false, "Install as user autostart (no admin required)")
 	hubURL := fs.String("hub", "", "Hub WebSocket URL (requires -machine, -ports)")
 	machineID := fs.String("machine", "", "Machine ID to register (requires -hub, -ports)")
 	portsStr := fs.String("ports", "", "Comma-separated port specs (requires -hub, -machine)")
@@ -1224,18 +1237,42 @@ func serviceInstall() {
 		cfg.WorkingDir = wd
 	}
 
-	if err := service.Install("telad", cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("telad service installed successfully")
-	if destPath != "" {
-		fmt.Printf("  config: %s\n", destPath)
-	}
-	fmt.Println("  start:  telad service start")
-	if destPath != "" {
-		fmt.Println("  edit:   " + destPath)
+	if *userMode {
+		// User mode: copy config to user dir, install as user task
+		if destPath != "" {
+			userDest := service.UserBinaryConfigPath("telad")
+			if err := copyFile(destPath, userDest); err != nil {
+				// destPath may be the system path from above; try the original
+				absConfig, _ := filepath.Abs(*configPath)
+				if err2 := copyFile(absConfig, userDest); err2 != nil {
+					fmt.Fprintf(os.Stderr, "error copying config to user dir: %v\n", err2)
+					os.Exit(1)
+				}
+			}
+			destPath = userDest
+		}
+		if err := service.UserInstall("telad", cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("telad user autostart installed successfully")
+		if destPath != "" {
+			fmt.Printf("  config: %s\n", destPath)
+		}
+		fmt.Println("  start:  telad service start --user")
+	} else {
+		if err := service.Install("telad", cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("telad system service installed successfully")
+		if destPath != "" {
+			fmt.Printf("  config: %s\n", destPath)
+		}
+		fmt.Println("  start:  telad service start")
+		if destPath != "" {
+			fmt.Println("  edit:   " + destPath)
+		}
 	}
 }
 
@@ -1255,40 +1292,75 @@ func copyFile(src, dst string) error {
 }
 
 func serviceUninstall() {
+	if serviceHasUserFlag() {
+		if err := service.UserUninstall("telad"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("telad user autostart uninstalled")
+		return
+	}
 	if err := service.Uninstall("telad"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("telad service uninstalled")
+	fmt.Println("telad system service uninstalled")
 	fmt.Printf("  config retained: %s\n", service.BinaryConfigPath("telad"))
 }
 
 func serviceStart() {
+	if serviceHasUserFlag() {
+		if err := service.UserStart("telad"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("telad user autostart started")
+		return
+	}
 	if err := service.Start("telad"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("telad service started")
+	fmt.Println("telad system service started")
 }
 
 func serviceStop() {
+	if serviceHasUserFlag() {
+		if err := service.UserStop("telad"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("telad user autostart stopped")
+		return
+	}
 	if err := service.Stop("telad"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("telad service stopped")
+	fmt.Println("telad system service stopped")
 }
 
 func serviceRestart() {
-	fmt.Println("stopping telad service...")
-	_ = service.Stop("telad")
-	// Brief pause to let the service fully stop
-	time.Sleep(time.Second)
-	if err := service.Start("telad"); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	userMode := serviceHasUserFlag()
+	fmt.Println("stopping telad...")
+	if userMode {
+		_ = service.UserStop("telad")
+	} else {
+		_ = service.Stop("telad")
 	}
-	fmt.Println("telad service restarted")
+	time.Sleep(time.Second)
+	if userMode {
+		if err := service.UserStart("telad"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		if err := service.Start("telad"); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	fmt.Println("telad restarted")
 }
 
 func serviceStatus() {
@@ -1297,11 +1369,25 @@ func serviceStatus() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("installed: %v\n", st.Installed)
-	fmt.Printf("running:   %v\n", st.Running)
-	fmt.Printf("status:    %s\n", st.Info)
+	fmt.Println("System service:")
+	fmt.Printf("  installed: %v\n", st.Installed)
+	fmt.Printf("  running:   %v\n", st.Running)
+	fmt.Printf("  status:    %s\n", st.Info)
 	if st.Installed {
-		fmt.Printf("config:    %s\n", service.BinaryConfigPath("telad"))
+		fmt.Printf("  config:    %s\n", service.BinaryConfigPath("telad"))
+	}
+
+	ust, err := service.QueryUserStatus("telad")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("User autostart:")
+	fmt.Printf("  installed: %v\n", ust.Installed)
+	fmt.Printf("  running:   %v\n", ust.Running)
+	fmt.Printf("  status:    %s\n", ust.Info)
+	if ust.Installed {
+		fmt.Printf("  config:    %s\n", service.UserBinaryConfigPath("telad"))
 	}
 }
 
@@ -1388,7 +1474,53 @@ func serviceRun() {
 		close(svcStop)
 	}()
 
-	serviceRunDaemon(svcStop)
+	if serviceHasUserFlag() {
+		serviceRunUserDaemon(svcStop)
+	} else {
+		serviceRunDaemon(svcStop)
+	}
+}
+
+// serviceRunUserDaemon is the user-mode variant of serviceRunDaemon.
+// It loads config from the user directory instead of the system directory.
+func serviceRunUserDaemon(svcStop <-chan struct{}) {
+	stopCh = make(chan struct{})
+	go func() {
+		<-svcStop
+		close(stopCh)
+	}()
+
+	logDest := io.Writer(os.Stderr)
+	logPath := service.UserLogPath("telad")
+	if lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600); err == nil {
+		logDest = lf
+	}
+	telelog.Init("telad", &logRingWriter{original: logDest})
+
+	svcCfg, err := service.LoadUserConfig("telad")
+	if err != nil {
+		log.Fatalf("user service config: %v", err)
+	}
+
+	if svcCfg.WorkingDir != "" {
+		os.Chdir(svcCfg.WorkingDir)
+	}
+
+	yamlPath := service.UserBinaryConfigPath("telad")
+	fileCfg, err := loadConfig(yamlPath)
+	if err != nil {
+		log.Fatalf("config %s: %v", yamlPath, err)
+	}
+
+	log.Printf("loaded %d machine(s) from %s (user mode)", len(fileCfg.Machines), yamlPath)
+
+	setActiveConfig(fileCfg, yamlPath)
+	removeControl := writeControlFile(fileCfg, yamlPath)
+	defer removeControl()
+	go runMultiMachine(fileCfg, yamlPath)
+
+	<-svcStop
+	log.Println("service stopping")
 }
 
 func runAsWindowsService() {
