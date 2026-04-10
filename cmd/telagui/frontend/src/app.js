@@ -89,6 +89,11 @@ function toggleLogPanel() {
   toggle.innerHTML = collapsed ? '&#x25B2;' : '&#x25BC;';
   goApp.GetSettings().then(function (s) {
     s.logPanelCollapsed = collapsed;
+    if (collapsed) {
+      panel.style.height = '';
+    } else if (s.logPanelHeight > 0) {
+      panel.style.height = s.logPanelHeight + 'px';
+    }
     goApp.SaveSettings(JSON.stringify(s));
   });
 }
@@ -1022,13 +1027,13 @@ initSidebarResize('hubs-sidebar-resize', 'hubs-sidebar', 220, 400, 'hubsSidebarW
 
   // Restore saved height and collapsed state
   goApp.GetSettings().then(function (s) {
-    if (s.logPanelHeight > 0) {
-      panel.style.height = s.logPanelHeight + 'px';
-    }
     if (s.logPanelCollapsed) {
       panel.classList.add('collapsed');
+      panel.style.height = '';
       var toggle = panel.querySelector('.log-panel-toggle');
       if (toggle) toggle.innerHTML = '&#x25B2;';
+    } else if (s.logPanelHeight > 0) {
+      panel.style.height = s.logPanelHeight + 'px';
     }
   });
 })();
