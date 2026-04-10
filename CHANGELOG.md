@@ -22,11 +22,15 @@ patch-level dev builds are too granular to list individually.
   (used by WebDAV mount to discover file-sharing machines)
 
 ### Fixed
-- UDP relay hairpin avoidance: when a client connects from a
-  private IP (same LAN as the hub), the udp-offer now sends the
-  hub's LAN address instead of the public hostname, keeping UDP
-  traffic on-LAN and avoiding unreliable NAT hairpinning that
-  caused tunnels to die after a few minutes
+- UDP relay auto-fallback to WebSocket: if no UDP data arrives
+  for 60 seconds (dead NAT mapping, unreliable hairpin, or
+  blocked path), the client automatically switches WireGuard
+  traffic to WebSocket so handshakes complete and the tunnel
+  recovers without user intervention
+- Same-LAN UDP optimization: when a client connects from a
+  private IP, the hub sends its own LAN address in the udp-offer,
+  keeping UDP relay traffic on-LAN when the local firewall allows
+  it
 - UDP session reaper killing active sessions after 5 minutes
   (regression from identity model changes: reaper looked up machine
   by display name instead of composite key, never found it, and

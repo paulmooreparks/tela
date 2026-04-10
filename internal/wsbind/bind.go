@@ -29,6 +29,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -41,6 +42,12 @@ const (
 	tokenLen  = 8
 	probeWord = "PROBE"
 	readyWord = "READY"
+
+	// UDP health: if no data arrives via UDP within this window,
+	// the relay path is considered dead and Send falls back to
+	// WebSocket. Two missed WireGuard keepalive rounds (25s each)
+	// plus margin.
+	udpHealthTimeout = 60 * time.Second
 
 	// Phase 3: STUN + direct tunnel
 	stunMagicCookie = 0x2112A442
@@ -67,11 +74,12 @@ type Bind struct {
 	sessionID uint32 // v1 relay frame session identifier (constant per connection)
 
 	// UDP relay (activated by UpgradeUDP)
-	udpMu      sync.RWMutex
-	udpConn    *net.UDPConn
-	udpHubAddr *net.UDPAddr
-	udpToken   []byte // 8-byte session token, prepended to outgoing UDP
-	udpActive  bool
+	udpMu       sync.RWMutex
+	udpConn     *net.UDPConn
+	udpHubAddr  *net.UDPAddr
+	udpToken    []byte // 8-byte session token, prepended to outgoing UDP
+	udpActive   bool
+	lastUDPRecv int64 // UnixNano of last UDP receive; accessed atomically
 
 	// Direct tunnel (Phase 3: STUN + hole punch)
 	directMu     sync.RWMutex
@@ -137,6 +145,20 @@ func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 	}
 
 	// 2. UDP relay ([token][header][WG datagram] via hub).
+	// Health check: if no UDP data has arrived for udpHealthTimeout,
+	// the NAT mapping or relay path is dead. Disable UDP so WireGuard
+	// traffic goes through WebSocket, where handshakes can complete.
+	if useUDP {
+		lastRecv := atomic.LoadInt64(&b.lastUDPRecv)
+		if lastRecv > 0 && time.Since(time.Unix(0, lastRecv)) > udpHealthTimeout {
+			log.Printf("[wsbind] no UDP data for %s -- falling back to WebSocket",
+				time.Since(time.Unix(0, lastRecv)).Round(time.Second))
+			b.udpMu.Lock()
+			b.udpActive = false
+			b.udpMu.Unlock()
+			useUDP = false
+		}
+	}
 	if useUDP && udpConn != nil {
 		for _, buf := range bufs {
 			pkt := make([]byte, tokenLen+relay.HeaderLen+len(buf))
@@ -233,6 +255,7 @@ func (b *Bind) UpgradeUDP(hubHost string, hubPort int, token []byte) error {
 	udpConn.SetReadDeadline(time.Time{})
 
 	// Activate UDP
+	atomic.StoreInt64(&b.lastUDPRecv, time.Now().UnixNano())
 	b.udpMu.Lock()
 	b.udpConn = udpConn
 	b.udpHubAddr = addr
@@ -276,6 +299,7 @@ func (b *Bind) udpReader() {
 		hubAddr := b.udpHubAddr
 		b.udpMu.RUnlock()
 		if hubAddr != nil && addr.IP.Equal(hubAddr.IP) && addr.Port == hubAddr.Port {
+			atomic.StoreInt64(&b.lastUDPRecv, time.Now().UnixNano())
 			if n <= tokenLen+relay.HeaderLen {
 				continue
 			}
@@ -327,6 +351,7 @@ func (b *Bind) udpReader() {
 		dAddr := b.directAddr
 		b.directMu.RUnlock()
 		if dAddr != nil && addr.IP.Equal(dAddr.IP) && addr.Port == dAddr.Port {
+			atomic.StoreInt64(&b.lastUDPRecv, time.Now().UnixNano())
 			if n <= relay.HeaderLen || buf[0] != relay.Magic {
 				continue
 			}
