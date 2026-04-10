@@ -2173,23 +2173,44 @@ func wsReader(ws *websocket.Conn, bind *wsbind.Bind, hubURL string, keepaliveRes
 }
 
 // tryUDPUpgrade attempts to switch from WebSocket to UDP relay transport.
+// It tries the offered host first, then the WebSocket peer IP (which may
+// differ when the hub is behind Docker or a reverse proxy), then the
+// hostname from the hub URL. This cascade finds a working UDP path
+// without configuration: direct LAN IP, public hostname, or whatever
+// the OS resolved the WS connection to.
 func tryUDPUpgrade(bind *wsbind.Bind, hubURL, tokenHex string, port int, host string) {
-	if host == "" {
-		u, err := url.Parse(hubURL)
-		if err != nil {
-			log.Printf("UDP upgrade: cannot parse hub URL: %v", err)
-			return
-		}
-		host = u.Hostname()
-	}
 	token, err := hex.DecodeString(tokenHex)
 	if err != nil {
 		log.Printf("UDP upgrade: invalid token: %v", err)
 		return
 	}
-	if err := bind.UpgradeUDP(host, port, token); err != nil {
-		log.Printf("UDP upgrade failed (continuing on WebSocket): %v", err)
+
+	// Build candidate list: offered host, WS peer IP, WS URL hostname.
+	// Deduplicate so we don't probe the same address twice.
+	var candidates []string
+	seen := map[string]bool{}
+	add := func(h string) {
+		if h != "" && !seen[h] {
+			seen[h] = true
+			candidates = append(candidates, h)
+		}
 	}
+	add(host)
+	if wsIP := bind.PeerIP(); wsIP != "" {
+		add(wsIP)
+	}
+	if u, err := url.Parse(hubURL); err == nil {
+		add(u.Hostname())
+	}
+
+	for _, h := range candidates {
+		if err := bind.UpgradeUDP(h, port, token); err != nil {
+			log.Printf("UDP probe %s:%d failed: %v", h, port, err)
+			continue
+		}
+		return // success
+	}
+	log.Printf("UDP upgrade failed (continuing on WebSocket)")
 }
 
 // tryDirectUpgrade performs STUN discovery and sends our reflexive

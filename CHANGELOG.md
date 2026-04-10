@@ -27,10 +27,10 @@ patch-level dev builds are too granular to list individually.
   blocked path), the client automatically switches WireGuard
   traffic to WebSocket so handshakes complete and the tunnel
   recovers without user intervention
-- Same-LAN UDP optimization: when a client connects from a
-  private IP, the hub sends its own LAN address in the udp-offer,
-  keeping UDP relay traffic on-LAN when the local firewall allows
-  it
+- UDP probe cascade: the client now tries the offered host, the
+  WS peer IP, and the URL hostname in order, finding a working
+  UDP path without configuration (handles Docker, LAN, and remote
+  scenarios automatically)
 - UDP session reaper killing active sessions after 5 minutes
   (regression from identity model changes: reaper looked up machine
   by display name instead of composite key, never found it, and

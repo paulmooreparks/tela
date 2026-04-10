@@ -589,6 +589,20 @@ func (b *Bind) ParseEndpoint(s string) (conn.Endpoint, error) {
 // BatchSize returns 1 (no batching).
 func (b *Bind) BatchSize() int { return 1 }
 
+// PeerIP returns the IP address of the WebSocket peer (the hub).
+// This is the actual TCP peer address, which may differ from the
+// hostname used to connect (e.g. resolved LAN IP vs public hostname).
+func (b *Bind) PeerIP() string {
+	if b.ws == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(b.ws.RemoteAddr().String())
+	if err != nil {
+		return ""
+	}
+	return host
+}
+
 // SendText sends a text (JSON control) message through the WebSocket,
 // serialized with WireGuard datagram sends to avoid concurrent writes.
 func (b *Bind) SendText(data []byte) error {
