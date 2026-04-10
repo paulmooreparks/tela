@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/paulmooreparks/tela/blob/main/SECURITY.md
+    about: Do not open a public issue for security vulnerabilities. See SECURITY.md for how to report responsibly.
