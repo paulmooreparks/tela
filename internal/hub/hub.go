@@ -1502,6 +1502,8 @@ func pairSession(machineKey string, entry *machineEntry, session *clientSession)
 	session.UDPTokens = []string{agentTokenHex, clientTokenHex}
 	entry.mu.Unlock()
 
+	log.Printf("[hub] UDP tokens created for %s (key=%s): agent=%s... client=%s...", machineID, machineKey, agentTokenHex[:8], clientTokenHex[:8])
+
 	// Send udp-offer to both sides
 	offer := map[string]any{"type": "udp-offer", "port": int(udpPort.Load())}
 	if udpHost != "" {
@@ -1847,25 +1849,29 @@ func runUDPSessionReaper() {
 			machinesMu.RLock()
 			entry, exists := machines[sess.MachineID]
 			machinesMu.RUnlock()
-			if exists {
-				entry.mu.Lock()
-				active := false
-				for _, cs := range entry.Sessions {
-					for _, t := range cs.UDPTokens {
-						if t == token {
-							active = true
-							break
-						}
-					}
-					if active {
+			if !exists {
+				log.Printf("[reaper] removing token %s...: machine %q not in machines map", token[:8], sess.MachineID)
+				delete(udpSessions, token)
+				continue
+			}
+			entry.mu.Lock()
+			active := false
+			for _, cs := range entry.Sessions {
+				for _, t := range cs.UDPTokens {
+					if t == token {
+						active = true
 						break
 					}
 				}
-				entry.mu.Unlock()
 				if active {
-					continue // session still alive, do not reap
+					break
 				}
 			}
+			entry.mu.Unlock()
+			if active {
+				continue // session still alive, do not reap
+			}
+			log.Printf("[reaper] removing token %s...: machine %q found but token not in any active session (%d sessions)", token[:8], sess.MachineID, len(entry.Sessions))
 			delete(udpSessions, token)
 		}
 		udpSessionsMu.Unlock()
