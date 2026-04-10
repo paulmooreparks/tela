@@ -69,6 +69,9 @@ var hubChannelFetcher = &channel.Fetcher{}
 func hubChannel() (string, string) {
 	globalCfgMu.RLock()
 	defer globalCfgMu.RUnlock()
+	if globalCfg == nil {
+		return channel.Normalize(""), ""
+	}
 	return channel.Normalize(globalCfg.Update.Channel), globalCfg.Update.ManifestBase
 }
 

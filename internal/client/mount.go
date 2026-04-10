@@ -450,7 +450,9 @@ func mountParsePath(name string) (machine, remotePath string) {
 		return "", ""
 	}
 	parts := strings.SplitN(name, "/", 2)
-	machine = parts[0]
+	// Resolve sanitized directory name back to the original machine
+	// name so control API calls use the name the hub knows.
+	machine = mountResolveName(parts[0])
 	if len(parts) > 1 {
 		remotePath = parts[1]
 	}
@@ -594,6 +596,78 @@ func (fs *mountFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }
 
+// ── Machine name sanitization ───────────────────────────────────
+//
+// Machine names are used as top-level directory names in the WebDAV
+// tree. Names that contain characters illegal on the host filesystem
+// (e.g. : < > | on Windows) would break the mount. We sanitize them
+// using filepath.Localize as the platform-authoritative check, then
+// replace illegal characters with underscores.
+//
+// A bidirectional mapping is maintained so that WebDAV paths using
+// sanitized names can be resolved back to the original machine name
+// for the control API.
+
+var (
+	mountSanitizedToReal = map[string]string{} // sanitized → original
+	mountRealToSanitized = map[string]string{} // original → sanitized
+	mountNameMapMu       sync.Mutex
+)
+
+// mountSanitizeName returns a filesystem-safe version of a machine
+// name and registers the mapping for reverse lookup.
+func mountSanitizeName(name string) string {
+	// filepath.Localize returns an error if the name is not a valid
+	// local path component on this OS. If it succeeds, the name is
+	// safe to use as-is.
+	if _, err := filepath.Localize(name); err == nil && name != "" {
+		mountNameMapMu.Lock()
+		mountSanitizedToReal[name] = name
+		mountRealToSanitized[name] = name
+		mountNameMapMu.Unlock()
+		return name
+	}
+
+	// Replace characters that are commonly illegal on Windows
+	// (covers the superset; on Unix only / and \0 are illegal,
+	// but filepath.Localize already caught those above).
+	safe := strings.Map(func(r rune) rune {
+		switch r {
+		case '/', '\\', ':', '*', '?', '"', '<', '>', '|':
+			return '_'
+		default:
+			if r < 0x20 { // control characters
+				return '_'
+			}
+			return r
+		}
+	}, name)
+
+	// Strip trailing dots and spaces (invalid on Windows).
+	safe = strings.TrimRight(safe, ". ")
+	if safe == "" {
+		safe = "_"
+	}
+
+	mountNameMapMu.Lock()
+	mountSanitizedToReal[safe] = name
+	mountRealToSanitized[name] = safe
+	mountNameMapMu.Unlock()
+	return safe
+}
+
+// mountResolveName maps a sanitized directory name back to the
+// original machine name. Returns the input unchanged if no mapping
+// exists (the name was already safe).
+func mountResolveName(sanitized string) string {
+	mountNameMapMu.Lock()
+	defer mountNameMapMu.Unlock()
+	if real, ok := mountSanitizedToReal[sanitized]; ok {
+		return real
+	}
+	return sanitized
+}
+
 // ── Root directory (lists machines) ──────────────────────────────
 
 type mountRootDir struct {
@@ -613,7 +687,8 @@ func (d *mountRootDir) Readdir(count int) ([]os.FileInfo, error) {
 	if d.entries == nil {
 		machines, _ := mountListMachines()
 		for _, m := range machines {
-			d.entries = append(d.entries, &mountDirInfo{name: m, modTime: time.Now()})
+			safe := mountSanitizeName(m)
+			d.entries = append(d.entries, &mountDirInfo{name: safe, modTime: time.Now()})
 		}
 	}
 	return mountReaddir(&d.entries, &d.pos, count)
