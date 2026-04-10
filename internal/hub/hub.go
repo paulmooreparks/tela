@@ -1486,14 +1486,14 @@ func pairSession(machineKey string, entry *machineEntry, session *clientSession)
 		PeerTokenHex: clientTokenHex,
 		PeerWS:       clientWS,
 		Role:         "agent",
-		MachineID:    machineID,
+		MachineID:    machineKey,
 		CreatedAt:    now,
 	}
 	udpSessions[clientTokenHex] = &udpSession{
 		PeerTokenHex: agentTokenHex,
 		PeerWS:       agentWS,
 		Role:         "client",
-		MachineID:    machineID,
+		MachineID:    machineKey,
 		CreatedAt:    now,
 	}
 	udpSessionsMu.Unlock()

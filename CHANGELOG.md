@@ -18,6 +18,17 @@ patch-level dev builds are too granular to list individually.
   privileges. Windows uses Scheduled Tasks, Linux uses systemd
   --user units, macOS uses LaunchAgents. TelaVisor shows both
   system service and user autostart options in Client Settings.
+- Control API `/tunnels` endpoint listing all connected machines
+  (used by WebDAV mount to discover file-sharing machines)
+
+### Fixed
+- UDP session reaper killing active sessions after 5 minutes
+  (regression from identity model changes: reaper looked up machine
+  by display name instead of composite key, never found it, and
+  deleted the UDP relay token)
+- File share mount not listing machines connected without TCP
+  services (mount queried `/services` which only has port-mapped
+  machines; now queries `/tunnels`)
 
 ## [0.7] - 2026-04-10 (in development)
 
