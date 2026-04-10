@@ -330,6 +330,20 @@ and `internal/channel/channel.go` for the implementation.
 
 - Clean up tmpclaude* files periodically so that they do not clog the file system
 
+## Changelog maintenance
+
+Maintain `CHANGELOG.md` with every commit that changes user-visible behavior.
+Internal refactors, CI tweaks, and code cleanup do not need entries.
+
+Rules:
+1. New entries go under an `[Unreleased]` section at the top of the file.
+2. Use subsections: `### Added`, `### Fixed`, `### Changed`, `### Removed`.
+3. Each entry is one line, plain language, no commit hashes.
+4. When a version is promoted to beta or stable, replace `[Unreleased]`
+   with `[X.Y] - YYYY-MM-DD` and add a fresh `[Unreleased]` above it.
+5. If the current commit is user-visible and you are creating the commit,
+   include the changelog update in the same commit.
+
 ## Remaining Review Items
 
 These are architectural improvements identified during a comprehensive code review.

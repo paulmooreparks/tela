@@ -9,6 +9,8 @@ Pre-1.0 releases use `MAJOR.MINOR.PATCH-channel.N` tags. The
 changelog is organized by minor version (0.5, 0.6, 0.7) since
 patch-level dev builds are too granular to list individually.
 
+## [Unreleased]
+
 ## [0.7] - 2026-04-10 (in development)
 
 The "hardening" release. Focus on polish, onboarding reliability,
