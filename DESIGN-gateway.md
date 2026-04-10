@@ -1,6 +1,37 @@
-# Tela Gateway: Path-Based Reverse Proxy in telad
+# Tela Gateways
 
-## The problem
+## The gateway primitive
+
+A gateway in Tela is a forwarding node: a component in the middle of the path that lets traffic keep moving without changing what the traffic means. The rule is the same at every layer: forward without inspecting beyond what the layer requires.
+
+This rule is not a policy choice. It is a structural property of the design. A relay that cannot read the payload cannot leak it, cannot alter it, and cannot be coerced into filtering it. The hub applies this rule at Layer 3 (it forwards opaque WireGuard ciphertext). The bridge agent applies it at Layer 4 (it forwards raw TCP streams). The path gateway applies it at Layer 7 (it reads only the URL path, nothing else). The planned multi-hop relay applies it recursively across hubs.
+
+### The four instances
+
+| Instance | Layer | Component | What it forwards | Content visibility |
+|----------|-------|-----------|-----------------|-------------------|
+| Path gateway | L7 HTTP | `telad` | HTTP requests, routed by URL path to local services | URL path only |
+| Bridge gateway | L4 TCP | `telad` (bridge mode) | TCP streams from the tunnel to LAN-reachable machines | None |
+| Upstream gateway | L4 TCP | `telad` | Outbound dependency calls rerouted to different targets | None |
+| Relay gateway | L3 WireGuard | `telahubd` | Opaque WireGuard ciphertext between a paired client and agent | None |
+
+A fifth instance, the **multi-hop relay gateway**, bridges sessions across more than one hub. It is the same primitive as the existing single-hop relay applied recursively: a hub that receives a paired session forwards it to an agent registered with a different hub, remaining blind to the payload at every hop. This is on the [1.0 roadmap](ROADMAP-1.0.md) under *Relay gateway*.
+
+### Why the rule matters
+
+Every instance of the gateway primitive is content-blind except where the layer requires it. The path gateway is the one exception: it must read the URL path to route correctly. It reads nothing else. It does not authenticate, it does not transform, and it does not inspect the request body or response. Authentication is the hub's job (token and ACL checks happen before the session is established). The application's own auth is the application's job.
+
+This division of responsibility is what makes each gateway instance composable. You can put a path gateway behind a relay gateway (the hub) behind a multi-hop relay and the security properties of each layer are additive, not competing. The blind-relay property of the hub does not require the path gateway to be blind; it requires only that each component know its layer and nothing else.
+
+### The other instances
+
+The bridge gateway and upstream gateway are documented in the agent setup guide and the CLI reference respectively. The relay gateway (hub) is documented in the core design rationale. This chapter covers the path gateway in depth because it is the most operationally complex instance and the one most users encounter first.
+
+---
+
+## The path gateway
+
+### The problem
 
 You have three microservices running on a machine behind a firewall:
 
@@ -16,7 +47,7 @@ Every microservice deployment behind Tela needs this reverse proxy. It is infras
 The gateway eliminates this. telad itself becomes the reverse proxy.
 
 
-## What the gateway does
+### What the gateway does
 
 The gateway is an HTTP reverse proxy that runs inside telad on a single port, exposed through the WireGuard tunnel. It matches incoming HTTP requests by URL path prefix and forwards them to local services. It is configured in the telad YAML alongside the existing service declarations.
 
@@ -30,9 +61,9 @@ The gateway does NOT:
 - Replace a full API gateway for production internet-facing traffic (it is for tunnel-internal routing only)
 
 
-## How you configure it
+### How you configure it
 
-### telad YAML: before
+#### telad YAML: before
 
 ```yaml
 hub: wss://test.demo.tela.sh
@@ -60,7 +91,7 @@ This registers four ports. A connecting client gets four local listeners. The UI
 2. An nginx container sits in front of everything (adds infrastructure).
 3. The UI hardcodes `localhost:4000` as the API URL (breaks when ports are remapped).
 
-### telad YAML: with gateway
+#### telad YAML: with gateway
 
 ```yaml
 hub: wss://test.demo.tela.sh
@@ -91,9 +122,9 @@ The gateway port (8080) does not need to match any local service port. It is a n
 The three HTTP services (3000, 4000, 4100) no longer appear in the `services` list. They are internal to the machine. Only the gateway port and the PostgreSQL port are exposed through the tunnel.
 
 
-## How it works, step by step
+### How it works, step by step
 
-### Step 1: telad starts
+#### Step 1: telad starts
 
 telad reads the YAML config. For the `launchpad` machine, it finds:
 
@@ -102,7 +133,7 @@ telad reads the YAML config. For the `launchpad` machine, it finds:
 
 The gateway config produces a list of routes, sorted by path length (longest first) for prefix matching. Each route maps a path prefix to a local target port.
 
-### Step 2: telad registers with the hub
+#### Step 2: telad registers with the hub
 
 The registration message includes the gateway port (8080) in the machine's port list, alongside any direct services (5432). The hub sees two ports for this machine.
 
@@ -118,7 +149,7 @@ The gateway port is also registered as a service with `proto: http` and `name: g
 }
 ```
 
-### Step 3: client connects
+#### Step 3: client connects
 
 A user runs `tela connect -profile launchpad-test`. Their profile contains:
 
@@ -138,7 +169,7 @@ localhost:5432  -> tunnel -> 10.77.{idx}.1:5432 (postgres)
 
 The user opens `http://localhost:8080` in their browser. They see the Launchpad UI.
 
-### Step 4: browser makes requests
+#### Step 4: browser makes requests
 
 The browser loads the UI from `localhost:8080/`. The Launchpad UI makes API calls to `/api/deployments`. Because the UI is served from the same origin (`localhost:8080`), the API calls go to `localhost:8080/api/deployments`. No CORS issues. No separate API URL to configure.
 
@@ -156,7 +187,7 @@ Browser
   -> response flows back through the same path
 ```
 
-### Step 5: direct service access (optional)
+#### Step 5: direct service access (optional)
 
 A developer who wants direct database access has `postgres` in their profile. They connect pgAdmin to `localhost:5432`. This bypasses the gateway entirely -- it is a direct TCP tunnel to the PostgreSQL port, exactly as Tela works today.
 
@@ -178,11 +209,11 @@ This gives them three local ports:
 The `gateway` is a service name like any other. It resolves to port 8080 because that is what telad registered. Direct API access is opt-in. The default path is through the gateway.
 
 
-## The cross-environment scenario
+### The cross-environment scenario
 
 This is where the gateway becomes essential for Tela's story.
 
-### The setup
+#### The setup
 
 Three environments, each running the same Launchpad stack:
 
@@ -192,7 +223,7 @@ Three environments, each running the same Launchpad stack:
 | Test | wss://test.demo.tela.sh | launchpad | tunnel:8080 | tunnel:5432 |
 | Prod | wss://prod.demo.tela.sh | launchpad | tunnel:8080 | tunnel:5432 |
 
-### Scenario: "The API works in dev but not in test"
+#### Scenario: "The API works in dev but not in test"
 
 The developer wants to compare the test API's behavior against their local dev API.
 
@@ -225,7 +256,7 @@ The test gateway routes `/api/` to the test API. The dev gateway routes `/api/` 
 
 What this does NOT do: it does not let you point the test UI at the dev API through a single port. Each gateway's routes are fixed by the telad config. To remix routes across environments (test UI + dev API on one port), you would need the client-side gateway feature described below.
 
-### Scenario: "Mix-and-match gateway"
+#### Scenario: "Mix-and-match gateway"
 
 What if the tela client could also run a local gateway? Not just telad, but tela itself.
 
@@ -260,9 +291,9 @@ The browser hits one URL. The routing is transparent. The developer is debugging
 This is the thing that no other tool does.
 
 
-## How it compares to alternatives
+### How it compares to alternatives
 
-### vs. nginx / Caddy / Traefik
+#### vs. nginx / Caddy / Traefik
 
 These are reverse proxies that run as separate processes or containers. They require:
 
@@ -275,23 +306,23 @@ The Tela gateway eliminates all of this for tunnel-internal routing. The config 
 
 For internet-facing production traffic with TLS termination, rate limiting, WAF rules, and load balancing, you still want a real reverse proxy. The Tela gateway is not a replacement for that. It is a replacement for the "I just need path routing inside my tunnel" use case.
 
-### vs. ngrok
+#### vs. ngrok
 
 ngrok exposes one port per tunnel. To expose a multi-service application, you run multiple ngrok tunnels and manage the URLs manually. There is no path-based routing. There is no cross-environment mixing.
 
 ngrok's paid plans offer edge routing, but this is for internet-facing traffic with ngrok's CDN. It does not help with connecting a dev frontend to a staging backend.
 
-### vs. Tailscale / WireGuard VPN
+#### vs. Tailscale / WireGuard VPN
 
 Tailscale gives you a flat network. Every machine can reach every other machine. But there is no routing layer -- your application still needs its own reverse proxy if you want path-based routing to multiple services.
 
 Tailscale Funnel exposes services to the internet, but again, one service per funnel. No path routing.
 
-### vs. HashiCorp Boundary
+#### vs. HashiCorp Boundary
 
 Boundary provides session-scoped, identity-aware access to infrastructure. It is an access management layer, not a routing layer. You connect to a specific target (host + port), not to a path-routed gateway. Cross-environment mixing would require multiple Boundary sessions and manual port management.
 
-### The unique value
+#### The unique value
 
 Tela with the gateway is the only tool that provides:
 
@@ -303,9 +334,9 @@ Tela with the gateway is the only tool that provides:
 Point 3 and 4 are what make the gateway a competitive differentiator, not just a convenience feature.
 
 
-## Implementation design
+### Implementation design
 
-### New types in telad
+#### New types in telad
 
 ```go
 // gatewayConfig is parsed from the telad YAML.
@@ -330,7 +361,7 @@ type machineConfig struct {
 }
 ```
 
-### Gateway startup in telad
+#### Gateway startup in telad
 
 During `handleSession`, after the netstack and WireGuard device are up, telad starts the gateway listener if configured:
 
@@ -344,7 +375,7 @@ if gw != nil {
 }
 ```
 
-### startGatewayListener
+#### startGatewayListener
 
 This function:
 
@@ -422,7 +453,7 @@ This is approximately 60 lines of implementation code. The `httputil.ReverseProx
 - Hop-by-hop header removal
 - X-Forwarded-For injection
 
-### Registration changes
+#### Registration changes
 
 The gateway port must be included in the registration so the hub and connecting clients know about it.
 
@@ -442,7 +473,7 @@ if mc.Gateway != nil {
 
 No hub changes needed. The hub already handles arbitrary ports and services.
 
-### Client-side gateway (tela)
+#### Client-side gateway (tela)
 
 The client-side gateway is a separate feature that can come later. It requires:
 
@@ -455,16 +486,16 @@ The profile parser in `cmd/tela/main.go` would need to recognize the `gateway` b
 This is not required for the initial implementation. The telad-side gateway alone provides the core value. The client-side gateway is an enhancement for the cross-environment remixing scenario.
 
 
-## What changes in the codebase
+### What changes in the codebase
 
-### Files to modify
+#### Files to modify
 
 | File | Change |
 |------|--------|
 | `cmd/telad/main.go` | Add `Gateway` field to `machineConfig`. Parse gateway config. Pass it to `handleSession`. Include gateway port in registration. |
 | `cmd/telad/gateway.go` | New file. `startGatewayListener` function (~80 lines). |
 
-### Files that do NOT change
+#### Files that do NOT change
 
 | File | Why |
 |------|-----|
@@ -476,9 +507,9 @@ This is not required for the initial implementation. The telad-side gateway alon
 This is the key architectural property: the gateway is entirely contained within telad. No protocol changes. No hub changes. No client changes. It is a local routing feature that happens to be exposed through the tunnel.
 
 
-## Example: Launchpad deployment
+### Example: Launchpad deployment
 
-### Dev environment (user's laptop)
+#### Dev environment (user's laptop)
 
 `docker-compose.yml`:
 
@@ -538,7 +569,7 @@ telad -config telad.yaml
 
 Their Launchpad instance is now accessible to anyone with a token for the dev hub.
 
-### Test environment (barn)
+#### Test environment (barn)
 
 Same stack, different hub, different data:
 
@@ -564,7 +595,7 @@ machines:
 
 (Ports are offset to 13000/14000/14100 because prod is on the same machine using 3000/4000/4100.)
 
-### Prod environment (barn)
+#### Prod environment (barn)
 
 ```yaml
 hub: wss://prod.demo.tela.sh
@@ -586,7 +617,7 @@ machines:
           target: 3000
 ```
 
-### User profiles
+#### User profiles
 
 **Viewer profile (prod only):**
 
@@ -643,14 +674,14 @@ connections:
 Result: prod on 8080, test on 18080. The ops engineer watches both dashboards side by side.
 
 
-## WebSocket support (future)
+### WebSocket support (future)
 
 The initial implementation proxies HTTP only. WebSocket upgrade requests would fail because `httputil.ReverseProxy` does not handle the `Connection: Upgrade` handshake.
 
 To add WebSocket support, the gateway handler would detect the `Upgrade: websocket` header and switch to a bidirectional TCP copy (the same `io.Copy` pattern used by `proxyToTarget`). This is approximately 20 additional lines of code. It is not needed for Launchpad (which uses REST), but would be needed for applications with real-time features (chat, live dashboards, collaborative editing).
 
 
-## Testing plan
+### Testing plan
 
 1. **Unit test**: gateway route matching with various path prefixes, edge cases (trailing slashes, overlapping prefixes, root-only routes).
 2. **Integration test**: start telad with gateway config, connect tela, make HTTP requests through the tunnel, verify correct routing.
@@ -658,7 +689,7 @@ To add WebSocket support, the gateway handler would detect the `Upgrade: websock
 4. **Error cases**: target service not running (502), no matching route (502), gateway port conflict, malformed config.
 
 
-## Summary
+### Summary
 
 The gateway is a small feature (one new file, approximately 80-100 lines of Go) with large impact. It:
 
