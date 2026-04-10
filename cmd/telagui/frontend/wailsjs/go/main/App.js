@@ -294,6 +294,10 @@ export function InstallAsService() {
   return window['go']['main']['App']['InstallAsService']();
 }
 
+export function InstallAsUserTask() {
+  return window['go']['main']['App']['InstallAsUserTask']();
+}
+
 export function InstallBinary(arg1) {
   return window['go']['main']['App']['InstallBinary'](arg1);
 }
@@ -304,6 +308,10 @@ export function IsAttached() {
 
 export function IsConnected() {
   return window['go']['main']['App']['IsConnected']();
+}
+
+export function IsElevated() {
+  return window['go']['main']['App']['IsElevated']();
 }
 
 export function IsMountRunning() {
@@ -510,6 +518,10 @@ export function UninstallService() {
   return window['go']['main']['App']['UninstallService']();
 }
 
+export function UninstallUserTask() {
+  return window['go']['main']['App']['UninstallUserTask']();
+}
+
 export function UpdateAgent(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateAgent'](arg1, arg2, arg3);
 }
@@ -524,6 +536,14 @@ export function UpdateLocalService(arg1) {
 
 export function UpdateServiceAgent() {
   return window['go']['main']['App']['UpdateServiceAgent']();
+}
+
+export function UserTaskStart() {
+  return window['go']['main']['App']['UserTaskStart']();
+}
+
+export function UserTaskStop() {
+  return window['go']['main']['App']['UserTaskStop']();
 }
 
 export function ValidateBinPath(arg1) {

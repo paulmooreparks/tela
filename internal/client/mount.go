@@ -323,7 +323,7 @@ func mountUploadFile(machine, path string, data []byte) error {
 }
 
 func mountListMachines() ([]string, error) {
-	url := mountControlBase + "/services"
+	url := mountControlBase + "/tunnels"
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+mountControlToken)
 	resp, err := http.DefaultClient.Do(req)
@@ -331,28 +331,17 @@ func mountListMachines() ([]string, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var services []struct {
+	var tunnels []struct {
 		Machine string `json:"machine"`
-		Name    string `json:"name"`
 	}
-	json.NewDecoder(resp.Body).Decode(&services)
+	json.NewDecoder(resp.Body).Decode(&tunnels)
 
-	// Collect unique machines, then probe each for file share support
-	seen := map[string]bool{}
-	var candidates []string
-	for _, s := range services {
-		if !seen[s.Machine] {
-			seen[s.Machine] = true
-			candidates = append(candidates, s.Machine)
-		}
-	}
-
+	// Probe each connected machine for file share support
 	var machines []string
-	for _, m := range candidates {
-		// A successful list request means file sharing is enabled
-		_, err := mountFileShareRequest(m, mountFsRequest{Op: "list", Path: ""})
+	for _, t := range tunnels {
+		_, err := mountFileShareRequest(t.Machine, mountFsRequest{Op: "list", Path: ""})
 		if err == nil {
-			machines = append(machines, m)
+			machines = append(machines, t.Machine)
 		}
 	}
 	return machines, nil

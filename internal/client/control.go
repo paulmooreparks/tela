@@ -345,6 +345,25 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		writeJSON(w, http.StatusOK, snapshotBoundServices())
 	})
 
+	mux.HandleFunc("/tunnels", func(w http.ResponseWriter, r *http.Request) {
+		if !checkControlAuth(w, r, token) {
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		machines := listTunnelMachines()
+		type tunnelEntry struct {
+			Machine string `json:"machine"`
+		}
+		out := make([]tunnelEntry, len(machines))
+		for i, m := range machines {
+			out[i] = tunnelEntry{Machine: m}
+		}
+		writeJSON(w, http.StatusOK, out)
+	})
+
 	mux.HandleFunc("/reconnect", func(w http.ResponseWriter, r *http.Request) {
 		if !checkControlAuth(w, r, token) {
 			return

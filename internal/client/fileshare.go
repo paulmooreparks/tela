@@ -87,6 +87,17 @@ func lookupTunnel(machine string) *tunnelInfo {
 	return tunnelRegistry[machine]
 }
 
+// listTunnelMachines returns the machine IDs of all registered tunnels.
+func listTunnelMachines() []string {
+	tunnelRegistryMu.Lock()
+	defer tunnelRegistryMu.Unlock()
+	out := make([]string, 0, len(tunnelRegistry))
+	for m := range tunnelRegistry {
+		out = append(out, m)
+	}
+	return out
+}
+
 // startFileEventSubscription opens a subscribe connection to telad's file
 // share port and forwards events through the control WebSocket. Runs until
 // the connection closes or the stop channel is signalled.

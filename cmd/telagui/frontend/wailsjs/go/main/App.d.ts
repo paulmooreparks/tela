@@ -148,11 +148,15 @@ export function ImportProfile():Promise<void>;
 
 export function InstallAsService():Promise<string>;
 
+export function InstallAsUserTask():Promise<string>;
+
 export function InstallBinary(arg1:string):Promise<void>;
 
 export function IsAttached():Promise<boolean>;
 
 export function IsConnected():Promise<boolean>;
+
+export function IsElevated():Promise<boolean>;
 
 export function IsMountRunning():Promise<boolean>;
 
@@ -256,6 +260,8 @@ export function TryAttach():Promise<boolean>;
 
 export function UninstallService():Promise<string>;
 
+export function UninstallUserTask():Promise<string>;
+
 export function UpdateAgent(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UpdateHub(arg1:string,arg2:string):Promise<string>;
@@ -263,5 +269,9 @@ export function UpdateHub(arg1:string,arg2:string):Promise<string>;
 export function UpdateLocalService(arg1:string):Promise<string>;
 
 export function UpdateServiceAgent():Promise<string>;
+
+export function UserTaskStart():Promise<string>;
+
+export function UserTaskStop():Promise<string>;
 
 export function ValidateBinPath(arg1:string):Promise<string>;
