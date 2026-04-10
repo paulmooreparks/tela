@@ -807,6 +807,9 @@ func runProfile(name string) {
 	defer cleanupControl()
 
 	log.Printf("loaded profile with %d connection(s)", len(profile.Connections))
+	for i, conn := range profile.Connections {
+		log.Printf("  [%d] hub=%s machine=%s services=%d", i+1, conn.Hub, conn.Machine, len(conn.Services))
+	}
 
 	// Auto-start mount if configured and auto is set.
 	if profile.Mount.Auto && profile.Mount.Mount != "" {
@@ -868,6 +871,10 @@ func runProfile(name string) {
 				services: append([]profileService(nil), conn.Services...),
 			})
 		}
+	}
+
+	if len(merged) != len(profile.Connections) {
+		log.Printf("merged to %d unique connection(s)", len(merged))
 	}
 
 	var wg sync.WaitGroup
@@ -1845,8 +1852,12 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping,
 	bind := wsbind.New(wsConn, 256)
 
 	// Create WireGuard device
+	wgVerbose := func(string, ...any) {}
+	if verbose {
+		wgVerbose = log.Printf
+	}
 	logger := &device.Logger{
-		Verbosef: log.Printf,
+		Verbosef: wgVerbose,
 		Errorf:   log.Printf,
 	}
 	dev := device.NewDevice(tunDev, bind, logger)
