@@ -830,27 +830,53 @@ func runProfile(name string) {
 		}()
 	}
 
-	var wg sync.WaitGroup
+	// Deduplicate connections: merge entries with the same hub+machine
+	// into one. This prevents duplicate WireGuard sessions (and tunnel
+	// registry overwrites) when a machine appears both for services and
+	// for file-share-only access.
+	type mergedConn struct {
+		hub      string
+		machine  string
+		token    string
+		services []profileService
+	}
+	seen := make(map[string]int) // "hub||machine" → index in merged
+	var merged []mergedConn
 	for i, conn := range profile.Connections {
 		hubURL := mustResolveHub(conn.Hub)
 		token := conn.Token
-
 		if token == "" && hubURL != "" {
 			token = credstore.LookupToken(hubURL)
 		}
-
 		machine := conn.Machine
-
 		if hubURL == "" || machine == "" {
 			log.Printf("[profile:%d] skipping: hub and machine are required", i+1)
 			continue
 		}
+		key := hubURL + "||" + machine
+		if idx, ok := seen[key]; ok {
+			merged[idx].services = append(merged[idx].services, conn.Services...)
+			if merged[idx].token == "" {
+				merged[idx].token = token
+			}
+		} else {
+			seen[key] = len(merged)
+			merged = append(merged, mergedConn{
+				hub:      hubURL,
+				machine:  machine,
+				token:    token,
+				services: append([]profileService(nil), conn.Services...),
+			})
+		}
+	}
 
+	var wg sync.WaitGroup
+	for i, mc := range merged {
 		// Build mappings from profile services
 		var mappings []portMapping
 		var serviceNames []string
 		var serviceLocalOverrides map[string]int // name -> local port override
-		for _, svc := range conn.Services {
+		for _, svc := range mc.services {
 			if svc.Name != "" {
 				serviceNames = append(serviceNames, svc.Name)
 				if svc.Local > 0 {
@@ -948,7 +974,7 @@ func runProfile(name string) {
 				}
 				attempt++
 			}
-		}(i+1, hubURL, machine, token, mappings, serviceNames, serviceLocalOverrides)
+		}(i+1, mc.hub, mc.machine, mc.token, mappings, serviceNames, serviceLocalOverrides)
 	}
 
 	wg.Wait()
@@ -1903,7 +1929,12 @@ persistent_keepalive_interval=25
 	// When a bridge is provided, the caller owns the listeners -- skip
 	// listener creation/cleanup here. The persistent listeners route
 	// through the bridge, which now points at this session's tunnel.
-	if bridge != nil {
+	//
+	// Also use this path for file-share-only connections (no bridge, no
+	// port mappings). The tunnel must stay alive so the WebDAV mount can
+	// dial through it; the legacy listener path would either create
+	// duplicate bindings or exit immediately.
+	if bridge != nil || len(overrideMappings) == 0 {
 		select {
 		case <-done:
 		case <-stopCh:
