@@ -394,6 +394,28 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		}
 	})
 
+	// File share probe: GET /files-probe/<machine> -- quick check for
+	// whether a machine has a file share listener. Uses a single 3s
+	// dial attempt, not the full retry cascade. Returns 200 if file
+	// sharing is available, 503 if not.
+	mux.HandleFunc("/files-probe/", func(w http.ResponseWriter, r *http.Request) {
+		if !checkControlAuth(w, r, token) {
+			return
+		}
+		machine := strings.TrimPrefix(r.URL.Path, "/files-probe/")
+		if machine == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "machine name required"})
+			return
+		}
+		conn, err := tryDialFileShare(machine)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no file share"})
+			return
+		}
+		conn.Close()
+		writeJSON(w, http.StatusOK, map[string]string{"status": "available"})
+	})
+
 	// File share proxy: POST /files/<machine> with JSON body.
 	// Proxies a single request/response through the tunnel to port 17377.
 	mux.HandleFunc("/files/", func(w http.ResponseWriter, r *http.Request) {

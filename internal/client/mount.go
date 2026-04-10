@@ -336,15 +336,37 @@ func mountListMachines() ([]string, error) {
 	}
 	json.NewDecoder(resp.Body).Decode(&tunnels)
 
-	// Probe each connected machine for file share support
+	// Probe each connected machine for file share support using a
+	// short timeout. Machines without a file share listener should
+	// fail fast, not block for the full retry cascade.
 	var machines []string
 	for _, t := range tunnels {
-		_, err := mountFileShareRequest(t.Machine, mountFsRequest{Op: "list", Path: ""})
-		if err == nil {
+		if mountProbeFileShare(t.Machine) {
 			machines = append(machines, t.Machine)
 		}
 	}
 	return machines, nil
+}
+
+// mountProbeFileShare checks whether a machine has a file share
+// listener using the control API's fast probe endpoint (single 3s
+// dial, no retries). Machines without file sharing fail in ~3s
+// instead of blocking for 18s+ on the full retry cascade.
+func mountProbeFileShare(machine string) bool {
+	url := mountControlBase + "/files-probe/" + machine
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+mountControlToken)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // ── Command entry point ──────────────────────────────────────────
