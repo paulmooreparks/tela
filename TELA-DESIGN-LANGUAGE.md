@@ -1164,3 +1164,372 @@ When building a new TDL application or restyling an existing one:
 15. Open [cmd/telagui/mockups/tdl-reference.html](cmd/telagui/mockups/tdl-reference.html)
     in a browser and verify your implementation matches the reference in
     both light and dark themes.
+
+---
+
+# TDL for the command line
+
+TDL extends beyond graphical interfaces. Tela ships three command-line
+binaries (`tela`, `telad`, `telahubd`) that are as much a part of the product
+as TelaVisor and Awan Saya. Operators spend as much time in terminals as in
+windowed UIs, so the CLI must present the same coherent personality: clear
+structure, predictable output, and the same "actionable information only,
+no reassurance" voice that governs the GUI.
+
+The rules in this section apply to every Tela CLI binary. New subcommands,
+new output, and new flags must conform. Where existing binaries diverge from
+these rules, the divergence is a bug to be fixed, not a precedent to preserve.
+
+## Command grammar
+
+Tela CLIs use a two-level grammar: `<binary> <verb> [<subject>] [flags] [args]`.
+
+```
+tela connect -profile home
+tela admin access grant alice workstation connect
+telad service install -config /etc/tela/agent.yaml
+telahubd user show-owner -config /etc/tela/hub.yaml
+```
+
+### Rules
+
+- **Verbs are lowercase, hyphenated for multi-word.** `show-owner`, not
+  `showOwner` or `show_owner`. One word is preferred; `list`, `add`, `remove`,
+  `get`, `set`, `update`, `pair`, `connect`, `status`, `login`, `logout`.
+- **Subject nesting is allowed when the verb operates on a resource.**
+  `tela admin access grant ...` is grammatically `admin` (namespace) +
+  `access` (resource) + `grant` (action). Nested grammar is used only when
+  the namespace groups multiple related resources. If there is only one
+  resource, flatten: `telad update`, not `telad self update`.
+- **Flags follow the verb.** Global flags before the verb are not supported.
+  Every flag belongs to a specific subcommand's `flag.FlagSet`.
+- **Flags may appear after positional arguments.** Implementations must use
+  the shared `permuteArgs` helper so that
+  `tela admin access grant alice workstation -expires 30d` parses the same
+  as `tela admin access grant -expires 30d alice workstation`. The helper
+  lives in `internal/cliutil`.
+- **Boolean flags are single-form.** `-v` enables verbose. `-dry-run`
+  enables dry run. There is no `--no-v` or `-v=false`. If the inverse
+  matters, use a second named flag.
+- **Short and long forms are not provided.** There is only one form per
+  flag. `-v` is the only verbose flag; there is no `--verbose`. This keeps
+  help text shorter and tab completion unambiguous.
+- **Env vars mirror flags for non-secret values.** Every flag that controls
+  connection target, profile, or configuration has an equivalent
+  `TELA_*` / `TELAD_*` / `TELAHUBD_*` environment variable. Flag takes
+  precedence over env; env takes precedence over built-in default.
+
+### Verb vocabulary
+
+These verbs have fixed meanings across all three binaries. Do not repurpose.
+
+| Verb | Meaning |
+|---|---|
+| `status` | Print current state, read-only. |
+| `list` | List items of a kind, read-only, table output. |
+| `get` | Retrieve a single item by identifier, read-only. |
+| `add` | Create a new item. |
+| `remove` | Delete an item. Paired with confirmation or `-force`. |
+| `set` | Update a property on an existing item. |
+| `update` | Self-update the binary from its release channel. |
+| `pair` | Interactive first-time registration of a machine or hub. |
+| `login` | Store credentials in the local credstore. |
+| `logout` | Remove credentials from the local credstore. |
+| `connect` | Establish a session. |
+| `service` | Install or manage the binary as an OS service. |
+| `version` | Print the binary's version string. |
+| `help` | Print help text. |
+
+## Help text
+
+Help is the CLI's own documentation. It must be complete enough that a user
+never has to leave the terminal to understand what a command does.
+
+### Invocation
+
+Every binary responds to:
+
+- `<binary>` alone (no arguments) — print top-level help and exit 0.
+- `<binary> help` — same as above.
+- `<binary> -h` or `<binary> --help` — same as above.
+- `<binary> <verb> -h` or `<binary> <verb> --help` — print that verb's help
+  and exit 0.
+
+`-h` on a subcommand is a recognized flag, not a parse error. Implementations
+must call `fs.BoolVar(&showHelp, "h", false, ...)` on every FlagSet or use the
+shared help wiring in `internal/cliutil`.
+
+### Format
+
+```
+<binary> <verb> — one-line description
+
+USAGE
+  <binary> <verb> [<subject>] [flags] [args]
+
+DESCRIPTION
+  Paragraph form. Explain what the command does, what it reads from, what
+  it writes to, and any precondition. No more than 5-6 lines.
+
+FLAGS
+  -flag-name <type>   Description. Default: <default>.
+  -another-flag       Description.
+
+EXAMPLES
+  <binary> <verb> simple-case
+  <binary> <verb> -flag-name value complex-case
+
+SEE ALSO
+  <binary> <related-verb>, <binary> <related-verb-2>
+```
+
+### Rules
+
+- **One-line summary first.** The top line is the verb name plus a single
+  sentence description. This is what top-level `<binary> help` lists.
+- **Sections are in fixed order.** USAGE, DESCRIPTION, FLAGS, EXAMPLES,
+  SEE ALSO. Omit sections that do not apply. Do not invent new sections.
+- **Examples are concrete and runnable.** Not `tela connect -hub <url>`.
+  Yes `tela connect -hub owlsnest.parkscomputing.com -machine dev-vm`.
+- **Flag column is aligned.** Use `text/tabwriter` or equivalent so all
+  flag descriptions start at the same column.
+- **No marketing language.** Do not write "easily connect to your hub".
+  Write "Connect to a hub and open a session."
+- **Help goes to stdout on success, stderr on error.** `tela help` exits 0
+  and prints to stdout. `tela unknown-verb` exits 1 and prints the
+  top-level help to stderr with an error line on top.
+
+### Shared helper
+
+A shared help renderer lives in `internal/cliutil`. Subcommands declare their
+help as a struct literal:
+
+```go
+var connectHelp = cliutil.Help{
+    Summary:     "Connect to a hub and open a session.",
+    Usage:       "tela connect [flags]",
+    Description: `Opens a WireGuard tunnel to the specified machine and binds local ports to the services exposed by the agent.`,
+    Examples: []string{
+        "tela connect -hub owlsnest.parkscomputing.com -machine dev-vm",
+        "tela connect -profile home",
+    },
+    SeeAlso: []string{"tela status", "tela machines", "tela services"},
+}
+```
+
+The helper formats sections, aligns flags, and handles both `-h` and the
+`help <verb>` form uniformly.
+
+## Output
+
+The CLI has three output streams: stdout for data the user requested, stderr
+for diagnostic logs, and stderr for errors. They are never interleaved on
+the same stream.
+
+### Stream discipline
+
+- **stdout** — the result of the command. A list of machines, a status
+  report, a created token, a JSON document. Must be pipeable and parseable.
+- **stderr (diagnostic)** — `log.Printf` output with ISO 8601 UTC timestamps
+  and component prefixes. Routed through `internal/telelog`. Used for
+  async operations, reconnect attempts, state changes.
+- **stderr (error)** — the final `Error: <message>` line printed just
+  before exit. Exit code is non-zero.
+
+A command that prints nothing to stdout and exits 0 has succeeded silently.
+Do not print "Done." or "Success." Silence is the success signal.
+
+### Success output
+
+- **No reassurance messages.** `Credentials stored for owlsnest` is wrong.
+  The command succeeded; the exit code says so. If the user wants
+  confirmation, they can run `tela status`.
+- **Tables use `text/tabwriter`.** Column headers are uppercase, separated
+  by tabs, with two-space padding. Alignment is left for identifiers and
+  strings, right for numeric counts.
+  ```
+  MACHINE        STATUS     SERVICES             SESSION
+  dev-vm         online     ssh, rdp             abc123
+  work-laptop    online     rdp, git             def456
+  ```
+- **Table headers use the same uppercase-muted convention as GUI tables.**
+  Identifiers, versions, paths, and token strings use the monospace
+  convention visually when terminals support it (they always do; monospace
+  is the default).
+- **Timestamps are ISO 8601 UTC.** Same rule as GUI logs. Never print
+  local time, never print relative time ("3 minutes ago") as the only
+  form. Relative time may be added as a trailing parenthetical hint but
+  the UTC stamp is always the authoritative value.
+- **Structured output is opt-in via `-json`.** Every command that produces
+  tabular output also supports `-json` for a machine-readable shape.
+  The JSON shape is stable; the table layout is for humans only and may
+  change.
+
+### Error output
+
+- **Format:** `Error: <short description>` to stderr, one line, no trailing
+  period. Unwrap the error chain and print only the outermost message
+  unless `-v` is set (then print the full chain).
+- **Exit codes:**
+  - **0** — success.
+  - **1** — runtime error (network, permission, not found, etc.).
+  - **2** — usage error (unknown flag, missing required argument,
+    invalid argument format). Pair with help text printed to stderr.
+  - **3** — configuration error (config file missing, credential store
+    inaccessible, schema mismatch).
+  - Other codes are reserved; do not invent new ones.
+- **Error messages are actionable.** `Error: hub not found` is insufficient.
+  `Error: hub "owlsnest" not found in credential store — run "tela login"` is
+  actionable.
+- **No stack traces by default.** Stack traces are for panics, not user
+  errors. A panic is a bug report; a handled error is a message.
+- **Suggestions on unknown verbs.** When a verb is misspelled, suggest the
+  nearest match using Levenshtein distance:
+  ```
+  Error: unknown command "conect"
+  Did you mean: connect?
+  ```
+
+### Color and glyphs
+
+Tela CLI output is monochrome by default. The design does not use color for
+state signaling because terminals vary wildly in palette, background, and
+colorblind-friendliness, and pipes to `grep` and `awk` strip color anyway.
+
+- **Glyph redundancy over color.** The same `✓` / `↑` / `⚠` glyphs used in
+  the GUI also appear in CLI output for version status, update status, and
+  warnings:
+  ```
+  tela       ✓ v0.7.0-dev.20
+  telad      ↑ v0.7.0-dev.18  (update available: v0.7.0-dev.20)
+  telahubd     not installed
+  ```
+  The glyph is the primary signal; if the terminal supports color, color
+  is added as a reinforcement.
+- **Color is opt-in.** Add color only when `stdout` is a TTY (`isatty`) and
+  the environment variable `NO_COLOR` is not set (per the
+  [no-color.org](https://no-color.org) convention).
+- **Use at most three colors.** Accent (green, `\033[32m`) for "good" or
+  "current". Warn (yellow, `\033[33m`) for "update" or "degraded". Danger
+  (red, `\033[31m`) for errors. No background colors. No bold. Reset after
+  every colored token.
+- **A `-no-color` flag overrides both TTY detection and `NO_COLOR`.** It is
+  the escape hatch for scripts that want predictable output regardless of
+  environment.
+
+### Progress indication
+
+- **No spinners.** Spinners do not pipe cleanly and are unreadable in logs.
+  For operations that take more than two seconds, print progress lines to
+  stderr with ISO timestamps:
+  ```
+  2026-04-11T03:22:01Z connecting to owlsnest.parkscomputing.com...
+  2026-04-11T03:22:03Z wireguard handshake complete
+  2026-04-11T03:22:03Z local port 10022 -> dev-vm:22
+  ```
+- **Long operations print start, key milestones, and end.** Not every
+  packet, not every retry, not every heartbeat. Verbose output is behind `-v`.
+
+## Logging vs output
+
+The CLI follows the same split as the rest of Tela:
+
+- **`log.Printf` → telelog → stderr** for operational diagnostics. ISO UTC
+  timestamps, bracketed component prefix, machine-readable by `grep` and
+  log aggregators.
+- **`fmt.Printf` → stdout** for command results. No timestamps, no
+  component prefix, formatted for humans.
+
+The two never mix. A command that needs to tell the user "I am connecting"
+uses `log.Printf`, not `fmt.Printf`. A command that returns data the user
+requested uses `fmt.Printf`, not `log.Printf`. Piping `tela machines | awk ...`
+must never include diagnostic noise on stdout.
+
+### Verbose and quiet
+
+- **`-v`** enables verbose diagnostic logging to stderr. Idempotent;
+  passing it twice does not enable debug.
+- **There is no `-q` / `--quiet`.** The default is already quiet. Commands
+  do not print chatter unless asked.
+- **No log levels.** Diagnostic logging is binary: on or off. If a message
+  is worth printing, it is worth printing whenever `-v` is set.
+
+## Configuration and credentials
+
+- **Config file discovery order:** `-config` flag > binary-specific env var
+  (`TELA_CONFIG`, `TELAD_CONFIG`, `TELAHUBD_CONFIG`) > auto-detect in
+  the binary's standard path > built-in defaults.
+- **Credentials:** looked up from the local credstore (user-level for
+  `tela`, system-level for `telad` and `telahubd`) by hub URL. Flag
+  `-token` and env `TELA_TOKEN` override lookup.
+- **Never print credentials to stdout.** Even on success. `tela login`
+  echoes nothing. `tela token show` (if it exists) prints the token only
+  when `-reveal` is passed explicitly.
+
+## Interactive prompts
+
+- **Use sparingly.** A well-designed CLI accepts its input via flags,
+  env vars, or files. Prompts are a fallback for interactive setup.
+- **Only `pair` and `login` prompt.** `tela pair` prompts for the
+  verification code. `tela login` prompts for the token when
+  `-token` is not given and stdin is a TTY.
+- **Password / token input is masked.** Use `golang.org/x/term.ReadPassword`
+  (which already lives in the Go standard library's extended module). Never
+  echo the token as the user types it.
+- **Confirmation prompts use `y/N` (capital default).** Destructive
+  commands without `-force` prompt:
+  ```
+  This will permanently delete token tk_01K8ABYZ. Continue? [y/N]:
+  ```
+  The default is No. An empty response is treated as No. `-force` skips
+  the prompt entirely.
+- **No prompts when stdin is not a TTY.** A command that requires input but
+  is run in a script must fail with a usage error, not hang waiting for
+  input that will never come.
+
+## Harmonization across binaries
+
+The three binaries must present the same personality. Current divergences
+that violate this rule are:
+
+1. **Help text length.** `tela` help is 80+ lines, `telahubd` help is 44.
+   Target: all three produce help of comparable depth for comparable
+   complexity.
+2. **Subcommand nesting.** `tela admin` uses two-level nesting; `telahubd
+   user` and `telahubd portal` are top-level with action suffixes. Pick
+   one pattern per binary and apply it consistently.
+3. **`-config` handling.** `telahubd` infers from a default path,
+   `telad` requires the flag, `tela` does not use the flag at all. The
+   service binaries (`telad`, `telahubd`) should both default to their
+   standard path and accept `-config` as an override.
+4. **`-h` support.** Currently relies on `flag.ExitOnError` default
+   behavior. Every binary should explicitly bind `-h` on every FlagSet
+   via `internal/cliutil`.
+5. **Exit codes.** All errors currently exit 1. Introduce the 1/2/3 split
+   (runtime / usage / config) across all three.
+
+These are tracked as harmonization work items, not design questions. The
+spec above is the target; the current binaries are being brought into line
+with it.
+
+## Implementation checklist for a new CLI command
+
+1. Create a `FlagSet` via `cliutil.NewFlagSet("<binary> <verb>")` so `-h`
+   is wired and help rendering is shared.
+2. Declare a `cliutil.Help{}` struct with summary, usage, description,
+   examples, and see-also.
+3. Call `cliutil.PermuteArgs(args)` before parsing so flags can appear
+   after positional arguments.
+4. Parse flags with `fs.Parse(permuted)`. Handle `-h` by printing help
+   and returning nil.
+5. Validate arguments before any side effects. Missing or malformed
+   arguments return a usage error (exit code 2).
+6. Emit diagnostic progress via `log.Printf` on stderr. Emit the result
+   via `fmt.Printf` on stdout.
+7. Support `-json` if the output is tabular.
+8. Support `-v` if the operation is long or has interesting intermediate
+   state.
+9. On error, print `Error: <message>` to stderr and return the
+   appropriate exit code.
+10. Add the verb to the binary's top-level help one-line list.
+
