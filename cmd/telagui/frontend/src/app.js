@@ -2669,6 +2669,13 @@ function agentsRefresh() {
   });
   goApp.GetAgentList().then(function (agents) {
     agentsData = agents || [];
+    agentsData.sort(function (a, b) {
+      var an = (a.displayName || a.id || '').toLowerCase();
+      var bn = (b.displayName || b.id || '').toLowerCase();
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return 0;
+    });
     agentsRenderSidebar();
     if (agentsSelectedId) {
       var found = agentsData.find(function (a) { return a.id === agentsSelectedId; });
@@ -4083,6 +4090,13 @@ function refreshHubsTab() {
   // in-session selection so a manual switch sticks until next refresh).
   Promise.all([goApp.GetKnownHubs(), goApp.GetSettings()]).then(function (results) {
     var hubs = results[0] || [];
+    hubs.sort(function (a, b) {
+      var an = (a.name || '').toLowerCase();
+      var bn = (b.name || '').toLowerCase();
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return 0;
+    });
     knownHubsData = hubs;
     var settings = results[1] || {};
     var prev = select.value || settings.lastSelectedHub || '';
