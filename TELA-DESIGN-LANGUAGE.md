@@ -1,427 +1,1097 @@
 # Tela Design Language (TDL)
 
-The Tela Design Language defines the visual language shared across all products in the Tela ecosystem: TelaVisor (desktop client), TelaBoard (demo application), and Awan Saya (portal). Any application built to showcase or integrate with Tela should follow TDL to present a cohesive, professional experience.
+The Tela Design Language defines the visual language shared across every product
+in the Tela ecosystem: TelaVisor (desktop client), TelaBoard (demo application),
+Awan Saya (portal), and any future Tela application. TDL is a specification, not
+a suggestion. Applications built on it look and behave like members of the same
+family because they share the same primitives, the same interaction rules, and
+the same visual contract.
 
-This document is the reference for implementers. It describes the design tokens, component patterns, and layout conventions that make a Tela application look and feel like part of the family.
+This document is the reference for implementers. A live HTML reference of every
+component in both light and dark themes lives at
+[cmd/telagui/mockups/tdl-reference.html](cmd/telagui/mockups/tdl-reference.html).
+Open it alongside this document to see the primitives in context.
 
+## The four categories
+
+Every interactive or state-bearing element in a TDL application falls into
+exactly one of four categories. The categories never share a location, so
+their visual styles never compete.
+
+| Category | Where | Invariant signal |
+|---|---|---|
+| `.btn` | Content area | Elevation (border + drop shadow + fill). |
+| `.status` | Content area | Flat inline text with a glyph prefix. |
+| `.chrome-btn` | Topbar only | Persistent circular outline. |
+| `.brand-link` | Topbar top-left | Cursor, subtle brightness hover, focus ring. |
+
+**Rule of disjoint location.** A `.chrome-btn` in content would be ambiguous
+(users could not tell it from a status badge). A `.btn` in the topbar would be
+visually loud. A `.brand-link` is a one-of-a-kind element that exists only at
+the top-left of the topbar. The four categories never mix locations, which is
+what keeps them unambiguous.
+
+**Rule of visible affordance.** Every interactive element must look interactive
+without depending on hover. Touch devices cannot hover. Colorblind users cannot
+rely on color alone. Elevation, persistent outline, and meaning-carrying glyphs
+are the invariants that must carry the signal.
+
+**Rule of no false affordance.** Anything that is not clickable must not look
+clickable. No outlined boxes around static labels. No filled pills for
+non-interactive state. No `cursor: pointer` on static elements.
 
 ## Design tokens
 
-All colors, spacing, typography, and radii are defined as CSS custom properties on `:root`. Every Tela application uses the same set.
+All colors, spacing, and typography are defined as CSS custom properties on
+`:root`. Every TDL application copies this block exactly. The theme is applied
+by setting `data-theme="light"` or `data-theme="dark"` on `<html>`.
 
 ```css
 :root {
-  /* Backgrounds */
-  --bg: #f5f6f8;               /* Page background */
-  --surface: #ffffff;           /* Cards, panels, modals */
-  --surface-alt: #f0f1f4;      /* Tab bars, column backgrounds, hover */
-
-  /* Text */
-  --text: #1a1a2e;             /* Primary text (blue-tinted dark) */
-  --text-muted: #6b7280;       /* Secondary text, labels, placeholders */
+  /* Light theme — default */
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-alt: #f0f1f4;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --border: #e2e5ea;
 
   /* Brand */
-  --accent: #2ecc71;           /* Primary action, connected state, links in dark contexts */
-  --accent-hover: #27ae60;     /* Accent hover state */
-
-  /* Chrome */
-  --topbar-bg: #1b2636;        /* Top bar background (dark navy) */
-  --topbar-text: #e0e0e0;      /* Top bar text */
-
-  /* Borders */
-  --border: #e2e5ea;           /* Default border (blue-tinted light gray) */
+  --accent: #2ecc71;
+  --accent-hover: #27ae60;
 
   /* Semantic */
-  --danger: #e74c3c;           /* Destructive actions, errors */
+  --warn: #f39c12;
+  --danger: #e74c3c;
   --danger-hover: #c0392b;
-  --warn: #f39c12;             /* Warnings, in-progress states */
+
+  /* Button surfaces */
+  --btn-bg: #ffffff;
+  --btn-secondary-hover: #f0f1f4;
+  --input-bg: #ffffff;
+
+  /* Elevation */
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.04),
+    0 1px 3px rgba(15,23,42,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.85);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.08),
+    0 1px 3px rgba(39,174,96,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.35);
+  --shadow-card: 0 1px 3px rgba(15,23,42,0.05);
 
   /* Shape */
-  --radius: 8px;               /* Default border radius for cards, panels, modals */
+  --radius: 8px;
+  --radius-sm: 4px;
+
+  /* Topbar (light variant) is set on the .topbar element itself via
+     --tb-* custom properties, not on :root. See the Topbar section. */
 
   /* Typography */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
 }
-```
 
-### Color usage rules
-
-- **Accent green (#2ecc71)** is the brand color. It appears in logos, active states, primary buttons, connected indicators, and links within dark-background contexts.
-- **Blue (#0f5cc0)** is used for text links in light-background contexts (web convention). Awan Saya uses this for body text links. TelaVisor and TelaBoard do not have body text links.
-- **Danger red (#e74c3c)** is used for destructive buttons, error messages, and disconnect states. Never use red for non-destructive purposes.
-- **Warning amber (#f39c12)** is used for in-progress states (connecting, disconnecting) and warning badges. Never use amber for success.
-- **Text colors** are blue-tinted, not pure gray. `--text` is #1a1a2e (not #222). `--text-muted` is #6b7280 (not #666). This subtle tint ties the palette together.
-- **Border color** is also blue-tinted (#e2e5ea, not #e0e0e0). Consistency with the text tint.
-
-### Dark mode
-
-TDL applications support three theme modes: light (default), dark, and system (follows OS preference). Dark mode overrides the CSS custom properties while keeping accent, danger, and warning colors unchanged.
-
-```css
 [data-theme="dark"] {
   --bg: #111827;
   --surface: #1f2937;
   --surface-alt: #1a2332;
   --text: #e5e7eb;
   --text-muted: #9ca3af;
-  --border: #374151;
-  --topbar-bg: #0f172a;
-  --topbar-text: #e0e0e0;
+  --border: #4b5668;
+  --btn-bg: #2a3545;
+  --btn-secondary-hover: #3a465c;
+  --input-bg: #1a2332;
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.09);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4);
 }
 ```
 
-The dark palette maintains the same blue tint as the light palette. All colors are derived from the same blue-gray family so that dark mode feels intentional, not inverted.
+### Color rules
 
-Theme is applied by setting `data-theme="dark"` or `data-theme="light"` on the `<html>` element. When the user selects "system," the application listens to the `prefers-color-scheme` media query and sets the attribute accordingly.
+- **Accent green** (`#2ecc71`) is the brand color. It appears in the logo
+  suffix, active states, primary buttons, connected indicators, and the
+  "current version" status marker. Accent is theme-invariant: the same green
+  reads correctly on light and dark surfaces.
+- **Warn amber** (`#f39c12`) is used for in-progress states and "update
+  available" markers. Never use amber for success.
+- **Danger red** (`#e74c3c`) is used for destructive actions, error messages,
+  and the "disconnected" state. Never use red for non-destructive purposes.
+- **Text colors** are blue-tinted, not pure gray. `--text` is `#1a1a2e` in
+  light mode, `#e5e7eb` in dark. This subtle tint ties the palette together.
+- **Borders** are also blue-tinted (`#e2e5ea` light, `#4b5668` dark).
 
-Settings (including theme preference) are stored in `localStorage` so they persist across sessions.
+### Theme selection
 
+Applications support three theme modes: light, dark, and system. When the user
+selects "system," the application listens to the `prefers-color-scheme` media
+query and sets the `data-theme` attribute accordingly. The user's preference is
+stored in `localStorage` (key: `theme`) so it persists across sessions.
 
-## Layout structure
+## Typography
 
-Every TDL application follows the same vertical layout:
+One family for body text (system UI stack), one family for monospace (for code,
+version strings, paths, IDs, and terminal output). Font weights are restricted
+to 400, 500, 600, and 700. Italic and underline are not used for emphasis.
 
-```mermaid
-block-beta
-  columns 1
-  block:topbar["Top bar"]
-    columns 3
-    Logo["Logo"]
-    ModeToggle["Mode Toggle"]
-    Icons["Icons | User Menu"]
-  end
-  block:tabbar
-    columns 4
-    Tab1["Tab"]
-    Tab2["Tab"]
-    space
-    Cmd["| Command"]
-  end
-  block:content["Content area (flex: 1, scrollable)"]
-    columns 1
-    space
-  end
+| Role | Size | Weight | Notes |
+|---|---|---|---|
+| Page title | 28px | 700 | One per page, `letter-spacing: -0.01em`. |
+| Section header | 20px | 700 | Major sections within a page. |
+| Card title | 14-15px | 600-700 | Card and modal headers. |
+| Group label | 13px | 600 | Uppercase, `letter-spacing: 0.06em`, `--text-muted`. |
+| Body | 13px | 400 | Default size for all content. |
+| Muted | 12px | 400 | Descriptions, hints. Color via `--text-muted`, never opacity. |
+| Monospace | 12px | 400-600 | Version strings, paths, IDs, code, terminal. |
 
-  style topbar fill:#1b2636,color:#e0e0e0
-  style tabbar fill:#f0f1f4,color:#1a1a2e
-  style content fill:#f5f6f8,color:#1a1a2e
-  style ModeToggle fill:#2a3a4e,color:#fff
-  style Tab1 fill:#f0f1f4,color:#1a1a2e
-  style Tab2 fill:#f0f1f4,color:#1a1a2e
-```
+## Buttons
 
-### Top bar
-
-The top bar is 44px tall with `--topbar-bg` background. It uses a three-section flex layout:
-
-- **Left**: Application logo. Text-based, with the product suffix in `--accent`. Examples: "Tela**Visor**", "Tela**Board**", "Awan**Saya**".
-- **Center**: Mode toggle. Positioned with `position: absolute; left: 50%; transform: translateX(-50%)` so it stays centered regardless of left/right content width. The toggle is a group of buttons with shared borders (first child gets left radius, last child gets right radius, middle children have no radius).
-- **Right**: Icon buttons and user menu. Icon buttons are 28px circles with 1px border. The user menu follows the Awan Saya dropdown pattern (avatar + name + chevron, dropdown with user info and sign out).
-
-### Top bar icon buttons
+Every content-area button shares an **elevation invariant**: a 1px border, a
+non-zero drop shadow, and a fill that contrasts with the card it sits on. The
+elevation signals "raised = pressable" without depending on hover or color
+perception.
 
 ```css
-.topbar-icon-btn {
-  background: none;
-  border: 1px solid rgba(255,255,255,0.2);
-  color: #94a3b8;
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  font-size: 14px; font-weight: 700;
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--text);
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.topbar-icon-btn:hover {
-  color: #fff;
-  border-color: rgba(255,255,255,0.4);
-  background: rgba(255,255,255,0.1);
-}
-```
-
-### Icon button with dropdown
-
-When an icon button opens a dropdown menu (such as a theme selector), the button shows the current state icon in the upper portion and a small downward chevron at the bottom as a dropdown affordance. The button size matches the avatar circle (32px) for visual balance.
-
-```css
-.theme-btn {
-  width: 32px !important;
-  height: 32px !important;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-}
-
-.theme-btn-icon {
-  font-size: 15px;
-  line-height: 1;
-}
-
-.theme-btn-arrow {
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.8;
-  margin-top: 2px;
-  margin-bottom: -4px;
-}
-```
-
-The dropdown uses the same `nav-btn-dd` panel as the user menu. Dropdown items display an icon on the left and label text on the right. The active selection is highlighted in `--accent`.
-
-### Mode toggle
-
-```css
-.mode-toggle { display: flex; gap: 0; }
-.mode-btn {
-  padding: 4px 14px; font-size: 12px; font-weight: 600;
-  border: 1px solid rgba(255,255,255,0.2);
-  background: none; color: #94a3b8;
-}
-.mode-btn:first-child { border-radius: 4px 0 0 4px; }
-.mode-btn:last-child  { border-radius: 0 4px 4px 0; border-left: none; }
-.mode-btn.active {
-  background: rgba(255,255,255,0.15);
-  color: #fff;
-  border-color: rgba(255,255,255,0.3);
-}
-```
-
-### Tab bar
-
-The tab bar sits directly below the top bar. Background is `--surface-alt`, with a 1px `--border` bottom border. Tabs are text buttons with a 2px bottom border that turns `--accent` when active.
-
-```css
-.main-tab-bar {
-  display: flex; align-items: center;
-  background: var(--surface-alt);
-  border-bottom: 1px solid var(--border);
-  padding: 0 16px;
-}
-.main-tab {
-  background: none; border: none;
-  padding: 8px 16px; font-size: 13px; font-weight: 500;
-  color: var(--text-muted);
-  border-bottom: 2px solid transparent;
-}
-.main-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
-}
-```
-
-### Tab bar separators
-
-Vertical separator bars divide groups of controls within a tab bar or toolbar. They visually separate tabs from commands, or group related commands together.
-
-```css
-.tb-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 2px;
-}
-```
-
-Use a separator before command buttons that appear at the right end of a tab bar. This makes clear that the commands are not tabs.
-
-### Tab bar command buttons
-
-Small bordered buttons that appear in the tab bar, visually distinct from tabs:
-
-```css
-.tb-btn {
-  background: none;
   border: 1px solid var(--border);
-  padding: 3px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--text-muted);
+  background: var(--btn-bg);
+  box-shadow: var(--shadow-btn);
+  transition: background 0.12s, box-shadow 0.08s, transform 0.05s;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
 }
-.tb-btn:hover {
-  background: var(--surface-alt);
-  color: var(--text);
+.btn:hover { background: var(--btn-secondary-hover); }
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
+}
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #1f2937;
+  border-color: var(--accent-hover);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn-primary);
+}
+.btn-primary:hover { background: var(--accent-hover); color: #1f2937; }
+
+.btn-danger {
+  background: var(--btn-bg);
+  color: var(--danger);
+  border-color: var(--border);
+}
+.btn-danger::before,
+.btn-destructive::before {
+  content: '\26A0';  /* ⚠ */
+  font-size: 13px;
+  line-height: 1;
+}
+.btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+.btn-destructive {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger-hover);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn-primary);
+}
+.btn-destructive:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-icon {
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+  min-width: 28px;
+  justify-content: center;
 }
 ```
 
+### Variants
 
-## Component patterns
+| Class | Role | Where |
+|---|---|---|
+| `.btn.btn-primary` | Main commit action | Content area. Exactly one per form, modal, or settings card. |
+| `.btn` | Default / secondary | Content area. Cancel, Refresh, Logs, Browse, Restart. |
+| `.btn.btn-danger` | Initiates destructive action | Content area. Delete, Remove, Revoke. Carries an automatic ⚠ glyph prefix. |
+| `.btn.btn-destructive` | Commits irreversible destructive action | Confirmation modals only. Filled red. Carries an automatic ⚠ glyph. |
+| `.btn.btn-icon` | Square icon-only button | Content toolbars and list rows. Carries a `title` attribute. |
+| `.btn.btn-sm` | Small modifier | Dense contexts: toolbars, row-level actions. |
 
-### Cards
+### Rules
 
-Cards are the primary container for content. White background, 1px border, 8px radius.
+- **One primary per context.** A view, form, or modal has exactly one
+  `.btn-primary`. If the design seems to need two, one of them is a secondary
+  or a danger.
+- **Destructive is confirmation-only.** `.btn-destructive` never appears outside
+  a confirmation modal. Its sibling is always a `.btn` labeled "Cancel".
+- **Danger is reversible or confirmable.** `.btn-danger` initiates destruction
+  but does not commit it. Irreversible actions route through a confirmation
+  modal containing a `.btn-destructive`.
+- **Icon buttons are uniform size.** Every `.btn-icon` in the same strip has
+  the same height so they read as a row of uniform controls. The class sets
+  a fixed `min-width` and centered alignment.
+- **Toolbars and tab bars use `.btn.btn-sm`.** There is no separate toolbar
+  button class. A toolbar's tinted background is what makes it distinct, not
+  a special button style.
+
+## Status badges
+
+Status labels are flat, inline, non-interactive, and always prefixed by a glyph
+(colored dot, checkmark, or arrow). The glyph is the primary signal so meaning
+survives red-green colorblindness (WCAG 1.4.1). Status elements never have a
+border, fill, or elevation.
+
+```css
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.status-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status-online   { color: var(--accent); }
+.status-degraded { color: var(--warn); }
+.status-error    { color: var(--danger); }
+.status-offline  { color: var(--text-muted); }
+
+/* Version status */
+.status-current::before  { content: '\2713'; margin-right: 4px; }  /* ✓ */
+.status-outdated::before { content: '\2191'; margin-right: 4px; }  /* ↑ */
+.status-current  { color: var(--accent); font-family: var(--mono); font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.status-outdated { color: var(--warn);   font-family: var(--mono); font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+```
+
+### Version status rule
+
+Apply `.status-current` or `.status-outdated` to the **installed** version only.
+The **available** (latest) version is rendered in the default text color with
+no status decoration. A user looking at a version pair always sees which side
+is the installation and whether it needs updating.
+
+### Chips
+
+Chips are small flat filled pills for neutral metadata tags: counts, platform
+labels, region or environment names. Chips explicitly do not convey state — use
+`.status` for state.
+
+```css
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: none;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+```
+
+Chips have no border. Outlined boxes around text are a web convention for
+interactive tags (GitHub labels, Stack Overflow tags); a border would be a
+false affordance for non-interactive metadata.
+
+### Status dots
+
+The raw colored-dot primitive. Used when only a status indicator is needed
+without a label, typically paired with a name instead.
+
+```css
+.dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-online   { background: var(--accent); }
+.dot-degraded { background: var(--warn); }
+.dot-error    { background: var(--danger); }
+.dot-offline  { background: var(--text-muted); }
+```
+
+When a `.dot` is used alone (without a label), pair it with a `title` attribute
+so the meaning is reachable by screen readers.
+
+## Form inputs
+
+All inputs share a common grammar: a 1px border, subtle surface fill, accent
+focus ring (3px low-opacity), and a consistent padding scale. Labels appear
+above the control except for checkboxes and radios, where the label is to the
+right of the control.
+
+```css
+.form-input,
+.form-select,
+.form-textarea {
+  padding: 7px 11px;
+  font-size: 13px;
+  font-family: var(--font);
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(46,204,113,0.15);
+}
+.form-input.mono { font-family: var(--mono); font-size: 12px; }
+.form-input.invalid { border-color: var(--danger); }
+.form-input:disabled { background: var(--surface-alt); color: var(--text-muted); cursor: not-allowed; }
+
+.form-textarea { font-family: var(--mono); min-height: 80px; resize: vertical; }
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.form-label { font-size: 12px; font-weight: 600; color: var(--text); }
+.form-hint  { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.form-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+.form-error::before { content: '\26A0'; font-size: 12px; }
+
+.form-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.form-check input[type="checkbox"],
+.form-check input[type="radio"] {
+  width: 14px; height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+```
+
+### Rules
+
+- **Labels above, not beside.** A `.form-label` is always on its own line
+  above the control. The one exception is the `.form-check` wrapper for
+  checkboxes and radios, where the label sits to the right of the control.
+- **Mono for verbatim content.** Use `.form-input.mono` whenever the value
+  is something the user copies verbatim: tokens, IDs, paths, version strings.
+- **Validation is inline.** When an input fails validation, mark the control
+  with `.invalid` and place a `.form-error` immediately below it. The error
+  message carries an automatic ⚠ prefix.
+- **Focus ring is always visible.** The 3px accent-colored focus ring appears
+  on every input on `:focus` (not just `:focus-visible`) because inputs are
+  keyboard targets in all contexts.
+
+## Cards
+
+Cards are the primary content container. Surface background, 1px border, 8px
+radius, subtle shadow. Cards never nest inside other cards. For visual grouping
+inside a card, use `.h3.sub` labels with spacing.
 
 ```css
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 22px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-card);
+}
+.card-title { font-size: 14px; font-weight: 600; margin: 0; }
+.card-desc  { font-size: 12px; color: var(--text-muted); margin: 0 0 14px; }
+.card-body  { font-size: 13px; }
+.card-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-alt);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.card-danger { border-color: var(--danger); }
+.card-danger .card-title { color: var(--danger); }
+.card-danger .card-title::before {
+  content: '\26A0\00a0';
+  font-size: 14px;
 }
 ```
 
-### Buttons
+The `.card-danger` modifier is used for "Danger zone" sections that house
+irreversible actions. The red border and ⚠ prefix on the title signal the
+content's severity without requiring the user to read the copy first.
 
-Four button variants:
+## Modals
 
-| Variant | Background | Text | Border | Use |
-|---------|-----------|------|--------|-----|
-| Primary | `--accent` | white | `--accent` | Main action (save, create, connect) |
-| Secondary | `--surface` | `--text` | `--border` | Cancel, alternative actions |
-| Danger | `--surface` | `--danger` | `--danger` | Delete, disconnect, destructive |
-| Ghost | transparent | `--topbar-text` | transparent | Icon-like buttons in dark contexts |
-
-Every button has a visible hover state (`background` or `border-color` change) and `cursor: pointer`. Anything that does not respond to clicks must not look like a button. In particular, status badges must never use a filled background that matches a button variant.
-
-### Status badges
-
-Status badges are inline labels that show a non-interactive state (online, offline, a version string). They are distinguished from buttons by using an outlined style (colored border and text, transparent background) and `cursor: default`.
-
-```css
-.badge-online {
-  padding: 1px 8px; border-radius: 10px;
-  font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--accent); border: 1px solid var(--accent);
-  background: none; cursor: default;
-  -webkit-user-select: none; user-select: none;
-}
-.badge-offline {
-  /* same shape; color: var(--text-muted); border: 1px solid var(--text-muted) */
-}
-```
-
-Never use a filled green or red pill for a status badge. Filled backgrounds are reserved for buttons.
-
-### Status indicators
-
-Small colored circles (8-10px) indicate connection or health state:
-
-| Color | Meaning |
-|-------|---------|
-| `--accent` (#2ecc71) | Connected, healthy, online |
-| `--warn` (#f39c12) | Connecting, degraded, in progress |
-| `--danger` (#e74c3c) | Disconnected, down, error |
-| `--text-muted` (#6b7280) | Unknown, offline |
-
-### Version status
-
-Installed software versions use color and a symbol to indicate update status. Color alone is insufficient for users with red-green colorblindness (deuteranopia).
-
-| State | Color | Symbol prefix | CSS class |
-|-------|-------|---------------|-----------|
-| Up to date | `--accent` | ✓ | `.tools-status-ok` |
-| Update available | `--warn` | ↑ | `.tools-status-warn` |
-| Not installed | default | none | (none) |
-
-The symbol is applied via a CSS `::before` pseudo-element so it requires no markup change. The color reinforces the symbol for users with normal color vision; the symbol carries the meaning for users who cannot distinguish green from amber.
-
-Apply the status class to the **installed** version value, not the available version. The available version is always rendered in the default text color.
-
-### Modals
-
-Modals use a semi-transparent overlay with a centered dialog:
+Modals center on a semi-transparent overlay. The dialog has a header with
+title and close button, a body, and an action footer on a tinted background.
 
 ```css
 .modal-overlay {
-  position: fixed; inset: 0;
+  position: fixed;
+  inset: 0;
   background: rgba(0,0,0,0.4);
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1000;
 }
 .modal-dialog {
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 24px;
-  width: 460px; max-width: 90vw;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
+  width: 440px;
+  max-width: 90vw;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 20px; font-size: 13px; }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--border);
 }
 ```
 
-Never use browser `alert()`, `confirm()`, or `prompt()`. Always use themed modals.
+### Rules
 
-### User menu (Awan Saya pattern)
+- **No browser dialogs.** `alert()`, `confirm()`, and `prompt()` are banned.
+  Every dialog is a themed modal with the structure above.
+- **Two buttons, predictable order.** A confirmation modal has exactly two
+  buttons: Cancel on the left, commit action on the right. The commit is
+  either `.btn-primary` or `.btn-destructive`, never both in the same modal.
+- **Modals capture window chrome.** While any modal is open, native window
+  controls (OS title-bar close, Cmd+Q, `beforeunload`) must route through the
+  modal's cancel flow first. The application does not dismiss until the modal
+  is handled, just like a native OS dialog. Implementations bind the window
+  close event while a modal is active and either block the close or
+  programmatically trigger the modal's Cancel handler.
+- **Modals stack.** When a modal opens a child modal (for example, a "discard
+  unsaved changes?" confirmation opened from inside a settings modal), the
+  child must render above its parent. Implementations use a shared modal
+  stack that assigns ascending z-index per push, or give each nested overlay
+  a strictly higher z-index than its parent. A confirmation dialog hidden
+  behind its parent is a serious bug: from the user's perspective, clicking
+  Cancel appears to do nothing.
 
-A dropdown triggered by a button in the top bar, containing user info and actions:
+## Tables
+
+Tables use uppercase-muted headers, muted row separators, and a hover highlight
+on selectable rows. Numeric or identifier columns use the monospace font.
 
 ```css
-.nav-btn-menu { position: relative; }
-.nav-btn {
-  display: flex; align-items: center; gap: 8px;
-  background: transparent;
-  border: 1px solid #445;
-  border-radius: 4px;
-  padding: 4px 10px;
-  color: #ddd;
-  font-size: 0.8rem; font-weight: 600;
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
-.nav-btn:hover { border-color: var(--accent); color: #fff; }
+.table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--surface-alt);
+}
+.table tr:last-child td { border-bottom: none; }
+.table tr.selectable { cursor: pointer; }
+.table tr.selectable:hover { background: var(--surface-alt); }
+.table .mono-col { font-family: var(--mono); font-size: 12px; }
 ```
 
-The dropdown appears below the button with a card-like appearance (white background, border, shadow, 8px radius).
+## Tabs and toolbars
 
-### Avatar
-
-User avatars are accent-colored circles with the user's initial:
+Tab bars use text buttons with an accent bottom border on the active tab.
+Toolbars are containers for content-area command buttons; the buttons
+themselves are `.btn.btn-sm` — the same elevation invariant as every other
+content button, just smaller.
 
 ```css
-.avatar {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--topbar-bg);
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 0.8rem;
+.tab-bar {
+  display: flex;
+  align-items: center;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+.tab {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.tab-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 ```
 
+### Rules
 
-## Logo conventions
+- **Tabs are for navigation, toolbars are for actions.** A tab switches the
+  active view. A toolbar button operates on the current view's content.
+- **Separate the two visually.** Use a `.tab-sep` between the tab group and any
+  trailing command buttons so it is clear the commands are not tabs.
+- **Toolbars carry `.btn.btn-sm`, not a custom class.** The tinted toolbar
+  background differentiates the region; the buttons inside it are regular
+  content buttons.
 
-Each product uses a text-based logo with the product name. The prefix is white (or dark text on light backgrounds). The suffix is `--accent` green:
+## Sidebar list items
 
-| Product | Logo | Prefix color | Suffix color |
-|---------|------|-------------|-------------|
-| TelaVisor | Tela**Visor** | white | #2ecc71 |
-| TelaBoard | Tela**Board** | white | #2ecc71 |
-| Awan Saya | Awan**Saya** | white | #2ecc71 |
+Sidebar items are selectable rows with a left accent border on the active item.
+They pair a name (and optional dot, chip, or version status) with a tight hit
+area.
 
-On light backgrounds (login pages, cards), the prefix uses `--text` instead of white.
+```css
+.sidebar {
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.sidebar-item + .sidebar-item { border-top: 1px solid var(--surface-alt); }
+.sidebar-item:hover { background: var(--surface-alt); }
+.sidebar-item.active {
+  background: var(--surface-alt);
+  border-left-color: var(--accent);
+}
+```
 
-The logo is rendered as HTML, not an image:
+### Rules
+
+- **Sort deterministically.** Lists in the sidebar must have a stable sort
+  order, typically alphabetical by display name. A list that reorders on each
+  refresh is a bug.
+- **Meta on a second line.** Secondary information (version, hostname, tags)
+  goes on a second line below the name, not beside it. The tight column makes
+  side-by-side layouts hard to read.
+- **Selection is a left border.** The active item carries a 3px accent left
+  border and a surface-alt background. Never use a full background color for
+  selection — it competes with content.
+
+## Topbar
+
+The topbar is the application chrome at the top of the window. It has a true
+light variant and a true dark variant. Chrome buttons and the brand mark use
+topbar-scoped custom properties (`--tb-*`) so the same markup adapts to either
+context. The topbar is the only place where `.chrome-btn` and `.brand-link`
+appear.
+
+```css
+.topbar {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  background: var(--tb-bg);
+  border-color: var(--tb-border);
+}
+.topbar.tb-dark {
+  --tb-bg: #0f172a;
+  --tb-border: #1e293b;
+  --tb-brand: #ffffff;
+  --tb-chrome-fg: #cbd5e1;
+  --tb-chrome-border: rgba(255,255,255,0.28);
+  --tb-chrome-bg: rgba(255,255,255,0.04);
+  --tb-chrome-hover-fg: #ffffff;
+  --tb-chrome-hover-bg: rgba(255,255,255,0.12);
+  --tb-chrome-hover-border: rgba(255,255,255,0.5);
+}
+.topbar.tb-light {
+  --tb-bg: #ffffff;
+  --tb-border: #d8dce4;
+  --tb-brand: #1a1a2e;
+  --tb-chrome-fg: #475569;
+  --tb-chrome-border: #cbd5e1;
+  --tb-chrome-bg: #ffffff;
+  --tb-chrome-hover-fg: #0f172a;
+  --tb-chrome-hover-bg: #eef0f4;
+  --tb-chrome-hover-border: #94a3b8;
+}
+```
+
+Applications select the topbar variant based on the active theme. In light
+mode, use `.topbar.tb-light`; in dark mode, use `.topbar.tb-dark`.
+
+### Brand link
+
+The clickable brand mark in the top-left. This is the deliberate exception to
+the "visible non-hover affordance" rule. Web convention has trained users that
+a top-left logo goes home, so the click must work — but any button chrome
+around the brand mark would destroy it.
+
+```css
+.brand {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tb-brand);
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+}
+.brand em { color: var(--accent); font-style: normal; }
+.brand img.brand-logo {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: -5px;
+  margin-right: 8px;
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  transition: filter 0.15s;
+}
+.brand-link:hover { filter: brightness(1.15); }
+.brand-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+```
+
+The brand is two-tone. The prefix (Tela, Awan) uses `--tb-brand` (dark text on
+light topbar, white on dark topbar). The suffix (`<em>Visor</em>`, `<em>Saya</em>`)
+stays accent green in both themes.
+
+Markup:
 
 ```html
-<span class="app-brand">Tela<em>Board</em></span>
+<button class="brand-link" type="button" onclick="goHome()">
+  <span class="brand">
+    <img class="brand-logo" src="logo.png" alt="Tela">Tela<em>Visor</em>
+  </span>
+</button>
 ```
+
+**Rules:**
+
+- **One brand link per application, at the top-left of the topbar.** Never
+  anywhere else.
+- **No underline on hover.** The brand mark is sacred. Hover is a brightness
+  bump only.
+- **The click target is per-app.** TelaVisor: go to Status. Awan Saya: go
+  home. TelaBoard: go to the demo landing page.
+- **Focus outline is required.** The brand link is often the first Tab stop,
+  so keyboard users must see a clear focus indicator.
+
+### Chrome buttons
+
+Circular icon-only buttons that live in the topbar. Persistent outlined border
+is the affordance — no elevation, no hover dependency.
 
 ```css
-.app-brand { font-weight: 700; font-size: 15px; color: #fff; }
-.app-brand em { color: var(--accent); font-style: normal; }
+.chrome-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--tb-chrome-border);
+  background: var(--tb-chrome-bg);
+  color: var(--tb-chrome-fg);
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.chrome-btn:hover {
+  background: var(--tb-chrome-hover-bg);
+  border-color: var(--tb-chrome-hover-border);
+  color: var(--tb-chrome-hover-fg);
+}
+.chrome-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chrome-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.chrome-btn svg { display: block; stroke: currentColor; }
+
+.chrome-btn.chrome-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chrome-btn.chrome-accent:hover {
+  background: rgba(46,204,113,0.15);
+  color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.chrome-btn.chrome-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.chrome-btn.chrome-danger:hover {
+  background: rgba(231,76,60,0.15);
+  color: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
 ```
 
+### Rules
 
-## Typography
+- **Topbar only.** A chrome button never appears in content. A content icon
+  button never appears in the topbar. This disjointness is what keeps them
+  distinguishable.
+- **Use inline SVG for glyphs.** Some platforms render Unicode glyphs (⚙, ⚠, 📁)
+  as colorful emoji, which breaks the monochrome chrome convention. Inline
+  SVGs using `stroke="currentColor"` inherit the correct color in both light
+  and dark topbars and render consistently across platforms.
+- **Variants are semantic.** Use `.chrome-accent` for primary or active states
+  (Connect, Mount folder). Use `.chrome-danger` for Quit. Neutral chrome
+  buttons use the base class alone.
 
-- Body font: `var(--font)` (system UI stack)
-- Monospace: `var(--mono)` (used for code, logs, port numbers)
-- Base font size: browser default (16px)
-- Headings: font-weight 600-700, no text-transform except column headers (uppercase, 0.85rem, letter-spacing 0.04em)
-- Labels: font-weight 600, 0.82rem, `--text-muted`
-- Muted text: `--text-muted`, 0.82-0.85rem
+## Feedback
 
+### Toasts
+
+Transient notifications that appear briefly at the top of the window. Three
+variants: error (default), success, warn. Each carries a glyph prefix.
+
+```css
+.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.toast::before { content: '\26A0'; font-size: 14px; }
+.toast.toast-success { background: var(--accent); color: #1f2937; }
+.toast.toast-success::before { content: '\2713'; }
+.toast.toast-warn { background: var(--warn); color: #2d1f00; }
+```
+
+Toasts auto-dismiss after 3-5 seconds for success and warn. Error toasts
+require manual dismissal so the user has time to read and act on the error.
+
+### Empty states
+
+```css
+.empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  background: var(--surface-alt);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+```
+
+An empty state explains what the user sees (or doesn't see) and includes a
+pointer to the action the user should take next. An empty sidebar with the
+text "No agents registered. Pair Agent to add one." is a good empty state. An
+empty sidebar with no text is not.
+
+## Progress and code
+
+```css
+.progress {
+  background: var(--surface-alt);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+  width: 100%;
+}
+.progress-bar {
+  background: var(--accent);
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.code-block {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface-alt);
+  color: var(--text);
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+```
+
+Code blocks are for command examples, config snippets, and terminal output.
+Simple token highlighting is available via `.tok-comment` (muted), `.tok-kw`
+(accent), `.tok-str` (warn) spans.
+
+## Log panel
+
+The log panel is a dockable bottom-of-window container for multi-source log
+output. It is TelaVisor-specific in its current implementation but generalizes
+to "any docked panel with tabs and a collapse affordance". Tabs behave like
+the main tab bar. Individual tabs may be closable. The panel itself collapses
+to a single-row header with a label next to the expand chevron.
+
+Every control in the log panel header uses the standard button classes:
+
+- **Tabs** are `.log-panel-tab` (active accent underline, like `.tab`).
+- **Attach-source button** (`+`) is `.btn.btn-sm.btn-icon`.
+- **Action buttons** (Copy, Save, Clear) are `.btn.btn-sm`.
+- **Verbose toggle** is a `.form-check` inline checkbox.
+- **Collapse/expand chevron** is `.btn.btn-sm.btn-icon`.
+
+There are no custom button classes inside the log panel. Every interactive
+element carries the same elevation invariant as the rest of the application.
+
+### Rules
+
+- **Log timestamps are ISO 8601 UTC.** The client converts to local time
+  for display in other views, but raw log output stays in UTC so logs from
+  multiple machines line up when cross-referenced.
+- **Label next to chevron when collapsed.** When the panel is collapsed to
+  its single-row header, a short identifying label (e.g. "Logs") appears
+  immediately to the left of the expand chevron.
+- **Clearing inline height on collapse.** If the panel's height is ever
+  set as an inline style (for example by a resize handle), implementations
+  must clear that inline style on collapse so the CSS class rule can apply.
+
+## Dropdown menus
+
+Dropdowns are small floating panels anchored to a trigger button. Used for
+user menus, theme pickers, attach-source popovers, and any short list of
+options where a full modal would be overkill.
+
+```css
+.menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 0 0 1px var(--border);
+  padding: 6px 0;
+  min-width: 200px;
+  font-size: 13px;
+}
+.menu-header {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--surface-alt);
+  margin-bottom: 4px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--surface-alt); }
+.menu-item-icon {
+  width: 16px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.menu-item.active { color: var(--accent); font-weight: 600; }
+.menu-item.active .menu-item-icon { color: var(--accent); }
+.menu-item.danger { color: var(--danger); }
+.menu-item.danger .menu-item-icon { color: var(--danger); }
+.menu-sep {
+  height: 1px;
+  background: var(--surface-alt);
+  margin: 4px 0;
+}
+```
+
+### Rules
+
+- **Menu, not modal, for short choice lists.** Theme picker, sign out, attach
+  source. If the interaction collects more than one field or requires
+  confirmation, use a modal.
+- **Icon column aligns across items.** The 16px `.menu-item-icon` column is
+  reserved even on items without icons, so everything lines up.
+- **Dismissal is standard.** A menu dismisses on: click outside, Escape key,
+  trigger re-click, or selection of an item. The trigger button toggles
+  `aria-expanded` for screen readers.
+- **Danger items go last.** A destructive menu item (Sign out, Delete account)
+  is always the last item in the menu, separated from safe items by a
+  `.menu-sep`.
+
+## Layout primitives
+
+### Sidebar + detail
+
+The canonical layout for any view with a selectable list and its detail pane.
+The sidebar is a fixed width; the detail pane fills remaining space and
+scrolls independently.
+
+```mermaid
+block-beta
+  columns 3
+  Sidebar["Sidebar\n(fixed width)"]:1
+  Detail["Detail pane\n(flex: 1, scrollable)"]:2
+
+  style Sidebar fill:#f0f1f4,color:#1a1a2e
+  style Detail fill:#ffffff,color:#1a1a2e
+```
+
+### Page structure
+
+```mermaid
+block-beta
+  columns 1
+  Topbar["Topbar (.topbar.tb-light or .tb-dark)"]
+  TabBar["Main tab bar"]
+  Content["Content area (scrollable)"]
+  LogPanel["Log panel (docked bottom, collapsible)"]
+```
+
+The log panel is optional. Applications without log output (Awan Saya, web
+pages) omit it entirely.
 
 ## Writing style
 
-- Do not use emdash or semicolons
-- Do not use curly quotes. Use straight quotes (' or ").
+- Do not use emdash or semicolons.
+- Do not use curly quotes. Use straight quotes (`'` or `"`) only.
 - Write in a factual, technical style. Do not use marketing language.
-- Print only actionable information in UI text. No reassurance messages.
-- All dates and times in ISO 8601 UTC format. The client converts to local for display.
-
+- Print only actionable information in UI text. Do not include reassurance
+  messages ("Settings saved successfully") or explanations of internal
+  mechanics.
+- All dates and times in data, logs, and configs are ISO 8601 UTC. The client
+  converts to local time for display.
 
 ## Scrollbars
 
-Custom scrollbars for WebKit browsers (used in TelaVisor's Wails WebView and all Chromium-based browsers):
+Custom scrollbars for WebKit browsers (used in TelaVisor's Wails WebView and
+all Chromium-based browsers):
 
 ```css
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -430,27 +1100,67 @@ Custom scrollbars for WebKit browsers (used in TelaVisor's Wails WebView and all
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 ```
 
+## Invariant rules
 
-## Dark contexts
+These rules are the soul of TDL. Violations are bugs, not style preferences.
 
-The top bar and login pages use dark backgrounds. Within these contexts:
+1. **Category separation.** Every interactive or state-bearing element is
+   exactly one of: `.btn`, `.status`, `.chrome-btn`, `.brand-link`. Categories
+   never share a location.
 
-- Text is light (#e0e0e0 for body, #94a3b8 for muted, #fff for active)
-- Borders use `rgba(255,255,255,0.2)` instead of `var(--border)`
-- Hover states use `rgba(255,255,255,0.1)` background
-- Links and accents remain `--accent` (green reads well on dark and light)
+2. **Color plus glyph redundancy.** Any state information that matters is
+   conveyed by both color and shape. Destructive actions carry a ⚠ glyph.
+   Current versions carry a ✓. Outdated versions carry a ↑. Status badges
+   carry a colored dot. Color alone fails WCAG 1.4.1.
 
+3. **No false affordances.** An element that is not clickable must not look
+   clickable. No outlined boxes around static labels, no filled pills for
+   non-interactive state, no `cursor: pointer` on non-buttons.
+
+4. **One primary per context.** A view, form, or modal has exactly one
+   `.btn-primary`. Confirmation modals have exactly one `.btn-destructive`
+   sibling to a Cancel.
+
+5. **ISO UTC everywhere.** All timestamps in data, logs, and configs are
+   ISO 8601 UTC. Never store or transmit local time.
+
+6. **No emoji in chrome.** Platforms render Unicode glyphs as colorful emoji.
+   Prefer inline SVG for any icon that must render consistently.
+
+7. **Modals capture window chrome.** Native window controls (title-bar close,
+   Cmd+Q, `beforeunload`) must route through the active modal's cancel flow
+   first.
+
+8. **Modals stack correctly.** Child modals render above their parents.
+   A confirmation dialog hidden behind its parent is a serious bug.
+
+9. **Deterministic list order.** Sidebar and list views have a stable sort
+   order (typically alphabetical). A list that reorders on each refresh is
+   a bug.
+
+10. **No browser dialogs.** `alert()`, `confirm()`, and `prompt()` are banned.
+    Every dialog is a themed modal.
 
 ## Implementation checklist
 
-When building a new Tela application or restyling an existing one:
+When building a new TDL application or restyling an existing one:
 
-1. Copy the `:root` CSS variables block exactly. Do not adjust colors.
-2. Use the topbar layout (left/center/right) with the mode toggle in center.
-3. Use the tab bar pattern for in-mode navigation.
-4. Use separators between tab groups and command groups.
-5. Use themed modals, never browser dialogs.
-6. Use the user menu dropdown pattern from Awan Saya.
-7. Use the text-based logo convention (prefix + accented suffix).
-8. Apply the scrollbar styles.
-9. Follow the writing style rules for all UI text.
+1. Copy the `:root` and `[data-theme="dark"]` CSS variable blocks exactly.
+2. Pick a topbar variant (`.tb-light` or `.tb-dark`) and wire it to the
+   active theme.
+3. Use `.brand-link` for the top-left logo, with per-app click target.
+4. Use `.chrome-btn` for every topbar icon button; use inline SVG glyphs.
+5. Use `.btn` family for every content-area button.
+6. Use `.status` family for every state indicator.
+7. Use `.chip` for neutral metadata tags (flat filled pills, no border).
+8. Use `.form-input`, `.form-select`, `.form-textarea`, and `.form-check`
+   for inputs. Wrap in `.form-group` with a label above.
+9. Use `.card` for content containers. Use `.card-danger` for danger zones.
+10. Use `.modal-overlay` + `.modal-dialog`, never browser dialogs.
+11. Implement the modal stack so child modals render above parents.
+12. Implement window-close capture so quit is blocked while a modal is open.
+13. Apply the scrollbar styles.
+14. Follow the writing style rules for all UI text.
+15. Open [cmd/telagui/mockups/tdl-reference.html](cmd/telagui/mockups/tdl-reference.html)
+    in a browser and verify your implementation matches the reference in
+    both light and dark themes.

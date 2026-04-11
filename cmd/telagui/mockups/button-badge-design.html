@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Button vs Badge Design Mockup</title>
+<style>
+:root {
+  /* Light theme (default) — matches TDL light palette */
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-alt: #f0f1f4;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --accent: #2ecc71;
+  --accent-hover: #27ae60;
+  --warn: #f39c12;
+  --danger: #e74c3c;
+  --danger-hover: #c0392b;
+  --border: #e2e5ea;
+  --topbar-bg: #1b2636;
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.04),
+    0 1px 3px rgba(15,23,42,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.85);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.08),
+    0 1px 3px rgba(39,174,96,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.35);
+  --btn-bg: #ffffff;
+  --btn-secondary-hover: #f0f1f4;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+[data-theme="dark"] {
+  --bg: #111827;
+  --surface: #1f2937;
+  --surface-alt: #1a2332;
+  --text: #e5e7eb;
+  --text-muted: #9ca3af;
+  /* Brighter border in dark mode so outlined buttons read as raised tiles */
+  --border: #4b5668;
+  --topbar-bg: #0f172a;
+  /* Button fill is lifted off the card surface; combined with a stronger
+     top-edge highlight, this gives outlined buttons visible elevation. */
+  --btn-bg: #2a3545;
+  --btn-secondary-hover: #3a465c;
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.09);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+* { box-sizing: border-box; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  line-height: 1.55;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 32px; }
+h1 { font-size: 22px; margin: 0 0 8px; }
+h2 { font-size: 16px; margin: 32px 0 12px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 13px; margin: 20px 0 8px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+p  { color: var(--text-muted); font-size: 13px; max-width: 70ch; }
+code { font-family: var(--mono); font-size: 12px; color: var(--text-muted); background: var(--surface-alt); padding: 1px 5px; border-radius: 3px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.card-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; color: var(--text); }
+.card-desc { font-size: 12px; color: var(--text-muted); margin: 0 0 16px; }
+
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.row + .row { margin-top: 12px; }
+.col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) { .col2 { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+}
+.panel-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.panel-label.bad { color: var(--danger); }
+.panel-label.good { color: var(--accent-hover); }
+
+.note {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  background: rgba(46,204,113,0.06);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  margin: 12px 0;
+}
+.note.warn { background: rgba(243,156,18,0.07); border-left-color: var(--warn); }
+
+.detail-title { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+
+/* =========================================================
+   CURRENT (problem state) — copied from live TelaVisor
+   ========================================================= */
+
+.old-tb-btn {
+  background: none; border: 1px solid var(--border); padding: 3px 10px;
+  border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--text);
+  font-family: var(--font); white-space: nowrap;
+}
+.old-btn-primary {
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  padding: 6px 14px; border-radius: 5px; font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: var(--font);
+}
+.old-badge-online {
+  display: inline-block; padding: 2px 10px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  background: var(--accent); color: #fff;
+}
+.old-badge-offline {
+  display: inline-block; padding: 2px 10px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  background: var(--text-muted); color: #fff;
+}
+
+/* =========================================================
+   PROPOSED — new design
+   =========================================================
+   Rule: Buttons always have elevation (box-shadow) and chrome
+   (fill OR border). Badges never have elevation, border, or fill.
+   A flat inline colored-text label cannot be confused with a
+   raised button, and a raised button cannot be confused with
+   a badge. The distinction holds without hover, without a
+   mouse, and regardless of color perception.
+*/
+
+/* --- Buttons: invariant signature is ELEVATION + CHROME --- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--text);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--btn-bg);
+  /* Elevation: the invariant that says "this is a pressable thing" */
+  box-shadow: var(--shadow-btn);
+  transition: background 0.12s, box-shadow 0.08s, transform 0.05s;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.btn:hover { background: var(--btn-secondary-hover); }
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 0 0 rgba(0,0,0,0), inset 0 1px 2px rgba(0,0,0,0.25);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #0b2016;
+  border-color: var(--accent-hover);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn-primary);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-danger {
+  background: var(--btn-bg);
+  color: var(--danger);
+  /* Neutral border so the elevation signal reads the same as Secondary;
+     red text alone carries the destructive identity. */
+  border-color: var(--border);
+}
+/* Warning glyph is part of the style, not markup — guarantees the
+   destructive signal even for users who cannot perceive the red. */
+.btn-danger::before,
+.btn-destructive::before {
+  content: '\26A0';  /* ⚠ warning sign */
+  font-size: 13px;
+  line-height: 1;
+}
+.btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* Destructive: the filled, high-commitment destructive action. Used
+   inside confirmation modals where the user is about to lose data. */
+.btn-destructive {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger-hover);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn-primary);
+}
+.btn-destructive:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-icon {
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+  min-width: 28px;
+  justify-content: center;
+}
+
+/* --- Badges: invariant signature is FLAT + ICON + INLINE --- */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+  vertical-align: baseline;
+}
+.status-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status-online    { color: var(--accent); }
+.status-offline   { color: var(--text-muted); }
+.status-degraded  { color: var(--warn); }
+.status-error     { color: var(--danger); }
+
+/* Version status: the icon *is* the redundancy layer for colorblind users */
+.status-current::before  { content: '\2713'; margin-right: 4px; }  /* ✓ */
+.status-outdated::before { content: '\2191'; margin-right: 4px; }  /* ↑ */
+.status-current  { color: var(--accent); font-family: var(--mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
+.status-outdated { color: var(--warn);   font-family: var(--mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
+
+/* Chip: a neutral tag (e.g., "2 hubs") — still flat, but with a subtle
+   outlined box to show multi-value grouping. Smaller than buttons. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  background: none;
+  cursor: default;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.mono { font-family: var(--mono); font-size: 12px; }
+
+/* --- Chip alternatives --- */
+
+/* A: current — outlined box. The problem style. */
+.chip-outlined {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  background: none;
+  cursor: default;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* B: flat filled pill — Stripe/Notion style. */
+.chip-filled {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: none;
+  cursor: default;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* C: inline meta — plain muted text with middot separator. Finder/VS Code style. */
+.chip-inline {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.chip-inline::before {
+  content: '\00B7';  /* · middot */
+  margin: 0 6px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* Sidebar row replica for chip-in-context demo */
+.sidebar-demo {
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 4px 0;
+}
+.sidebar-demo-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-demo-ver {
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* --- Side-by-side comparison --- */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 18px;
+  margin: 12px 0;
+}
+.compare .cell { padding: 6px; }
+.compare .cell .panel-label { margin-bottom: 10px; }
+
+/* --- Elevation comparison diagram --- */
+.elev-diag {
+  display: flex;
+  gap: 24px;
+  align-items: flex-end;
+  padding: 24px;
+  background: var(--surface-alt);
+  border-radius: 6px;
+}
+.elev-item { text-align: center; }
+.elev-item-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-top: 8px; letter-spacing: 0.08em; }
+
+/* --- Mobile preview frame --- */
+.phone {
+  width: 280px;
+  border: 2px solid var(--border);
+  border-radius: 20px;
+  padding: 16px 14px;
+  background: var(--surface);
+  margin: 8px 0;
+}
+.phone-title { font-size: 16px; font-weight: 700; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+.phone .row { margin-top: 10px; }
+.phone-sub { font-size: 11px; color: var(--text-muted); margin: 0 0 14px; }
+
+/* --- Agent detail replica --- */
+.agent-detail {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.agent-detail .subtitle { color: var(--text-muted); font-size: 13px; margin: 2px 0 20px; }
+
+.info-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--surface-alt); font-size: 13px; }
+.info-row:last-child { border-bottom: none; }
+.info-label { color: var(--text-muted); width: 120px; font-size: 12px; }
+
+/* --- Theme toggle (fixed top-right) --- */
+.theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  color: var(--text);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--btn-bg);
+  box-shadow: var(--shadow-btn);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.theme-toggle:hover { background: var(--btn-secondary-hover); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* --- Chrome buttons (topbar only) ---
+   Chrome-button colors are driven by three context-scoped custom
+   properties. A topbar sets them once, and every .chrome-btn inside
+   inherits the correct palette. This lets us have real light and
+   real dark topbars with the same markup. */
+.topbar-demo {
+  padding: 10px 16px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+
+  /* Defaults (dark topbar) */
+  --tb-bg: #0f172a;
+  --tb-border: #1e293b;
+  --tb-brand: #ffffff;
+  --tb-chrome-fg: #cbd5e1;
+  --tb-chrome-border: rgba(255,255,255,0.28);
+  --tb-chrome-bg: rgba(255,255,255,0.04);
+  --tb-chrome-hover-fg: #ffffff;
+  --tb-chrome-hover-bg: rgba(255,255,255,0.12);
+  --tb-chrome-hover-border: rgba(255,255,255,0.5);
+
+  background: var(--tb-bg);
+  border-color: var(--tb-border);
+}
+.topbar-demo.dark-ctx {
+  --tb-bg: #0f172a;
+  --tb-border: #1e293b;
+  --tb-brand: #ffffff;
+  --tb-chrome-fg: #cbd5e1;
+  --tb-chrome-border: rgba(255,255,255,0.28);
+  --tb-chrome-bg: rgba(255,255,255,0.04);
+  --tb-chrome-hover-fg: #ffffff;
+  --tb-chrome-hover-bg: rgba(255,255,255,0.12);
+  --tb-chrome-hover-border: rgba(255,255,255,0.5);
+  background: var(--tb-bg);
+  border-color: var(--tb-border);
+}
+.topbar-demo.light-ctx {
+  /* True light topbar: near-white surface with dark text and dark
+     outlined chrome buttons. Provides clear visual separation from
+     content (which sits on --bg #f5f6f8) via a 1px border. */
+  --tb-bg: #ffffff;
+  --tb-border: #d8dce4;
+  --tb-brand: #1a1a2e;
+  --tb-chrome-fg: #475569;
+  --tb-chrome-border: #cbd5e1;
+  --tb-chrome-bg: #ffffff;
+  --tb-chrome-hover-fg: #0f172a;
+  --tb-chrome-hover-bg: #eef0f4;
+  --tb-chrome-hover-border: #94a3b8;
+  background: var(--tb-bg);
+  border-color: var(--tb-border);
+}
+.topbar-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.topbar-demo .brand-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar-demo .brand {
+  /* inline-block, NOT flex — flex would split "Tela" and "<em>Visor</em>"
+     into separate flex items with a gap between them, breaking the
+     single-word appearance. */
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font);
+  /* Two-tone brand: "Tela" prefix flips with theme (dark text on light
+     topbar, white on dark topbar), "Visor" suffix is always accent green.
+     The icon uses currentColor so it inherits the prefix color. */
+  color: var(--tb-brand);
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+}
+.topbar-demo .brand em {
+  color: var(--accent);
+  font-style: normal;
+}
+.topbar-demo .brand svg {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 7px;
+  color: var(--tb-brand);
+}
+.topbar-demo .brand img.brand-logo {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: -5px;
+  margin-right: 8px;
+  /* The logo PNG is a single-color teal glyph on transparent. We want
+     it to render in accent green regardless of its source color. */
+}
+/* brand-version: the version label next to the logo. It is a status
+   badge: uses the same .status + .status-current / .status-outdated
+   convention as every other version display in TelaVisor. So a user
+   always knows if TV itself needs updating without opening a menu. */
+.topbar-demo .brand-version {
+  font-size: 11px;
+}
+
+/* .brand-link: the fourth category. Clickable brand mark in the
+   topbar. Breaks the "every interactive thing has a visible non-
+   hover affordance" rule to preserve branding strength. The signals
+   are cursor: pointer, a very subtle brightness shift on hover, and
+   a focus-visible outline for keyboard users. No underline, no
+   color change, no surface tint — the brand mark is sacred. */
+.brand-link {
+  cursor: pointer;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  transition: filter 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.brand-link:hover { filter: brightness(1.15); }
+.brand-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+
+.chrome-row { display: flex; align-items: center; gap: 8px; }
+
+.chrome-btn {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  /* Persistent outline IS the affordance. It is always visible, never
+     depends on hover. On touch devices you can see it without probing. */
+  border: 1px solid var(--tb-chrome-border, rgba(255,255,255,0.28));
+  background: var(--tb-chrome-bg, rgba(255,255,255,0.04));
+  color: var(--tb-chrome-fg, #cbd5e1);
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.chrome-btn:hover {
+  background: var(--tb-chrome-hover-bg, rgba(255,255,255,0.12));
+  border-color: var(--tb-chrome-hover-border, rgba(255,255,255,0.5));
+  color: var(--tb-chrome-hover-fg, #ffffff);
+}
+.chrome-btn svg {
+  display: block;
+  stroke: currentColor;
+}
+.chrome-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.chrome-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.chrome-btn.chrome-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chrome-btn.chrome-accent:hover {
+  background: rgba(46,204,113,0.15);
+  color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.chrome-btn.chrome-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.chrome-btn.chrome-danger:hover {
+  background: rgba(231,76,60,0.15);
+  color: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.info-val { font-family: var(--mono); font-size: 12px; }
+
+</style>
+</head>
+<body>
+<button type="button" class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark">
+  <span id="theme-icon">&#x2600;</span>
+  <span id="theme-label">Light</span>
+</button>
+<script>
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('mockup-theme'); } catch (e) {}
+  if (saved === 'light' || saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', saved);
+  }
+  updateToggleLabel();
+})();
+function toggleTheme() {
+  var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  var next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('mockup-theme', next); } catch (e) {}
+  updateToggleLabel();
+}
+function updateToggleLabel() {
+  var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  var icon = document.getElementById('theme-icon');
+  var label = document.getElementById('theme-label');
+  if (!icon || !label) return;
+  if (cur === 'dark') {
+    icon.innerHTML = '&#x2600;';    // sun — click to go light
+    label.textContent = 'Light';
+  } else {
+    icon.innerHTML = '&#x263D;';    // moon — click to go dark
+    label.textContent = 'Dark';
+  }
+}
+</script>
+<div class="wrap">
+
+<h1>Button vs badge design</h1>
+<p>
+The problem: in the current TelaVisor, an ONLINE status pill looks the same as a primary button
+(both are filled green rounded rectangles), the <code>tb-btn</code> secondary button looks
+identical to an outlined badge, and hovering is required to confirm clickability. This breaks
+down on touch screens and for users who do not want to hunt with the mouse. Color alone also
+fails for the ~8% of male users with red-green colorblindness.
+</p>
+
+<p>
+<strong>The rule:</strong> A button always has <em>elevation</em> (subtle drop shadow) plus
+<em>chrome</em> (fill or border) plus <code>cursor: pointer</code>. A badge always has
+<em>zero chrome</em> (no border, no fill, no shadow) plus an <em>icon prefix</em>
+(dot or symbol) plus <code>cursor: default</code>. Neither rule depends on hover, and the
+two styles cannot be visually confused regardless of context.
+</p>
+
+<h2>1. The elevation invariant</h2>
+<p>
+Every button, regardless of variant, sits on a subtle drop shadow. This single signal tells
+the eye "raised object = pressable". Badges sit flat in the text flow. This works on first
+glance, without a mouse, and on any device.
+</p>
+
+<div class="elev-diag">
+  <div class="elev-item">
+    <button class="btn btn-primary">Save</button>
+    <div class="elev-item-label">Primary button</div>
+  </div>
+  <div class="elev-item">
+    <button class="btn">Refresh</button>
+    <div class="elev-item-label">Secondary button</div>
+  </div>
+  <div class="elev-item">
+    <button class="btn btn-danger">Delete</button>
+    <div class="elev-item-label">Danger (outlined)</div>
+  </div>
+  <div class="elev-item">
+    <button class="btn btn-icon" title="Refresh">&#x21BB;</button>
+    <div class="elev-item-label">Icon button</div>
+  </div>
+  <div class="elev-item" style="padding-bottom: 7px;">
+    <span class="status status-online"><span class="status-dot"></span>Online</span>
+    <div class="elev-item-label">Status badge</div>
+  </div>
+  <div class="elev-item" style="padding-bottom: 7px;">
+    <span class="status status-current">v0.7.0-dev.20</span>
+    <div class="elev-item-label">Version badge</div>
+  </div>
+</div>
+
+<div class="note">
+The buttons cast a shadow. The badges do not. You do not have to move your mouse to tell
+which ones are interactive. The shadow is deliberately subtle (1px offset, 3px blur, ~25%
+opacity on dark) so it does not feel skeuomorphic, but it is always visible.
+</div>
+
+<h2>2. Side-by-side: current vs proposed</h2>
+
+<div class="card">
+  <div class="card-title">Agent detail header</div>
+  <div class="card-desc">The original screenshot where the ONLINE badge looked like a button.</div>
+
+  <div class="compare">
+    <div class="cell">
+      <span class="panel-label bad">Current (broken)</span>
+      <div class="detail-title">
+        Work Laptop
+        <span class="old-badge-online">Online</span>
+      </div>
+      <div class="subtitle" style="color: var(--text-muted); font-size: 13px;">On owlsnest.parkscomputing.com</div>
+      <div style="margin-top: 14px;">
+        <button class="old-btn-primary">Restart</button>
+        <button class="old-tb-btn">Logs</button>
+      </div>
+      <p style="margin-top: 14px; font-size: 11px; color: #fca5a5;">
+        The filled ONLINE pill and the filled Restart button share a visual class.
+        The outlined Logs button and an outlined badge would share another.
+      </p>
+    </div>
+
+    <div class="cell">
+      <span class="panel-label good">Proposed</span>
+      <div class="detail-title">
+        Work Laptop
+        <span class="status status-online"><span class="status-dot"></span>Online</span>
+      </div>
+      <div style="color: var(--text-muted); font-size: 13px;">On owlsnest.parkscomputing.com</div>
+      <div style="margin-top: 14px;">
+        <button class="btn btn-primary">Restart</button>
+        <button class="btn">Logs</button>
+      </div>
+      <p style="margin-top: 14px; font-size: 11px; color: var(--accent);">
+        Badge is flat inline text with a colored dot. Buttons are raised.
+        Nothing flat is interactive. Everything raised is interactive.
+      </p>
+    </div>
+  </div>
+</div>
+
+<h2>3. The full badge family</h2>
+<p>
+All badges share the same signature: flat, inline, icon prefix, <code>cursor: default</code>.
+The icon (dot, checkmark, arrow) is not decoration. It is the primary signal; color is
+reinforcement for users who can perceive it.
+</p>
+
+<div class="card">
+  <div class="card-title">Status badges</div>
+  <div class="card-desc">For connection, health, and reachability state.</div>
+  <div class="row">
+    <span class="status status-online"><span class="status-dot"></span>Online</span>
+    <span class="status status-degraded"><span class="status-dot"></span>Connecting</span>
+    <span class="status status-error"><span class="status-dot"></span>Error</span>
+    <span class="status status-offline"><span class="status-dot"></span>Offline</span>
+  </div>
+
+  <h3>Version status</h3>
+  <div class="row">
+    <span class="status status-current">v0.7.0-dev.20</span>
+    <span class="status status-outdated">v0.7.0-dev.18</span>
+  </div>
+  <div class="note">
+    The <code>&#x2713;</code> and <code>&#x2191;</code> glyphs convey "current" and
+    "update available" without relying on green-vs-amber. A user with deuteranopia
+    who sees both as the same muddy brown still knows which is which. WCAG 1.4.1
+    compliant without extra markup (the glyphs are added via <code>::before</code>).
+  </div>
+
+  <h3>Counts and tags (neutral chip)</h3>
+  <div class="row">
+    <span class="chip">2 hubs</span>
+    <span class="chip">v0.7.0-dev.20</span>
+    <span class="chip">windows/amd64</span>
+  </div>
+  <p style="font-size: 11px;">
+    Chips are the one exception that carries an outlined box. They are for neutral
+    metadata, never state. They are smaller than any button (font-size 10px, padding
+    1px 7px, 3px radius) and they never use a color variant. A chip cannot be mistaken
+    for a button because it has no elevation and its geometry is visibly "data, not
+    control".
+  </p>
+</div>
+
+<h2>4. The full button family</h2>
+
+<div class="card">
+  <div class="card-title">Button variants</div>
+  <div class="card-desc">All variants share the elevation signature. Fill and color distinguish roles.</div>
+
+  <h3>Sizes</h3>
+  <div class="row">
+    <button class="btn btn-primary">Primary action</button>
+    <button class="btn">Secondary</button>
+    <button class="btn btn-danger">Delete</button>
+    <button class="btn btn-destructive">Delete permanently</button>
+  </div>
+
+  <h3>Small (toolbar)</h3>
+  <div class="row">
+    <button class="btn btn-sm btn-primary">Save</button>
+    <button class="btn btn-sm">Cancel</button>
+    <button class="btn btn-sm btn-danger">Delete</button>
+  </div>
+
+  <h3>Icon buttons</h3>
+  <div class="row">
+    <button class="btn btn-icon" title="Refresh">&#x21BB;</button>
+    <button class="btn btn-icon" title="Settings">&#x2699;</button>
+    <button class="btn btn-icon" title="Close">&#x00D7;</button>
+  </div>
+
+  <h3>With icon + label</h3>
+  <div class="row">
+    <button class="btn btn-primary">&#x2713; Save changes</button>
+    <button class="btn">&#x21BB; Refresh</button>
+    <button class="btn btn-danger">Remove</button>
+  </div>
+</div>
+
+<h2>5. Full agent detail replica</h2>
+<p>Side by side using realistic content.</p>
+
+<div class="col2">
+  <div>
+    <span class="panel-label bad">Current</span>
+    <div class="agent-detail">
+      <div class="detail-title">Work Laptop <span class="old-badge-online">Online</span></div>
+      <div class="subtitle">On owlsnest.parkscomputing.com</div>
+      <div class="info-row"><div class="info-label">Version</div><div class="info-val">v0.7.0-dev.18 <span style="color: var(--warn);">update available: v0.7.0-dev.20</span></div></div>
+      <div class="info-row"><div class="info-label">Hub</div><div class="info-val">owlsnest.parkscomputing.com</div></div>
+      <div class="info-row"><div class="info-label">Hostname</div><div class="info-val">NB-SGP-0004</div></div>
+      <div class="info-row"><div class="info-label">Platform</div><div class="info-val">windows</div></div>
+      <div class="info-row"><div class="info-label">Last seen</div><div class="info-val">2026-04-11T02:59:00Z</div></div>
+      <div style="margin-top: 18px;">
+        <button class="old-btn-primary">Restart</button>
+        <button class="old-tb-btn">Logs</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <span class="panel-label good">Proposed</span>
+    <div class="agent-detail">
+      <div class="detail-title">Work Laptop <span class="status status-online"><span class="status-dot"></span>Online</span></div>
+      <div class="subtitle">On owlsnest.parkscomputing.com</div>
+      <div class="info-row"><div class="info-label">Version</div><div class="info-val"><span class="status status-outdated">v0.7.0-dev.18</span> &nbsp;<span style="color: var(--text-muted); font-family: var(--font); font-size: 11px;">latest: v0.7.0-dev.20</span></div></div>
+      <div class="info-row"><div class="info-label">Hub</div><div class="info-val">owlsnest.parkscomputing.com</div></div>
+      <div class="info-row"><div class="info-label">Hostname</div><div class="info-val">NB-SGP-0004</div></div>
+      <div class="info-row"><div class="info-label">Platform</div><div class="info-val">windows</div></div>
+      <div class="info-row"><div class="info-label">Last seen</div><div class="info-val">2026-04-11T02:59:00Z</div></div>
+      <div style="margin-top: 18px; display: flex; gap: 8px;">
+        <button class="btn btn-primary">Restart</button>
+        <button class="btn">Logs</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>6. Mobile test</h2>
+<p>
+A phone user cannot hover. Every interactive element must declare itself visually.
+</p>
+
+<div class="col2">
+  <div class="phone">
+    <div class="phone-title">Work Laptop <span class="status status-online"><span class="status-dot"></span>Online</span></div>
+    <div class="phone-sub">On owlsnest.parkscomputing.com</div>
+    <div class="row"><span class="status status-outdated">v0.7.0-dev.18</span></div>
+    <div class="row" style="margin-top: 18px; gap: 8px;">
+      <button class="btn btn-primary">Restart</button>
+      <button class="btn">Logs</button>
+      <button class="btn btn-icon" title="More">&#x22EF;</button>
+    </div>
+  </div>
+
+  <div style="font-size: 12px; color: var(--text-muted); padding: 16px;">
+    <p><strong>What the user sees without touching anything:</strong></p>
+    <ul>
+      <li>Three raised rectangles near the bottom: "Restart", "Logs", and an icon. Obviously tappable.</li>
+      <li>A green dot followed by "Online" next to the name. Obviously a label.</li>
+      <li>An amber up-arrow followed by a version number. Obviously a state indicator.</li>
+    </ul>
+    <p>No hover, no <code>:active</code>, no color vision required to understand the hierarchy.</p>
+  </div>
+</div>
+
+<h2>7. Chrome buttons (topbar only)</h2>
+<p>
+The topbar icon strip (power, folder, alerts, info, settings, quit) is a distinct
+category. It cannot follow the elevation rule: shadows do not read well on the
+dark topbar background, and giving every icon its own shadow would make the strip
+look like a row of tile buttons — too heavy for chrome controls.
+</p>
+
+<p>
+<strong>The solution is to treat the topbar as a known chrome region with its own
+convention.</strong> Users already recognize topbar icon strips from every desktop
+application (VS Code, Figma, browsers). Inside that region, the affordance rule
+changes: a persistent outlined circle with a meaning-carrying glyph is enough.
+The signals are:
+</p>
+
+<ol style="font-size: 13px; color: var(--text);">
+  <li><strong>Persistent outline.</strong> The circle border is always visible,
+    not only on hover. On a touch device you can see it before tapping.</li>
+  <li><strong>Repeated pattern.</strong> Same size, same shape, in a row. The
+    repetition itself signals "these are all the same kind of thing".</li>
+  <li><strong>Meaning-carrying icon.</strong> Power, gear, X — glyphs that already
+    carry action semantics. The glyph says "this does something" as clearly as
+    elevation would.</li>
+  <li><strong>Distinct location.</strong> Chrome buttons only ever appear in the
+    topbar. Content areas never contain them. The two sets never mix, so their
+    visual styles never compete.</li>
+</ol>
+
+<div class="card">
+  <div class="card-title">Live topbar strip</div>
+  <div class="card-desc">
+    The topbar has a true light variant and a true dark variant. In light mode
+    the topbar is near-white with dark text and dark-outlined chrome buttons;
+    in dark mode it is deep navy with light text and light-outlined chrome
+    buttons. TDL must be updated to reflect this (the previous rule that said
+    "topbar is always dark" was wrong). Chrome button colors are driven by
+    topbar-scoped custom properties so the same markup adapts to either context.
+  </div>
+
+  <div class="topbar-label">Light topbar (#ffffff on bg #f5f6f8)</div>
+  <div class="topbar-demo light-ctx">
+    <div class="brand-group">
+      <button class="brand-link" type="button" title="Go to Status" onclick="event.preventDefault()">
+        <span class="brand">
+          <img class="brand-logo" src="logo.png" alt="Tela">Tela<em>Visor</em>
+        </span>
+      </button>
+      <span class="status status-current brand-version">v0.7.0-dev.20</span>
+    </div>
+    <div class="chrome-row">
+      <button class="chrome-btn chrome-accent" title="Connect">&#x23FB;</button>
+      <button class="chrome-btn chrome-accent" title="Open data folder"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 4.25a1 1 0 0 1 1-1h3.5l1.5 1.5h6.5a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H2.75a1 1 0 0 1-1-1v-8z"/></svg></button>
+      <button class="chrome-btn" disabled title="No alerts">&#x26A0;</button>
+      <button class="chrome-btn" title="About">&#x2139;</button>
+      <button class="chrome-btn" title="Settings">&#x2699;</button>
+      <button class="chrome-btn chrome-danger" title="Quit">&#x2715;</button>
+    </div>
+  </div>
+
+  <div class="topbar-label" style="margin-top: 16px;">Dark topbar (#0f172a on bg #111827)</div>
+  <div class="topbar-demo dark-ctx">
+    <div class="brand-group">
+      <button class="brand-link" type="button" title="Go to Status" onclick="event.preventDefault()">
+        <span class="brand">
+          <img class="brand-logo" src="logo.png" alt="Tela">Tela<em>Visor</em>
+        </span>
+      </button>
+      <span class="status status-current brand-version">v0.7.0-dev.20</span>
+    </div>
+    <div class="chrome-row">
+      <button class="chrome-btn chrome-accent" title="Connect">&#x23FB;</button>
+      <button class="chrome-btn chrome-accent" title="Open data folder"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 4.25a1 1 0 0 1 1-1h3.5l1.5 1.5h6.5a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H2.75a1 1 0 0 1-1-1v-8z"/></svg></button>
+      <button class="chrome-btn" disabled title="No alerts">&#x26A0;</button>
+      <button class="chrome-btn" title="About">&#x2139;</button>
+      <button class="chrome-btn" title="Settings">&#x2699;</button>
+      <button class="chrome-btn chrome-danger" title="Quit">&#x2715;</button>
+    </div>
+  </div>
+
+  <h3>Variants (dark topbar)</h3>
+  <div class="row">
+    <div class="topbar-demo dark-ctx" style="flex: 0 0 auto; padding: 6px 10px; margin: 0;">
+      <div class="chrome-row">
+        <button class="chrome-btn" title="Neutral">&#x2699;</button>
+        <button class="chrome-btn chrome-accent" title="Active state">&#x23FB;</button>
+        <button class="chrome-btn chrome-danger" title="Destructive">&#x2715;</button>
+        <button class="chrome-btn" disabled title="Disabled">&#x26A0;</button>
+      </div>
+    </div>
+    <div style="font-size: 12px; color: var(--text-muted);">
+      Neutral &middot; Accent (connected / primary chrome state) &middot; Danger (quit) &middot; Disabled
+    </div>
+  </div>
+</div>
+
+<div class="note">
+<strong>The rule is now four categories.</strong> Every interactive element in
+TelaVisor (and every TDL application) falls into exactly one:
+<ul style="margin: 8px 0 0 16px; color: var(--text-muted);">
+  <li><code>.btn</code> — content-area button. Rectangular, elevated, in the main view. Signal: elevation.</li>
+  <li><code>.status</code> — content-area badge. Flat inline text, icon prefix. Non-interactive. Signal: flatness + glyph.</li>
+  <li><code>.chrome-btn</code> — topbar icon button. Circular, persistent outline, glyph only. Signal: persistent outline.</li>
+  <li><code>.brand-link</code> — topbar brand mark. Breaks the "visible non-hover affordance" rule to preserve branding strength. Signal: web convention + cursor + subtle hover brightness + focus outline.</li>
+</ul>
+Categories never mix locations. A <code>.chrome-btn</code> in content would be
+ambiguous; a <code>.btn</code> in the topbar would be visually loud; a
+<code>.brand-link</code> is a one-of-a-kind element that only ever exists at
+the top-left of the topbar. Location disjoint-ness is what keeps the four
+categories unambiguous.
+</div>
+
+<h3>About <code>.brand-link</code></h3>
+<p>
+The topbar brand mark is the deliberate exception. Desktop UX rules say every
+interactive element must look interactive without hover, but the web has
+trained users for twenty years that a logo at the top-left is a clickable
+"home" link. For a design language that spans both a desktop app (TelaVisor)
+and a web app (Awan Saya), the web convention wins: users try clicking it,
+so the click must work.
+</p>
+
+<p>
+Design choices for <code>.brand-link</code>:
+</p>
+
+<ul style="font-size: 13px; color: var(--text);">
+  <li><strong>Single color.</strong> The entire wordmark is accent green in both
+    themes. No prefix/suffix two-tone split. One less case to think about when
+    the theme flips, and it keeps the brand visually unified.</li>
+  <li><strong>No underline on hover.</strong> The web convention says "link = underline
+    on hover", but the brand mark is sacred and an underline fragments it.
+    This is the single place where we break the convention.</li>
+  <li><strong>Subtle brightness bump on hover</strong> (<code>filter: brightness(1.15)</code>).
+    Enough to confirm interactivity to someone probing with the mouse, not
+    enough to alter brand identity.</li>
+  <li><strong>Focus-visible outline.</strong> A 2px accent outline with 4px offset
+    on keyboard focus. Keyboard users must have a clear target since this is
+    often the first Tab stop.</li>
+  <li><strong>Per-app target.</strong> TDL does not dictate where a brand-link
+    goes. Awan Saya: navigate to home page. TelaVisor: go to Status tab (the
+    default landing view). Each app decides.</li>
+</ul>
+
+<h3>Alternatives considered</h3>
+<ul style="font-size: 13px; color: var(--text-muted);">
+  <li><strong>Move everything into a single <code>&#x22EF;</code> menu.</strong> Clean,
+    but hides frequently-used actions (connect, quit). Two extra clicks to reach a
+    primary workflow is too much.</li>
+  <li><strong>Replace icons with labeled buttons ("Connect", "Quit", etc.).</strong>
+    Defeats the chrome convention and steals space that content needs.</li>
+  <li><strong>Use <code>.btn-icon</code> (the new small rectangular tile).</strong> Visually
+    consistent with content buttons, but heavy in the topbar and creates ambiguity
+    with content-area icon buttons like Refresh.</li>
+  <li><strong>Keep as-is (current TelaVisor topbar).</strong> ← Chosen. Just formalize
+    it with <code>.chrome-btn</code> and document the rule.</li>
+</ul>
+
+<h2>8. Accessibility summary</h2>
+<div class="card">
+  <ul style="font-size: 13px; color: var(--text);">
+    <li><strong>Touch:</strong> elevation is visible without hover. Buttons declare themselves on first glance.</li>
+    <li><strong>Colorblindness:</strong> version status uses <code>&#x2713;</code>/<code>&#x2191;</code> glyphs
+      so the meaning survives green/amber indistinguishability (deuteranopia and protanopia).</li>
+    <li><strong>Focus:</strong> all buttons get a 2px <code>--accent</code> outline on <code>:focus-visible</code>
+      for keyboard navigation. Badges are not in the tab order.</li>
+    <li><strong>Screen readers:</strong> buttons are <code>&lt;button&gt;</code> elements, badges are
+      <code>&lt;span&gt;</code>. The role difference is announced.</li>
+    <li><strong>Contrast:</strong> primary button text is dark-on-green (#0b2016 on #2ecc71) which beats
+      WCAG AA (contrast ratio 5.8:1). The old white-on-green scheme was 2.6:1 which fails AA.</li>
+  </ul>
+</div>
+
+<h2>9. Control reference</h2>
+<p>
+Canonical list of every interactive control class in TDL, what it looks like,
+where it lives, and when to use it. Treat this as the specification: if you
+need a control that doesn't fit any of these categories, stop and discuss it
+before inventing a new one.
+</p>
+
+<!-- === Primary button === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <button class="btn btn-primary">Save changes</button>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.btn.btn-primary</code> &mdash; Primary button</div>
+      <div class="card-desc">
+        The main action in a view or modal. Exactly one per context. Filled accent
+        green, elevated. Commits user intent (Save, Create, Connect, Apply).
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> content area only; one per form, modal, or settings card.</li>
+        <li><strong>Signals:</strong> elevation + accent fill + dark text + <code>cursor: pointer</code>.</li>
+        <li><strong>Examples:</strong> Save (Application Settings), Connect (profile), Apply (hub config), Create (new token).</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Secondary button === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <button class="btn">Cancel</button>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.btn</code> &mdash; Secondary button</div>
+      <div class="card-desc">
+        Default button. Any action that is not the primary commit. Elevated,
+        outlined, neutral fill. Use for Cancel, Refresh, Logs, Browse,
+        Restart, etc.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> content area, tab bars, toolbars, form footers.</li>
+        <li><strong>Signals:</strong> elevation + neutral fill + border + <code>cursor: pointer</code>.</li>
+        <li><strong>Examples:</strong> Cancel, Refresh, Logs, Browse, Restart, Check Now.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Danger button === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <button class="btn btn-danger">Delete</button>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.btn.btn-danger</code> &mdash; Danger button</div>
+      <div class="card-desc">
+        Initiates a destructive action. Same geometry and elevation as a
+        secondary button so it reads as "a button", with red text and a
+        warning <code>&#x26A0;</code> glyph (injected via <code>::before</code>)
+        for color-independent identification. Hover commits to a filled red.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> content area, next to the item being acted on, or in a row of options.</li>
+        <li><strong>Signals:</strong> elevation + red text + <code>&#x26A0;</code> glyph + <code>cursor: pointer</code>.</li>
+        <li><strong>Examples:</strong> Delete token, Remove machine, Revoke access, Sign out.</li>
+        <li><strong>Escalation:</strong> for destructive actions that cannot be undone (data loss), the danger button usually opens a confirmation modal that contains a <code>.btn-destructive</code>.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Destructive button === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <button class="btn btn-destructive">Delete permanently</button>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.btn.btn-destructive</code> &mdash; Destructive button</div>
+      <div class="card-desc">
+        The filled, high-commitment destructive action. Used only inside
+        confirmation modals to finalize an irreversible action the user has
+        already initiated with a danger button. The filled red background
+        makes hesitation unambiguous and matches the weight of a primary
+        button so the commit action is always the visually dominant choice.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> confirmation modals only, never in the main content area.</li>
+        <li><strong>Signals:</strong> elevation + red fill + white text + <code>&#x26A0;</code> glyph + <code>cursor: pointer</code>.</li>
+        <li><strong>Examples:</strong> "Delete permanently" (after clicking Delete in the Tokens view), "Discard changes" (after clicking Cancel with unsaved edits), "Remove machine forever".</li>
+        <li><strong>Rule of one:</strong> a modal has at most one <code>.btn-destructive</code>. Its sibling is always a <code>.btn</code> labeled "Cancel".</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Icon button === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <button class="btn btn-icon" title="Refresh">&#x21BB;</button>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.btn.btn-icon</code> &mdash; Icon button</div>
+      <div class="card-desc">
+        Compact square button with a single glyph. Same elevation as other
+        content buttons. Used in dense toolbars or sidebars where a labeled
+        button would be too large. Always carries a <code>title</code>
+        tooltip for the action name.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> content area, in toolbars or list rows.</li>
+        <li><strong>Signals:</strong> elevation + glyph + <code>cursor: pointer</code>.</li>
+        <li><strong>Examples:</strong> sidebar refresh, up-one-level navigation, close dialog (content-area X).</li>
+        <li><strong>Do not confuse with <code>.chrome-btn</code>:</strong> icon buttons are square and live in the content area; chrome buttons are circular and live in the topbar.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Chrome button === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <div class="topbar-demo dark-ctx" style="margin: 0; padding: 6px 10px;">
+        <div class="chrome-row">
+          <button class="chrome-btn" title="Settings">&#x2699;</button>
+        </div>
+      </div>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.chrome-btn</code> &mdash; Chrome button</div>
+      <div class="card-desc">
+        Circular icon-only button that lives in the topbar. Persistent
+        outlined border is the affordance (no elevation). Reserved for
+        application-level utilities: power, open data folder, alerts,
+        about, settings, quit. Three color variants: neutral, accent,
+        and danger.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> topbar only. Never in content.</li>
+        <li><strong>Signals:</strong> persistent outlined circle + glyph + <code>cursor: pointer</code>.</li>
+        <li><strong>Examples:</strong> Connect/disconnect, Open data folder, Alerts, About, Settings, Quit.</li>
+        <li><strong>Topbar-scoped colors:</strong> chrome buttons read their foreground, border, background, and hover colors from <code>--tb-chrome-*</code> custom properties set by the containing topbar, so the same markup adapts to light and dark topbars without per-theme markup changes.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Brand link === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <div class="topbar-demo dark-ctx" style="margin: 0; padding: 6px 10px; justify-content: flex-start;">
+        <button class="brand-link" type="button" onclick="event.preventDefault()">
+          <span class="brand">
+            <img class="brand-logo" src="logo.png" alt="Tela">Tela<em>Visor</em>
+          </span>
+        </button>
+      </div>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.brand-link</code> &mdash; Brand link</div>
+      <div class="card-desc">
+        Clickable brand mark in the top-left of the topbar. The deliberate
+        exception to the "visible non-hover affordance" rule. Desktop UX
+        would say this is wrong, but twenty years of web convention have
+        trained users that a top-left logo goes home, so the click must
+        work. Single <code>.brand-link</code> per application, max one per page.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> topbar, left side, always the first element.</li>
+        <li><strong>Signals:</strong> cursor: pointer + subtle brightness hover (<code>filter: brightness(1.15)</code>) + 2px accent focus outline.</li>
+        <li><strong>Styling:</strong> "Tela" prefix uses <code>--tb-brand</code> (flips with topbar theme), "Visor"/"Saya" suffix stays accent green in both themes. No underline, ever.</li>
+        <li><strong>Target:</strong> decided per app. TelaVisor: Status tab. Awan Saya: home page.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Status badge === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <span class="status status-online"><span class="status-dot"></span>Online</span>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.status</code> &mdash; Status badge</div>
+      <div class="card-desc">
+        Flat inline non-interactive label that communicates connection,
+        health, or reachability state. Colored dot prefix (the primary
+        signal) + uppercase label. No border, no fill, no shadow, no
+        hover. Cannot be confused with a button.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> content area, inline with titles, sidebar items, list rows.</li>
+        <li><strong>Signals:</strong> flat + colored dot + uppercase text + <code>cursor: default</code>.</li>
+        <li><strong>Variants:</strong> <code>.status-online</code> (accent), <code>.status-degraded</code> (warn), <code>.status-error</code> (danger), <code>.status-offline</code> (muted).</li>
+        <li><strong>Examples:</strong> Agent ONLINE badge, hub status, session state.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Version status === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <div><span class="status status-current">v0.7.0-dev.20</span></div>
+      <div style="margin-top: 6px;"><span class="status status-outdated">v0.7.0-dev.18</span></div>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.status.status-current</code> / <code>.status.status-outdated</code> &mdash; Version status</div>
+      <div class="card-desc">
+        Specialization of the status badge for software version display.
+        Monospace font, mixed case (so version strings render correctly),
+        glyph prefix indicating update state. The glyph is the primary
+        signal so users with red/green colorblindness can still
+        distinguish "current" from "update available".
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> anywhere an installed version is displayed.</li>
+        <li><strong>Signals:</strong> <code>&#x2713;</code> (current, accent green) or <code>&#x2191;</code> (outdated, warn amber) + monospace version string.</li>
+        <li><strong>Rule:</strong> applied to the <em>installed</em> version only. The <em>available</em> (latest) version is rendered in the default text color with no status decoration.</li>
+        <li><strong>Examples:</strong> Installed Tools card (Client Settings), sidebar agent version, topbar TelaVisor version label, agent detail Version row.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- === Chip alternatives === -->
+<div class="card">
+  <div class="card-title">Chip alternatives &mdash; pick one</div>
+  <div class="card-desc">
+    The original <code>.chip</code> used a small outlined box. That style is
+    historically interactive (GitHub labels, Stack Overflow tags, Steam tags),
+    which makes the outlined pill a false signal for neutral metadata. Here
+    are three candidates in a realistic sidebar-item context so you can pick
+    the one that reads clearly as "metadata, not a control".
+  </div>
+
+  <h3>A. Outlined box (current, the problem)</h3>
+  <div class="sidebar-demo">
+    <div class="sidebar-demo-name">
+      <span class="status-dot" style="background: var(--accent);"></span>
+      owlsnest-agent
+      <span class="chip-outlined">2 hubs</span>
+    </div>
+    <div class="sidebar-demo-ver"><span class="status status-current">v0.7.0-dev.20</span></div>
+  </div>
+  <p style="font-size: 12px;">
+    Has a border. Borders around text mean "you can click this" in most web UI conventions.
+    Even with <code>cursor: default</code>, the hand still hovers over it expecting something.
+  </p>
+
+  <h3>B. Flat filled pill</h3>
+  <div class="sidebar-demo">
+    <div class="sidebar-demo-name">
+      <span class="status-dot" style="background: var(--accent);"></span>
+      owlsnest-agent
+      <span class="chip-filled">2 hubs</span>
+    </div>
+    <div class="sidebar-demo-ver"><span class="status status-current">v0.7.0-dev.20</span></div>
+  </div>
+  <p style="font-size: 12px;">
+    <strong>Prior art:</strong> Stripe Dashboard, Notion properties, Linear.
+    Has presence, sits within the flow, reads as "painted label" rather than
+    "interactive target". No border to suggest clickability, no elevation to
+    suggest button-hood. The subtle fill (<code>--surface-alt</code>) gives
+    it just enough weight to be noticed without competing with real controls.
+  </p>
+
+  <h3>C. Inline meta with middot separator</h3>
+  <div class="sidebar-demo">
+    <div class="sidebar-demo-name">
+      <span class="status-dot" style="background: var(--accent);"></span>
+      owlsnest-agent<span class="chip-inline">2 hubs</span>
+    </div>
+    <div class="sidebar-demo-ver"><span class="status status-current">v0.7.0-dev.20</span></div>
+  </div>
+  <p style="font-size: 12px;">
+    <strong>Prior art:</strong> macOS Finder info strip, VS Code status bar,
+    git log oneline output, GitHub repo description headers. Pure text with a
+    middot separator. Zero chrome. Absolutely cannot be mistaken for a
+    control. Downside: less visually prominent, can blend in with the
+    item it qualifies.
+  </p>
+
+  <h3>Recommendation</h3>
+  <p>
+    <strong>Adopt style B (flat filled pill).</strong> It preserves the
+    visual scannability of a discrete tag while removing the
+    interactive-looking border. It also composes naturally when you need
+    more than one (e.g. "v0.7.0-dev.20" + "windows/amd64" + "2 hubs" side by
+    side). Style C is cleaner but loses the ability to visually group metadata
+    at a glance &mdash; the middot separators flatten them into an undifferentiated
+    text run.
+  </p>
+
+  <p style="font-size: 12px;">
+    <strong>Examples of style B in use:</strong>
+  </p>
+  <div class="row">
+    <span class="chip-filled">2 hubs</span>
+    <span class="chip-filled">windows/amd64</span>
+    <span class="chip-filled">production</span>
+    <span class="chip-filled">us-east</span>
+  </div>
+</div>
+
+<!-- === Chip (after decision) === -->
+<div class="card">
+  <div class="row" style="align-items: flex-start; gap: 24px;">
+    <div style="flex: 0 0 180px;">
+      <span class="chip-filled">2 hubs</span>
+    </div>
+    <div style="flex: 1;">
+      <div class="card-title"><code>.chip</code> &mdash; Neutral metadata chip</div>
+      <div class="card-desc">
+        Small flat filled pill for neutral metadata tags. Muted text on a
+        <code>--surface-alt</code> fill, no border, no elevation. Used for
+        counts, platform tags, region labels. Explicitly not a state
+        indicator &mdash; use <code>.status</code> for state.
+      </div>
+      <ul style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        <li><strong>Where:</strong> content area, inline with titles, list items.</li>
+        <li><strong>Signals:</strong> flat filled pill + muted text + no border + <code>cursor: default</code>.</li>
+        <li><strong>Why not outlined?</strong> Outlined boxes around text are a web convention for interactive tags (GitHub labels, Stack Overflow tags). A border is a false affordance for non-interactive metadata.</li>
+        <li><strong>Examples:</strong> "2 hubs" next to an agent name, "windows/amd64" platform tag, region or environment labels.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<h2>10. What changes in code</h2>
+<div class="card">
+  <h3>CSS (in style.css)</h3>
+  <ul style="font-size: 12px; color: var(--text-muted);">
+    <li>Replace <code>.tb-btn</code>, <code>.btn-primary</code>, <code>.btn-secondary</code>,
+        <code>.btn-danger</code> with the unified <code>.btn</code> family above.</li>
+    <li>Every <code>.btn</code> gets the three-layer <code>box-shadow</code> for elevation.</li>
+    <li>Replace <code>.badge-online</code>/<code>.badge-offline</code> with <code>.status</code>
+        plus <code>.status-online</code>/<code>.status-offline</code>. Drop the filled pill entirely.</li>
+    <li>Keep <code>.chip</code> as-is for neutral metadata tags (it is already flat enough).</li>
+  </ul>
+
+  <h3>HTML (in index.html and app.js string templates)</h3>
+  <ul style="font-size: 12px; color: var(--text-muted);">
+    <li>Find every <code>class="tb-btn"</code> and rename to <code>class="btn"</code>.</li>
+    <li>Find every <code>badge-online</code>/<code>badge-offline</code> and rewrite with the
+        <code>&lt;span class="status status-online"&gt;&lt;span class="status-dot"&gt;&lt;/span&gt;Online&lt;/span&gt;</code>
+        pattern.</li>
+    <li>Leave <code>tools-status-ok</code>/<code>tools-status-warn</code> alone (already fixed).</li>
+  </ul>
+
+  <h3>TDL (in TELA-DESIGN-LANGUAGE.md)</h3>
+  <ul style="font-size: 12px; color: var(--text-muted);">
+    <li>Add "The elevation invariant" subsection under Buttons.</li>
+    <li>Rewrite "Status badges" to require flat + icon + inline.</li>
+    <li>Explicitly forbid filled pills as non-interactive elements.</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

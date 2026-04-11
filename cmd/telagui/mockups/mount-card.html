@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mount Card Mockup</title>
+<style>
+:root {
+  --bg: #131a24;
+  --surface: #1b2636;
+  --surface-alt: #222e3e;
+  --text: #e0e0e0;
+  --text-muted: #8899aa;
+  --accent: #5ee89e;
+  --border: #2a3a4e;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  padding: 40px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.setting-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.setting-card-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
+.setting-card-desc {
+  font-size: 0.82rem; color: var(--text-muted);
+  margin-bottom: 14px; line-height: 1.5;
+}
+.setting-field { margin-bottom: 14px; }
+.setting-field:last-child { margin-bottom: 0; }
+.setting-label { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+.setting-input {
+  display: block; width: 100%; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface-alt); color: var(--text);
+  font-size: 13px; font-family: var(--mono);
+}
+.setting-input:focus { outline: none; border-color: var(--accent); }
+.setting-input-short { width: 100px; }
+.setting-checkbox-row {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;
+}
+.setting-checkbox-row input[type="checkbox"] { accent-color: var(--accent); }
+.setting-inline {
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.setting-inline .setting-field { margin-bottom: 0; }
+
+/* ── Mount preview ───────────────────────────────────────────── */
+.mount-preview {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mount-preview-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.mp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+.mp-indent { padding-left: 22px; }
+.mp-icon {
+  flex-shrink: 0;
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.mp-icon svg { width: 14px; height: 14px; }
+.mp-drive {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--accent); font-weight: 600;
+}
+.mp-name {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+}
+.mp-badge {
+  font-family: var(--font); font-size: 10px; color: var(--text-muted);
+  background: rgba(136,153,170,0.12); border-radius: 3px; padding: 1px 6px;
+  margin-left: 4px;
+}
+
+h2 { font-size: 1.1rem; margin-bottom: 20px; font-weight: 600; }
+.section-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted); margin-bottom: 12px; margin-top: 32px;
+}
+.section-label:first-of-type { margin-top: 0; }
+
+/* ── Demo sidebar ────────────────────────────────────────────── */
+.demo-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.demo-sidebar-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted); margin-bottom: 10px;
+}
+.demo-machine-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; font-size: 13px; cursor: pointer;
+}
+.demo-machine-row input[type="checkbox"] { accent-color: var(--accent); }
+.demo-machine-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+}
+.demo-share-badge {
+  font-size: 10px; color: var(--text-muted);
+  background: rgba(136,153,170,0.12); border-radius: 3px; padding: 1px 6px;
+  margin-left: auto;
+}
+</style>
+</head>
+<body>
+
+<h2>File Share Mount - Mockup</h2>
+
+<div class="section-label">Toggle machines to see the preview update</div>
+<div class="demo-sidebar">
+  <div class="demo-sidebar-title">Profile Machines</div>
+  <label class="demo-machine-row">
+    <input type="checkbox" checked onchange="rebuildPreview()" id="m-barn">
+    <span class="demo-machine-dot"></span>
+    barn
+    <span class="demo-share-badge">file share</span>
+  </label>
+  <label class="demo-machine-row">
+    <input type="checkbox" checked onchange="rebuildPreview()" id="m-work-laptop">
+    <span class="demo-machine-dot"></span>
+    work-laptop
+    <span class="demo-share-badge">file share</span>
+  </label>
+  <label class="demo-machine-row">
+    <input type="checkbox" checked onchange="rebuildPreview()" id="m-owlsnest-agent">
+    <span class="demo-machine-dot"></span>
+    owlsnest-agent
+    <span class="demo-share-badge">file share</span>
+  </label>
+  <label class="demo-machine-row">
+    <input type="checkbox" onchange="rebuildPreview()" id="m-staging">
+    <span class="demo-machine-dot" style="background: var(--text-muted);"></span>
+    staging
+  </label>
+</div>
+
+<!-- Main card -->
+<div class="setting-card">
+  <div class="setting-card-title">File Share Mount</div>
+  <div class="setting-card-desc">
+    Mounts a local drive that contains all file shares from connected machines.
+    Each machine appears as a folder under the mount point.
+  </div>
+
+  <div class="setting-field">
+    <label class="setting-checkbox-row">
+      <input type="checkbox" checked id="mount-enable" onchange="rebuildPreview()"> Enable file share mount
+    </label>
+  </div>
+
+  <div class="setting-inline" id="mount-fields">
+    <div class="setting-field">
+      <div class="setting-label">Drive letter</div>
+      <input class="setting-input setting-input-short" value="T:" id="mount-drive" oninput="rebuildPreview()">
+    </div>
+    <div class="setting-field">
+      <div class="setting-label">WebDAV port</div>
+      <input class="setting-input setting-input-short" value="18080">
+    </div>
+  </div>
+
+  <div class="setting-field">
+    <label class="setting-checkbox-row">
+      <input type="checkbox" checked> Mount automatically on connect
+    </label>
+  </div>
+
+  <div class="setting-field" id="preview-field">
+    <div class="setting-label">Preview</div>
+    <div class="mount-preview" id="mount-preview"></div>
+  </div>
+</div>
+
+<script>
+var ICON_DRIVE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="3" width="12" height="10" rx="1.5"/><line x1="2" y1="9" x2="14" y2="9"/><circle cx="12" cy="11.5" r="0.8" fill="currentColor" stroke="none"/></svg>';
+var ICON_FOLDER = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 3V13H14.5V5H6.5L5 3H1.5Z"/></svg>';
+
+var fileShareMachines = ['barn', 'work-laptop', 'owlsnest-agent'];
+
+function rebuildPreview() {
+  var el = document.getElementById('mount-preview');
+  var enabled = document.getElementById('mount-enable').checked;
+  var drive = document.getElementById('mount-drive').value.trim() || 'T:';
+
+  if (!enabled) {
+    el.innerHTML = '<div class="mount-preview-empty">File share mount is disabled.</div>';
+    return;
+  }
+
+  var machines = [];
+  fileShareMachines.forEach(function (m) {
+    var cb = document.getElementById('m-' + m);
+    if (cb && cb.checked) machines.push(m);
+  });
+
+  if (machines.length === 0) {
+    el.innerHTML = '<div class="mount-preview-empty">No selected machines offer file sharing.</div>';
+    return;
+  }
+
+  var html = '<div class="mp-row">'
+    + '<span class="mp-icon" style="color:var(--accent)">' + ICON_DRIVE + '</span>'
+    + '<span class="mp-drive">' + escHtml(drive + '\\') + '</span>'
+    + '</div>';
+
+  machines.forEach(function (m) {
+    html += '<div class="mp-row mp-indent">'
+      + '<span class="mp-icon" style="color:var(--accent)">' + ICON_FOLDER + '</span>'
+      + '<span class="mp-name">' + escHtml(m) + '\\</span>'
+      + '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+rebuildPreview();
+</script>
+
+</body>
+</html>
