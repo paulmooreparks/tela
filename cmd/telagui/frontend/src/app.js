@@ -1175,14 +1175,10 @@ function refreshVersionBadges() {
     var ver = el.getAttribute('data-ver');
     if (ver) el.innerHTML = formatVersionBadge(ver);
   });
-  // Sidebar version labels: just color them.
+  // Sidebar version labels: toggle outdated class.
   document.querySelectorAll('.version-badge-sidebar').forEach(function (el) {
     var ver = el.getAttribute('data-ver');
-    if (latestVersion && ver && ver !== latestVersion) {
-      el.style.color = '#f39c12';
-    } else {
-      el.style.color = '';
-    }
+    el.classList.toggle('version-outdated', !!(latestVersion && ver && ver !== latestVersion));
   });
   // Re-render the agent detail and hub settings so Management button labels update.
   if (document.getElementById('agent-management-card')) {
@@ -2698,7 +2694,7 @@ function agentsRenderSidebar() {
       + '<span class="machine-status-dot ' + dotClass + '"></span>'
       + '<div>'
       + '<div class="agents-sidebar-name">' + escHtml(label) + linkedBadge + '</div>'
-      + '<div class="agents-sidebar-version version-badge-sidebar" data-ver="' + escAttr(ver) + '"' + (latestVersion && ver !== latestVersion ? ' style="color:#f39c12"' : '') + '>' + escHtml(ver) + '</div>'
+      + '<div class="agents-sidebar-version version-badge-sidebar' + (latestVersion && ver !== latestVersion ? ' version-outdated' : '') + '" data-ver="' + escAttr(ver) + '">' + escHtml(ver) + '</div>'
       + '</div>'
       + '</div>';
   });

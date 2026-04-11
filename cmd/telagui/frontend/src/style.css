@@ -1485,8 +1485,8 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .detail-header { margin-bottom: 24px; }
 .detail-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
 .detail-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
-.badge-online { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: var(--accent); color: #fff; }
-.badge-offline { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: var(--text-muted); color: #fff; }
+.badge-online { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent); background: none; cursor: default; -webkit-user-select: none; user-select: none; }
+.badge-offline { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border: 1px solid var(--text-muted); background: none; cursor: default; -webkit-user-select: none; user-select: none; }
 
 /* Legacy settings-card-block (used by Client Settings, to be migrated) */
 .settings-card-block {
@@ -1511,7 +1511,9 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .tools-table td { padding: 6px 8px; border-bottom: 1px solid var(--surface-alt); }
 .tools-version { font-family: var(--mono); font-size: 12px; }
 .tools-status-ok { font-size: 12px; color: var(--accent); }
-.tools-status-warn { font-size: 12px; color: #f39c12; }
+.tools-status-ok::before { content: '\2713\00a0'; }
+.tools-status-warn { font-size: 12px; color: var(--warn); }
+.tools-status-warn::before { content: '\2191\00a0'; }
 .tools-action-btn { padding: 2px 8px; font-size: 11px; }
 .tools-service-row td { border-bottom: 1px solid var(--surface-alt); padding-top: 0; }
 .tools-service-label { font-size: 11px; color: var(--text-muted); font-style: italic; }
@@ -1761,6 +1763,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .agents-sidebar-item .machine-status-dot { width: 8px; height: 8px; margin-top: 0; flex-shrink: 0; }
 .agents-sidebar-name { font-size: 13px; }
 .agents-sidebar-version { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
+.agents-sidebar-version.version-outdated { color: var(--warn); }
 .agents-sidebar-footer {
   padding: 8px 12px; border-top: 1px solid var(--border); flex-shrink: 0;
 }

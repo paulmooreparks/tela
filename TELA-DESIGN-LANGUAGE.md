@@ -271,6 +271,28 @@ Four button variants:
 | Danger | `--surface` | `--danger` | `--danger` | Delete, disconnect, destructive |
 | Ghost | transparent | `--topbar-text` | transparent | Icon-like buttons in dark contexts |
 
+Every button has a visible hover state (`background` or `border-color` change) and `cursor: pointer`. Anything that does not respond to clicks must not look like a button. In particular, status badges must never use a filled background that matches a button variant.
+
+### Status badges
+
+Status badges are inline labels that show a non-interactive state (online, offline, a version string). They are distinguished from buttons by using an outlined style (colored border and text, transparent background) and `cursor: default`.
+
+```css
+.badge-online {
+  padding: 1px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--accent); border: 1px solid var(--accent);
+  background: none; cursor: default;
+  -webkit-user-select: none; user-select: none;
+}
+.badge-offline {
+  /* same shape; color: var(--text-muted); border: 1px solid var(--text-muted) */
+}
+```
+
+Never use a filled green or red pill for a status badge. Filled backgrounds are reserved for buttons.
+
 ### Status indicators
 
 Small colored circles (8-10px) indicate connection or health state:
@@ -281,6 +303,20 @@ Small colored circles (8-10px) indicate connection or health state:
 | `--warn` (#f39c12) | Connecting, degraded, in progress |
 | `--danger` (#e74c3c) | Disconnected, down, error |
 | `--text-muted` (#6b7280) | Unknown, offline |
+
+### Version status
+
+Installed software versions use color and a symbol to indicate update status. Color alone is insufficient for users with red-green colorblindness (deuteranopia).
+
+| State | Color | Symbol prefix | CSS class |
+|-------|-------|---------------|-----------|
+| Up to date | `--accent` | ✓ | `.tools-status-ok` |
+| Update available | `--warn` | ↑ | `.tools-status-warn` |
+| Not installed | default | none | (none) |
+
+The symbol is applied via a CSS `::before` pseudo-element so it requires no markup change. The color reinforces the symbol for users with normal color vision; the symbol carries the meaning for users who cannot distinguish green from amber.
+
+Apply the status class to the **installed** version value, not the available version. The available version is always rendered in the default text color.
 
 ### Modals
 
