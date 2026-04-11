@@ -204,31 +204,31 @@
         <h1 style="margin-bottom:4px;">Client Settings</h1>
         <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Configuration for how tela runs on this machine.</p>
 
-        <div class="settings-card-block">
-          <h3>Default Profile</h3>
-          <p class="settings-card-desc">The profile loaded on startup and used by the system service.</p>
+        <div class="setting-card">
+          <div class="setting-card-title">Default Profile</div>
+          <p class="setting-card-desc">The profile loaded on startup and used by the system service.</p>
           <select id="cs-default-profile" title="Default profile" class="settings-full-control" onchange="markCSDirty()"></select>
         </div>
 
-        <div class="settings-card-block">
-          <h3>Binary Location</h3>
-          <p class="settings-card-desc">Folder containing tela binaries.</p>
+        <div class="setting-card">
+          <div class="setting-card-title">Binary Location</div>
+          <p class="setting-card-desc">Folder containing tela binaries.</p>
           <div class="settings-path-row">
             <input type="text" id="cs-binPath" class="settings-full-control settings-path-input" title="Binary folder" onchange="markCSDirty();refreshBinStatus()">
-            <button class="icon-btn" onclick="browseBinPath()" title="Browse">Browse</button>
-            <button class="icon-btn" onclick="restoreDefaultBinPath()" title="Restore default">Restore Default</button>
+            <button class="btn btn-sm" onclick="browseBinPath()" title="Browse">Browse</button>
+            <button class="btn btn-sm" onclick="restoreDefaultBinPath()" title="Restore default">Restore Default</button>
           </div>
         </div>
 
-        <div class="settings-card-block">
-          <div class="settings-card-head"><h3>Installed Tools</h3><button type="button" class="btn btn-sm tools-action-btn" onclick="refreshClientToolVersions()" title="Check all versions">&#x21BB; Refresh</button></div>
-          <p class="settings-card-desc">Versions of tela binaries found in the configured location.</p>
+        <div class="setting-card">
+          <div class="setting-card-title-row"><div class="setting-card-title">Installed Tools</div><button type="button" class="btn btn-sm tools-action-btn" onclick="refreshClientToolVersions()" title="Check all versions">&#x21BB; Refresh</button></div>
+          <p class="setting-card-desc">Versions of tela binaries found in the configured location.</p>
           <div id="cs-bin-status" class="bin-status"></div>
         </div>
 
-        <div class="settings-card-block">
-          <h3>System Service</h3>
-          <p class="settings-card-desc">Run the default profile as an always-on background service that starts with the OS. Requires administrator privileges.</p>
+        <div class="setting-card">
+          <div class="setting-card-title">System Service</div>
+          <p class="setting-card-desc">Run the default profile as an always-on background service that starts with the OS. Requires administrator privileges.</p>
           <div class="service-status-row">Status: <strong id="cs-service-status">checking...</strong></div>
           <div class="settings-service-actions">
             <button type="button" class="btn btn-sm" id="svc-install-btn" onclick="installService()">Install</button>
@@ -238,9 +238,9 @@
           </div>
         </div>
 
-        <div class="settings-card-block">
-          <h3>User Autostart</h3>
-          <p class="settings-card-desc">Run the default profile automatically when you log in. No administrator privileges required.</p>
+        <div class="setting-card">
+          <div class="setting-card-title">User Autostart</div>
+          <p class="setting-card-desc">Run the default profile automatically when you log in. No administrator privileges required.</p>
           <div class="service-status-row">Status: <strong id="cs-user-task-status">checking...</strong></div>
           <div class="settings-service-actions">
             <button type="button" class="btn btn-sm" id="utask-install-btn" onclick="installUserTask()">Install</button>

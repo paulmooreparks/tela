@@ -1318,7 +1318,7 @@ function renderToolsTable(container, showActions, onDone) {
 
       // TelaVisor
       var tvStatusClass = tvUpToDate ? 'status status-current' : 'status status-outdated';
-      html += '<tr><td>' + (showActions ? '<span class="dot dot-online"></span>' : '') + 'TelaVisor</td>'
+      html += '<tr><td>TelaVisor</td>'
         + '<td class="tools-version"><span class="' + tvStatusClass + '">' + escHtml(guiVer || 'dev') + '</span></td>'
         + '<td class="tools-version">' + escHtml(latest || guiVer || 'dev') + '</td>';
       if (showActions) {
@@ -1335,7 +1335,6 @@ function renderToolsTable(container, showActions, onDone) {
           // Main row version: use service version when no local copy exists.
           var mainVer = b.found ? (b.version || 'unknown') : (svcOnly ? (b.serviceVersion || 'unknown') : 'not installed');
           var mainUpToDate = svcOnly ? (b.serviceVersion === b.latest) : b.upToDate;
-          var dotClass = (b.found || svcOnly) ? 'dot-online' : 'dot-error';
           var installedCell;
           if (b.found || svcOnly) {
             var installedStatus = mainUpToDate ? 'status status-current' : 'status status-outdated';
@@ -1351,7 +1350,7 @@ function renderToolsTable(container, showActions, onDone) {
             nameLabel += ' <span class="tools-service-label">service (' + svcStatus + ')</span>';
           }
 
-          html += '<tr><td>' + (showActions ? '<span class="dot ' + dotClass + '"></span>' : '') + nameLabel + '</td>'
+          html += '<tr><td>' + nameLabel + '</td>'
             + '<td class="tools-version">' + installedCell + '</td>'
             + '<td class="tools-version">' + escHtml(b.latest || '?') + '</td>';
           if (showActions) {
@@ -1373,8 +1372,7 @@ function renderToolsTable(container, showActions, onDone) {
             var svcState = b.serviceRunning ? 'running' : 'stopped';
             var svcUpToDate = b.serviceVersion === b.latest;
             var svcInstalledClass = svcUpToDate ? 'status status-current' : 'status status-outdated';
-            var svcDotClass = b.serviceRunning ? 'dot-online' : 'dot-error';
-            html += '<tr class="tools-service-row"><td>' + (showActions ? '<span class="dot ' + svcDotClass + '"></span>' : '')
+            html += '<tr class="tools-service-row"><td>'
               + '<span class="tools-service-label">service (' + svcState + ')</span></td>'
               + '<td class="tools-version"><span class="' + svcInstalledClass + '">' + escHtml(svcVer) + '</span></td>'
               + '<td class="tools-version">' + escHtml(b.latest || '?') + '</td>';
@@ -4412,9 +4410,9 @@ function renderHubTokens(pane) {
         + '<td><span class="chip chip-role-' + t.role + '">' + t.role + '</span></td>'
         + '<td><span class="token-preview">' + escHtml(t.tokenPreview) + '</span></td>'
         + '<td><div class="action-btns">'
-        + '<button class="icon-btn" onclick="rotateToken(\'' + escAttr(t.id) + '\')">Rotate</button>';
+        + '<button class="btn btn-sm" onclick="rotateToken(\'' + escAttr(t.id) + '\')">Rotate</button>';
       if (!isOwner) {
-        html += '<button class="icon-btn danger" onclick="deleteToken(\'' + escAttr(t.id) + '\')">Delete</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="deleteToken(\'' + escAttr(t.id) + '\')">Delete</button>';
       }
       html += '</div></td></tr>';
     });
@@ -5312,11 +5310,11 @@ function renderBinStatus(container, bins, warningHtml) {
       } else if (b.found && !b.upToDate) {
         dotClass = 'dot-degraded';
         verText = b.version + ' (latest: ' + (b.latest || '?') + ')';
-        action = '<button class="bin-status-action" onclick="installBinary(\'' + escAttr(b.name) + '\')">Update</button>';
+        action = '<button class="btn btn-sm" onclick="installBinary(\'' + escAttr(b.name) + '\')">Update</button>';
       } else {
         dotClass = 'dot-error';
         verText = 'not found';
-        action = '<button class="bin-status-action" onclick="installBinary(\'' + escAttr(b.name) + '\')">Install</button>';
+        action = '<button class="btn btn-sm" onclick="installBinary(\'' + escAttr(b.name) + '\')">Install</button>';
       }
 
       html += '<div class="bin-status-item">'
@@ -5324,7 +5322,7 @@ function renderBinStatus(container, bins, warningHtml) {
         + '<span class="bin-status-name">' + escHtml(b.name) + '</span>'
         + '<span class="bin-status-ver">' + escHtml(verText) + '</span>'
         + action
-        + '<button type="button" class="bin-refresh-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)" title="Check for updates">&#x21BB;</button>'
+        + '<button type="button" class="btn btn-sm btn-icon" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)" title="Check for updates">&#x21BB;</button>'
         + '</div>';
     });
     container.innerHTML = html;
@@ -5502,7 +5500,7 @@ function refreshCredentialsList() {
       var identity = c.identity || '';
       html += '<tr><td>' + escHtml(c.hubUrl) + '</td>'
         + '<td>' + escHtml(identity) + '</td>'
-        + '<td><button class="icon-btn danger" onclick="removeCredential(\'' + escAttr(c.hubUrl) + '\')">Remove</button></td></tr>';
+        + '<td><button class="btn btn-sm btn-danger" onclick="removeCredential(\'' + escAttr(c.hubUrl) + '\')">Remove</button></td></tr>';
     });
     html += '</tbody></table>';
     el.innerHTML = html;
