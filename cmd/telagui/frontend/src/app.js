@@ -20,6 +20,17 @@ var profileDirty = false;
 var currentMode = 'clients';
 var tabBars = { clients: 'tabbar-clients', infra: 'tabbar-infra' };
 
+// Brand-link click target per TDL: navigate to the current mode's
+// default ("home") tab. For Clients mode that's Status; for
+// Infrastructure mode it's Hubs.
+function goHome() {
+  var mode = currentMode || 'clients';
+  var bar = document.getElementById(tabBars[mode]);
+  if (!bar) return;
+  var firstTab = bar.querySelector('.main-tab');
+  if (firstTab) firstTab.click();
+}
+
 function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll('.mode-btn').forEach(function (b) { b.classList.remove('active'); });
@@ -227,13 +238,13 @@ function openAttachDialog() {
       html += '<div class="attach-log-section">Hubs</div>';
       hubs.forEach(function (h) {
         html += '<button class="attach-log-item" onclick="hubViewLogs(\'' + escAttr(h) + '\');this.closest(\'.attach-log-popover\').remove()">'
-          + '<span class="log-dot log-dot-live"></span>' + escHtml(h) + '</button>';
+          + '<span class="dot dot-online"></span>' + escHtml(h) + '</button>';
       });
     }
     if (agents.length > 0) {
       html += '<div class="attach-log-section">Agents</div>';
       agents.forEach(function (a) {
-        var dotClass = a.online ? 'log-dot-live' : 'log-dot-idle';
+        var dotClass = a.online ? 'dot-online' : 'dot-offline';
         var label = a.displayName || a.id;
         html += '<button class="attach-log-item" onclick="agentsViewLogs(\'' + escAttr(a.id) + '\',\'' + escAttr(a.hub) + '\');this.closest(\'.attach-log-popover\').remove()">'
           + '<span class="log-dot ' + dotClass + '"></span>' + escHtml(label) + '</button>';
@@ -256,7 +267,7 @@ function hubViewLogs(hubName) {
     var tab = document.createElement('button');
     tab.className = 'log-panel-tab';
     tab.onclick = function () { switchLogTab(tab, paneId); };
-    tab.innerHTML = '<span class="log-dot log-dot-idle" id="' + paneId + '-dot"></span>'
+    tab.innerHTML = '<span class="dot dot-offline" id="' + paneId + '-dot"></span>'
       + escHtml(hubName)
       + '<span class="log-tab-close" onclick="event.stopPropagation();removeAgentLogTab(\'' + escAttr(paneId) + '\',this.parentNode)" title="Close">&times;</span>';
     tabBar.insertBefore(tab, addBtn);
@@ -279,27 +290,27 @@ function hubViewLogs(hubName) {
   if (panel.classList.contains('collapsed')) toggleLogPanel();
 
   var dot = document.getElementById(paneId + '-dot');
-  if (dot) dot.className = 'log-dot log-dot-warn';
+  if (dot) dot.className = 'dot dot-degraded';
 
   goApp.GetHubLogs(hubName, 500).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) {
       document.getElementById(paneId).textContent = 'Error: invalid response\n';
-      if (dot) dot.className = 'log-dot log-dot-idle';
+      if (dot) dot.className = 'dot dot-offline';
       return;
     }
     if (data.error) {
       document.getElementById(paneId).textContent = 'Error: ' + data.error + '\n';
-      if (dot) dot.className = 'log-dot log-dot-idle';
+      if (dot) dot.className = 'dot dot-offline';
       return;
     }
     var lines = data.lines || [];
     var el = document.getElementById(paneId);
     el.textContent = lines.join('\n') + '\n';
     logAutoScroll(el);
-    if (dot) dot.className = 'log-dot log-dot-live';
+    if (dot) dot.className = 'dot dot-online';
   }).catch(function (err) {
     document.getElementById(paneId).textContent = 'Failed: ' + err + '\n';
-    if (dot) dot.className = 'log-dot log-dot-idle';
+    if (dot) dot.className = 'dot dot-offline';
   });
 }
 
@@ -693,8 +704,8 @@ function refreshStatus() {
   });
 
   if (Object.keys(groups).length === 0) {
-    badge.textContent = 'Disconnected';
-    badge.className = 'status-connection-state disconnected';
+    badge.className = 'status status-offline';
+    badge.innerHTML = '<span class="status-dot"></span>Disconnected';
     container.innerHTML = '<p class="empty-hint">No services selected. Go to <strong>Profiles</strong> to select hubs, machines, and services.</p>';
     return;
   }
@@ -702,14 +713,14 @@ function refreshStatus() {
   // Single Go call -- not nested inside anything
   goApp.GetConnectionState().then(function (state) {
     if (state.connected && state.attached) {
-      badge.textContent = 'Attached (external tela)';
-      badge.className = 'status-connection-state connected';
+      badge.className = 'status status-online';
+      badge.innerHTML = '<span class="status-dot"></span>Attached (external tela)';
     } else if (state.connected) {
-      badge.textContent = 'Connected (PID ' + state.pid + ')';
-      badge.className = 'status-connection-state connected';
+      badge.className = 'status status-online';
+      badge.innerHTML = '<span class="status-dot"></span>Connected &middot; PID ' + escHtml(String(state.pid));
     } else {
-      badge.textContent = 'Disconnected';
-      badge.className = 'status-connection-state disconnected';
+      badge.className = 'status status-offline';
+      badge.innerHTML = '<span class="status-dot"></span>Disconnected';
     }
 
     var html = '';
@@ -723,7 +734,7 @@ function refreshStatus() {
         + '</div>';
 
       g.services.forEach(function (svc) {
-        var indicatorClass = 'unavailable';
+        var indicatorClass = 'dot-offline';
         var statusText = 'Not connected';
         var localClass = 'inactive';
 
@@ -756,15 +767,16 @@ function refreshStatus() {
 
           if (portFound) {
             if (tunnelCount > 0) {
-              indicatorClass = 'available';
+              indicatorClass = 'dot-online';
               statusText = 'Active (' + tunnelCount + ')';
               localClass = 'active';
             } else {
-              indicatorClass = 'available';
+              indicatorClass = 'dot-online';
               statusText = 'Listening';
               localClass = 'active';
             }
           } else {
+            indicatorClass = 'dot-degraded';
             statusText = 'Connecting...';
           }
         }
@@ -778,7 +790,7 @@ function refreshStatus() {
         }
 
         html += '<div class="settings-row status-svc-row">'
-          + '<span class="status-svc-indicator ' + indicatorClass + '"></span>'
+          + '<span class="dot ' + indicatorClass + '"></span>'
           + '<div class="status-svc-name">' + escHtml(svc.service) + '</div>'
           + '<div class="status-svc-remote">' + (svc.servicePort ? ':' + svc.servicePort : '') + '</div>'
           + '<div class="status-svc-local ' + localClass + '">' + localDisplay + '</div>'
@@ -840,7 +852,7 @@ if (window.runtime) {
   window.runtime.EventsOn('app:quitting', function () {
     var quitBtn = document.getElementById('quit-btn');
     var connectBtn = document.getElementById('connect-btn');
-    if (quitBtn) { quitBtn.classList.add('quitting'); quitBtn.disabled = true; }
+    if (quitBtn) { quitBtn.classList.add('pulse'); quitBtn.disabled = true; }
     setConnPhase('disconnecting');
   });
 
@@ -869,7 +881,7 @@ if (window.runtime) {
     logAutoScroll(el);
     // Update tela dot to live
     var dot = document.getElementById('log-tela-dot');
-    if (dot) dot.className = 'log-dot log-dot-live';
+    if (dot) dot.className = 'dot dot-online';
   });
 
   window.runtime.EventsOn('tela:exited', function () {
@@ -893,7 +905,7 @@ if (window.runtime) {
     var logEl = document.getElementById('log-tela');
     if (logEl) logEl.textContent = 'Attached to external tela. Log output is in the terminal where tela is running.';
     var logDot = document.getElementById('log-tela-dot');
-    if (logDot) logDot.className = 'log-dot log-dot-live';
+    if (logDot) logDot.className = 'dot dot-online';
 
     // Fetch bound services, then refresh UI
     function fetchAndRefresh() {
@@ -1087,7 +1099,8 @@ loadSavedSelections().then(function () {
     }
   }).catch(function () {});
 
-  // Version stamp
+  // Version stamp in the topbar. The .status-current / .status-outdated
+  // classes are toggled by refreshUpdateInfo() once update status is known.
   goApp.GetVersion().then(function (v) {
     var el = document.getElementById('app-version');
     if (el && v) el.textContent = v;
@@ -1154,10 +1167,10 @@ function formatVersionBadge(ver) {
     return escHtml(ver) + ' <span class="tools-service-label">(checking...)</span>';
   }
   if (ver === latestVersion) {
-    return '<span class="tools-status-ok">' + escHtml(ver) + '</span>'
+    return '<span class="status status-current">' + escHtml(ver) + '</span>'
       + ' <span class="tools-service-label">(latest: ' + escHtml(latestVersion) + ')</span>';
   }
-  return '<span class="tools-status-warn">' + escHtml(ver) + '</span>'
+  return '<span class="status status-outdated">' + escHtml(ver) + '</span>'
     + ' <a href="#" onclick="event.preventDefault();scrollToManagement();" class="tools-service-label" style="text-decoration:underline;cursor:pointer;">update available: ' + escHtml(latestVersion) + '</a>';
 }
 
@@ -1208,13 +1221,27 @@ function checkForUpdate() {
         }
       });
     }
+    var ubtn = document.getElementById('update-btn');
+    var vbadge = document.getElementById('app-version');
     if (!info.pending || (!info.guiBehind && !info.cliBehind)) {
-      document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
+      ubtn.disabled = true;
+      ubtn.classList.remove('chrome-warn');
+      ubtn.title = 'No updates';
+      if (vbadge) {
+        vbadge.classList.remove('status-outdated');
+        vbadge.classList.add('status-current');
+      }
       return;
     }
     if (updateDismissedForSession) return;
     if (updateSkippedVersion && updateSkippedVersion === info.version) return;
-    document.getElementById('update-btn').disabled = false; document.getElementById('update-btn').title = 'Update available';
+    ubtn.disabled = false;
+    ubtn.classList.add('chrome-warn');
+    ubtn.title = 'Update available';
+    if (vbadge && info.guiBehind) {
+      vbadge.classList.remove('status-current');
+      vbadge.classList.add('status-outdated');
+    }
   });
 }
 
@@ -1290,11 +1317,12 @@ function renderToolsTable(container, showActions, onDone) {
       html += '</tr></thead><tbody>';
 
       // TelaVisor
-      html += '<tr><td>' + (showActions ? '<span class="bin-dot bin-dot-ok"></span>' : '') + 'TelaVisor</td>'
-        + '<td class="tools-version ' + (tvUpToDate ? 'tools-status-ok' : 'tools-status-warn') + '">' + escHtml(guiVer || 'dev') + '</td>'
+      var tvStatusClass = tvUpToDate ? 'status status-current' : 'status status-outdated';
+      html += '<tr><td>' + (showActions ? '<span class="dot dot-online"></span>' : '') + 'TelaVisor</td>'
+        + '<td class="tools-version"><span class="' + tvStatusClass + '">' + escHtml(guiVer || 'dev') + '</span></td>'
         + '<td class="tools-version">' + escHtml(latest || guiVer || 'dev') + '</td>';
       if (showActions) {
-        var tvAction = tvUpToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="restartToUpdate(this)">Update &amp; Restart</button>';
+        var tvAction = tvUpToDate ? '' : '<button class="btn btn-sm tools-action-btn" onclick="restartToUpdate(this)">Update &amp; Restart</button>';
         html += '<td>' + tvAction + '</td>';
       }
       html += '</tr>';
@@ -1307,8 +1335,14 @@ function renderToolsTable(container, showActions, onDone) {
           // Main row version: use service version when no local copy exists.
           var mainVer = b.found ? (b.version || 'unknown') : (svcOnly ? (b.serviceVersion || 'unknown') : 'not installed');
           var mainUpToDate = svcOnly ? (b.serviceVersion === b.latest) : b.upToDate;
-          var dotClass = (b.found || svcOnly) ? 'bin-dot-ok' : 'bin-dot-missing';
-          var installedClass = (b.found || svcOnly) ? (mainUpToDate ? 'tools-status-ok' : 'tools-status-warn') : '';
+          var dotClass = (b.found || svcOnly) ? 'dot-online' : 'dot-error';
+          var installedCell;
+          if (b.found || svcOnly) {
+            var installedStatus = mainUpToDate ? 'status status-current' : 'status status-outdated';
+            installedCell = '<span class="' + installedStatus + '">' + escHtml(mainVer) + '</span>';
+          } else {
+            installedCell = escHtml(mainVer);
+          }
 
           // Label: show "service (running/stopped)" when the service is the only installation.
           var nameLabel = escHtml(b.name);
@@ -1317,17 +1351,17 @@ function renderToolsTable(container, showActions, onDone) {
             nameLabel += ' <span class="tools-service-label">service (' + svcStatus + ')</span>';
           }
 
-          html += '<tr><td>' + (showActions ? '<span class="bin-dot ' + dotClass + '"></span>' : '') + nameLabel + '</td>'
-            + '<td class="tools-version ' + installedClass + '">' + escHtml(mainVer) + '</td>'
+          html += '<tr><td>' + (showActions ? '<span class="dot ' + dotClass + '"></span>' : '') + nameLabel + '</td>'
+            + '<td class="tools-version">' + installedCell + '</td>'
             + '<td class="tools-version">' + escHtml(b.latest || '?') + '</td>';
           if (showActions) {
             var action = '';
             if (b.found) {
-              action = b.upToDate ? '' : '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>';
+              action = b.upToDate ? '' : '<button class="btn btn-sm tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Update</button>';
             } else if (svcOnly && !mainUpToDate) {
-              action = '<button class="tb-btn tools-action-btn" onclick="updateLocalService(\'' + escAttr(b.name) + '\', this)">Update</button>';
+              action = '<button class="btn btn-sm tools-action-btn" onclick="updateLocalService(\'' + escAttr(b.name) + '\', this)">Update</button>';
             } else if (!svcOnly) {
-              action = '<button class="tb-btn tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
+              action = '<button class="btn btn-sm tools-action-btn" onclick="refreshSingleBinary(\'' + escAttr(b.name) + '\', this)">Install</button>';
             }
             html += '<td>' + action + '</td>';
           }
@@ -1338,10 +1372,11 @@ function renderToolsTable(container, showActions, onDone) {
             var svcVer = b.serviceVersion || 'unknown';
             var svcState = b.serviceRunning ? 'running' : 'stopped';
             var svcUpToDate = b.serviceVersion === b.latest;
-            var svcInstalledClass = svcUpToDate ? 'tools-status-ok' : 'tools-status-warn';
-            html += '<tr class="tools-service-row"><td>' + (showActions ? '<span class="bin-dot ' + (b.serviceRunning ? 'bin-dot-ok' : 'bin-dot-missing') + '"></span>' : '')
+            var svcInstalledClass = svcUpToDate ? 'status status-current' : 'status status-outdated';
+            var svcDotClass = b.serviceRunning ? 'dot-online' : 'dot-error';
+            html += '<tr class="tools-service-row"><td>' + (showActions ? '<span class="dot ' + svcDotClass + '"></span>' : '')
               + '<span class="tools-service-label">service (' + svcState + ')</span></td>'
-              + '<td class="tools-version ' + svcInstalledClass + '">' + escHtml(svcVer) + '</td>'
+              + '<td class="tools-version"><span class="' + svcInstalledClass + '">' + escHtml(svcVer) + '</span></td>'
               + '<td class="tools-version">' + escHtml(b.latest || '?') + '</td>';
             if (showActions) html += '<td></td>';
             html += '</tr>';
@@ -1375,13 +1410,13 @@ function refreshUpdateTable() {
 
 function ignoreUpdateSession() {
   updateDismissedForSession = true;
-  document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
+  (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
   toggleUpdateOverlay();
 }
 
 function ignoreUpdateForever() {
   if (updateInfo) updateSkippedVersion = updateInfo.version;
-  document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
+  (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
   toggleUpdateOverlay();
 }
 
@@ -1544,15 +1579,15 @@ function updateMountButtonState() {
     goApp.IsMountRunning().then(function (running) {
       if (running) {
         mountBtn.disabled = false;
-        mountBtn.classList.add('mounted');
+        mountBtn.classList.add('chrome-accent');
         mountBtn.title = 'Unmount file shares';
       } else if (mc && mc.mount) {
         mountBtn.disabled = false;
-        mountBtn.classList.remove('mounted');
+        mountBtn.classList.remove('chrome-accent');
         mountBtn.title = 'Mount file shares (' + mc.mount + ')';
       } else {
         mountBtn.disabled = true;
-        mountBtn.classList.remove('mounted');
+        mountBtn.classList.remove('chrome-accent');
         mountBtn.title = 'No mount configured';
       }
     });
@@ -1799,9 +1834,9 @@ function renderHubInSidebar(content, hub, isConnected) {
   var hubDisabled = isConnected ? ' disabled' : '';
   hubHeader.innerHTML = '<input type="checkbox"' + (included ? ' checked' : '') + hubDisabled
     + ' onclick="event.stopPropagation(); toggleHubInclusion(\'' + escAttr(hubKey) + '\', this.checked)">'
-    + '<span class="hub-dot"></span>'
+    + '<span class="dot hub-dot"></span>'
     + '<span class="hub-name">' + escHtml(hub.name) + '</span>'
-    + (!hub.hasToken ? '<span class="no-token-badge">no token</span>' : '');
+    + (!hub.hasToken ? '<span class="status status-error">No token</span>' : '');
   hubHeader.onclick = function (e) {
     if (e.target.tagName === 'INPUT') return;
     selectHub(hubForCallbacks, hubHeader);
@@ -1812,7 +1847,7 @@ function renderHubInSidebar(content, hub, isConnected) {
   if (hub.hasToken) {
     goApp.GetHubStatus(hub.name).then(function (status) {
       hubStatusCache[hubKey] = status;
-      hubHeader.querySelector('.hub-dot').className = 'hub-dot ' + (status.online ? 'online' : 'offline');
+      hubHeader.querySelector('.hub-dot').className = 'dot hub-dot ' + (status.online ? 'dot-online' : 'dot-error');
 
       if (status.machines) {
         reconcileServicePorts(hubKey, status.machines);
@@ -1827,8 +1862,8 @@ function renderHubInSidebar(content, hub, isConnected) {
             var mEl = document.createElement('div');
             mEl.className = 'machine-item';
             if (selectedHubURL === hubKey && selectedMachineId === mId) mEl.classList.add('selected');
-            var dotClass = m.agentConnected ? 'online' : 'offline';
-            mEl.innerHTML = '<span class="machine-dot ' + dotClass + '"></span>'
+            var dotClass = m.agentConnected ? 'dot-online' : 'dot-offline';
+            mEl.innerHTML = '<span class="dot ' + dotClass + '"></span>'
               + escHtml(mId);
             mEl.onclick = function (e) {
               e.stopPropagation();
@@ -1846,7 +1881,7 @@ function renderHubInSidebar(content, hub, isConnected) {
           var mEl = document.createElement('div');
           mEl.className = 'machine-item machine-unreachable';
           if (selectedHubURL === hubKey && selectedMachineId === sel.machine) mEl.classList.add('selected');
-          mEl.innerHTML = '<span class="machine-dot unreachable"></span>'
+          mEl.innerHTML = '<span class="dot dot-offline"></span>'
             + escHtml(sel.machine)
             + '<span class="unreachable-badge">unreachable</span>';
           mEl.onclick = function (e) {
@@ -1857,7 +1892,7 @@ function renderHubInSidebar(content, hub, isConnected) {
         });
       }
     }).catch(function () {
-      hubHeader.querySelector('.hub-dot').className = 'hub-dot offline';
+      hubHeader.querySelector('.hub-dot').className = 'dot hub-dot dot-error';
     });
   }
 }
@@ -2384,13 +2419,13 @@ function setConnPhase(phase) {
 function applyConnectionUI() {
   var btn = document.getElementById('connect-btn');
   if (btn) {
-    btn.classList.remove('connected', 'connecting');
+    btn.classList.remove('chrome-accent', 'chrome-warn', 'pulse');
     btn.disabled = (connPhase === 'disconnecting');
     if (connPhase === 'connected') {
-      btn.classList.add('connected');
+      btn.classList.add('chrome-accent');
       btn.title = connAttached ? 'Detach' : 'Disconnect';
     } else if (connPhase === 'connecting' || connPhase === 'disconnecting') {
-      btn.classList.add('connecting');
+      btn.classList.add('chrome-warn', 'pulse');
       btn.title = connPhase === 'connecting' ? 'Connecting...' : 'Disconnecting...';
     } else {
       btn.title = 'Connect';
@@ -2402,7 +2437,7 @@ function applyConnectionUI() {
 
   // Tela log dot
   var dot = document.getElementById('log-tela-dot');
-  if (dot) dot.className = (connPhase === 'connected' || connPhase === 'connecting') ? 'log-dot log-dot-live' : 'log-dot log-dot-idle';
+  if (dot) dot.className = (connPhase === 'connected' || connPhase === 'connecting') ? 'dot dot-online' : 'dot dot-offline';
 
   // Agents pair button
   var pairBtn = document.getElementById('agents-pair-btn');
@@ -2515,10 +2550,8 @@ function doConnect() {
         goApp.GetSettings().then(function (s) {
           if (s.verboseDefault) {
             verboseMode = true;
-            var vbtn = document.getElementById('verbose-btn');
-            var vicon = document.getElementById('verbose-icon');
-            if (vbtn) vbtn.classList.add('active');
-            if (vicon) vicon.innerHTML = '\u2611';
+            var vchk = document.getElementById('verbose-check');
+            if (vchk) vchk.checked = true;
             goApp.SetVerbose(true);
           }
         });
@@ -2691,14 +2724,14 @@ function agentsRenderSidebar() {
   var html = '';
   agentsData.forEach(function (a) {
     var active = a.id === agentsSelectedId ? ' active' : '';
-    var dotClass = a.online ? 'online' : 'offline';
+    var dotClass = a.online ? 'dot-online' : 'dot-offline';
     var ver = a.version || 'unknown';
     var linkedBadge = (a.linkedAgentIds && a.linkedAgentIds.length)
       ? ' <span class="chip" title="Registered on ' + (a.linkedAgentIds.length + 1) + ' hubs">' + (a.linkedAgentIds.length + 1) + ' hubs</span>'
       : '';
     var label = a.displayName || a.id;
     html += '<div class="agents-sidebar-item' + active + '" onclick="agentsSelect(\'' + escAttr(a.id) + '\')">'
-      + '<span class="machine-status-dot ' + dotClass + '"></span>'
+      + '<span class="dot ' + dotClass + '"></span>'
       + '<div>'
       + '<div class="agents-sidebar-name">' + escHtml(label) + linkedBadge + '</div>'
       + '<div class="agents-sidebar-version version-badge-sidebar' + (latestVersion && ver !== latestVersion ? ' version-outdated' : '') + '" data-ver="' + escAttr(ver) + '">' + escHtml(ver) + '</div>'
@@ -2743,8 +2776,8 @@ function agentsShowDetail(a) {
   var label = a.displayName || a.id;
   var html = '<div class="detail-header">'
     + '<div class="detail-title">' + escHtml(label)
-    + ' <span class="' + (isOnline ? 'badge-online' : 'badge-offline') + '">'
-    + (isOnline ? 'Online' : 'Offline') + '</span></div>'
+    + ' <span class="status ' + (isOnline ? 'status-online' : 'status-offline') + '">'
+    + '<span class="status-dot"></span>' + (isOnline ? 'Online' : 'Offline') + '</span></div>'
     + '<div class="detail-subtitle">On ' + escHtml(a.hub) + '</div>'
     + '</div>';
 
@@ -2839,12 +2872,12 @@ function agentsShowDetail(a) {
     // Software button starts disabled with a neutral label. loadAgentChannel
     // overwrites it with the channel-aware truth from the agent's update-status
     // response, so the button can never disagree with the channel row.
-    html += '<tr><td>Configuration</td><td><button type="button" class="tb-btn" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
-      + '<tr><td>Log output</td><td><button type="button" class="tb-btn" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
+    html += '<tr><td>Configuration</td><td><button type="button" class="btn btn-sm" onclick="agentsViewConfig(\'' + eid + '\',\'' + ehub + '\')">View Config</button></td></tr>'
+      + '<tr><td>Log output</td><td><button type="button" class="btn btn-sm" onclick="agentsViewLogs(\'' + eid + '\',\'' + ehub + '\')">View Logs</button></td></tr>'
       + '<tr><td>Release channel</td><td>' + renderChannelSelect('agent-channel-select', '') + ' <span id="agent-channel-status" class="tools-service-label">loading...</span></td></tr>'
-      + '<tr><td>Software</td><td><button type="button" class="tb-btn" id="agent-update-btn" disabled onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">Update</button>'
+      + '<tr><td>Software</td><td><button type="button" class="btn btn-sm" id="agent-update-btn" disabled onclick="agentsUpdate(\'' + eid + '\',\'' + ehub + '\')">Update</button>'
       + ' <span id="agent-update-status" class="tools-service-label">loading...</span></td></tr>'
-      + '<tr><td>Restart</td><td><button type="button" class="tb-btn" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
+      + '<tr><td>Restart</td><td><button type="button" class="btn btn-sm" onclick="agentsRestart(\'' + eid + '\',\'' + ehub + '\')">Restart</button></td></tr>';
   } else {
     html += '<tr><td colspan="2">Agent ' + (isOnline ? 'does not support remote management. Update telad to enable.' : 'is offline.') + '</td></tr>';
   }
@@ -2855,11 +2888,11 @@ function agentsShowDetail(a) {
     + '<div class="danger-row"><div class="danger-row-text">'
     + '<div class="danger-row-label">Force disconnect</div>'
     + '<div class="danger-row-desc">Close all active sessions for this agent.</div>'
-    + '</div><button type="button" class="btn-danger btn-sm" disabled>Disconnect</button></div>'
+    + '</div><button type="button" class="btn btn-sm btn-danger" disabled>Disconnect</button></div>'
     + '<div class="danger-row"><div class="danger-row-text">'
     + '<div class="danger-row-label">Remove machine</div>'
     + '<div class="danger-row-desc">Remove this machine from the hub. The agent will re-register.</div>'
-    + '</div><button type="button" class="btn-danger btn-sm" disabled>Remove</button></div>'
+    + '</div><button type="button" class="btn btn-sm btn-danger" disabled>Remove</button></div>'
     + '</div>';
 
   document.getElementById('agents-detail').innerHTML = html;
@@ -3001,7 +3034,7 @@ function showTextViewDialog(title, text) {
 
   var okBtn = document.getElementById('generic-dialog-ok');
   okBtn.textContent = 'Close';
-  okBtn.className = 'btn-primary';
+  okBtn.className = 'btn btn-primary';
   overlay.classList.remove('hidden');
 
   _dialogResolve = function () {
@@ -3024,7 +3057,7 @@ function agentsViewLogs(machineId, hub) {
     var tab = document.createElement('button');
     tab.className = 'log-panel-tab';
     tab.onclick = function () { switchLogTab(tab, paneId); };
-    tab.innerHTML = '<span class="log-dot log-dot-idle" id="' + paneId + '-dot"></span>'
+    tab.innerHTML = '<span class="dot dot-offline" id="' + paneId + '-dot"></span>'
       + escHtml(machineId)
       + '<span class="log-tab-close" onclick="event.stopPropagation();removeAgentLogTab(\'' + escAttr(paneId) + '\',this.parentNode)" title="Close">&times;</span>';
     tabBar.insertBefore(tab, addBtn);
@@ -3054,17 +3087,17 @@ function agentsViewLogs(machineId, hub) {
 
   // Fetch logs
   var dot = document.getElementById(paneId + '-dot');
-  if (dot) dot.className = 'log-dot log-dot-warn';
+  if (dot) dot.className = 'dot dot-degraded';
 
   goApp.GetAgentLogs(hub, machineId, 500).then(function (resp) {
     try { var data = JSON.parse(resp); } catch (e) {
       document.getElementById(paneId).textContent = 'Error: invalid response\n';
-      if (dot) dot.className = 'log-dot log-dot-idle';
+      if (dot) dot.className = 'dot dot-offline';
       return;
     }
     if (data.error || data.ok === false) {
       document.getElementById(paneId).textContent = 'Error: ' + (data.error || data.message || 'unknown error') + '\n';
-      if (dot) dot.className = 'log-dot log-dot-idle';
+      if (dot) dot.className = 'dot dot-offline';
       return;
     }
     var payload = data.payload || data;
@@ -3072,10 +3105,10 @@ function agentsViewLogs(machineId, hub) {
     var el = document.getElementById(paneId);
     el.textContent = lines.join('\n') + '\n';
     logAutoScroll(el);
-    if (dot) dot.className = 'log-dot log-dot-live';
+    if (dot) dot.className = 'dot dot-online';
   }).catch(function (err) {
     document.getElementById(paneId).textContent = 'Failed: ' + err + '\n';
-    if (dot) dot.className = 'log-dot log-dot-idle';
+    if (dot) dot.className = 'dot dot-offline';
   });
 }
 
@@ -3315,11 +3348,11 @@ function filesShowMachineList() {
       filesMachineCapabilities = caps || {};
       var html = '<div class="files-machine-list">';
       machineList.forEach(function (m) {
-        var statusClass = state.connected ? 'online' : 'disconnected';
+        var statusClass = state.connected ? 'dot-online' : 'dot-error';
         var badge, disabled;
 
         if (!state.connected) {
-          badge = '<span class="files-machine-badge off">disconnected</span>';
+          badge = '<span class="chip chip-cap-no files-machine-badge">disconnected</span>';
           disabled = true;
         } else {
           var mc = caps[m.name];
@@ -3327,25 +3360,25 @@ function filesShowMachineList() {
           if (fs && fs.enabled) {
             badge = '<span class="cap-tags">';
             if (fs.writable) {
-              badge += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Writable</span>';
+              badge += '<span class="chip chip-cap-yes">Writable</span>';
               if (fs.allowDelete) {
-                badge += '<span class="cap-tag cap-tag-yes"><span class="cap-dot cap-dot-yes"></span> Delete</span>';
+                badge += '<span class="chip chip-cap-yes">Delete</span>';
               } else {
-                badge += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> No delete</span>';
+                badge += '<span class="chip chip-cap-no">No delete</span>';
               }
             } else {
-              badge += '<span class="cap-tag cap-tag-no"><span class="cap-dot cap-dot-no"></span> Read only</span>';
+              badge += '<span class="chip chip-cap-no">Read only</span>';
             }
             if (fs.maxFileSize) {
-              badge += '<span class="cap-tag cap-tag-info">Max: ' + formatFileSize(fs.maxFileSize) + '</span>';
+              badge += '<span class="chip chip-cap-info">Max: ' + formatFileSize(fs.maxFileSize) + '</span>';
             }
             if (fs.blockedExtensions && fs.blockedExtensions.length > 0) {
-              badge += '<span class="cap-tag cap-tag-info">Blocked: ' + escHtml(fs.blockedExtensions.join(', ')) + '</span>';
+              badge += '<span class="chip chip-cap-info">Blocked: ' + escHtml(fs.blockedExtensions.join(', ')) + '</span>';
             }
             badge += '</span>';
             disabled = false;
           } else {
-            badge = '<span class="files-machine-badge none">no file share</span>';
+            badge = '<span class="chip files-machine-badge">no file share</span>';
             disabled = true;
           }
         }
@@ -3354,7 +3387,7 @@ function filesShowMachineList() {
         var cls = disabled ? ' disabled' : '';
 
         html += '<div class="files-machine-card' + cls + '"' + onclick + '>'
-          + '<span class="files-machine-status ' + statusClass + '"></span>'
+          + '<span class="dot ' + statusClass + '"></span>'
           + '<span class="fe-icon-machine"></span>'
           + '<div>'
           + '<div class="files-machine-name">' + escHtml(m.name) + '</div>'
@@ -3378,11 +3411,11 @@ function filesShowMachineList() {
       var fallbackHtml = '<div class="files-machine-list">';
       machineList.forEach(function (m) {
         fallbackHtml += '<div class="files-machine-card" onclick="filesOpenMachine(\'' + escAttr(m.name) + '\')">'
-          + '<span class="files-machine-status online"></span>'
+          + '<span class="dot dot-online"></span>'
           + '<span class="fe-icon-machine"></span>'
           + '<div><div class="files-machine-name">' + escHtml(m.name) + '</div>'
           + '<div class="files-machine-meta">' + escHtml(m.hub) + '</div></div>'
-          + '<span class="files-machine-badge none">unknown</span>'
+          + '<span class="chip files-machine-badge">unknown</span>'
           + '</div>';
       });
       fallbackHtml += '</div>';
@@ -4042,11 +4075,11 @@ function filesUpdateStatusBar() {
   if (files) parts.push(files + ' file' + (files !== 1 ? 's' : ''));
   if (dirs) parts.push(dirs + ' folder' + (dirs !== 1 ? 's' : ''));
   var text = parts.join(', ') || 'Empty';
-  var modeClass = filesCurrentWritable ? 'rw' : 'ro';
+  var modeClass = filesCurrentWritable ? 'dot-online' : 'dot-degraded';
   var modeText = filesCurrentWritable ? 'read-write' : 'read-only';
   document.getElementById('files-status').innerHTML = '<span>' + text + '</span>'
     + (totalSize > 0 ? '<span class="files-status-sep"></span><span>' + formatFileSize(totalSize) + '</span>' : '')
-    + '<span class="files-status-mode"><span class="files-status-dot ' + modeClass + '"></span>' + modeText + '</span>';
+    + '<span class="files-status-mode"><span class="dot ' + modeClass + '"></span>' + modeText + '</span>';
 }
 
 // ── Formatters ──
@@ -4185,11 +4218,12 @@ function renderHubSettings(pane) {
     html += '<div class="settings-group"><div class="settings-group-header">Connection</div>';
     html += '<div class="settings-row"><div class="settings-label">URL</div><div class="settings-value">' + escHtml(hubUrl) + '</div></div>';
 
-    var statusDot = hubInfoData ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;"></span>Online'
-      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#95a5a6;margin-right:6px;vertical-align:middle;"></span>Offline';
-    html += '<div class="settings-row"><div class="settings-label">Status</div><div class="settings-value" style="font-family:var(--font)">' + statusDot + '</div></div>';
+    var statusBadge = hubInfoData
+      ? '<span class="status status-online"><span class="status-dot"></span>Online</span>'
+      : '<span class="status status-offline"><span class="status-dot"></span>Offline</span>';
+    html += '<div class="settings-row"><div class="settings-label">Status</div><div class="settings-value" style="font-family:var(--font)">' + statusBadge + '</div></div>';
 
-    html += '<div class="settings-row"><div class="settings-label">Your role</div><div class="settings-value" style="font-family:var(--font)"><span class="role-badge role-' + tokenRole + '">' + tokenRole + '</span></div></div>';
+    html += '<div class="settings-row"><div class="settings-label">Your role</div><div class="settings-value" style="font-family:var(--font)"><span class="chip chip-role-' + tokenRole + '">' + tokenRole + '</span></div></div>';
     html += '<div class="settings-row"><div class="settings-label">Console</div><div class="settings-value"><a href="' + escAttr(consoleUrl) + '" target="_blank">' + escHtml(consoleUrl) + '</a></div></div>';
     html += '</div>';
 
@@ -4232,14 +4266,14 @@ function renderHubSettings(pane) {
       // GET /api/admin/update response.
       html += '<div class="settings-group" id="hub-management-card"><div class="settings-group-header">Management</div>';
       html += '<div class="settings-row"><div class="settings-label">Log output</div>'
-        + '<div class="settings-value"><button class="tb-btn" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
+        + '<div class="settings-value"><button class="btn btn-sm" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Release channel</div>'
         + '<div class="settings-value">' + renderChannelSelect('hub-channel-select', '') + ' <span id="hub-channel-status" class="tools-service-label">loading...</span></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Software</div>'
-        + '<div class="settings-value"><button class="tb-btn" id="hub-update-btn" disabled onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Update</button>'
+        + '<div class="settings-value"><button class="btn btn-sm" id="hub-update-btn" disabled onclick="hubUpdate(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Update</button>'
         + ' <span id="hub-update-status" class="tools-service-label">loading...</span></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Restart</div>'
-        + '<div class="settings-value"><button class="tb-btn" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
+        + '<div class="settings-value"><button class="btn btn-sm" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
       html += '</div>';
     }
 
@@ -4248,12 +4282,12 @@ function renderHubSettings(pane) {
       + '<div class="settings-row"><div class="settings-label">Remove hub</div>'
       + '<div class="settings-value danger-value">'
       + '<span class="danger-desc">Remove this hub from TelaVisor. Does not affect the hub itself.</span>'
-      + '<button class="btn-danger btn-sm" onclick="removeHub(\'' + escAttr(hub) + '\')">Remove Hub</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="removeHub(\'' + escAttr(hub) + '\')">Remove Hub</button>'
       + '</div></div>'
       + '<div class="settings-row"><div class="settings-label">Clear credentials</div>'
       + '<div class="settings-value danger-value">'
       + '<span class="danger-desc">Delete all stored hub tokens. You will need to re-add hubs.</span>'
-      + '<button class="btn-danger btn-sm" onclick="clearCredentialStore()">Clear All</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="clearCredentialStore()">Clear All</button>'
       + '</div></div></div>';
 
     pane.innerHTML = html;
@@ -4315,7 +4349,7 @@ function renderHubMachines(pane) {
       html += '<p class="empty-hint">No machines registered.</p>';
     } else {
       status.machines.forEach(function (m) {
-        var dotClass = m.agentConnected ? 'online' : 'offline';
+        var dotClass = m.agentConnected ? 'dot-online' : 'dot-offline';
         var sessionsHtml = m.sessionCount > 0
           ? '<span style="font-size:12px;color:var(--accent);font-weight:600;">' + m.sessionCount + ' active session' + (m.sessionCount > 1 ? 's' : '') + '</span>'
           : '<span style="font-size:12px;color:var(--text-muted);">No active sessions</span>';
@@ -4326,7 +4360,7 @@ function renderHubMachines(pane) {
           });
         }
         html += '<div class="machine-card">'
-          + '<div class="machine-status-dot ' + dotClass + '"></div>'
+          + '<span class="dot dot-lg ' + dotClass + '"></span>'
           + '<div class="machine-info">'
           + '<div class="machine-name">' + escHtml(m.id) + '</div>'
           + '<div class="machine-detail">' + (m.agentConnected ? 'Online' : 'Offline') + (m.lastSeen ? ' &middot; Last seen: ' + escHtml(m.lastSeen) : '') + '</div>'
@@ -4362,8 +4396,8 @@ function renderHubTokens(pane) {
       + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hub) + '</strong></p>';
 
     html += '<div class="toolbar">'
-      + '<button class="btn-primary btn-sm" onclick="promptCreateToken()">Add Token</button>'
-      + '<button class="btn-primary btn-sm" style="background:#3498db;border-color:#3498db;" onclick="promptPairCode()">Generate Pairing Code</button>'
+      + '<button class="btn btn-sm btn-primary" onclick="promptCreateToken()">Add Token</button>'
+      + '<button class="btn btn-sm" onclick="promptPairCode()">Generate Pairing Code</button>'
       + '</div>';
 
     html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Full tokens are only shown at creation or after rotation.</p>';
@@ -4375,7 +4409,7 @@ function renderHubTokens(pane) {
     tokens.forEach(function (t) {
       var isOwner = t.role === 'owner';
       html += '<tr><td><strong>' + escHtml(t.id) + '</strong></td>'
-        + '<td><span class="role-badge role-' + t.role + '">' + t.role + '</span></td>'
+        + '<td><span class="chip chip-role-' + t.role + '">' + t.role + '</span></td>'
         + '<td><span class="token-preview">' + escHtml(t.tokenPreview) + '</span></td>'
         + '<td><div class="action-btns">'
         + '<button class="icon-btn" onclick="rotateToken(\'' + escAttr(t.id) + '\')">Rotate</button>';
@@ -4533,7 +4567,7 @@ function renderHubAccess(pane) {
           + ' <span class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</span></div>';
 
         if (entry.role !== 'owner') {
-          html += '<button type="button" class="tb-btn" onclick="accessRename(\'' + escAttr(entry.id) + '\')">Rename</button>';
+          html += '<button type="button" class="btn btn-sm" onclick="accessRename(\'' + escAttr(entry.id) + '\')">Rename</button>';
         }
 
         html += '</div>';
@@ -4551,7 +4585,7 @@ function renderHubAccess(pane) {
             (m.permissions || []).forEach(function (p) {
               html += '<span class="pill">' + escHtml(p) + '</span> ';
             });
-            html += '<button type="button" class="btn-danger btn-sm" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
+            html += '<button type="button" class="btn btn-sm btn-danger" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
             html += '</div>';
           });
         }
@@ -4561,7 +4595,7 @@ function renderHubAccess(pane) {
     }
 
     html += '<div style="margin-top:16px;">'
-      + '<button type="button" class="btn-primary btn-sm" onclick="accessGrantModal()">Grant Access</button>'
+      + '<button type="button" class="btn btn-sm btn-primary" onclick="accessGrantModal()">Grant Access</button>'
       + '</div>';
 
     pane.innerHTML = html;
@@ -4885,16 +4919,8 @@ function saveTerminal() {
 }
 
 function toggleVerbose() {
-  verboseMode = !verboseMode;
-  var btn = document.getElementById('verbose-btn');
-  var icon = document.getElementById('verbose-icon');
-  if (verboseMode) {
-    btn.classList.add('active');
-    icon.innerHTML = '&#x2611;';
-  } else {
-    btn.classList.remove('active');
-    icon.innerHTML = '&#x2610;';
-  }
+  var chk = document.getElementById('verbose-check');
+  verboseMode = chk ? chk.checked : !verboseMode;
   goApp.GetConnectionState().then(function (state) {
     if (state.connected) {
       goApp.SetVerbose(verboseMode);
@@ -4906,7 +4932,7 @@ function refreshTerminal() {
   goApp.GetConnectionState().then(function (state) {
     var dot = document.getElementById('log-tela-dot');
     if (dot) {
-      dot.className = state.connected ? 'log-dot log-dot-live' : 'log-dot log-dot-idle';
+      dot.className = state.connected ? 'dot dot-online' : 'dot dot-offline';
     }
     if (state.connected && state.attached) {
       var el = document.getElementById('log-tela');
@@ -5133,7 +5159,7 @@ function applySettings() {
       settingsDirty = false;
       setSettingsButtonsDisabled(true);
       if (s.logMaxLines) logMaxLines = s.logMaxLines;
-      document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
+      (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
       updateDismissedForSession = false;
       updateSkippedVersion = '';
       checkForUpdate();
@@ -5165,11 +5191,19 @@ function markSettingsDirty() {
 // ── Theme ──────────────────────────────────────────────────────────
 
 function applyTelaTheme(pref) {
+  var resolved;
   if (pref === 'system') {
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   } else {
-    document.documentElement.setAttribute('data-theme', pref);
+    resolved = pref;
+  }
+  document.documentElement.setAttribute('data-theme', resolved);
+  // Topbar tracks the active theme via .tb-light / .tb-dark classes so
+  // chrome buttons and brand mark can resolve --tb-* custom properties.
+  var tb = document.querySelector('.topbar');
+  if (tb) {
+    tb.classList.toggle('tb-light', resolved === 'light');
+    tb.classList.toggle('tb-dark', resolved !== 'light');
   }
 }
 
@@ -5192,7 +5226,7 @@ function closeSettings() {
   goApp.SaveSettings(JSON.stringify(s)).then(function () {
     settingsDirty = false;
     setSettingsButtonsDisabled(true);
-    document.getElementById('update-btn').disabled = true; document.getElementById('update-btn').title = 'No updates';
+    (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
     updateDismissedForSession = false;
     updateSkippedVersion = '';
     checkForUpdate();
@@ -5273,20 +5307,20 @@ function renderBinStatus(container, bins, warningHtml) {
       var action = '';
 
       if (b.found && b.upToDate) {
-        dotClass = 'found';
+        dotClass = 'dot-online';
         verText = b.version;
       } else if (b.found && !b.upToDate) {
-        dotClass = 'outdated';
+        dotClass = 'dot-degraded';
         verText = b.version + ' (latest: ' + (b.latest || '?') + ')';
         action = '<button class="bin-status-action" onclick="installBinary(\'' + escAttr(b.name) + '\')">Update</button>';
       } else {
-        dotClass = 'missing';
+        dotClass = 'dot-error';
         verText = 'not found';
         action = '<button class="bin-status-action" onclick="installBinary(\'' + escAttr(b.name) + '\')">Install</button>';
       }
 
       html += '<div class="bin-status-item">'
-        + '<span class="bin-status-dot ' + dotClass + '"></span>'
+        + '<span class="dot ' + dotClass + '"></span>'
         + '<span class="bin-status-name">' + escHtml(b.name) + '</span>'
         + '<span class="bin-status-ver">' + escHtml(verText) + '</span>'
         + action
@@ -5378,7 +5412,7 @@ function renderRemotesView(pane) {
     + '<p class="section-desc">Portals TelaVisor talks to for hubs and agents.</p>'
     + '<div id="remotes-list-pane"></div>'
     + '<div class="remotes-add-row">'
-    + '<button type="button" class="tb-btn" onclick="openAddPortalSourceDialog()">Add Remote...</button>'
+    + '<button type="button" class="btn btn-sm" onclick="openAddPortalSourceDialog()">Add Remote...</button>'
     + '</div>';
   refreshRemotesList();
 }
@@ -5410,7 +5444,7 @@ function refreshRemotesList() {
         + ' onchange="portalSourceToggleEnabled(\'' + escAttr(s.name) + '\', this.checked)">'
         + ' Enabled</label>';
       if (!isEmbedded) {
-        html += '<button type="button" class="tb-btn tb-delete-btn" onclick="portalSourceRemove(\'' + escAttr(s.name) + '\')">Remove</button>';
+        html += '<button type="button" class="btn btn-sm btn-danger" onclick="portalSourceRemove(\'' + escAttr(s.name) + '\')">Remove</button>';
       }
       html += '</div></div>';
     });
@@ -5429,7 +5463,7 @@ function renderCredentialsView(pane) {
   pane.innerHTML = '<h2>Stored Credentials</h2>'
     + '<p class="section-desc">Hub tokens stored in the local credential file. Equivalent to <code>tela login</code> / <code>tela logout</code>.</p>'
     + '<div id="credentials-list-pane"></div>'
-    + '<div style="margin-top:12px;"><button type="button" class="tb-btn tb-delete-btn" onclick="clearAllCredentials()">Clear All</button></div>';
+    + '<div style="margin-top:12px;"><button type="button" class="btn btn-sm btn-danger" onclick="clearAllCredentials()">Clear All</button></div>';
   refreshCredentialsList();
 }
 
@@ -5966,6 +6000,72 @@ function validateRequiredFields(containerEl) {
 var _dialogResolve = null;
 var _dialogMode = ''; // 'confirm' or 'prompt'
 
+// Modal stack: when a modal opens a child modal, the child must render
+// above its parent. We compute the highest z-index across all currently
+// visible .modal-overlay elements and assign the new overlay one higher.
+//
+// Called by the generic dialog (which is the one that gets stacked on
+// top of other modals). Also notifies the Go backend whenever the
+// total modal-open count changes, so OS-level window close can be
+// blocked while any modal is active (TDL: "modals capture window
+// chrome").
+function _countVisibleModals() {
+  var count = 0;
+  document.querySelectorAll('.modal-overlay').forEach(function (el) {
+    if (el.classList.contains('hidden')) return;
+    if (el.style.display === 'none') return;
+    count++;
+  });
+  return count;
+}
+function _notifyModalState() {
+  var open = _countVisibleModals() > 0;
+  if (window.goApp && typeof goApp.SetModalOpen === 'function') {
+    goApp.SetModalOpen(open);
+  }
+}
+function modalStackPush(overlay) {
+  var maxZ = 100;
+  document.querySelectorAll('.modal-overlay').forEach(function (el) {
+    if (el === overlay) return;
+    if (el.classList.contains('hidden')) return;
+    if (el.style.display === 'none') return;
+    var z = parseInt(el.style.zIndex || '100', 10);
+    if (isNaN(z)) z = 100;
+    if (z > maxZ) maxZ = z;
+  });
+  overlay.style.zIndex = String(maxZ + 10);
+  // Defer one tick so the `hidden` class removal has landed before the
+  // count runs. Caller pushes first then removes hidden, so schedule
+  // the notify for after that sequence completes.
+  setTimeout(_notifyModalState, 0);
+}
+function modalStackPop(overlay) {
+  overlay.style.zIndex = '';
+  setTimeout(_notifyModalState, 0);
+}
+
+// Observe every .modal-overlay and notify the Go backend whenever its
+// visibility changes. This catches all modal toggles regardless of how
+// they are opened (classList, style.display, or via modalStackPush).
+// Installed once at load time after the DOM is ready.
+(function installModalObservers() {
+  function install() {
+    document.querySelectorAll('.modal-overlay').forEach(function (el) {
+      var obs = new MutationObserver(function () {
+        _notifyModalState();
+      });
+      obs.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+    });
+    _notifyModalState();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', install);
+  } else {
+    install();
+  }
+})();
+
 function showConfirmDialog(title, message, okLabel) {
   return new Promise(function (resolve) {
     _dialogResolve = resolve;
@@ -5975,8 +6075,10 @@ function showConfirmDialog(title, message, okLabel) {
     document.getElementById('generic-dialog-input').classList.add('hidden');
     var okBtn = document.getElementById('generic-dialog-ok');
     okBtn.textContent = okLabel || 'OK';
-    okBtn.className = (okLabel && okLabel.toLowerCase().indexOf('delete') >= 0) ? 'btn-danger' : 'btn-primary';
-    document.getElementById('generic-dialog-overlay').classList.remove('hidden');
+    okBtn.className = (okLabel && okLabel.toLowerCase().indexOf('delete') >= 0) ? 'btn btn-destructive' : 'btn btn-primary';
+    var overlay = document.getElementById('generic-dialog-overlay');
+    modalStackPush(overlay);
+    overlay.classList.remove('hidden');
   });
 }
 
@@ -5994,14 +6096,18 @@ function showPromptDialog(title, message, defaultValue, okLabel) {
     input.placeholder = '';
     var okBtn = document.getElementById('generic-dialog-ok');
     okBtn.textContent = okLabel || 'OK';
-    okBtn.className = 'btn-primary';
-    document.getElementById('generic-dialog-overlay').classList.remove('hidden');
+    okBtn.className = 'btn btn-primary';
+    var overlay = document.getElementById('generic-dialog-overlay');
+    modalStackPush(overlay);
+    overlay.classList.remove('hidden');
     setTimeout(function () { input.focus(); input.select(); }, 50);
   });
 }
 
 function genericDialogOk() {
-  document.getElementById('generic-dialog-overlay').classList.add('hidden');
+  var overlay = document.getElementById('generic-dialog-overlay');
+  overlay.classList.add('hidden');
+  modalStackPop(overlay);
   if (_dialogResolve) {
     if (_dialogMode === 'prompt') {
       _dialogResolve(document.getElementById('generic-dialog-input').value);
@@ -6013,7 +6119,9 @@ function genericDialogOk() {
 }
 
 function genericDialogCancel() {
-  document.getElementById('generic-dialog-overlay').classList.add('hidden');
+  var overlay = document.getElementById('generic-dialog-overlay');
+  overlay.classList.add('hidden');
+  modalStackPop(overlay);
   if (_dialogResolve) {
     if (_dialogMode === 'prompt') {
       _dialogResolve(null);

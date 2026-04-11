@@ -62,7 +62,8 @@ type App struct {
 	updateVersion string
 
 	// Window state
-	quitting bool
+	quitting  bool
+	modalOpen bool // set by JS via SetModalOpen; TDL rule: modals capture window chrome
 
 	// WebSocket control connection
 	controlWS *websocket.Conn
@@ -781,6 +782,22 @@ func (a *App) IsQuitting() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.quitting
+}
+
+// SetModalOpen is called by the frontend whenever a modal is pushed or
+// popped. The Go side uses this to block OS-level window close while a
+// modal is active, per the TDL "modals capture window chrome" rule.
+func (a *App) SetModalOpen(open bool) {
+	a.mu.Lock()
+	a.modalOpen = open
+	a.mu.Unlock()
+}
+
+// IsModalOpen returns true if the frontend currently has any modal open.
+func (a *App) IsModalOpen() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.modalOpen
 }
 
 // IsConnected returns true if tela is currently connected.

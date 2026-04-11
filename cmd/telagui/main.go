@@ -36,6 +36,15 @@ func main() {
 			if app.IsQuitting() {
 				return false // already confirmed, allow close
 			}
+			// TDL rule: modals capture window chrome. While any modal is
+			// open the OS title-bar close must not dismiss the app; it
+			// must route through the active modal's cancel flow first.
+			// Ring the window (let the user know) and return true to
+			// prevent close.
+			if app.IsModalOpen() {
+				wailsRuntime.EventsEmit(app.ctx, "app:close-blocked-by-modal")
+				return true
+			}
 			s := app.GetSettings()
 			if s.MinimizeOnClose {
 				wailsRuntime.WindowHide(app.ctx)

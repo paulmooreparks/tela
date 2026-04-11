@@ -259,6 +259,169 @@ perception.
   button class. A toolbar's tinted background is what makes it distinct, not
   a special button style.
 
+## Links
+
+Links are the one place in TDL where underline carries meaning. Any text the
+user can click must be underlined. This rule is absolute: it applies to web
+apps (Awan Saya), to desktop apps (TelaVisor, TelaBoard), to menus, to
+modals, and to help text. It does not apply to the brand link, which is the
+documented exception.
+
+```css
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.link:hover {
+  color: var(--accent-hover);
+  text-decoration-thickness: 2px;
+}
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.link:visited { color: var(--accent); }
+
+/* Muted link: same underline rule, but with --text-muted color so the
+   link is subordinate to surrounding body content. Used for footer
+   links, secondary navigation, and metadata cross-references. */
+.link-muted {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-muted:hover {
+  color: var(--text);
+  text-decoration-thickness: 2px;
+}
+```
+
+### Rules
+
+- **Every link is underlined.** The underline is visible by default, not only
+  on hover. Users must not have to hover to discover that text is clickable.
+- **Color is accent or muted, never blue.** Blue hyperlinks are a web
+  convention that predates TDL. TDL uses accent green for primary links and
+  text-muted for secondary links. Both remain underlined.
+- **Hover thickens the underline** from 1px to 2px. Color shifts from
+  `--accent` to `--accent-hover`, or from `--text-muted` to `--text`.
+- **Focus-visible outline is required.** Links are keyboard-reachable and
+  must show a focus ring.
+- **No visited color.** Links keep their color regardless of visited state.
+  TDL applications do not track link history, and visited-style coloring
+  adds visual noise without benefit.
+- **Links are not buttons.** A link navigates or reveals. A button commits
+  an action. If the element changes application state beyond showing a new
+  view or loading new data, it must be a `.btn`, not a `.link`.
+- **Brand link is the one exception.** `.brand-link` at the top-left of the
+  topbar intentionally omits the underline to preserve the brand mark.
+  Every other link on screen is underlined.
+
+## Mode bar
+
+A mode bar is a compact toggle group that switches between top-level
+application modes. TelaVisor uses it to switch between "Clients" and
+"Infrastructure". Awan Saya uses a similar pattern to switch between user
+views and admin views.
+
+Mode bars live in the topbar, not in content. They use an outlined container
+(the affordance for "these are interactive options") with a full-width accent
+bar flush along the bottom edge of the active segment (the existing TDL
+vocabulary for "you are here", already used by the main tab bar's active
+indicator). Because mode bars live in the topbar, they inherit the topbar's
+chrome context and use topbar-scoped `--tb-*` custom properties.
+
+The active segment is bold, uses `cursor: default`, and carries no button
+chrome (no hover fill, no raised appearance). It is unambiguously "you are
+here", not "click me". Inactive segments show a hover fill on mouseover to
+confirm they are interactive.
+
+```css
+.mode-bar {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--tb-chrome-border);
+  border-radius: 6px;
+  background: var(--tb-chrome-bg);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mode-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--tb-chrome-fg);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.mode-btn + .mode-btn {
+  border-left: 1px solid var(--tb-chrome-border);
+}
+.mode-btn:hover:not(.active) {
+  color: var(--tb-chrome-hover-fg);
+  background: var(--tb-chrome-hover-bg);
+}
+.mode-btn.active {
+  color: var(--tb-chrome-hover-fg);
+  font-weight: 700;
+  cursor: default;
+}
+.mode-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+}
+.mode-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+```
+
+### Rules
+
+- **Topbar-only.** Mode bars appear only in the topbar. Content-area
+  navigation uses the main tab bar (`.tab`), not a mode bar.
+- **Exactly one active mode.** A mode bar has at least two segments and
+  exactly one `.active`. A mode bar with one segment should not exist.
+- **Segments are short labels.** One or two words per segment. Icons
+  without labels are not allowed because the mode switch is a navigational
+  commit, not a compact tool.
+- **Active is not a button.** The active segment has `cursor: default`,
+  no hover state, no fill, and no button chrome. Only the bold label and
+  the 3px accent bar at the bottom edge signal "you are here". This is
+  deliberately the inverse of the naive "active = filled button" pattern,
+  because a filled button would read as "click me" and confuse the user
+  into thinking the mode bar is a toggle they must click repeatedly.
+- **Inactive segments are hoverable.** Inactive segments show a subtle
+  hover fill (via `--tb-chrome-hover-bg`) so the interactive affordance
+  is visible before hover too (the container border alone).
+- **No glyph prefixes.** Mode bars do not carry icons or dots. The text
+  label alone is the signal.
+- **Placement.** Centered in the topbar between the brand link and the
+  chrome button strip. When the viewport is narrow, the mode bar may shift
+  left-of-center but never wraps to a new line.
+
 ## Status badges
 
 Status labels are flat, inline, non-interactive, and always prefixed by a glyph
@@ -1141,6 +1304,13 @@ These rules are the soul of TDL. Violations are bugs, not style preferences.
 10. **No browser dialogs.** `alert()`, `confirm()`, and `prompt()` are banned.
     Every dialog is a themed modal.
 
+11. **Every link is underlined.** Any clickable text must be underlined by
+    default, not only on hover. The underline is the universal affordance
+    for text links. The brand link is the one exception.
+
+12. **Mode bars live in the topbar only.** Content-area navigation uses the
+    main tab bar, never a segmented mode bar.
+
 ## Implementation checklist
 
 When building a new TDL application or restyling an existing one:
@@ -1149,19 +1319,22 @@ When building a new TDL application or restyling an existing one:
 2. Pick a topbar variant (`.tb-light` or `.tb-dark`) and wire it to the
    active theme.
 3. Use `.brand-link` for the top-left logo, with per-app click target.
-4. Use `.chrome-btn` for every topbar icon button; use inline SVG glyphs.
-5. Use `.btn` family for every content-area button.
-6. Use `.status` family for every state indicator.
-7. Use `.chip` for neutral metadata tags (flat filled pills, no border).
-8. Use `.form-input`, `.form-select`, `.form-textarea`, and `.form-check`
-   for inputs. Wrap in `.form-group` with a label above.
-9. Use `.card` for content containers. Use `.card-danger` for danger zones.
-10. Use `.modal-overlay` + `.modal-dialog`, never browser dialogs.
-11. Implement the modal stack so child modals render above parents.
-12. Implement window-close capture so quit is blocked while a modal is open.
-13. Apply the scrollbar styles.
-14. Follow the writing style rules for all UI text.
-15. Open [cmd/telagui/mockups/tdl-reference.html](cmd/telagui/mockups/tdl-reference.html)
+4. Use `.mode-bar` + `.mode-btn` for top-level mode switching in the topbar.
+5. Use `.chrome-btn` for every topbar icon button; use inline SVG glyphs.
+6. Use `.btn` family for every content-area button.
+7. Use `.link` / `.link-muted` for every clickable text outside the topbar,
+   always underlined.
+8. Use `.status` family for every state indicator.
+9. Use `.chip` for neutral metadata tags (flat filled pills, no border).
+10. Use `.form-input`, `.form-select`, `.form-textarea`, and `.form-check`
+    for inputs. Wrap in `.form-group` with a label above.
+11. Use `.card` for content containers. Use `.card-danger` for danger zones.
+12. Use `.modal-overlay` + `.modal-dialog`, never browser dialogs.
+13. Implement the modal stack so child modals render above parents.
+14. Implement window-close capture so quit is blocked while a modal is open.
+15. Apply the scrollbar styles.
+16. Follow the writing style rules for all UI text.
+17. Open [cmd/telagui/mockups/tdl-reference.html](cmd/telagui/mockups/tdl-reference.html)
     in a browser and verify your implementation matches the reference in
     both light and dark themes.
 

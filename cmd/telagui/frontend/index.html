@@ -9,27 +9,30 @@
 <body>
   <div id="error-toast" class="error-toast hidden"></div>
   <div id="app">
-    <div class="topbar">
+    <div class="topbar tb-dark">
       <div class="topbar-left">
-        <a class="app-brand" onclick="toggleAboutOverlay()" title="About TelaVisor">
-          <img src="/src/logo.png" class="app-logo" alt="Tela">
-          <span class="app-title">Tela<span class="app-title-visor">Visor</span></span>
-        </a>
-        <span class="app-version" id="app-version"></span>
+        <button class="brand-link" type="button" onclick="goHome()" title="Go to Status">
+          <span class="brand">
+            <img class="brand-logo" src="/src/logo.png" alt="Tela">Tela<em>Visor</em>
+          </span>
+        </button>
+        <span class="status status-current brand-version" id="app-version"></span>
       </div>
       <div class="topbar-center">
-        <div class="mode-toggle">
+        <div class="mode-bar">
           <button type="button" class="mode-btn active" id="mode-clients-btn" onclick="switchMode('clients')">Clients</button>
           <button type="button" class="mode-btn" id="mode-infra-btn" onclick="switchMode('infra')">Infrastructure</button>
         </div>
       </div>
       <div class="topbar-right">
-        <button class="topbar-icon-btn topbar-power-btn" id="connect-btn" onclick="toggleConnection()" title="Connect">&#x23FB;</button>
-        <button class="topbar-icon-btn topbar-mount-btn" id="mount-btn" onclick="toggleMount()" title="Mount file shares" disabled><svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 3V12H15V3H7L5.5 1H1V3Z"/></svg></button>
-        <button class="topbar-icon-btn topbar-update-btn" id="update-btn" onclick="toggleUpdateOverlay()" title="No updates" disabled>&#x26A0;</button>
-        <button class="topbar-icon-btn" onclick="toggleAboutOverlay()" title="About TelaVisor">i</button>
-        <button class="topbar-icon-btn" onclick="toggleSettingsOverlay()" title="Settings">&#x2699;</button>
-        <button class="topbar-icon-btn topbar-quit-btn" id="quit-btn" onclick="doQuit()" title="Quit">&#x2715;</button>
+        <div class="chrome-row">
+          <button type="button" class="chrome-btn" id="connect-btn" onclick="toggleConnection()" title="Connect">&#x23FB;</button>
+          <button type="button" class="chrome-btn" id="mount-btn" onclick="toggleMount()" title="Mount file shares" disabled><svg width="14" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 3V12H15V3H7L5.5 1H1V3Z"/></svg></button>
+          <button type="button" class="chrome-btn" id="update-btn" onclick="toggleUpdateOverlay()" title="No updates" disabled>&#x26A0;</button>
+          <button type="button" class="chrome-btn" onclick="toggleAboutOverlay()" title="About TelaVisor">&#x2139;</button>
+          <button type="button" class="chrome-btn" onclick="toggleSettingsOverlay()" title="Settings">&#x2699;</button>
+          <button type="button" class="chrome-btn chrome-danger" id="quit-btn" onclick="doQuit()" title="Quit">&#x2715;</button>
+        </div>
       </div>
       <!-- First-run tooltip -->
       <div class="connect-tooltip" id="connect-tooltip">
@@ -50,16 +53,16 @@
     <div class="pane-toolbar profile-toolbar hidden" id="profile-toolbar">
       <select id="profile-select" class="profile-toolbar-select" onchange="switchProfile(this.value)" title="Current profile"></select>
       <span class="tb-sep"></span>
-      <button class="tb-btn" id="undo-btn" disabled onclick="undoSelections()" title="Undo">&#x21B6;</button>
-      <button class="tb-btn tb-save-btn" id="save-btn" disabled onclick="saveSelections()" title="Save">Save</button>
+      <button class="btn btn-sm" id="undo-btn" disabled onclick="undoSelections()" title="Undo">&#x21B6;</button>
+      <button class="btn btn-sm btn-primary" id="save-btn" disabled onclick="saveSelections()" title="Save">Save</button>
       <span class="tb-sep"></span>
-      <button class="tb-btn" onclick="newProfile()" title="New profile">New</button>
-      <button class="tb-btn tb-delete-btn" onclick="deleteCurrentProfile()" title="Delete profile">Delete</button>
+      <button class="btn btn-sm" onclick="newProfile()" title="New profile">New</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteCurrentProfile()" title="Delete profile">Delete</button>
       <span class="tb-sep"></span>
-      <button class="tb-btn" onclick="importProfile()" title="Import profile">Import</button>
-      <button class="tb-btn" onclick="exportProfile()" title="Export profile">Export</button>
+      <button class="btn btn-sm" onclick="importProfile()" title="Import profile">Import</button>
+      <button class="btn btn-sm" onclick="exportProfile()" title="Export profile">Export</button>
       <span class="tb-sep"></span>
-      <button class="tb-btn" onclick="migrateAllProfiles()" title="Assign stable IDs to all profiles">Migrate</button>
+      <button class="btn btn-sm" onclick="migrateAllProfiles()" title="Assign stable IDs to all profiles">Migrate</button>
     </div>
 
     <!-- Infrastructure mode tab bar -->
@@ -75,7 +78,7 @@
       <div class="status-pane">
         <div class="status-header">
           <h1 id="status-profile-name">telavisor</h1>
-          <span class="status-connection-state" id="status-conn-state">Disconnected</span>
+          <span class="status status-offline" id="status-conn-state"><span class="status-dot"></span>Disconnected</span>
         </div>
         <div id="status-services">
           <p class="empty-hint">No services selected. Go to <strong>Profiles</strong> to select hubs, machines, and services.</p>
@@ -102,17 +105,17 @@
     <div class="tab-pane hidden" role="tabpanel" id="tab-files">
       <div class="files-pane">
         <div class="files-addressbar">
-          <button type="button" class="files-nav-btn" id="files-btn-back" onclick="filesGoBack()" disabled title="Back">&#x2190;</button>
-          <button type="button" class="files-nav-btn" id="files-btn-up" onclick="filesGoUp()" disabled title="Up one level">&#x2191;</button>
+          <button type="button" class="btn btn-sm btn-icon" id="files-btn-back" onclick="filesGoBack()" disabled title="Back">&#x2190;</button>
+          <button type="button" class="btn btn-sm btn-icon" id="files-btn-up" onclick="filesGoUp()" disabled title="Up one level">&#x2191;</button>
           <div class="files-path" id="files-path"></div>
-          <button type="button" class="files-nav-btn" onclick="filesRefresh()" title="Refresh">&#x21BB;</button>
+          <button type="button" class="btn btn-sm btn-icon" onclick="filesRefresh()" title="Refresh">&#x21BB;</button>
         </div>
         <div class="pane-toolbar files-actionbar" id="files-actionbar" style="display: none;">
-          <button type="button" class="files-action-btn" id="files-btn-upload" onclick="filesUpload()" disabled>Upload</button>
-          <button type="button" class="files-action-btn" id="files-btn-newfolder" onclick="filesNewFolder()" disabled>New Folder</button>
-          <button type="button" class="files-action-btn" id="files-btn-rename" onclick="filesRenameSelected()" disabled>Rename</button>
-          <button type="button" class="files-action-btn" id="files-btn-download" onclick="filesDownloadSelected()" disabled>Download</button>
-          <button type="button" class="files-action-btn danger" id="files-btn-delete" onclick="filesDeleteSelected()" disabled>Delete</button>
+          <button type="button" class="btn btn-sm" id="files-btn-upload" onclick="filesUpload()" disabled>Upload</button>
+          <button type="button" class="btn btn-sm" id="files-btn-newfolder" onclick="filesNewFolder()" disabled>New Folder</button>
+          <button type="button" class="btn btn-sm" id="files-btn-rename" onclick="filesRenameSelected()" disabled>Rename</button>
+          <button type="button" class="btn btn-sm" id="files-btn-download" onclick="filesDownloadSelected()" disabled>Download</button>
+          <button type="button" class="btn btn-sm btn-danger" id="files-btn-delete" onclick="filesDeleteSelected()" disabled>Delete</button>
           <div class="tab-bar-spacer"></div>
           <label class="files-dotfiles-toggle" title="Show or hide dotfiles and dot directories"><input type="checkbox" id="files-hide-dotfiles" checked onchange="toggleHideDotfiles(this.checked)"> Hide dotfiles</label>
           <span id="files-selection-info" style="font-size: 11px; color: var(--text-muted);"></span>
@@ -140,23 +143,23 @@
     <!-- Agents tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-agents">
       <div class="pane-toolbar" id="agents-toolbar">
-        <button type="button" class="tb-btn" id="agents-undo-btn" onclick="agentsUndo()" title="Undo changes" disabled>&#x21B6;</button>
-        <button type="button" class="tb-btn tb-save-btn" id="agents-save-btn" onclick="agentsSaveConfig()" title="Save changes" disabled>Save</button>
+        <button type="button" class="btn btn-sm" id="agents-undo-btn" onclick="agentsUndo()" title="Undo changes" disabled>&#x21B6;</button>
+        <button type="button" class="btn btn-sm btn-primary" id="agents-save-btn" onclick="agentsSaveConfig()" title="Save changes" disabled>Save</button>
         <span class="tb-sep"></span>
-        <button type="button" class="tb-btn" id="agents-restart-btn" onclick="agentsRestartSelected()" title="Restart agent" disabled>Restart</button>
-        <button type="button" class="tb-btn" id="agents-logs-btn" onclick="agentsViewLogsSelected()" title="View logs" disabled>Logs</button>
+        <button type="button" class="btn btn-sm" id="agents-restart-btn" onclick="agentsRestartSelected()" title="Restart agent" disabled>Restart</button>
+        <button type="button" class="btn btn-sm" id="agents-logs-btn" onclick="agentsViewLogsSelected()" title="View logs" disabled>Logs</button>
       </div>
       <div class="agents-layout">
         <div class="agents-sidebar">
           <div class="agents-sidebar-header">
             <span>Agents</span>
-            <button type="button" class="tb-btn" onclick="agentsRefresh()" title="Refresh">&#x21BB;</button>
+            <button type="button" class="btn btn-sm" onclick="agentsRefresh()" title="Refresh">&#x21BB;</button>
           </div>
           <div class="agents-sidebar-list" id="agents-sidebar-list">
             <p class="empty-hint agents-empty-hint">Connect to view agents.</p>
           </div>
           <div class="agents-sidebar-footer">
-            <button type="button" class="btn-primary" id="agents-pair-btn" onclick="agentsPairAgent()" disabled>Pair Agent</button>
+            <button type="button" class="btn btn-primary" id="agents-pair-btn" onclick="agentsPairAgent()" disabled>Pair Agent</button>
           </div>
         </div>
         <div class="agents-detail" id="agents-detail">
@@ -182,7 +185,7 @@
             <div class="hubs-admin-nav-item" data-view="history" onclick="showHubAdminView('history')">History</div>
           </div>
           <div class="hubs-admin-sidebar-footer">
-            <button class="btn-primary btn-sm sidebar-footer-btn" onclick="openAddHubModal()">Add Hub</button>
+            <button class="btn btn-sm btn-primary sidebar-footer-btn" onclick="openAddHubModal()">Add Hub</button>
           </div>
         </div>
         <div class="hubs-admin-detail" id="hubs-admin-detail">
@@ -194,8 +197,8 @@
     <!-- Client Settings tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-client-settings">
       <div class="pane-toolbar" id="cs-toolbar">
-        <button type="button" class="tb-btn" id="cs-undo-btn" onclick="undoClientSettings()" title="Undo changes" disabled>&#x21B6;</button>
-        <button type="button" class="tb-btn tb-save-btn" id="cs-save-btn" onclick="saveClientSettings()" disabled>Save</button>
+        <button type="button" class="btn btn-sm" id="cs-undo-btn" onclick="undoClientSettings()" title="Undo changes" disabled>&#x21B6;</button>
+        <button type="button" class="btn btn-sm btn-primary" id="cs-save-btn" onclick="saveClientSettings()" disabled>Save</button>
       </div>
       <div class="status-pane">
         <h1 style="margin-bottom:4px;">Client Settings</h1>
@@ -218,7 +221,7 @@
         </div>
 
         <div class="settings-card-block">
-          <div class="settings-card-head"><h3>Installed Tools</h3><button type="button" class="tb-btn tools-action-btn" onclick="refreshClientToolVersions()" title="Check all versions">&#x21BB; Refresh</button></div>
+          <div class="settings-card-head"><h3>Installed Tools</h3><button type="button" class="btn btn-sm tools-action-btn" onclick="refreshClientToolVersions()" title="Check all versions">&#x21BB; Refresh</button></div>
           <p class="settings-card-desc">Versions of tela binaries found in the configured location.</p>
           <div id="cs-bin-status" class="bin-status"></div>
         </div>
@@ -228,10 +231,10 @@
           <p class="settings-card-desc">Run the default profile as an always-on background service that starts with the OS. Requires administrator privileges.</p>
           <div class="service-status-row">Status: <strong id="cs-service-status">checking...</strong></div>
           <div class="settings-service-actions">
-            <button type="button" class="tb-btn" id="svc-install-btn" onclick="installService()">Install</button>
-            <button type="button" class="tb-btn" id="svc-start-btn" onclick="startService()" disabled>Start</button>
-            <button type="button" class="tb-btn" id="svc-stop-btn" onclick="stopService()" disabled>Stop</button>
-            <button type="button" class="tb-btn tb-delete-btn" id="svc-uninstall-btn" onclick="uninstallService()" disabled>Uninstall</button>
+            <button type="button" class="btn btn-sm" id="svc-install-btn" onclick="installService()">Install</button>
+            <button type="button" class="btn btn-sm" id="svc-start-btn" onclick="startService()" disabled>Start</button>
+            <button type="button" class="btn btn-sm" id="svc-stop-btn" onclick="stopService()" disabled>Stop</button>
+            <button type="button" class="btn btn-sm btn-danger" id="svc-uninstall-btn" onclick="uninstallService()" disabled>Uninstall</button>
           </div>
         </div>
 
@@ -240,10 +243,10 @@
           <p class="settings-card-desc">Run the default profile automatically when you log in. No administrator privileges required.</p>
           <div class="service-status-row">Status: <strong id="cs-user-task-status">checking...</strong></div>
           <div class="settings-service-actions">
-            <button type="button" class="tb-btn" id="utask-install-btn" onclick="installUserTask()">Install</button>
-            <button type="button" class="tb-btn" id="utask-start-btn" onclick="startUserTask()" disabled>Start</button>
-            <button type="button" class="tb-btn" id="utask-stop-btn" onclick="stopUserTask()" disabled>Stop</button>
-            <button type="button" class="tb-btn tb-delete-btn" id="utask-uninstall-btn" onclick="uninstallUserTask()" disabled>Uninstall</button>
+            <button type="button" class="btn btn-sm" id="utask-install-btn" onclick="installUserTask()">Install</button>
+            <button type="button" class="btn btn-sm" id="utask-start-btn" onclick="startUserTask()" disabled>Start</button>
+            <button type="button" class="btn btn-sm" id="utask-stop-btn" onclick="stopUserTask()" disabled>Stop</button>
+            <button type="button" class="btn btn-sm btn-danger" id="utask-uninstall-btn" onclick="uninstallUserTask()" disabled>Uninstall</button>
           </div>
         </div>
 
@@ -257,7 +260,7 @@
         <p class="section-desc remotes-desc">Portals TelaVisor talks to for hubs and agents. The Local source is always present and serves the hubs you have configured on this machine. Sign in to a remote portal (such as Awan Saya) to see the hubs it manages.</p>
         <div id="remotes-list-pane"></div>
         <div class="remotes-add-row">
-          <button type="button" class="tb-btn" onclick="openAddPortalSourceDialog()">Add Remote...</button>
+          <button type="button" class="btn btn-sm" onclick="openAddPortalSourceDialog()">Add Remote...</button>
         </div>
       </div>
     </div>
@@ -268,7 +271,7 @@
         <h1 style="margin-bottom:4px;">Stored Credentials</h1>
         <p class="section-desc" style="margin-bottom:20px;color:var(--text-muted);font-size:0.9rem;">Hub tokens stored in the local credential file. Equivalent to <code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela login</code> / <code style="font-family:var(--mono);font-size:0.82rem;background:var(--surface-alt);padding:1px 6px;border-radius:3px;">tela logout</code>.</p>
         <div id="credentials-list-pane"></div>
-        <div style="margin-top:12px;"><button type="button" class="tb-btn tb-delete-btn" onclick="clearAllCredentials()">Clear All</button></div>
+        <div style="margin-top:12px;"><button type="button" class="btn btn-sm btn-danger" onclick="clearAllCredentials()">Clear All</button></div>
       </div>
     </div>
 
@@ -278,25 +281,23 @@
       <div class="log-panel-header">
         <div class="log-panel-tabs">
           <button class="log-panel-tab active" onclick="switchLogTab(this, 'log-tv')">
-            <span class="log-dot log-dot-live"></span>TelaVisor
+            <span class="dot dot-online"></span>TelaVisor
           </button>
           <button class="log-panel-tab" onclick="switchLogTab(this, 'log-tela')">
-            <span class="log-dot log-dot-idle" id="log-tela-dot"></span>tela
+            <span class="dot dot-offline" id="log-tela-dot"></span>tela
           </button>
           <button class="log-panel-tab" onclick="switchLogTab(this, 'log-commands')">
-            <span class="log-dot log-dot-cmd"></span>Commands
+            Commands
           </button>
-          <button class="tb-btn log-panel-tab-add" onclick="openAttachDialog()" title="Attach log source">+</button>
+          <button class="btn btn-sm btn-icon log-panel-tab-add" onclick="openAttachDialog()" title="Attach log source">+</button>
         </div>
         <div class="log-panel-actions">
-          <button class="term-btn verbose-btn" id="verbose-btn" onclick="toggleVerbose()">
-            <span class="verbose-check-icon" id="verbose-icon">&#x2610;</span> Verbose
-          </button>
-          <button class="term-btn" onclick="copyLogPanel()">Copy</button>
-          <button class="term-btn" onclick="saveLogPanel()">Save</button>
-          <button class="term-btn" onclick="clearLogPanel()">Clear</button>
+          <label class="form-check log-panel-verbose"><input type="checkbox" id="verbose-check" onchange="toggleVerbose()"> Verbose</label>
+          <button class="btn btn-sm" onclick="copyLogPanel()">Copy</button>
+          <button class="btn btn-sm" onclick="saveLogPanel()">Save</button>
+          <button class="btn btn-sm" onclick="clearLogPanel()">Clear</button>
           <span class="log-panel-collapsed-title">Logs</span>
-          <button class="log-panel-toggle" onclick="toggleLogPanel()" title="Toggle panel">&#x25BC;</button>
+          <button class="btn btn-sm btn-icon log-panel-toggle" onclick="toggleLogPanel()" title="Toggle panel">&#x25BC;</button>
         </div>
       </div>
       <pre class="log-panel-output" id="log-tv"></pre>
@@ -327,8 +328,8 @@
         <div class="modal-body-padded">
           <p class="confirm-message">Are you sure you want to disconnect?</p>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="cancelDisconnect()">No</button>
-            <button type="button" class="btn-danger" onclick="confirmDisconnect()">Yes, Disconnect</button>
+            <button type="button" class="btn" onclick="cancelDisconnect()">No</button>
+            <button type="button" class="btn btn-destructive" onclick="confirmDisconnect()">Yes, Disconnect</button>
           </div>
         </div>
       </div>
@@ -357,8 +358,8 @@
             </div>
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="closeMTUDialog()">Cancel</button>
-            <button type="button" class="btn-primary" onclick="saveMTUDialog()">Save</button>
+            <button type="button" class="btn" onclick="closeMTUDialog()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveMTUDialog()">Save</button>
           </div>
         </div>
       </div>
@@ -377,8 +378,8 @@
           <p id="generic-dialog-message" class="confirm-message"></p>
           <input type="text" id="generic-dialog-input" class="settings-full-control hidden" title="Input" placeholder="Enter value">
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="genericDialogCancel()">Cancel</button>
-            <button type="button" class="btn-primary" id="generic-dialog-ok" onclick="genericDialogOk()">OK</button>
+            <button type="button" class="btn" onclick="genericDialogCancel()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="generic-dialog-ok" onclick="genericDialogOk()">OK</button>
           </div>
         </div>
       </div>
@@ -395,8 +396,8 @@
         <div class="modal-body-padded">
           <p class="confirm-message">The tela process is taking longer than expected to disconnect. You can continue waiting or force it to stop.</p>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="document.getElementById('quit-stuck-overlay').style.display='none'">Keep Waiting</button>
-            <button type="button" class="btn-danger" onclick="goApp.ForceQuit()">Force Quit</button>
+            <button type="button" class="btn" onclick="document.getElementById('quit-stuck-overlay').style.display='none'">Keep Waiting</button>
+            <button type="button" class="btn btn-destructive" onclick="goApp.ForceQuit()">Force Quit</button>
           </div>
         </div>
       </div>
@@ -415,8 +416,8 @@
           <div id="update-table-container"></div>
           <p class="update-note" id="update-note"></p>
           <div class="modal-actions update-actions">
-            <button type="button" class="btn-secondary" onclick="ignoreUpdateForever()">Skip This Version</button>
-            <button type="button" class="btn-secondary" onclick="ignoreUpdateSession()">Remind Later</button>
+            <button type="button" class="btn" onclick="ignoreUpdateForever()">Skip This Version</button>
+            <button type="button" class="btn" onclick="ignoreUpdateSession()">Remind Later</button>
           </div>
         </div>
       </div>
@@ -431,9 +432,9 @@
         <button class="modal-close" onclick="cancelSettings()">&times;</button>
       </div>
       <div class="settings-toolbar">
-        <button type="button" class="tb-btn tb-save-btn" id="settings-apply-btn" onclick="applySettings()" disabled>Apply</button>
-        <button type="button" class="tb-btn tb-save-btn" id="settings-applyclose-btn" onclick="closeSettings()" disabled>Apply &amp; Close</button>
-        <button type="button" class="tb-btn" onclick="cancelSettings()">Cancel</button>
+        <button type="button" class="btn btn-sm" onclick="cancelSettings()">Cancel</button>
+        <button type="button" class="btn btn-sm" id="settings-apply-btn" onclick="applySettings()" disabled>Apply</button>
+        <button type="button" class="btn btn-sm btn-primary" id="settings-applyclose-btn" onclick="closeSettings()" disabled>Apply &amp; Close</button>
       </div>
       <div class="modal-body">
         <div class="modal-body-padded">
@@ -462,7 +463,7 @@
             <div class="settings-group-header">TelaVisor self-update</div>
             <div class="settings-group-desc">Controls how TelaVisor updates itself. Hubs and agents have their own update channels, configured separately in Hub Settings and Agent Settings.</div>
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="markSettingsDirty()"></div><div class="settings-label">Check for TelaVisor updates automatically</div></div>
-            <div class="settings-check-now"><button type="button" class="tb-btn" onclick="goApp.CheckForUpdatesNow()">Check Now</button></div>
+            <div class="settings-check-now"><button type="button" class="btn btn-sm" onclick="goApp.CheckForUpdatesNow()">Check Now</button></div>
             <div class="settings-stacked-row">
               <div class="settings-stacked-label">TelaVisor release channel</div>
               <select id="client-channel-select" class="tb-select">
@@ -504,8 +505,8 @@
             </div>
             <div id="portal-source-error" class="settings-error-msg hidden"></div>
             <div class="portal-source-actions">
-              <button type="button" class="tb-btn tb-save-btn" onclick="portalSourceBeginSignIn()">Sign In</button>
-              <button type="button" class="tb-btn" onclick="closeAddPortalSourceDialog()">Cancel</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="portalSourceBeginSignIn()">Sign In</button>
+              <button type="button" class="btn btn-sm" onclick="closeAddPortalSourceDialog()">Cancel</button>
             </div>
           </div>
           <div id="portal-source-step-code" class="hidden">
@@ -516,7 +517,7 @@
             </div>
             <div id="portal-source-poll-status" class="section-desc portal-source-poll-status">Waiting for authorization...</div>
             <div class="portal-source-actions">
-              <button type="button" class="tb-btn" onclick="closeAddPortalSourceDialog()">Cancel</button>
+              <button type="button" class="btn btn-sm" onclick="closeAddPortalSourceDialog()">Cancel</button>
             </div>
           </div>
           <div id="portal-source-step-name" class="hidden">
@@ -527,8 +528,8 @@
             </div>
             <div id="portal-source-name-error" class="settings-error-msg hidden"></div>
             <div class="portal-source-actions">
-              <button type="button" class="tb-btn tb-save-btn" onclick="portalSourceFinish()">Save</button>
-              <button type="button" class="tb-btn" onclick="closeAddPortalSourceDialog()">Cancel</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="portalSourceFinish()">Save</button>
+              <button type="button" class="btn btn-sm" onclick="closeAddPortalSourceDialog()">Cancel</button>
             </div>
           </div>
         </div>
@@ -609,8 +610,8 @@
             </div>
             <div id="add-hub-error" class="error-msg hidden"></div>
             <div class="modal-actions">
-              <button type="button" class="btn-secondary" onclick="closeAddHubModal()">Cancel</button>
-              <button type="submit" class="btn-primary" id="add-hub-submit">Connect</button>
+              <button type="button" class="btn" onclick="closeAddHubModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="add-hub-submit">Connect</button>
             </div>
           </form>
         </div>
@@ -620,22 +621,22 @@
           <div class="form-group">
             <label>Container</label>
             <select id="docker-container"><option value="">Loading...</option></select>
-            <button type="button" class="btn-link" onclick="refreshDockerContainers()">Refresh</button>
+            <button type="button" class="btn btn-sm" onclick="refreshDockerContainers()">Refresh</button>
           </div>
           <div class="form-group">
             <label>Hub URL (external)</label>
             <input type="text" id="docker-hub-url" placeholder="wss://myhub.example.com">
           </div>
           <div class="form-row">
-            <button type="button" class="btn-primary" onclick="dockerGetOwner()">Get Owner Token</button>
-            <button type="button" class="btn-secondary" onclick="dockerGetViewer()">Get Viewer Token</button>
+            <button type="button" class="btn btn-primary" onclick="dockerGetOwner()">Get Owner Token</button>
+            <button type="button" class="btn" onclick="dockerGetViewer()">Get Viewer Token</button>
           </div>
           <div id="docker-result" class="hidden">
             <div class="form-group">
               <label>Token</label>
               <div class="token-display" id="docker-token-value"></div>
             </div>
-            <button type="button" class="btn-primary" onclick="dockerAddHub()">Add This Hub</button>
+            <button type="button" class="btn btn-primary" onclick="dockerAddHub()">Add This Hub</button>
           </div>
           <div id="docker-error" class="error-msg hidden"></div>
         </div>
@@ -666,8 +667,8 @@
           </div>
           <div id="create-token-error" class="error-msg hidden"></div>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="closeModal('create-token-modal')">Cancel</button>
-            <button type="submit" class="btn-primary">Create</button>
+            <button type="button" class="btn" onclick="closeModal('create-token-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create</button>
           </div>
         </form>
       </div>
@@ -701,8 +702,8 @@
           </div>
           <div id="pair-code-error" class="error-msg hidden"></div>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="closeModal('pair-code-modal')">Cancel</button>
-            <button type="submit" class="btn-primary">Generate</button>
+            <button type="button" class="btn" onclick="closeModal('pair-code-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Generate</button>
           </div>
         </form>
       </div>
@@ -737,8 +738,8 @@
             <div class="setting-check"><input type="checkbox" id="grant-access-manage"> Manage</div>
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" onclick="closeModal('grant-access-modal')">Cancel</button>
-            <button type="submit" class="btn-primary">Grant</button>
+            <button type="button" class="btn" onclick="closeModal('grant-access-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Grant</button>
           </div>
         </form>
       </div>
@@ -760,7 +761,7 @@
           </div>
           <p class="field-hint" id="result-modal-hint"></p>
           <div class="modal-actions">
-            <button type="button" class="btn-primary" onclick="copyResultAndClose()">Copy &amp; Close</button>
+            <button type="button" class="btn btn-primary" onclick="copyResultAndClose()">Copy &amp; Close</button>
           </div>
         </div>
       </div>

@@ -314,6 +314,10 @@ export function IsElevated() {
   return window['go']['main']['App']['IsElevated']();
 }
 
+export function IsModalOpen() {
+  return window['go']['main']['App']['IsModalOpen']();
+}
+
 export function IsMountRunning() {
   return window['go']['main']['App']['IsMountRunning']();
 }
@@ -476,6 +480,10 @@ export function SetClientChannel(arg1) {
 
 export function SetHubChannel(arg1, arg2) {
   return window['go']['main']['App']['SetHubChannel'](arg1, arg2);
+}
+
+export function SetModalOpen(arg1) {
+  return window['go']['main']['App']['SetModalOpen'](arg1);
 }
 
 export function SetMountConfig(arg1) {

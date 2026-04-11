@@ -81,7 +81,7 @@ body {
 .wrap { max-width: 1100px; margin: 0 auto; padding: 40px 32px 120px; }
 .doc-header { margin-bottom: 48px; }
 .doc-title { font-size: 28px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.01em; }
-.doc-sub { font-size: 14px; color: var(--text-muted); margin: 0; max-width: 70ch; }
+.doc-sub { font-size: 14px; color: var(--text-muted); margin: 0; }
 
 /* ==========================================================================
    1. DESIGN TOKENS (colors, spacing, typography scale)
@@ -105,7 +105,6 @@ h2.section .num {
 .section-intro {
   font-size: 13px;
   color: var(--text-muted);
-  max-width: 70ch;
   margin: 0 0 24px;
 }
 
@@ -298,6 +297,102 @@ code {
   line-height: 1;
   min-width: 28px;
   justify-content: center;
+}
+
+/* ==========================================================================
+   LINKS — always underlined, no exceptions except .brand-link
+   ========================================================================== */
+
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-family: inherit;
+}
+.link:hover {
+  color: var(--accent-hover);
+  text-decoration-thickness: 2px;
+}
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.link:visited { color: var(--accent); }
+
+.link-muted {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-muted:hover {
+  color: var(--text);
+  text-decoration-thickness: 2px;
+}
+
+/* ==========================================================================
+   MODE BAR — topbar-scoped mode toggle
+   Outlined container ("these are interactive options") with a full-width
+   accent bar flush along the bottom edge of the active segment
+   ("you are here", using the same accent-bar vocabulary as the main
+   tab bar). Active has cursor: default so it cannot be confused with
+   a button. Inactive segments have a hover fill.
+   ========================================================================== */
+
+.mode-bar {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--tb-chrome-border, rgba(255,255,255,0.28));
+  border-radius: 6px;
+  background: var(--tb-chrome-bg, rgba(255,255,255,0.04));
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mode-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--tb-chrome-fg, #cbd5e1);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.mode-btn + .mode-btn { border-left: 1px solid var(--tb-chrome-border, rgba(255,255,255,0.28)); }
+.mode-btn:hover:not(.active) {
+  color: var(--tb-chrome-hover-fg, #ffffff);
+  background: var(--tb-chrome-hover-bg, rgba(255,255,255,0.08));
+}
+.mode-btn.active {
+  color: var(--tb-chrome-hover-fg, #ffffff);
+  font-weight: 700;
+  cursor: default;
+}
+.mode-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+}
+.mode-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* ==========================================================================
@@ -1197,13 +1292,9 @@ function updateToggleLabel() {
 
 <header class="doc-header">
   <h1 class="doc-title">Tela Design Language — Reference</h1>
-  <p class="doc-sub">
-    Canonical visual reference for every reusable primitive in TDL. Toggle the theme
-    in the top-right to preview each component in light and dark modes. Every class
-    in this document is part of the design language; every design language primitive
-    appears here. If you need a pattern that is not shown, open a discussion before
-    inventing a new class.
-  </p>
+  <p class="doc-sub">Canonical visual reference for every reusable primitive in TDL. Toggle the theme in the top-right to preview each component in light and dark modes.
+    Every class in this document is part of the design language; every design language primitive appears here. If you need a pattern that is not shown, open a discussion
+    before inventing a new class.</p>
 </header>
 
 <nav class="toc">
@@ -1212,6 +1303,7 @@ function updateToggleLabel() {
     <li><a href="#tokens">Design tokens</a></li>
     <li><a href="#typography">Typography</a></li>
     <li><a href="#buttons">Buttons</a></li>
+    <li><a href="#links">Links</a></li>
     <li><a href="#status">Status and badges</a></li>
     <li><a href="#forms">Form inputs</a></li>
     <li><a href="#cards">Cards</a></li>
@@ -1275,11 +1367,7 @@ function updateToggleLabel() {
      2. TYPOGRAPHY
      ======================================================================== -->
 <h2 class="section" id="typography"><span class="num">2</span>Typography</h2>
-<p class="section-intro">
-  One family (system UI stack) for body text, one family (monospace) for code,
-  version strings, and terminal output. Font weights are restricted to 400, 500,
-  600, and 700. Never use italic or underline for emphasis in UI chrome.
-</p>
+<p class="section-intro">One family (system UI stack) for body text, one family (monospace) for code, version strings, and terminal output. Font weights are restricted to 400, 500, 600, and 700. Never use italic or underline for emphasis in UI chrome.</p>
 
 <div class="component-card">
   <div class="component-row">
@@ -1486,9 +1574,80 @@ function updateToggleLabel() {
 </div>
 
 <!-- ========================================================================
-     4. STATUS AND BADGES
+     4. LINKS
      ======================================================================== -->
-<h2 class="section" id="status"><span class="num">4</span>Status and badges</h2>
+<h2 class="section" id="links"><span class="num">4</span>Links</h2>
+<p class="section-intro">
+  Links are the one place in TDL where underline carries meaning. Any
+  clickable text must be underlined by default &mdash; not only on hover. The
+  underline is the universal affordance for text links. The brand link is
+  the one exception.
+</p>
+
+<div class="component-card">
+
+  <div class="component-row">
+    <div class="component-demo">
+      <a class="link" href="#" onclick="event.preventDefault()">Primary link</a>
+    </div>
+    <div class="component-info">
+      <div class="component-title">Primary link <code>.link</code></div>
+      <div class="component-desc">Accent-colored underlined text. Always underlined by default; hover thickens the underline from 1px to 2px and shifts color to <code>--accent-hover</code>.</div>
+      <ul>
+        <li><strong>Where:</strong> body copy, modals, help text, menu items, anywhere non-topbar.</li>
+        <li><strong>Examples:</strong> "Learn more", "View documentation", "Open in browser", inline references in help text.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="component-row">
+    <div class="component-demo">
+      <a class="link-muted" href="#" onclick="event.preventDefault()">Muted link</a>
+    </div>
+    <div class="component-info">
+      <div class="component-title">Muted link <code>.link-muted</code></div>
+      <div class="component-desc">Secondary navigation link. Same underline rule, but colored <code>--text-muted</code> so it sits quietly beside surrounding body content. Hover brightens to <code>--text</code>.</div>
+      <ul>
+        <li><strong>Where:</strong> footers, metadata cross-references, breadcrumb tails, secondary navigation.</li>
+        <li><strong>Examples:</strong> "Privacy", "Terms", "Back to list", inline cross-references.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="component-row">
+    <div class="component-demo">
+      <p style="font-size: 13px; max-width: 360px; margin: 0;">
+        The file share is configured in
+        <a class="link" href="#" onclick="event.preventDefault()">Client Settings</a>.
+        See the
+        <a class="link-muted" href="#" onclick="event.preventDefault()">file sharing guide</a>
+        for details.
+      </p>
+    </div>
+    <div class="component-info">
+      <div class="component-title">Inline use</div>
+      <div class="component-desc">Links inline with body text inherit the paragraph's font size. The 1px-to-2px underline thickness bump on hover works at any font size.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <strong>Rules at a glance.</strong>
+  <ul style="margin: 8px 0 0 16px; color: var(--text-muted); font-size: 12px;">
+    <li>Every link is underlined by default, not only on hover.</li>
+    <li>Links are accent green or muted, never blue. Blue hyperlinks are a web convention that predates TDL.</li>
+    <li>Hover thickens the underline; it does not remove or add it.</li>
+    <li>Links keep their color regardless of visited state. No visited styling.</li>
+    <li>A link navigates or reveals. If the element commits a state change, use a <code>.btn</code>, not a <code>.link</code>.</li>
+    <li>The brand link <code>.brand-link</code> is the one exception &mdash; no underline, ever.</li>
+  </ul>
+</div>
+
+<!-- ========================================================================
+     5. STATUS AND BADGES
+     ======================================================================== -->
+<h2 class="section" id="status"><span class="num">5</span>Status and badges</h2>
 <p class="section-intro">
   Status labels are flat, inline, non-interactive, and always prefixed by a
   glyph (colored dot, checkmark, or arrow). The glyph is the primary signal so
@@ -1572,7 +1731,7 @@ function updateToggleLabel() {
 <!-- ========================================================================
      5. FORM INPUTS
      ======================================================================== -->
-<h2 class="section" id="forms"><span class="num">5</span>Form inputs</h2>
+<h2 class="section" id="forms"><span class="num">6</span>Form inputs</h2>
 <p class="section-intro">
   All inputs share a common visual grammar: a 1px border, subtle surface fill,
   accent-colored focus ring (3px low-opacity), and a consistent padding scale.
@@ -1691,7 +1850,7 @@ services:
 <!-- ========================================================================
      6. CARDS
      ======================================================================== -->
-<h2 class="section" id="cards"><span class="num">6</span>Cards</h2>
+<h2 class="section" id="cards"><span class="num">7</span>Cards</h2>
 <p class="section-intro">
   Cards are the primary content container. White (or dark) surface, 1px border,
   8px radius, subtle shadow. Never nest a card inside another card. For visual
@@ -1740,7 +1899,7 @@ services:
 <!-- ========================================================================
      7. MODALS
      ======================================================================== -->
-<h2 class="section" id="modals"><span class="num">7</span>Modals</h2>
+<h2 class="section" id="modals"><span class="num">8</span>Modals</h2>
 <p class="section-intro">
   Modals center on a semi-transparent overlay. The dialog has a header with
   title and close button, a body, and an action footer on a subtle tinted
@@ -1794,7 +1953,7 @@ services:
 <!-- ========================================================================
      8. TABLES
      ======================================================================== -->
-<h2 class="section" id="tables"><span class="num">8</span>Tables</h2>
+<h2 class="section" id="tables"><span class="num">9</span>Tables</h2>
 <p class="section-intro">
   Tables use uppercase-muted headers, muted row separators, and a hover
   highlight on selectable rows. Numeric or identifier columns should use the
@@ -1843,7 +2002,7 @@ services:
 <!-- ========================================================================
      9. TABS AND TOOLBARS
      ======================================================================== -->
-<h2 class="section" id="tabs"><span class="num">9</span>Tabs and toolbars</h2>
+<h2 class="section" id="tabs"><span class="num">10</span>Tabs and toolbars</h2>
 <p class="section-intro">
   Tab bars use text buttons with an accent bottom border on the active tab.
   Toolbars are containers for content-area command buttons; the buttons
@@ -1881,7 +2040,7 @@ services:
 <!-- ========================================================================
      10. SIDEBAR LIST ITEMS
      ======================================================================== -->
-<h2 class="section" id="sidebar"><span class="num">10</span>Sidebar list items</h2>
+<h2 class="section" id="sidebar"><span class="num">11</span>Sidebar list items</h2>
 <p class="section-intro">
   Sidebar items are selectable rows with a left accent border on the active
   item. They pair a name (and optional dot, chip, or version status) with a
@@ -1921,7 +2080,7 @@ services:
 <!-- ========================================================================
      11. TOPBAR
      ======================================================================== -->
-<h2 class="section" id="topbar"><span class="num">11</span>Topbar</h2>
+<h2 class="section" id="topbar"><span class="num">12</span>Topbar</h2>
 <p class="section-intro">
   The topbar has a true light variant and a true dark variant. Chrome buttons
   and the brand mark use topbar-scoped custom properties (<code>--tb-*</code>)
@@ -1939,6 +2098,10 @@ services:
         </span>
       </button>
       <span class="status status-current brand-version">v0.7.0-dev.20</span>
+    </div>
+    <div class="mode-bar">
+      <button class="mode-btn active" type="button">Clients</button>
+      <button class="mode-btn" type="button">Infrastructure</button>
     </div>
     <div class="chrome-row">
       <button class="chrome-btn chrome-accent" title="Connect">&#x23FB;</button>
@@ -1959,6 +2122,10 @@ services:
         </span>
       </button>
       <span class="status status-current brand-version">v0.7.0-dev.20</span>
+    </div>
+    <div class="mode-bar">
+      <button class="mode-btn active" type="button">Clients</button>
+      <button class="mode-btn" type="button">Infrastructure</button>
     </div>
     <div class="chrome-row">
       <button class="chrome-btn chrome-accent" title="Connect">&#x23FB;</button>
@@ -1989,12 +2156,49 @@ services:
     (quit). Inline SVG is preferred over Unicode glyphs for stroke consistency
     across platforms.
   </p>
+
+  <h3 class="sub">Mode bar <code>.mode-bar</code></h3>
+  <p class="section-intro">
+    The mode bar switches between top-level application modes (TelaVisor's
+    Clients / Infrastructure; Awan Saya's user / admin). It lives in the
+    topbar only &mdash; content-area navigation uses the main tab bar.
+  </p>
+  <p class="section-intro">
+    The mode bar uses an outlined container (signaling "these are
+    interactive options") with a 3px accent bar flush along the bottom
+    edge of the active segment (the existing TDL vocabulary for "you are
+    here", matching the main tab bar's active indicator). The active
+    segment is bold, has <code>cursor: default</code>, and carries no
+    button chrome. Inactive segments show a subtle hover fill on mouseover
+    to confirm they are interactive.
+  </p>
+
+  <div class="topbar tb-light" style="padding: 10px 20px;">
+    <div class="brand-group">
+      <span class="brand"><img class="brand-logo" src="logo.png" alt="Tela">Tela<em>Visor</em></span>
+    </div>
+    <div class="mode-bar">
+      <button class="mode-btn active" type="button">Clients</button>
+      <button class="mode-btn" type="button">Infrastructure</button>
+    </div>
+    <div></div>
+  </div>
+  <div class="topbar tb-dark" style="padding: 10px 20px;">
+    <div class="brand-group">
+      <span class="brand"><img class="brand-logo" src="logo.png" alt="Tela">Tela<em>Visor</em></span>
+    </div>
+    <div class="mode-bar">
+      <button class="mode-btn active" type="button">Clients</button>
+      <button class="mode-btn" type="button">Infrastructure</button>
+    </div>
+    <div></div>
+  </div>
 </div>
 
 <!-- ========================================================================
      12. FEEDBACK
      ======================================================================== -->
-<h2 class="section" id="feedback"><span class="num">12</span>Feedback</h2>
+<h2 class="section" id="feedback"><span class="num">13</span>Feedback</h2>
 <p class="section-intro">
   Inline, non-blocking messages. Toasts appear briefly after an action. Empty
   states explain what the user sees (or doesn't see) without burying a
@@ -2035,7 +2239,7 @@ services:
 <!-- ========================================================================
      13. PROGRESS AND CODE BLOCKS
      ======================================================================== -->
-<h2 class="section" id="progress"><span class="num">13</span>Progress and code</h2>
+<h2 class="section" id="progress"><span class="num">14</span>Progress and code</h2>
 
 <div class="component-card">
   <div class="component-row">
@@ -2068,7 +2272,7 @@ services:
 <!-- ========================================================================
      14. LOG PANEL
      ======================================================================== -->
-<h2 class="section" id="logpanel"><span class="num">14</span>Log panel</h2>
+<h2 class="section" id="logpanel"><span class="num">15</span>Log panel</h2>
 <p class="section-intro">
   The log panel is a dockable bottom-of-window container for multi-source
   log output. It is TelaVisor-specific in its current implementation but
@@ -2167,7 +2371,7 @@ services:
 <!-- ========================================================================
      15. DROPDOWN MENUS
      ======================================================================== -->
-<h2 class="section" id="menus"><span class="num">15</span>Dropdown menus</h2>
+<h2 class="section" id="menus"><span class="num">16</span>Dropdown menus</h2>
 <p class="section-intro">
   Dropdowns are small floating panels anchored to a trigger button.
   Used for user menus, theme pickers, attach-source popovers, context
@@ -2247,7 +2451,7 @@ services:
 <!-- ========================================================================
      16. LAYOUT PRIMITIVES
      ======================================================================== -->
-<h2 class="section" id="layout"><span class="num">16</span>Layout primitives</h2>
+<h2 class="section" id="layout"><span class="num">17</span>Layout primitives</h2>
 <p class="section-intro">
   Two-column sidebar + detail is the canonical layout for any view with a
   selectable list and its detail pane. The sidebar is a fixed width; the
@@ -2288,7 +2492,7 @@ services:
 <!-- ========================================================================
      15. INVARIANT RULES
      ======================================================================== -->
-<h2 class="section" id="rules"><span class="num">17</span>Invariant rules</h2>
+<h2 class="section" id="rules"><span class="num">18</span>Invariant rules</h2>
 
 <div class="component-card">
   <h3 class="sub">Category separation</h3>
@@ -2318,6 +2522,22 @@ services:
     An element that is not clickable must not look clickable. No outlined
     boxes around static labels. No filled pills for non-interactive state.
     No hover states on text. No <code>cursor: pointer</code> on non-buttons.
+  </p>
+
+  <h3 class="sub">Every link is underlined</h3>
+  <p class="section-intro" style="margin-bottom: 0;">
+    Any clickable text outside the topbar must be underlined by default,
+    not only on hover. TDL uses accent green for primary links and
+    <code>--text-muted</code> for secondary links; blue is not used. The
+    brand link is the one documented exception.
+  </p>
+
+  <h3 class="sub">Mode bars live in the topbar</h3>
+  <p class="section-intro" style="margin-bottom: 0;">
+    Segmented mode toggles (Clients / Infrastructure, user / admin) live
+    only in the topbar. Content-area navigation uses the main tab bar,
+    never a segmented mode bar. The two patterns have different visual
+    signatures so they never compete.
   </p>
 
   <h3 class="sub">One primary per context</h3>

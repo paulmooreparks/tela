@@ -20,21 +20,54 @@
 }
 
 :root {
+  /* Light theme — default. See TELA-DESIGN-LANGUAGE.md for the full
+     token specification. Tokens that apply across themes are defined
+     here; tokens that flip are redefined under [data-theme="dark"]. */
   --bg: #f5f6f8;
   --surface: #ffffff;
   --surface-alt: #f0f1f4;
   --text: #1a1a2e;
   --text-muted: #6b7280;
+  --border: #e2e5ea;
+
+  /* Brand — theme-invariant */
   --accent: #2ecc71;
   --accent-hover: #27ae60;
-  --topbar-bg: #1b2636;
-  --topbar-text: #e0e0e0;
-  --border: #e2e5ea;
-  --sidebar-bg: #ffffff;
-  --sidebar-hover: #f0f1f4;
+
+  /* Semantic — theme-invariant */
+  --warn: #f39c12;
   --danger: #e74c3c;
   --danger-hover: #c0392b;
+
+  /* Button fills and hover (light) */
+  --btn-bg: #ffffff;
+  --btn-secondary-hover: #f0f1f4;
+  --input-bg: #ffffff;
+
+  /* Elevation — the invariant signal for content buttons */
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.04),
+    0 1px 3px rgba(15,23,42,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.85);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.08),
+    0 1px 3px rgba(39,174,96,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.35);
+  --shadow-card: 0 1px 3px rgba(15,23,42,0.05);
+
+  /* Legacy aliases — retained during TDL migration so pre-migration
+     rules continue to resolve. Will be deleted once every selector in
+     this file references the new tokens directly. */
+  --sidebar-bg: var(--surface);
+  --sidebar-hover: var(--surface-alt);
+  --topbar-bg: #1b2636;
+  --topbar-text: #e0e0e0;
+
+  /* Shape */
   --radius: 8px;
+  --radius-sm: 4px;
+
+  /* Typography */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
 }
@@ -87,34 +120,119 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .text-mono { font-family: var(--mono); font-size: 12px; }
 
-/* --- Topbar --- */
+/* ==========================================================================
+   TOPBAR — per TDL
+   See TELA-DESIGN-LANGUAGE.md section "Topbar" for the full spec.
+   Chrome buttons and the brand mark use topbar-scoped --tb-* custom
+   properties so the same markup adapts to light and dark topbars.
+   ========================================================================== */
+
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--topbar-bg);
-  color: var(--topbar-text);
   padding: 0 16px;
   height: 44px;
   flex-shrink: 0;
   -webkit-app-region: drag;
   position: relative;
-}
-.topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; }
-/* Power button (connect/disconnect) */
-.topbar-power-btn {
-  font-size: 18px; font-weight: 400; transition: all 0.2s;
-  width: 30px; height: 30px;
-}
-.topbar-power-btn:not(.connected):hover { border-color: var(--accent); color: var(--accent); }
-.topbar-power-btn.connected { border-color: var(--accent); color: var(--accent); background: rgba(94,232,158,0.1); }
-.topbar-power-btn.connected:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
-.topbar-power-btn.connecting { animation: pulse-border 1.2s ease-in-out infinite; color: #f39c12; border-color: #f39c12; }
+  border-bottom: 1px solid var(--tb-border);
+  background: var(--tb-bg);
 
-.topbar-mount-btn { transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; }
-.topbar-mount-btn:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
-.topbar-mount-btn.mounted { border-color: var(--accent); color: var(--accent); background: rgba(94,232,158,0.1); }
-.topbar-mount-btn.mounted:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
+  /* Default (dark) topbar palette. The .tb-light class below overrides
+     these in light mode. */
+  --tb-bg: #0f172a;
+  --tb-border: #1e293b;
+  --tb-brand: #ffffff;
+  --tb-chrome-fg: #cbd5e1;
+  --tb-chrome-border: rgba(255,255,255,0.28);
+  --tb-chrome-bg: rgba(255,255,255,0.04);
+  --tb-chrome-hover-fg: #ffffff;
+  --tb-chrome-hover-bg: rgba(255,255,255,0.12);
+  --tb-chrome-hover-border: rgba(255,255,255,0.5);
+}
+.topbar.tb-dark {
+  --tb-bg: #0f172a;
+  --tb-border: #1e293b;
+  --tb-brand: #ffffff;
+  --tb-chrome-fg: #cbd5e1;
+  --tb-chrome-border: rgba(255,255,255,0.28);
+  --tb-chrome-bg: rgba(255,255,255,0.04);
+  --tb-chrome-hover-fg: #ffffff;
+  --tb-chrome-hover-bg: rgba(255,255,255,0.12);
+  --tb-chrome-hover-border: rgba(255,255,255,0.5);
+  background: var(--tb-bg);
+  border-color: var(--tb-border);
+}
+.topbar.tb-light {
+  --tb-bg: #ffffff;
+  --tb-border: #d8dce4;
+  --tb-brand: #1a1a2e;
+  --tb-chrome-fg: #475569;
+  --tb-chrome-border: #cbd5e1;
+  --tb-chrome-bg: #ffffff;
+  --tb-chrome-hover-fg: #0f172a;
+  --tb-chrome-hover-bg: #eef0f4;
+  --tb-chrome-hover-border: #94a3b8;
+  background: var(--tb-bg);
+  border-color: var(--tb-border);
+}
+
+.topbar-left, .topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.topbar-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* --- Brand link --- */
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  transition: filter 0.15s;
+  -webkit-app-region: no-drag;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.brand-link:hover { filter: brightness(1.15); }
+.brand-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+.brand {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font);
+  color: var(--tb-brand);
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+}
+.brand em { color: var(--accent); font-style: normal; }
+.brand img.brand-logo {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  vertical-align: -6px;
+  margin-right: 8px;
+}
+.brand-version {
+  font-size: 11px !important;
+  margin-left: 4px;
+}
 
 /* First-run connect tooltip -- positioned dynamically by positionConnectTooltip() */
 .connect-tooltip {
@@ -131,98 +249,132 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   border-left: 1px solid var(--accent); border-top: 1px solid var(--accent);
   transform: rotate(45deg);
 }
-.topbar-center { position: absolute; left: 50%; transform: translateX(-50%); }
-.app-brand {
-  display: flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none;
-  -webkit-app-region: no-drag;
-}
-.app-logo { height: 22px; width: auto; filter: brightness(1.2); }
-.app-title { font-weight: 700; font-size: 15px; color: #fff; }
-.app-title-visor { color: var(--accent); }
 
-/* Mode toggle */
-.mode-toggle { display: flex; gap: 0; -webkit-app-region: no-drag; }
+/* --- Mode bar ---
+   Outlined container with a full-width accent bar flush along the
+   bottom edge of the active segment. The container affordance says
+   "these are interactive options"; the accent bar says "you are here"
+   using the same green vocabulary already in TDL. Active segment has
+   cursor: default so it cannot be confused with a button. */
+.mode-bar {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--tb-chrome-border);
+  border-radius: 6px;
+  background: var(--tb-chrome-bg);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  -webkit-user-select: none;
+  user-select: none;
+}
 .mode-btn {
-  padding: 4px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.2); background: none; color: #94a3b8;
-  font-family: var(--font); transition: all 0.15s;
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--tb-chrome-fg);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
-.mode-btn:first-child { border-radius: 4px 0 0 4px; }
-.mode-btn:last-child { border-radius: 0 4px 4px 0; border-left: none; }
-.mode-btn-middle { border-left: none; border-radius: 0; }
-.mode-btn.active { background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3); }
-.mode-btn:hover:not(.active) { color: #e0e0e0; }
+.mode-btn + .mode-btn { border-left: 1px solid var(--tb-chrome-border); }
+.mode-btn:hover:not(.active) {
+  color: var(--tb-chrome-hover-fg);
+  background: var(--tb-chrome-hover-bg);
+}
+.mode-btn.active {
+  color: var(--tb-chrome-hover-fg);
+  font-weight: 700;
+  cursor: default;
+}
+.mode-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+}
+.mode-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
-/* Topbar icon buttons */
-.topbar-icon-btn {
+/* --- Chrome buttons --- */
+.chrome-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   -webkit-app-region: no-drag;
-  background: none; border: 1px solid rgba(255,255,255,0.2); color: #94a3b8;
-  width: 28px; height: 28px; border-radius: 50%; font-size: 14px; font-weight: 700;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-family: var(--font); line-height: 1; transition: all 0.15s;
 }
-.topbar-icon-btn:not(:disabled):hover { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); }
-/* Connection status icon */
-.topbar-conn-btn { color: #94a3b8; border-color: rgba(255,255,255,0.2); }
-.topbar-conn-btn.disconnected { color: #94a3b8; }
-.topbar-conn-btn.connecting { color: #f39c12; border-color: #f39c12; animation: pulse-border 1.2s ease-in-out infinite; }
-.topbar-conn-btn.connected { color: var(--accent); border-color: var(--accent); }
-.topbar-conn-btn.disconnecting { color: #f39c12; border-color: #f39c12; animation: pulse-border 1.2s ease-in-out infinite; }
-.conn-icon { display: block; }
+.chrome-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--tb-chrome-border);
+  background: var(--tb-chrome-bg);
+  color: var(--tb-chrome-fg);
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  -webkit-app-region: no-drag;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: 0;
+}
+.chrome-btn:hover {
+  background: var(--tb-chrome-hover-bg);
+  border-color: var(--tb-chrome-hover-border);
+  color: var(--tb-chrome-hover-fg);
+}
+.chrome-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.chrome-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.chrome-btn svg { display: block; stroke: currentColor; }
+.chrome-btn.chrome-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chrome-btn.chrome-accent:hover {
+  background: rgba(46,204,113,0.15);
+  color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.chrome-btn.chrome-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.chrome-btn.chrome-danger:hover {
+  background: rgba(231,76,60,0.15);
+  color: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+.chrome-btn.chrome-warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.chrome-btn.chrome-warn:hover {
+  background: rgba(243,156,18,0.15);
+}
+
+/* Pulse animation for connecting / disconnecting / quitting states */
 @keyframes pulse-border {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
-
-.topbar-update-btn { font-size: 16px; font-weight: 400; }
-.topbar-update-btn:disabled { color: var(--text-muted); border-color: var(--border); }
-.topbar-update-btn:disabled:hover { background: none; }
-.topbar-update-btn:not(:disabled) { color: #f39c12; border-color: #f39c12; }
-.topbar-update-btn:not(:disabled):hover { background: #f39c12; color: #fff; }
-.topbar-quit-btn { color: var(--danger); border-color: var(--danger); }
-.topbar-quit-btn:hover { background: var(--danger); color: #fff; }
-.topbar-quit-btn.quitting { animation: pulse-border 1.2s ease-in-out infinite; cursor: wait; }
-.topbar-btn {
-  -webkit-app-region: no-drag;
-  background: none;
-  border: 1px solid rgba(255,255,255,0.2);
-  color: var(--topbar-text);
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  font-family: var(--font);
-}
-.topbar-btn:hover { background: rgba(255,255,255,0.18); }
-.topbar-btn.update-btn {
-  background: #f39c12;
-  color: #fff;
-  border-color: #f39c12;
-  font-weight: 600;
-}
-.topbar-btn.update-btn:hover { background: #e67e22; }
-.topbar-btn.connect-btn {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-  font-weight: 600;
-}
-.topbar-btn.connect-btn:hover { background: var(--accent-hover); }
-.topbar-btn.connect-btn.disabled { opacity: 0.4; cursor: not-allowed; }
-.topbar-btn.disconnect-btn {
-  background: var(--danger);
-  color: #fff;
-  border-color: var(--danger);
-  font-weight: 600;
-}
-.topbar-btn.disconnect-btn:hover { background: var(--danger-hover); }
-.topbar-btn.disconnecting-btn {
-  background: #95a5a6;
-  color: #fff;
-  border-color: #95a5a6;
-  font-weight: 600;
-  cursor: wait;
-}
+.chrome-btn.pulse { animation: pulse-border 1.2s ease-in-out infinite; }
 
 /* --- Log Pane --- */
 .log-pane {
@@ -257,15 +409,9 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .main-tab:hover { color: var(--text); background: rgba(0,0,0,0.04); }
 .tab-bar-spacer { flex: 1; }
-.main-tab-bar .topbar-btn { padding: 2px 14px; font-size: 13px; margin: 4px 4px 4px 0; }
+/* Tab-bar command buttons (used to be .topbar-btn) are now .btn.btn-sm. */
 .tab-bar-icons { display: flex; align-items: center; gap: 6px; }
-.tab-icon-btn {
-  background: none; border: 1px solid var(--border); color: var(--text-muted);
-  width: 26px; height: 26px; border-radius: 50%; font-size: 14px; font-weight: 700;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-family: var(--font); line-height: 1; transition: all 0.15s;
-}
-.tab-icon-btn:hover { color: var(--text); border-color: var(--text-muted); background: rgba(0,0,0,0.04); }
+/* Tab-bar icon controls use .btn .btn-sm .btn-icon directly. */
 .tab-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
 /* Common pane toolbar: shared across profile, files, and client-settings toolbars */
@@ -282,16 +428,9 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-family: var(--font); background: var(--surface); min-width: 160px;
 }
 .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
-.tb-btn {
-  background: none; border: 1px solid var(--border); padding: 3px 10px;
-  border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--text);
-  font-family: var(--font); white-space: nowrap;
-}
-.tb-btn:hover { background: var(--surface-alt); color: var(--text); }
-.tb-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.tb-save-btn:disabled { color: var(--text-muted); }
-.tb-save-btn:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
-.tb-delete-btn:hover { color: var(--danger) !important; border-color: var(--danger); }
+/* Tab-bar command buttons use .btn .btn-sm directly; no .tb-btn class.
+   The separator above visually divides command buttons from tabs. */
+
 .tb-select {
   background: var(--surface); border: 1px solid var(--border); padding: 3px 8px;
   border-radius: 4px; font-size: 12px; color: var(--text); font-family: var(--font);
@@ -309,7 +448,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .status-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -317,31 +456,12 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-size: 22px;
   font-weight: 700;
 }
-.status-connection-state {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 3px 12px;
-  border-radius: 12px;
-}
-.status-connection-state.connected {
-  background: var(--accent);
-  color: #fff;
-}
-.status-connection-state.disconnected {
-  background: var(--surface-alt);
-  color: var(--text-muted);
-}
+/* Status-page connection badge uses the standard .status family. */
 /* Status service cards */
 .status-svc-row {
   display: flex; align-items: center; gap: 12px; padding: 10px 16px;
 }
-.status-svc-indicator {
-  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-}
-.status-svc-indicator.available { background: var(--accent); }
-.status-svc-indicator.unavailable { background: #ccc; }
-.status-svc-indicator.error { background: var(--danger); }
-.status-svc-indicator.warning { background: #f39c12; }
+/* Service status indicators use .dot .dot-online | .dot-offline | .dot-error | .dot-degraded. */
 .status-svc-name { width: 120px; font-weight: 500; font-size: 13px; flex-shrink: 0; }
 .status-svc-remote { width: 80px; font-family: var(--mono); font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
 .status-svc-local { flex: 1; font-family: var(--mono); font-size: 13px; }
@@ -376,24 +496,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-weight: 600;
   background: var(--surface);
 }
-.profile-new-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 0;
-}
-.profile-new-btn:hover { background: var(--accent-hover); }
+/* "New profile" button uses .btn .btn-sm .btn-icon .btn-primary directly. */
 .profile-dropdown:focus {
   outline: none;
   border-color: var(--accent);
@@ -493,14 +596,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .hub-item:hover { background: var(--sidebar-hover); }
 .hub-item.selected { background: var(--sidebar-hover); border-left-color: var(--accent); }
-.hub-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.hub-dot.online { background: var(--accent); }
-.hub-dot.offline { background: var(--danger); }
+/* Hub sidebar dots use .dot .dot-online | .dot-error. */
 .machine-item {
   display: flex;
   align-items: center;
@@ -534,13 +630,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   color: var(--text); background: var(--surface-alt); padding: 6px 10px;
   border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.copy-btn {
-  flex-shrink: 0; width: 28px; height: 28px; font-size: 14px;
-  border: 1px solid var(--border); border-radius: 4px;
-  background: var(--surface); color: var(--text-muted); cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.copy-btn:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+/* Copy buttons use .btn .btn-sm .btn-icon directly. */
 .yaml-preview {
   padding: 12px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.5;
   color: var(--text-muted); margin: 0; white-space: pre-wrap; word-break: break-all;
@@ -556,14 +646,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .machine-excluded {
   opacity: 0.45;
 }
-.machine-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.machine-dot.online { background: var(--accent); }
-.machine-dot.offline { background: #ccc; }
+/* Machine sidebar dots use .dot .dot-online | .dot-offline. */
 
 /* Detail pane */
 .detail-pane {
@@ -619,12 +702,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .stat-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .hub-actions { margin-top: 16px; }
 
-/* No-token badge */
-.no-token-badge {
-  font-size: 10px;
-  color: var(--danger);
-  margin-left: 6px;
-}
+/* "no token" label uses .status .status-error directly. */
 
 /* --- Machine Cards --- */
 .machine-card {
@@ -711,15 +789,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   gap: 12px;
   margin-bottom: 12px;
 }
-.connected-badge {
-  background: var(--accent);
-  color: #fff;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
+/* Connected badge uses .status .status-online with a .status-dot prefix. */
 .connected-pid {
   font-size: 12px;
   color: var(--text-muted);
@@ -747,64 +817,95 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-weight: 600;
 }
 
-/* --- Buttons --- */
+/* ==========================================================================
+   BUTTONS — per TDL
+   See TELA-DESIGN-LANGUAGE.md section "Buttons" for the spec. Every
+   content-area button shares an elevation invariant (border + shadow +
+   fill) so it reads as raised without depending on hover. The .btn base
+   carries the invariant; modifiers (.btn-primary, .btn-danger,
+   .btn-destructive, .btn-icon, .btn-sm) layer role and size on top.
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--text);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--btn-bg);
+  box-shadow: var(--shadow-btn);
+  transition: background 0.12s, box-shadow 0.08s, transform 0.05s;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.btn:hover { background: var(--btn-secondary-hover); }
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .btn-primary {
   background: var(--accent);
-  color: #fff;
-  border: none;
-  padding: 8px 20px;
-  border-radius: 5px;
-  font-size: 14px;
+  color: #1f2937;
+  border-color: var(--accent-hover);
   font-weight: 600;
-  cursor: pointer;
-  font-family: var(--font);
+  box-shadow: var(--shadow-btn-primary);
 }
-.btn-primary:hover { background: var(--accent-hover); }
-.btn-primary:disabled, .btn-primary.disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-secondary {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 8px 20px;
-  border-radius: 5px;
-  font-size: 14px;
-  cursor: pointer;
-  font-family: var(--font);
+.btn-primary:hover { background: var(--accent-hover); color: #1f2937; }
+
+.btn-danger {
+  background: var(--btn-bg);
+  color: var(--danger);
+  border-color: var(--border);
 }
-.btn-secondary:hover { background: var(--surface-alt); }
-.btn-sm { padding: 4px 12px; font-size: 12px; }
-.btn-icon {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
+.btn-danger::before,
+.btn-destructive::before {
+  content: '\26A0';
+  font-size: 13px;
   line-height: 1;
 }
-.btn-icon:hover { background: var(--surface-alt); }
-.btn-icon:disabled { opacity: 0.35; cursor: not-allowed; }
-.btn-link {
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 13px;
-  font-family: var(--font);
-  text-decoration: underline;
-}
-.btn-danger {
+.btn-danger:hover {
   background: var(--danger);
   color: #fff;
-  border: none;
-  padding: 8px 20px;
-  border-radius: 5px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: var(--font);
+  border-color: var(--danger);
 }
-.btn-danger:hover { background: var(--danger-hover); }
+
+.btn-destructive {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger-hover);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn-primary);
+}
+.btn-destructive:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-icon {
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+  min-width: 28px;
+  justify-content: center;
+}
 
 /* --- Modal --- */
 .modal-overlay {
@@ -965,22 +1066,10 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   gap: 6px;
   align-items: center;
 }
-.term-btn {
-  background: #334155;
-  color: #e2e8f0;
-  border: 1px solid #475569;
-  padding: 3px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  font-family: var(--font);
-}
-.term-btn:hover { background: #475569; }
-.term-btn-green { background: var(--accent); border-color: var(--accent); color: #fff; }
-.term-btn-green:hover { background: var(--accent-hover); }
-.term-btn-amber { background: #f39c12; border-color: #f39c12; color: #fff; }
-.term-btn-amber:hover { background: #e67e22; }
-.term-btn.verbose-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Terminal/log panel action buttons use .btn .btn-sm directly.
+   The .term-btn and .verbose-btn classes were retired as part of the
+   TDL sweep so every control in the log panel header carries the same
+   elevation invariant. */
 .verbose-check-icon { font-size: 13px; }
 .copy-toast {
   font-size: 11px;
@@ -1307,14 +1396,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-family: var(--mono); font-size: 12px; color: var(--text-muted);
   background: var(--surface-alt); padding: 2px 6px; border-radius: 3px;
 }
-.role-badge {
-  display: inline-block; padding: 2px 8px; border-radius: 10px;
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-}
-.role-owner { background: #fef3c7; color: #92400e; }
-.role-admin { background: #dbeafe; color: #1e40af; }
-.role-user { background: #d1fae5; color: #065f46; }
-.role-viewer { background: #f3f4f6; color: #4b5563; }
+/* Role badges use .chip .chip-role-owner | .chip-role-admin | .chip-role-user | .chip-role-viewer. */
 .action-btns { display: flex; gap: 4px; }
 .icon-btn {
   background: none; border: 1px solid var(--border); padding: 4px 8px;
@@ -1377,7 +1459,8 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .settings-path-input::placeholder { color: var(--text-muted); }
 .settings-path-row { display: flex; gap: 6px; align-items: center; }
 .settings-path-row .settings-full-control { flex: 1; }
-.app-version { font-size: 11px; color: #64748b; font-weight: 400; margin-left: 2px; }
+/* .app-version was a legacy topbar label — now .brand-version uses the
+   status family (.status.status-current / .status-outdated). */
 .mtu-explanation { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 10px; }
 .mtu-form { margin-top: 16px; }
 .mtu-form-row { margin-bottom: 10px; }
@@ -1389,30 +1472,13 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .mtu-check-label { display: flex; align-items: center; gap: 6px; font-weight: 500 !important; cursor: pointer; }
 .mtu-check-label input { accent-color: var(--accent); }
 [data-theme="dark"] .mtu-form-row input[type="number"] { background: var(--bg); color: var(--text); border-color: var(--border); }
-/* ── Capability tags ── */
+/* Capability tags use .chip .chip-cap-yes | .chip-cap-no | .chip-cap-info.
+   Inline yes/no text colors use .status-online | .status-error. */
 .cap-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.cap-tag {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 600;
-}
-.cap-tag-yes { background: #eef8f1; color: #2d7d46; }
-.cap-tag-no { background: #fef2f2; color: #c0392b; }
-.cap-tag-info { background: var(--surface-alt); color: var(--text-muted); }
-.cap-dot { width: 5px; height: 5px; border-radius: 50%; }
-.cap-dot-yes { background: #2d7d46; }
-.cap-dot-no { background: #c0392b; }
-[data-theme="dark"] .cap-tag-yes { background: #1a2e1a; color: #86efac; }
-[data-theme="dark"] .cap-tag-no { background: #2d1b1b; color: #fca5a5; }
-[data-theme="dark"] .cap-dot-yes { background: #86efac; }
-[data-theme="dark"] .cap-dot-no { background: #fca5a5; }
-.cap-yes { color: #2d7d46; }
-.cap-no { color: #c0392b; }
-[data-theme="dark"] .cap-yes { color: #86efac; }
-[data-theme="dark"] .cap-no { color: #fca5a5; }
 .status-svc-link { color: var(--accent); text-decoration: none; }
 .status-svc-link:hover { text-decoration: underline; }
 .machine-unreachable { opacity: 0.6; }
-.machine-dot.unreachable { background: var(--text-muted); }
+/* .machine-dot.unreachable is covered by .dot.dot-offline. */
 .unreachable-badge {
   font-size: 10px; color: var(--text-muted); margin-left: 6px;
   font-style: italic;
@@ -1467,15 +1533,103 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .danger-row-text { flex: 1; }
 .danger-row-label { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
 .danger-row-desc { font-size: 12px; color: var(--text-muted); }
-.chip {
-  display: inline-block; padding: 3px 10px; border: 1px solid var(--border);
-  border-radius: 4px; font-size: 12px; font-family: var(--mono); margin: 2px 4px 2px 0;
+/* ==========================================================================
+   STATUS BADGES, DOTS, CHIPS — per TDL
+   See TELA-DESIGN-LANGUAGE.md section "Status badges" for the spec.
+   ========================================================================== */
+
+/* Status badge: flat inline label with a glyph prefix. Non-interactive. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+  vertical-align: baseline;
 }
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status-online    { color: var(--accent); }
+.status-degraded  { color: var(--warn); }
+.status-error     { color: var(--danger); }
+.status-offline   { color: var(--text-muted); }
+
+/* Version status specialization. Monospace, mixed-case, glyph prefix.
+   Applied to the *installed* version only. The *available* version
+   is rendered in default text color. */
+.status-current,
+.status-outdated {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.status-current  { color: var(--accent); }
+.status-current::before  { content: '\2713'; margin-right: 4px; }
+.status-outdated { color: var(--warn); }
+.status-outdated::before { content: '\2191'; margin-right: 4px; }
+
+/* Raw colored-dot primitive. Use alone for dense contexts where only
+   a state indicator is needed (sidebar rows, list items, card headers).
+   For label + dot, prefer .status with a .status-dot child. */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-online   { background: var(--accent); }
+.dot-degraded { background: var(--warn); }
+.dot-error    { background: var(--danger); }
+.dot-offline  { background: var(--text-muted); }
+
+/* Metadata chip: flat filled pill, no border, no elevation. Neutral
+   text on surface-alt. Explicitly not a state indicator. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: none;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Chip color variants — for categorical metadata like user role. Flat
+   filled, tinted background, matching text color. */
+.chip-role-owner  { background: rgba(243, 156, 18, 0.12); color: var(--warn); }
+.chip-role-admin  { background: rgba(52, 152, 219, 0.12); color: #3498db; }
+.chip-role-user   { background: rgba(46, 204, 113, 0.12); color: var(--accent); }
+.chip-role-viewer { background: var(--surface-alt); color: var(--text-muted); }
+.chip-cap-yes     { background: rgba(46, 204, 113, 0.12); color: var(--accent); }
+.chip-cap-no      { background: rgba(231, 76, 60, 0.12); color: var(--danger); }
+.chip-cap-info    { background: var(--surface-alt); color: var(--text-muted); }
+
 .log-tab-close {
   margin-left: 6px; font-size: 14px; line-height: 1; opacity: 0.5; cursor: pointer;
 }
 .log-tab-close:hover { opacity: 1; color: var(--danger); }
-.log-dot-warn { background: var(--warn); }
 .text-view-content {
   max-height: 400px; overflow: auto; padding: 12px;
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
@@ -1485,8 +1639,6 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .detail-header { margin-bottom: 24px; }
 .detail-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
 .detail-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
-.badge-online { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent); background: none; cursor: default; -webkit-user-select: none; user-select: none; }
-.badge-offline { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border: 1px solid var(--text-muted); background: none; cursor: default; -webkit-user-select: none; user-select: none; }
 
 /* Legacy settings-card-block (used by Client Settings, to be migrated) */
 .settings-card-block {
@@ -1510,10 +1662,6 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .tools-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .tools-table td { padding: 6px 8px; border-bottom: 1px solid var(--surface-alt); }
 .tools-version { font-family: var(--mono); font-size: 12px; }
-.tools-status-ok { font-size: 12px; color: var(--accent); }
-.tools-status-ok::before { content: '\2713\00a0'; }
-.tools-status-warn { font-size: 12px; color: var(--warn); }
-.tools-status-warn::before { content: '\2191\00a0'; }
 .tools-action-btn { padding: 2px 8px; font-size: 11px; }
 .tools-service-row td { border-bottom: 1px solid var(--surface-alt); padding-top: 0; }
 .tools-service-label { font-size: 11px; color: var(--text-muted); font-style: italic; }
@@ -1552,10 +1700,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .bin-status-name { font-weight: 600; width: 70px; font-family: var(--mono); }
 .bin-status-ver { color: var(--text-muted); font-family: var(--mono); flex: 1; }
-.bin-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.bin-status-dot.found { background: var(--accent); }
-.bin-status-dot.outdated { background: #f39c12; }
-.bin-status-dot.missing { background: var(--danger); }
+/* Binary status indicators use .dot .dot-online | .dot-degraded | .dot-error. */
 .bin-status-action {
   background: none; border: 1px solid var(--border); padding: 1px 8px;
   border-radius: 3px; font-size: 11px; cursor: pointer; color: var(--text-muted);
@@ -1581,14 +1726,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   display: flex; align-items: center; gap: 6px; padding: 5px 12px;
   border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface);
 }
-.files-nav-btn {
-  background: none; border: 1px solid var(--border); width: 26px; height: 26px;
-  border-radius: 4px; font-size: 13px; cursor: pointer; color: var(--text-muted);
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 0; flex-shrink: 0;
-}
-.files-nav-btn:hover:not(:disabled) { background: var(--surface-alt); color: var(--text); border-color: var(--text-muted); }
-.files-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+/* File-browser nav arrows use .btn .btn-sm .btn-icon directly. */
 .files-path {
   display: flex; align-items: center; flex: 1; min-width: 0;
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
@@ -1605,14 +1743,8 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .files-actionbar {
   gap: 4px; padding: 4px 12px;
 }
-.files-action-btn {
-  background: none; border: 1px solid var(--border); padding: 3px 10px;
-  border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--text);
-  font-family: var(--font); white-space: nowrap;
-}
-.files-action-btn:hover:not(:disabled) { background: var(--surface-alt); color: var(--text); }
-.files-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.files-action-btn.danger:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+/* File-browser action buttons (Upload, New Folder, Rename, Download, Delete)
+   use .btn .btn-sm directly. Delete uses .btn-danger. */
 .files-dotfiles-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
 .files-dotfiles-toggle input { accent-color: var(--accent); }
 .files-header {
@@ -1640,7 +1772,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .files-entry {
   display: flex; align-items: center; padding: 0 16px; height: 28px;
   border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 12px;
-  cursor: default; user-select: none;
+  cursor: default; -webkit-user-select: none; user-select: none;
 }
 .files-entry:hover { background: rgba(94, 232, 158, 0.10); }
 .files-entry.selected { background: rgba(94, 232, 158, 0.20); }
@@ -1700,9 +1832,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .files-status-sep { width: 1px; height: 12px; background: var(--border); }
 .files-status-mode { margin-left: auto; display: flex; align-items: center; gap: 4px; }
-.files-status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-.files-status-dot.rw { background: var(--accent); }
-.files-status-dot.ro { background: #f59e0b; }
+/* File mount status indicators use .dot .dot-online | .dot-degraded. */
 .files-progress {
   display: none; align-items: center; gap: 8px; padding: 4px 16px;
   border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted);
@@ -1721,17 +1851,10 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .files-machine-card.disabled { opacity: 0.45; cursor: default; }
 .files-machine-name { font-weight: 600; font-size: 13px; }
 .files-machine-meta { font-size: 11px; color: var(--text-muted); }
-.files-machine-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.files-machine-status.online { background: var(--accent); }
-.files-machine-status.offline { background: var(--text-muted); }
-.files-machine-status.disconnected { background: var(--danger); }
-.files-machine-badge {
-  font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: auto;
-  background: rgba(94, 232, 158, 0.1); color: var(--accent); border: 1px solid rgba(94, 232, 158, 0.2);
-}
-.files-machine-badge.ro { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border-color: rgba(245, 158, 11, 0.2); }
-.files-machine-badge.none { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); border-color: var(--border); }
-.files-machine-badge.off { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+/* File machine card uses .dot for status and .chip variants for RO/RW/none/off badges.
+   .files-machine-badge positioning carried over as a modifier so the right-aligned
+   spacing in the list rows still works. */
+.files-machine-badge { margin-left: auto; }
 .files-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   flex: 1; color: var(--text-muted); font-size: 13px; gap: 8px; padding: 32px;
@@ -1760,7 +1883,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   background: var(--surface-alt); font-weight: 600; color: var(--text);
   border-left-color: var(--accent);
 }
-.agents-sidebar-item .machine-status-dot { width: 8px; height: 8px; margin-top: 0; flex-shrink: 0; }
+.agents-sidebar-item .dot { margin-top: 0; }
 .agents-sidebar-name { font-size: 13px; }
 .agents-sidebar-version { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
 .agents-sidebar-version.version-outdated { color: var(--warn); }
@@ -1808,11 +1931,11 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   margin-bottom: 12px; padding: 16px; display: flex; align-items: flex-start; gap: 16px;
 }
-.machine-status-dot {
-  width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0;
-}
-.machine-status-dot.online { background: var(--accent); }
-.machine-status-dot.offline { background: #95a5a6; }
+/* Machine card status dots use .dot .dot-online | .dot-offline.
+   The larger 10px size and margin-top for card alignment is applied
+   via the .dot-lg modifier below. */
+.dot-lg { width: 10px; height: 10px; }
+.machine-card .dot-lg { margin-top: 5px; }
 .machine-info { flex: 1; }
 .machine-name { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
 .machine-detail { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
@@ -1909,8 +2032,8 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .modal-body-padded { padding: 20px; }
 .modal-confirm { width: 420px; }
 .confirm-message { font-size: 14px; margin-bottom: 20px; }
-.btn-danger { background: var(--danger); color: #fff; border: none; padding: 6px 16px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); }
-.btn-danger:hover { background: var(--danger-hover); }
+/* Duplicate .btn-danger definition removed — canonical rules are in the
+   Buttons section above. */
 
 /* Profile detail: service rows in cards */
 .profile-svc-row {
@@ -1976,108 +2099,232 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   pointer-events: none;
 }
 
-/* --- Log Panel (bottom dock) --- */
+/* ==========================================================================
+   LOG PANEL (bottom dock) — per TDL
+   ========================================================================== */
 .log-panel {
-  border-top: 2px solid var(--border);
-  background: #1e293b;
+  border-top: 1px solid var(--border);
+  background: var(--surface-alt);
   display: flex;
   flex-direction: column;
   height: 220px;
   flex-shrink: 0;
   transition: height 0.15s;
 }
-.log-panel.collapsed { height: 26px; overflow: hidden; }
+.log-panel.collapsed { height: 30px; overflow: hidden; }
 .log-panel.collapsed .log-panel-resize { display: none; }
-.log-panel.collapsed .log-panel-header { height: 26px; }
+.log-panel.collapsed .log-panel-header { height: 30px; border-bottom: none; }
 .log-panel.collapsed .log-panel-tabs { display: none; }
-.log-panel.collapsed .log-panel-actions .term-btn { display: none; }
-.log-panel.collapsed .log-panel-actions .verbose-btn { display: none; }
+.log-panel.collapsed .log-panel-actions .btn { display: none; }
+.log-panel.collapsed .log-panel-actions .form-check { display: none; }
+.log-panel.collapsed .log-panel-actions .log-panel-toggle { display: inline-flex; }
 .log-panel.collapsed .log-panel-collapsed-title { display: block; }
 .log-panel-collapsed-title {
-  display: none; font-size: 11px; color: #94a3b8; font-weight: 500;
-  padding-left: 4px; white-space: nowrap;
+  display: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-right: 4px;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .log-panel-resize {
-  height: 4px; cursor: row-resize; flex-shrink: 0;
+  height: 4px;
+  cursor: row-resize;
+  flex-shrink: 0;
 }
 .log-panel-resize:hover { background: var(--accent); opacity: 0.4; }
 .log-panel-header {
-  display: flex; align-items: center; padding: 0 12px;
-  background: #0f172a; border-bottom: 1px solid #334155;
-  flex-shrink: 0; height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 36px;
 }
-.log-panel-tabs { display: flex; gap: 0; height: 100%; align-items: stretch; overflow-x: auto; }
+.log-panel-tabs {
+  display: flex;
+  gap: 0;
+  height: 100%;
+  align-items: stretch;
+  overflow-x: auto;
+}
 .log-panel-tab {
-  background: none; border: none; color: #94a3b8; font-size: 11px; font-family: var(--font);
-  padding: 0 12px; cursor: pointer; border-bottom: 2px solid transparent;
-  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font);
+  padding: 0 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
-.log-panel-tab:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
-.log-panel-tab.active { color: #e2e8f0; border-bottom-color: var(--accent); }
-.log-panel-tab-add { color: #94a3b8 !important; border-color: #334155 !important; padding: 1px 8px !important; font-size: 13px; font-weight: 600; align-self: center; margin-left: 6px; }
-.attach-log-popover { min-width: 200px; max-height: 300px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000; padding: 4px 0; }
-.attach-log-section { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 12px 2px; }
-.attach-log-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 12px; font-size: 12px; font-family: var(--font); color: var(--text); background: none; border: none; cursor: pointer; text-align: left; }
-.attach-log-item:hover { background: rgba(255,255,255,0.05); }
-.attach-log-loading, .attach-log-empty { font-size: 12px; color: var(--text-muted); padding: 8px 12px; }
-.log-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-.log-dot-live { background: var(--accent); }
-.log-dot-idle { background: #94a3b8; }
-.log-dot-cmd { background: #3498db; }
-.log-panel-tab .close-tab {
-  color: #64748b; font-size: 13px; cursor: pointer;
-  background: none; border: none; padding: 0 0 0 2px; font-family: var(--font); line-height: 1;
+.log-panel-tab:hover { color: var(--text); background: var(--surface-alt); }
+.log-panel-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
 }
-.log-panel-tab .close-tab:hover { color: #e2e8f0; }
-.log-panel-actions {
-  margin-left: auto; display: flex; gap: 4px; align-items: center; flex-shrink: 0;
+/* Attach-source (+) and collapse/expand toggle use .btn.btn-sm.btn-icon
+   directly. These modifier classes only handle positioning within the
+   header strip. */
+.log-panel-tab-add {
+  align-self: center;
+  margin: 0 0 0 6px;
 }
-.log-panel-actions .term-btn {
-  font-size: 11px; padding: 3px 8px; line-height: 1; height: 22px;
-  display: inline-flex; align-items: center; gap: 3px;
-}
-.log-panel-actions .verbose-btn { font-size: 11px; }
 .log-panel-toggle {
-  background: none; border: none; color: #94a3b8; font-size: 14px;
-  cursor: pointer; padding: 0 6px; font-family: var(--font); line-height: 1;
-  display: inline-flex; align-items: center; align-self: center;
+  /* plain .btn.btn-sm.btn-icon — no overrides */
 }
-.log-panel-toggle:hover { color: #e2e8f0; }
-.log-panel-output {
-  flex: 1; overflow-y: auto; padding: 4px 12px;
-  color: #e2e8f0; font-family: var(--mono); font-size: 12px;
-  line-height: 1.3; white-space: pre-wrap; margin: 0;
-}
-.log-panel-output .log-ts { color: #94a3b8; }
 
-/* Command log in panel */
+.log-panel-tab .close-tab {
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0 0 0 4px;
+  font-family: var(--font);
+  line-height: 1;
+}
+.log-panel-tab .close-tab:hover { color: var(--text); }
+
+.log-panel-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.log-panel-actions .form-check {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.log-panel-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 14px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  margin: 0;
+  background: var(--surface-alt);
+}
+.log-panel-output .log-ts { color: var(--text-muted); }
+
+/* Attach-source popover — surface card with list of log sources */
+.attach-log-popover {
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 0 0 1px var(--border);
+  z-index: 1000;
+  padding: 6px 0;
+}
+.attach-log-section {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 14px 4px;
+}
+.attach-log-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.attach-log-item:hover { background: var(--surface-alt); }
+.attach-log-loading,
+.attach-log-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 10px 14px;
+}
+
+/* Log source dots use .dot .dot-online | .dot-offline | .dot-degraded. */
+
+/* Command log filter bar — sits at the top of the #log-commands pane */
 .cmd-filter-bar {
-  display: flex; align-items: center; gap: 6px; padding: 4px 12px;
-  background: #0f172a; border-bottom: 1px solid #334155; flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .cmd-filter-input {
-  background: #1e293b; border: 1px solid #334155; color: #e2e8f0;
-  padding: 2px 8px; border-radius: 3px; font-size: 11px; font-family: var(--mono);
-  width: 180px; outline: none;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: var(--mono);
+  width: 180px;
+  outline: none;
 }
-.cmd-filter-input:focus { border-color: #3498db; }
-.cmd-filter-input::placeholder { color: #475569; }
+.cmd-filter-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(46,204,113,0.15);
+}
+.cmd-filter-input::placeholder { color: var(--text-muted); }
 .cmd-filter-chips { display: flex; gap: 4px; }
 .cmd-filter-chip {
-  background: none; border: 1px solid #334155; color: #64748b; padding: 1px 8px;
-  border-radius: 10px; font-size: 10px; cursor: pointer; font-family: var(--font);
+  background: var(--surface-alt);
+  border: none;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
 }
-.cmd-filter-chip:hover { color: #94a3b8; border-color: #475569; }
-.cmd-filter-chip.active { background: #334155; color: #e2e8f0; border-color: #475569; }
+.cmd-filter-chip:hover { color: var(--text); background: var(--btn-secondary-hover); }
+.cmd-filter-chip.active {
+  background: var(--accent);
+  color: #1f2937;
+}
 #log-commands {
-  display: flex; flex-direction: column; padding: 0 !important; overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden;
+  background: var(--surface-alt);
 }
 .cmd-list {
-  overflow-y: auto; flex: 1;
-  font-family: var(--mono) !important; font-size: 12px !important; color: #cbd5e1;
-  line-height: 14px !important; padding: 2px 12px; white-space: pre; margin: 0;
+  overflow-y: auto;
+  flex: 1;
+  font-family: var(--mono) !important;
+  font-size: 12px !important;
+  color: var(--text);
+  line-height: 16px !important;
+  padding: 4px 14px;
+  white-space: pre;
+  margin: 0;
 }
-.cmd-line { cursor: pointer; display: block; line-height: 14px !important; }
+.cmd-line { cursor: pointer; display: block; line-height: 16px !important; }
 .cmd-line:hover { background: #273549; }
 .cmd-line.cmd-active { background: #1e3a5f; }
 .cmd-cp {
@@ -2105,16 +2352,36 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .settings-radio-label input { accent-color: var(--accent); }
 
-/* ── Dark mode ── */
+/* ── Dark mode ──
+   Dark palette per TDL. Accent, warn, and danger are theme-invariant
+   (defined only in :root). Button fills lift one step above the card
+   surface so outlined buttons read as raised tiles. Border is brighter
+   in dark mode so outlined buttons have a crisp edge. */
 [data-theme="dark"] {
   --bg: #111827;
   --surface: #1f2937;
   --surface-alt: #1a2332;
   --text: #e5e7eb;
   --text-muted: #9ca3af;
-  --border: #374151;
-  --sidebar-bg: #1f2937;
-  --sidebar-hover: #1a2332;
+  --border: #4b5668;
+
+  --btn-bg: #2a3545;
+  --btn-secondary-hover: #3a465c;
+  --input-bg: #1a2332;
+
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.09);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4);
+
+  /* Legacy aliases */
+  --sidebar-bg: var(--surface);
+  --sidebar-hover: var(--surface-alt);
   --topbar-bg: #0f172a;
 }
 [data-theme="dark"] .status-pane { background: var(--bg); }
@@ -2128,10 +2395,6 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 [data-theme="dark"] .profile-toolbar-select {
   background: var(--surface); color: var(--text); border-color: var(--border);
 }
-[data-theme="dark"] .tb-btn {
-  color: var(--text); border-color: var(--border);
-}
-[data-theme="dark"] .tb-btn:hover { background: var(--surface-alt); color: var(--text); }
 [data-theme="dark"] .main-tab-bar { background: var(--surface-alt); }
 [data-theme="dark"] .main-tab { color: var(--text-muted); }
 [data-theme="dark"] .main-tab.active { color: var(--text); }
@@ -2160,13 +2423,6 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 [data-theme="dark"] .settings-path-input {
   background: var(--bg); color: var(--text); border-color: var(--border);
-}
-[data-theme="dark"] .tab-icon-btn {
-  color: var(--text-muted); border-color: var(--border);
-}
-[data-theme="dark"] .tab-icon-btn:hover {
-  color: var(--text); border-color: var(--text-muted);
-  background: rgba(255,255,255,0.06);
 }
 /* Files tab */
 [data-theme="dark"] .files-address-bar { background: var(--surface); border-color: var(--border); }

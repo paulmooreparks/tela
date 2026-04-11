@@ -158,6 +158,8 @@ export function IsConnected():Promise<boolean>;
 
 export function IsElevated():Promise<boolean>;
 
+export function IsModalOpen():Promise<boolean>;
+
 export function IsMountRunning():Promise<boolean>;
 
 export function IsPackageManaged():Promise<boolean>;
@@ -239,6 +241,8 @@ export function SetAgentConfig(arg1:string,arg2:string,arg3:string):Promise<stri
 export function SetClientChannel(arg1:string):Promise<string>;
 
 export function SetHubChannel(arg1:string,arg2:string):Promise<string>;
+
+export function SetModalOpen(arg1:boolean):Promise<void>;
 
 export function SetMountConfig(arg1:main.ProfileMount):Promise<void>;
 
