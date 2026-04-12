@@ -41,23 +41,23 @@ they eliminate all manual configuration.
 ### Layer 1: Virtual loopback addresses
 
 Each connected machine gets a unique loopback IP address from the
-`127.77.0.0/16` range. The address is deterministic: derived from a hash
+`127.88.0.0/16` range. The address is deterministic: derived from a hash
 of the hub URL and machine name, so the same machine always gets the same
 address across sessions and across profiles.
 
 ```
-127.77.1.1   -> dev-vm
-127.77.1.2   -> staging-db
-127.77.2.1   -> prod-api
+127.88.1.1   -> dev-vm
+127.88.1.2   -> staging-db
+127.88.2.1   -> prod-api
 ```
 
 Services on that machine bind to their real remote ports on that address:
 
 ```
-127.77.1.1:22    -> dev-vm SSH
-127.77.1.1:5432  -> dev-vm PostgreSQL
-127.77.1.2:22    -> staging-db SSH
-127.77.1.2:5432  -> staging-db PostgreSQL
+127.88.1.1:22    -> dev-vm SSH
+127.88.1.1:5432  -> dev-vm PostgreSQL
+127.88.1.2:22    -> staging-db SSH
+127.88.1.2:5432  -> staging-db PostgreSQL
 ```
 
 Port conflicts disappear. Two machines that both expose SSH on port 22
@@ -72,10 +72,10 @@ reverse proxy running on the same machine:
 
 ```nginx
 upstream dev_api {
-    server 127.77.1.1:8080;    # always dev-vm's HTTP service
+    server 127.88.1.1:8080;    # always dev-vm's HTTP service
 }
 upstream staging_api {
-    server 127.77.1.2:8080;    # always staging-db's HTTP service
+    server 127.88.1.2:8080;    # always staging-db's HTTP service
 }
 ```
 
@@ -104,7 +104,7 @@ The address is computed as:
 hash = SHA-256(hub_url + "/" + machine_name)
 octet3 = (hash[0] as uint16 << 8 | hash[1] as uint16) % 255 + 1  // 1-255
 octet4 = (hash[2] as uint16 << 8 | hash[3] as uint16) % 255 + 1  // 1-255
-address = 127.77.{octet3}.{octet4}
+address = 127.88.{octet3}.{octet4}
 ```
 
 This gives 65,025 unique addresses (255 * 255), which is far more than
@@ -117,7 +117,7 @@ warning in the log.
 #### Clash avoidance and configurable range
 
 The entire `127.0.0.0/8` block is loopback (RFC 1122). In practice,
-almost nothing uses any address other than `127.0.0.1`. The `127.77`
+almost nothing uses any address other than `127.0.0.1`. The `127.88`
 prefix was chosen because no known software claims a systematic range
 inside the loopback block. Docker, Kubernetes, WSL2, Tailscale, Nebula,
 ZeroTier, and common local development tools all use non-loopback
@@ -125,14 +125,14 @@ private ranges (`10.x`, `172.x`, `100.64.x`, `169.254.x`).
 
 The realistic clash scenario is another tool that uses the same
 virtual-loopback trick, or a user who has manually aliased addresses in
-the `127.77.x.x` range for their own purposes.
+the `127.88.x.x` range for their own purposes.
 
 If a clash occurs, the fallback is layered. The design prefers staying
 in the loopback-address model as long as possible. Dropping to
 port-remapped `127.0.0.1` is a last resort, not a first response:
 
 1. **Global prefix override.** The address prefix is configurable so
-   users can move the entire range away from `127.77`. This is the
+   users can move the entire range away from `127.88`. This is the
    first thing to try when a clash is discovered:
 2. **Per-machine override.** The profile YAML `address` field lets the
    user pin a specific machine to a different loopback address (see
@@ -149,7 +149,7 @@ port-remapped `127.0.0.1` is a last resort, not a first response:
 
 ```yaml
 dns:
-  loopback_prefix: "127.88"    # default: "127.77"
+  loopback_prefix: "127.77"    # default: "127.88"
 ```
 
 The prefix must be `127.{1-254}`. The two remaining octets are still
@@ -167,11 +167,11 @@ tela dns prefix 127.88      # set new prefix
 ```
 
 The `127.0.0.0/8` range is entirely loopback on all three platforms.
-Binding to `127.77.x.x` does not require creating a new interface or
+Binding to `127.88.x.x` does not require creating a new interface or
 adding a route. On Linux and macOS, any address in `127.0.0.0/8` is
 reachable immediately. On Windows, only `127.0.0.1` is reachable by
 default; additional loopback addresses require adding them with
-`netsh interface ip add address "Loopback" 127.77.x.x 255.255.255.255`
+`netsh interface ip add address "Loopback" 127.88.x.x 255.255.255.255`
 or equivalent. This requires elevation.
 
 #### Platform behavior
@@ -210,7 +210,7 @@ upstream DNS resolver.
 ```
 dig @127.0.0.1 -p 15353 dev-vm
 ;; ANSWER SECTION:
-dev-vm.    0    IN    A    127.77.1.1
+dev-vm.    0    IN    A    127.88.1.1
 ```
 
 The resolver is opt-in. It is not useful until the system is configured
@@ -266,7 +266,7 @@ dns:
   enabled: true              # default: true when Layer 2 is available
   suffix: tela               # default: "tela"; used for stub-zone resolution
   port: 15353                # default: 15353
-  loopback_prefix: "127.77"  # default: "127.77"; must be 127.{1-254}
+  loopback_prefix: "127.88"  # default: "127.88"; must be 127.{1-254}
 ```
 
 The `tela` process starts the DNS resolver when a profile with
@@ -280,7 +280,7 @@ address:
 connections:
   - hub: wss://work.example.com
     machine: dev-vm
-    address: 127.77.10.1    # override the hash-assigned address
+    address: 127.88.10.1    # override the hash-assigned address
 ```
 
 ### Integration with TelaVisor
@@ -288,7 +288,7 @@ connections:
 TelaVisor exposes the feature in two places:
 
 1. **Status tab.** Each service line shows the resolved address
-   (`127.77.1.1:22`) instead of or in addition to the `localhost:NNNNN`
+   (`127.88.1.1:22`) instead of or in addition to the `localhost:NNNNN`
    binding. If DNS is configured, the name (`dev-vm.tela`) is shown
    as well.
 
@@ -313,8 +313,8 @@ tela dns unconfigure      # reverse the system resolver setup
 service when the resolver is running:
 
 ```
-  SSH      dev-vm.tela:22  (127.77.1.1:22)   Listening
-  postgres dev-vm.tela:5432 (127.77.1.1:5432) Listening
+  SSH      dev-vm.tela:22  (127.88.1.1:22)   Listening
+  postgres dev-vm.tela:5432 (127.88.1.1:5432) Listening
 ```
 
 ## What changes in the codebase
@@ -334,7 +334,7 @@ changes, no agent changes.
 
 ### Phase 1: Virtual loopback addresses (Layer 1)
 
-- Deterministic address assignment from `127.77.0.0/16`
+- Deterministic address assignment from `127.88.0.0/16`
 - Services bind to real ports on assigned addresses
 - Windows loopback alias management
 - `tela status` shows addresses

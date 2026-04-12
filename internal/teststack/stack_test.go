@@ -108,10 +108,10 @@ func TestStackClientConnectsAndBindsListener(t *testing.T) {
 	const localPort uint16 = 15555
 	stack.Connect("barn", localPort, echoPort)
 
-	// The client binds on a deterministic loopback address (127.77.x.x)
+	// The client binds on a deterministic loopback address (127.88.x.x)
 	// when available, falling back to 127.0.0.1 when the loopback alias
 	// cannot be added (e.g. Windows without elevation). Try both.
-	bindAddr := client.LoopbackAddr("127.77", stack.HubURL(), "barn")
+	bindAddr := client.LoopbackAddr("127.88", stack.HubURL(), "barn")
 	loopbackTarget := fmt.Sprintf("%s:%d", bindAddr, echoPort)
 	fallbackTarget := fmt.Sprintf("127.0.0.1:%d", localPort)
 

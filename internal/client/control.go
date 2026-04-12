@@ -64,7 +64,7 @@ type BoundService struct {
 	Name     string `json:"name"`
 	Local    int    `json:"local"`
 	Remote   int    `json:"remote"`
-	BindAddr string `json:"bindAddr"` // loopback address (e.g. "127.77.1.1")
+	BindAddr string `json:"bindAddr"` // loopback address (e.g. "127.88.1.1")
 	Machine  string `json:"machine"`
 	Hub      string `json:"hub"`
 }

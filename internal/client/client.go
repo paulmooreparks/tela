@@ -424,7 +424,7 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 	}
 
 	// Convert exported PortMapping to the internal portMapping type.
-	bindAddr := LoopbackAddr("127.77", opts.HubURL, opts.MachineID)
+	bindAddr := LoopbackAddr("127.88", opts.HubURL, opts.MachineID)
 	mappings := make([]portMapping, 0, len(opts.Ports))
 	for _, p := range opts.Ports {
 		mappings = append(mappings, portMapping{
@@ -530,7 +530,7 @@ func buildMappings(portsFlag, servicesFlag string, legacyLocal, legacyTarget int
 	}
 
 	// Assign deterministic loopback addresses to all mappings.
-	addr := LoopbackAddr("127.77", hubURL, machineID)
+	addr := LoopbackAddr("127.88", hubURL, machineID)
 	for i := range mappings {
 		mappings[i].bindAddr = addr
 	}
@@ -690,7 +690,7 @@ type connectionProfile struct {
 // profileDNS configures local name resolution for tunneled services.
 type profileDNS struct {
 	// LoopbackPrefix is the first two octets of the loopback address
-	// range (e.g. "127.77"). Default: "127.77".
+	// range (e.g. "127.88"). Default: "127.88".
 	LoopbackPrefix string `yaml:"loopback_prefix,omitempty"`
 }
 
@@ -903,7 +903,7 @@ func runProfile(name string) {
 	// Compute the loopback prefix for deterministic address assignment.
 	lbPrefix := profile.DNS.LoopbackPrefix
 	if lbPrefix == "" {
-		lbPrefix = "127.77"
+		lbPrefix = "127.88"
 	}
 
 	var wg sync.WaitGroup
@@ -1986,7 +1986,7 @@ persistent_keepalive_interval=25
 	// compatibility with callers that do not use persistent listeners).
 	mappings := overrideMappings
 	if len(mappings) == 0 && len(agentPorts) > 0 {
-		addr := LoopbackAddr("127.77", hubURL, machineID)
+		addr := LoopbackAddr("127.88", hubURL, machineID)
 		for _, p := range agentPorts {
 			mappings = append(mappings, portMapping{local: p, remote: p, bindAddr: addr})
 		}
@@ -2053,18 +2053,18 @@ persistent_keepalive_interval=25
 type portMapping struct {
 	local    uint16
 	remote   uint16
-	bindAddr string // loopback address (e.g. "127.77.1.1"); empty means 127.0.0.1
+	bindAddr string // loopback address (e.g. "127.88.1.1"); empty means 127.0.0.1
 }
 
 // LoopbackAddr computes a deterministic loopback address for a
 // hub+machine pair. The address is derived from SHA-256 so the same
 // machine always gets the same address across sessions.
 //
-//	prefix  "127.77" (configurable, must be "127.{1-254}")
+//	prefix  "127.88" (configurable, must be "127.{1-254}")
 //	hubURL  hub WebSocket URL
 //	machine machine name
 //
-// Returns e.g. "127.77.42.17".
+// Returns e.g. "127.88.42.17".
 func LoopbackAddr(prefix, hubURL, machine string) string {
 	h := sha256.Sum256([]byte(hubURL + "/" + machine))
 	o3 := (uint16(h[0])<<8|uint16(h[1]))%255 + 1
@@ -2628,7 +2628,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 		if svcBindAddr == "" {
 			svcLbPrefix := profile.DNS.LoopbackPrefix
 			if svcLbPrefix == "" {
-				svcLbPrefix = "127.77"
+				svcLbPrefix = "127.88"
 			}
 			svcBindAddr = LoopbackAddr(svcLbPrefix, hubURL, machine)
 		}
@@ -2762,7 +2762,7 @@ func serviceRunUserDaemon(svcStop <-chan struct{}) {
 		if userBindAddr == "" {
 			userLbPrefix := profile.DNS.LoopbackPrefix
 			if userLbPrefix == "" {
-				userLbPrefix = "127.77"
+				userLbPrefix = "127.88"
 			}
 			userBindAddr = LoopbackAddr(userLbPrefix, hubURL, machine)
 		}
