@@ -34,6 +34,7 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -423,11 +424,13 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 	}
 
 	// Convert exported PortMapping to the internal portMapping type.
+	bindAddr := loopbackAddr("127.77", opts.HubURL, opts.MachineID)
 	mappings := make([]portMapping, 0, len(opts.Ports))
 	for _, p := range opts.Ports {
 		mappings = append(mappings, portMapping{
-			local:  p.LocalPort,
-			remote: p.RemotePort,
+			local:    p.LocalPort,
+			remote:   p.RemotePort,
+			bindAddr: bindAddr,
 		})
 	}
 
@@ -496,6 +499,7 @@ func ResetForTesting() {
 
 // buildMappings consolidates -ports, -services, and legacy -port/-target-port
 // flags into a single []portMapping. Service names are resolved via the hub API.
+// All returned mappings have bindAddr set to a deterministic loopback address.
 func buildMappings(portsFlag, servicesFlag string, legacyLocal, legacyTarget int, hubURL, machineID, token string) ([]portMapping, error) {
 	var mappings []portMapping
 
@@ -523,6 +527,12 @@ func buildMappings(portsFlag, servicesFlag string, legacyLocal, legacyTarget int
 			return nil, err
 		}
 		mappings = append(mappings, resolved...)
+	}
+
+	// Assign deterministic loopback addresses to all mappings.
+	addr := loopbackAddr("127.77", hubURL, machineID)
+	for i := range mappings {
+		mappings[i].bindAddr = addr
 	}
 
 	return mappings, nil
@@ -674,6 +684,14 @@ type connectionProfile struct {
 	Connections []profileConnection `yaml:"connections"`
 	MTU         int                 `yaml:"mtu,omitempty"`
 	Mount       profileMount        `yaml:"mount,omitempty"`
+	DNS         profileDNS          `yaml:"dns,omitempty"`
+}
+
+// profileDNS configures local name resolution for tunneled services.
+type profileDNS struct {
+	// LoopbackPrefix is the first two octets of the loopback address
+	// range (e.g. "127.77"). Default: "127.77".
+	LoopbackPrefix string `yaml:"loopback_prefix,omitempty"`
 }
 
 // profileConnection defines one hub+machine+services entry in a profile.
@@ -686,9 +704,12 @@ type profileConnection struct {
 	Hub string `yaml:"hub"`
 	// AgentID is the stable v4 UUID of the agent for this connection,
 	// when known. Optional; populated lazily.
-	AgentID  string           `yaml:"agentId,omitempty"`
-	Machine  string           `yaml:"machine"`
-	Token    string           `yaml:"token"`
+	AgentID string `yaml:"agentId,omitempty"`
+	Machine string `yaml:"machine"`
+	Token   string `yaml:"token"`
+	// Address overrides the computed loopback address for this machine.
+	// Must be in 127.0.0.0/8. Empty means use the deterministic hash.
+	Address  string           `yaml:"address,omitempty"`
 	Services []profileService `yaml:"services,omitempty"`
 }
 
@@ -841,6 +862,7 @@ func runProfile(name string) {
 		hub      string
 		machine  string
 		token    string
+		address  string // per-connection loopback override
 		services []profileService
 	}
 	seen := make(map[string]int) // "hub||machine" → index in merged
@@ -868,6 +890,7 @@ func runProfile(name string) {
 				hub:      hubURL,
 				machine:  machine,
 				token:    token,
+				address:  conn.Address,
 				services: append([]profileService(nil), conn.Services...),
 			})
 		}
@@ -877,8 +900,20 @@ func runProfile(name string) {
 		log.Printf("merged to %d unique connection(s)", len(merged))
 	}
 
+	// Compute the loopback prefix for deterministic address assignment.
+	lbPrefix := profile.DNS.LoopbackPrefix
+	if lbPrefix == "" {
+		lbPrefix = "127.77"
+	}
+
 	var wg sync.WaitGroup
 	for i, mc := range merged {
+		// Compute the bind address for this machine.
+		machBindAddr := mc.address
+		if machBindAddr == "" {
+			machBindAddr = loopbackAddr(lbPrefix, mc.hub, mc.machine)
+		}
+
 		// Build mappings from profile services
 		var mappings []portMapping
 		var serviceNames []string
@@ -897,12 +932,12 @@ func runProfile(name string) {
 				if local == 0 {
 					local = svc.Remote
 				}
-				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote)})
+				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote), bindAddr: machBindAddr})
 			}
 		}
 
 		wg.Add(1)
-		go func(idx int, hub, mach, tok string, maps []portMapping, svcNames []string, svcOverrides map[string]int) {
+		go func(idx int, hub, mach, tok string, maps []portMapping, svcNames []string, svcOverrides map[string]int, bindAddr string) {
 			defer wg.Done()
 			log.Printf("[profile:%d] connecting to %s → %s", idx, hub, mach)
 
@@ -919,6 +954,7 @@ func runProfile(name string) {
 								if override, ok := svcOverrides[name]; ok {
 									resolved[j].local = uint16(override)
 								}
+								resolved[j].bindAddr = bindAddr
 							}
 						}
 						maps = append(maps, resolved...)
@@ -981,7 +1017,7 @@ func runProfile(name string) {
 				}
 				attempt++
 			}
-		}(i+1, mc.hub, mc.machine, mc.token, mappings, serviceNames, serviceLocalOverrides)
+		}(i+1, mc.hub, mc.machine, mc.token, mappings, serviceNames, serviceLocalOverrides, machBindAddr)
 	}
 
 	wg.Wait()
@@ -1628,27 +1664,20 @@ func bindPersistentListeners(mappings []portMapping, machineID, hubURL string, b
 	var listeners []net.Listener
 	log.Println("Services available:")
 	for _, m := range mappings {
-		listenAddr := fmt.Sprintf("127.0.0.1:%d", m.local)
-		listener, err := net.Listen("tcp", listenAddr)
+		addr, port, listener, err := bindLoopbackListener(m)
 		if err != nil {
-			alt := m.local + 10000
-			listenAddr = fmt.Sprintf("127.0.0.1:%d", alt)
-			listener, err = net.Listen("tcp", listenAddr)
-			if err != nil {
-				log.Printf("  SKIP port %d (could not bind: %v)", m.local, err)
-				continue
-			}
-			log.Printf("  localhost:%-5d → %s (port %d in use, remapped)", alt, portLabel(m.remote), m.remote)
-		} else {
-			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
+			log.Printf("  SKIP %s:%d → %s (%v)", addr, m.remote, portLabel(m.remote), err)
+			continue
 		}
+		log.Printf("  %s:%-5d → %s", addr, port, portLabel(m.remote))
 		listeners = append(listeners, listener)
 		addBoundService(BoundService{
-			Name:    portLabel(m.remote),
-			Local:   int(m.local),
-			Remote:  int(m.remote),
-			Machine: machineID,
-			Hub:     hubURL,
+			Name:     portLabel(m.remote),
+			Local:    int(port),
+			Remote:   int(m.remote),
+			BindAddr: addr,
+			Machine:  machineID,
+			Hub:      hubURL,
 		})
 		go func(l net.Listener, remote uint16, local uint16, machine string) {
 			for {
@@ -1661,7 +1690,7 @@ func bindPersistentListeners(mappings []portMapping, machineID, hubURL string, b
 				}
 				go handleBridgedClient(ctx, bridge, localConn, int(remote), machine, int(local))
 			}
-		}(listener, m.remote, m.local, machineID)
+		}(listener, m.remote, port, machineID)
 	}
 
 	return func() {
@@ -1957,8 +1986,9 @@ persistent_keepalive_interval=25
 	// compatibility with callers that do not use persistent listeners).
 	mappings := overrideMappings
 	if len(mappings) == 0 && len(agentPorts) > 0 {
+		addr := loopbackAddr("127.77", hubURL, machineID)
 		for _, p := range agentPorts {
-			mappings = append(mappings, portMapping{local: p, remote: p})
+			mappings = append(mappings, portMapping{local: p, remote: p, bindAddr: addr})
 		}
 	}
 	if len(mappings) == 0 {
@@ -1970,27 +2000,20 @@ persistent_keepalive_interval=25
 	var listeners []net.Listener
 	log.Println("Services available:")
 	for _, m := range mappings {
-		listenAddr := fmt.Sprintf("127.0.0.1:%d", m.local)
-		listener, err := net.Listen("tcp", listenAddr)
+		addr, port, listener, err := bindLoopbackListener(m)
 		if err != nil {
-			alt := m.local + 10000
-			listenAddr = fmt.Sprintf("127.0.0.1:%d", alt)
-			listener, err = net.Listen("tcp", listenAddr)
-			if err != nil {
-				log.Printf("  SKIP port %d (could not bind: %v)", m.local, err)
-				continue
-			}
-			log.Printf("  localhost:%-5d → %s (port %d in use, remapped)", alt, portLabel(m.remote), m.remote)
-		} else {
-			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
+			log.Printf("  SKIP %s:%d → %s (%v)", addr, m.remote, portLabel(m.remote), err)
+			continue
 		}
+		log.Printf("  %s:%-5d → %s", addr, port, portLabel(m.remote))
 		listeners = append(listeners, listener)
 		addBoundService(BoundService{
-			Name:    portLabel(m.remote),
-			Local:   int(m.local),
-			Remote:  int(m.remote),
-			Machine: machineID,
-			Hub:     hubURL,
+			Name:     portLabel(m.remote),
+			Local:    int(port),
+			Remote:   int(m.remote),
+			BindAddr: addr,
+			Machine:  machineID,
+			Hub:      hubURL,
 		})
 		go func(l net.Listener, remote uint16, local uint16, machine string) {
 			for {
@@ -2003,7 +2026,7 @@ persistent_keepalive_interval=25
 				}
 				go handleNetstackClient(tnet, localConn, int(remote), sessionAgentIP, machine, int(local))
 			}
-		}(listener, m.remote, m.local, machineID)
+		}(listener, m.remote, port, machineID)
 	}
 
 	if len(listeners) == 0 {
@@ -2028,8 +2051,71 @@ persistent_keepalive_interval=25
 
 // portMapping pairs a local listener port with the remote agent port.
 type portMapping struct {
-	local  uint16
-	remote uint16
+	local    uint16
+	remote   uint16
+	bindAddr string // loopback address (e.g. "127.77.1.1"); empty means 127.0.0.1
+}
+
+// loopbackAddr computes a deterministic loopback address for a
+// hub+machine pair. The address is derived from SHA-256 so the same
+// machine always gets the same address across sessions.
+//
+//	prefix  "127.77" (configurable, must be "127.{1-254}")
+//	hubURL  hub WebSocket URL
+//	machine machine name
+//
+// Returns e.g. "127.77.42.17".
+func loopbackAddr(prefix, hubURL, machine string) string {
+	h := sha256.Sum256([]byte(hubURL + "/" + machine))
+	o3 := (uint16(h[0])<<8|uint16(h[1]))%255 + 1
+	o4 := (uint16(h[2])<<8|uint16(h[3]))%255 + 1
+	return fmt.Sprintf("%s.%d.%d", prefix, o3, o4)
+}
+
+// bindLoopbackListener tries to bind a TCP listener for the given
+// portMapping. If m.bindAddr is set, it binds to that address on the
+// service's real remote port. If that fails, it falls back to
+// 127.0.0.1 with the legacy port-remapping behavior.
+//
+// Returns the address actually bound, the port actually bound, the
+// listener, and any error (only if all attempts failed).
+func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Listener, err error) {
+	// Try the deterministic loopback address first.
+	if m.bindAddr != "" {
+		// On Windows, ensure the loopback alias exists before binding.
+		if aliasErr := ensureLoopbackAlias(m.bindAddr); aliasErr == nil {
+			addr = m.bindAddr
+			port = m.remote // real service port on the loopback address
+			listenAddr := fmt.Sprintf("%s:%d", addr, port)
+			ln, err = net.Listen("tcp", listenAddr)
+			if err == nil {
+				return addr, port, ln, nil
+			}
+			log.Printf("  [loopback] %s:%d in use, falling back to 127.0.0.1:%d", addr, port, m.local)
+		} else {
+			log.Printf("  [loopback] alias for %s unavailable, falling back to 127.0.0.1:%d", m.bindAddr, m.local)
+		}
+	}
+
+	// Fallback: legacy 127.0.0.1 with the requested local port.
+	addr = "127.0.0.1"
+	port = m.local
+	listenAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	ln, err = net.Listen("tcp", listenAddr)
+	if err == nil {
+		return addr, port, ln, nil
+	}
+
+	// Last resort: 127.0.0.1 with port + 10000.
+	alt := m.local + 10000
+	listenAddr = fmt.Sprintf("127.0.0.1:%d", alt)
+	ln, err = net.Listen("tcp", listenAddr)
+	if err == nil {
+		log.Printf("  (port %d in use, remapped to %d)", m.local, alt)
+		return addr, alt, ln, nil
+	}
+
+	return addr, m.local, nil, fmt.Errorf("could not bind %s:%d or 127.0.0.1:%d or 127.0.0.1:%d", m.bindAddr, m.remote, m.local, alt)
 }
 
 // portLabel returns a friendly name for well-known ports.
@@ -2537,6 +2623,16 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 			continue
 		}
 
+		// Compute the bind address for this machine.
+		svcBindAddr := conn.Address
+		if svcBindAddr == "" {
+			svcLbPrefix := profile.DNS.LoopbackPrefix
+			if svcLbPrefix == "" {
+				svcLbPrefix = "127.77"
+			}
+			svcBindAddr = loopbackAddr(svcLbPrefix, hubURL, machine)
+		}
+
 		// Build mappings from profile services
 		var mappings []portMapping
 		for _, svc := range conn.Services {
@@ -2545,7 +2641,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 				if local == 0 {
 					local = svc.Remote
 				}
-				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote)})
+				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote), bindAddr: svcBindAddr})
 			}
 		}
 
@@ -2661,6 +2757,16 @@ func serviceRunUserDaemon(svcStop <-chan struct{}) {
 			token = credstore.LookupToken(hubURL)
 		}
 
+		// Compute the bind address for this machine.
+		userBindAddr := conn.Address
+		if userBindAddr == "" {
+			userLbPrefix := profile.DNS.LoopbackPrefix
+			if userLbPrefix == "" {
+				userLbPrefix = "127.77"
+			}
+			userBindAddr = loopbackAddr(userLbPrefix, hubURL, machine)
+		}
+
 		var mappings []portMapping
 		for _, svc := range conn.Services {
 			if svc.Remote > 0 {
@@ -2668,7 +2774,7 @@ func serviceRunUserDaemon(svcStop <-chan struct{}) {
 				if local == 0 {
 					local = svc.Remote
 				}
-				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote)})
+				mappings = append(mappings, portMapping{local: uint16(local), remote: uint16(svc.Remote), bindAddr: userBindAddr})
 			}
 		}
 

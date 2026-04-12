@@ -61,11 +61,12 @@ type controlInfo struct {
 
 // BoundService describes a locally bound port forwarding a remote service.
 type BoundService struct {
-	Name    string `json:"name"`
-	Local   int    `json:"local"`
-	Remote  int    `json:"remote"`
-	Machine string `json:"machine"`
-	Hub     string `json:"hub"`
+	Name     string `json:"name"`
+	Local    int    `json:"local"`
+	Remote   int    `json:"remote"`
+	BindAddr string `json:"bindAddr"` // loopback address (e.g. "127.77.1.1")
+	Machine  string `json:"machine"`
+	Hub      string `json:"hub"`
 }
 
 var (
@@ -81,19 +82,21 @@ func addBoundService(svc BoundService) {
 
 	// Emit service_bound event to WebSocket clients.
 	emitEvent(struct {
-		Type    string `json:"type"`
-		Name    string `json:"name"`
-		Local   int    `json:"local"`
-		Remote  int    `json:"remote"`
-		Machine string `json:"machine"`
-		Hub     string `json:"hub"`
+		Type     string `json:"type"`
+		Name     string `json:"name"`
+		Local    int    `json:"local"`
+		Remote   int    `json:"remote"`
+		BindAddr string `json:"bindAddr"`
+		Machine  string `json:"machine"`
+		Hub      string `json:"hub"`
 	}{
-		Type:    "service_bound",
-		Name:    svc.Name,
-		Local:   svc.Local,
-		Remote:  svc.Remote,
-		Machine: svc.Machine,
-		Hub:     svc.Hub,
+		Type:     "service_bound",
+		Name:     svc.Name,
+		Local:    svc.Local,
+		Remote:   svc.Remote,
+		BindAddr: svc.BindAddr,
+		Machine:  svc.Machine,
+		Hub:      svc.Hub,
 	})
 }
 
