@@ -64,6 +64,48 @@ Local binding:
 - The client typically binds a loopback listener like `127.0.0.1:<port>` so local apps (SSH/RDP/etc.) can connect.
   - This is “inbound” only from the local machine, not from the Internet.
 
+## Topology and addressing
+
+These questions come up often from people evaluating Tela against mesh VPNs or traditional VPNs. The short answers are here; the architecture chapter has the longer rationale.
+
+### Does Tela create an L3 network?
+
+Not in the sense that a mesh VPN does. Tela creates per-session point-to-point WireGuard tunnels. Each session gets its own /24 from the `10.77.0.0/16` range: `10.77.{idx}.1` on the agent side, `10.77.{idx}.2` on the client side. The session index is assigned by the hub, increments monotonically per machine, and maxes out at 254 (one machine can serve up to 254 simultaneous client sessions).
+
+Critically, these addresses exist only inside gVisor's userspace network stack. They never appear as host interfaces, routing table entries, or ARP entries on either machine. There is no risk of collision with your LAN's `10.77.x.x` subnet or anyone else's private addressing, because Tela's addresses are not visible to the host network at all.
+
+### Does it clash with my existing IP addressing?
+
+No. Because Tela runs WireGuard in userspace through gVisor, the `10.77.x.x` session addresses are internal to the process. The host operating system sees no new interfaces, no new routes, and no new neighbors. A machine with a LAN IP of `10.77.5.100` has no conflict with a Tela session using `10.77.5.0/24`.
+
+### How do I find and reach services? Is there DNS?
+
+You do not use IP addresses or DNS to reach services through Tela. The workflow is:
+
+1. You tell `tela` (or TelaVisor) which machine on which hub you want to connect to, and which services on that machine you want.
+2. `tela` binds a local TCP listener on `localhost` for each service (for example, `localhost:2222` for SSH, `localhost:5432` for PostgreSQL).
+3. You point your SSH client, browser, or database tool at that local address.
+
+The hub resolves machine names; you never type a `10.77.x.x` address. If you lose track of which local port maps to which service, `tela status` lists the current bindings. TelaVisor shows them in the Status tab.
+
+### Can I ping through the tunnel?
+
+No. Tela tunnels TCP only. Internet Control Message Protocol (ICMP), which carries `ping` and `traceroute`, does not travel through the tunnel. This also means no UDP services. If your application uses UDP (SIP, QUIC, game protocols), it will not work through a Tela tunnel today.
+
+### Can agents talk to each other?
+
+Not directly. Tela does not route between agents. To get data from machine A to machine B, you need a client on the path: `tela` connects to A, gets the data, and separately connects to B to send it. There is no agent-to-agent tunnel without a client in the middle. The hub-to-hub relay gateway planned for 1.0 addresses hub federation, not agent-to-agent routing.
+
+### Does Tela support IPv6?
+
+The WireGuard session addressing is IPv4 (`10.77.x.x`). The control channel between agents, clients, and the hub (WebSocket or UDP relay) works over whatever IP version the hub is reachable on. End-to-end IPv6 service tunneling is not currently supported; the gVisor netstack inside the agent and client uses IPv4 for the tunnel. IPv6 is on the long-term list but is not a 1.0 requirement.
+
+### How many clients can connect to one agent simultaneously?
+
+Up to 254. The session index is an 8-bit counter; session index 0 is reserved, leaving 1-254 for active sessions. Attempting a 255th session is rejected by the hub. In practice, the bottleneck is usually the agent machine's bandwidth or the services behind it, not the session limit.
+
+---
+
 ## Checklist (copy/paste)
 
 When something “can’t connect”, check these in order:

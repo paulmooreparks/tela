@@ -132,6 +132,11 @@ naming up front.
 - **Not a replacement for SSH.** It is a way to *get* SSH (or RDP, or
   PostgreSQL) onto your laptop without configuring port forwarding or VPNs.
 
+The [Topology and addressing](../howto/networking.md#topology-and-addressing)
+section in the Networking chapter answers specific questions about IP
+addressing, clash avoidance, discoverability, ICMP, agent-to-agent routing,
+and session limits.
+
 ## Why three binaries
 
 The split is deliberate.
