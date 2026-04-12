@@ -180,24 +180,11 @@ or equivalent. This requires elevation.
 |----------|-------------------|-----------------|
 | Linux    | Any `127.x.x.x` works out of the box | No |
 | macOS    | Any `127.x.x.x` works out of the box | No |
-| Windows  | Only `127.0.0.1` by default; must add aliases | Yes (one-time setup) |
+| Windows  | Any `127.x.x.x` works out of the box | No |
 
-On Windows, `tela` can either:
-
-1. Prompt for elevation once to add the loopback aliases, then run
-   unprivileged afterward. The aliases persist across reboots.
-2. Fall back to the current port-on-127.0.0.1 model if the user declines
-   elevation, with a message explaining the tradeoff.
-
-When `tela` is installed as a service (which already runs elevated), it
-can manage loopback aliases without prompting.
-
-#### Cleanup
-
-When a profile disconnects, `tela` removes the loopback aliases it
-created (Windows only; Linux and macOS need no cleanup). If `tela` is
-killed without cleanup, stale aliases are harmless: they point at
-addresses nothing is listening on. The next `tela connect` re-adds them.
+All three platforms route the full `127.0.0.0/8` loopback range without
+requiring any aliases, interfaces, or elevation. No cleanup is needed
+on disconnect: stale addresses simply have nothing listening on them.
 
 ### Layer 2: Local DNS resolver
 
