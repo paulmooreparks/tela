@@ -1764,6 +1764,21 @@ func isPortAvailable(port int) bool {
 	return true
 }
 
+// LoopbackAddr computes a deterministic loopback address for a
+// hub+machine pair using the same algorithm as the tela client.
+// Exposed as a Wails binding so the frontend can display the
+// expected bind address before connecting.
+func (a *App) LoopbackAddr(hubURL, machine string) string {
+	return loopbackAddr("127.88", hubURL, machine)
+}
+
+func loopbackAddr(prefix, hubURL, machine string) string {
+	h := sha256.Sum256([]byte(hubURL + "/" + machine))
+	o3 := (uint16(h[0])<<8|uint16(h[1]))%255 + 1
+	o4 := (uint16(h[2])<<8|uint16(h[3]))%255 + 1
+	return fmt.Sprintf("%s.%d.%d", prefix, o3, o4)
+}
+
 // newProfileUUID returns a v4 UUID for use as Profile.ID. Uses
 // crypto/rand so the result is suitable as a stable identity.
 func newProfileUUID() string {

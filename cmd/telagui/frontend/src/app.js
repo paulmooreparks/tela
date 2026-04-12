@@ -739,10 +739,10 @@ function refreshStatus() {
         var localClass = 'inactive';
 
         if (state.connected) {
-          var portStr = 'localhost:' + svc.localPort;
+          var bindDisplay = svc.bindAddr ? svc.bindAddr + ':' + svc.localPort : 'localhost:' + svc.localPort;
           var tunnelKey = g.machine + ':' + svc.localPort;
           var tunnelCount = activeTunnels[tunnelKey] || 0;
-          var portFound = state.output && state.output.indexOf(portStr) !== -1;
+          var portFound = state.output && (state.output.indexOf(bindDisplay) !== -1 || state.output.indexOf('localhost:' + svc.localPort) !== -1);
 
           // In attached mode, we don't have stdout output.
           // Check if the service appears in the bound services list.
@@ -784,9 +784,11 @@ function refreshStatus() {
         // Clickable link for HTTP services (gateway, http) when listening
         var svcNameLower = (svc.service || '').toLowerCase();
         var isHttpService = svcNameLower === 'gateway' || svcNameLower === 'http' || svcNameLower === 'web';
-        var localDisplay = 'localhost:' + svc.localPort;
+        var localAddr = svc.bindAddr ? svc.bindAddr + ':' + svc.localPort : 'localhost:' + svc.localPort;
+        var localDisplay = localAddr;
         if (isHttpService && portFound) {
-          localDisplay = '<a href="http://localhost:' + svc.localPort + '" target="_blank" rel="noopener" class="status-svc-link">localhost:' + svc.localPort + '</a>';
+          var httpAddr = svc.bindAddr || 'localhost';
+          localDisplay = '<a href="http://' + httpAddr + ':' + svc.localPort + '" target="_blank" rel="noopener" class="status-svc-link">' + localAddr + '</a>';
         }
 
         html += '<div class="settings-row status-svc-row">'
@@ -812,11 +814,13 @@ if (window.runtime) {
       var evt = JSON.parse(eventJSON);
       if (evt.type === 'service_bound' || evt.type === 'connection_state' || evt.type === 'tunnel_activity') {
         if (evt.type === 'service_bound' && evt.machine && evt.name && evt.remote) {
-          // Update remote port from tela's actual bound service
+          // Update remote port and bind address from tela's actual bound service
           Object.keys(selectedServices).forEach(function (key) {
             var sel = selectedServices[key];
             if (sel.machine === evt.machine && sel.service === evt.name) {
               sel.servicePort = evt.remote;
+              if (evt.bindAddr) sel.bindAddr = evt.bindAddr;
+              if (evt.local) sel.localPort = evt.local;
             }
           });
           // Service confirmed bound. Transition connecting -> connected.
@@ -1432,21 +1436,29 @@ function loadSavedSelections() {
           machine: machineId,
           service: svc.name,
           servicePort: svc.remote || 0,
-          localPort: svc.local
+          localPort: svc.remote || 0,
+          bindAddr: ''
         };
-        requests.push({ key: key, servicePort: svc.local });
       });
     });
-    // Resolve ports to catch any new clashes since last save
-    if (requests.length > 0) {
-      return goApp.ResolveAllPorts(JSON.stringify(requests)).then(function (assignments) {
-        if (assignments) {
-          assignments.forEach(function (a) {
-            if (selectedServices[a.key]) {
-              selectedServices[a.key].localPort = a.localPort;
-            }
-          });
-        }
+    // Compute loopback addresses for loaded profile
+    var machineAddrs = {};
+    var addrPromises = [];
+    connections.forEach(function (conn) {
+      var mk = conn.hub + '||' + conn.machine;
+      if (!machineAddrs[mk]) {
+        machineAddrs[mk] = goApp.LoopbackAddr(conn.hub, conn.machine);
+        addrPromises.push(machineAddrs[mk].then(function (addr) { machineAddrs[mk] = addr; }));
+      }
+    });
+    if (addrPromises.length > 0) {
+      return Promise.all(addrPromises).then(function () {
+        Object.keys(selectedServices).forEach(function (key) {
+          var sel = selectedServices[key];
+          var mk = sel.hub + '||' + sel.machine;
+          sel.bindAddr = machineAddrs[mk];
+          sel.localPort = sel.servicePort;
+        });
       });
     }
   }).then(function () {
@@ -2246,7 +2258,10 @@ function renderMachineDetail(hub, machine) {
           + '<div class="profile-svc-proto">' + escHtml(svc.proto || 'tcp') + '</div>';
 
         if (localPort) {
-          html += '<div class="profile-svc-local">localhost:' + localPort + '</div>';
+          var selSvc = selectedServices[key];
+          var svcBindAddr = selSvc && selSvc.bindAddr ? selSvc.bindAddr : '';
+          var localDisplay2 = svcBindAddr ? svcBindAddr + ':' + localPort : 'localhost:' + localPort;
+          html += '<div class="profile-svc-local">' + localDisplay2 + '</div>';
         }
         html += '</div>';
       });
@@ -2289,16 +2304,21 @@ function toggleService(hubURL, machineId, serviceName, servicePort, checked) {
 }
 
 function resolveAllPortsAndUpdate() {
-  // Build port requests from all selections
-  var requests = [];
+  // Compute loopback addresses for each machine, then assign real
+  // remote ports as local ports (no clash because each machine gets
+  // its own unique loopback IP).
+  var machineAddrs = {}; // "hub||machine" -> Promise<addr>
+  var promises = [];
   Object.keys(selectedServices).forEach(function (key) {
-    requests.push({
-      key: key,
-      servicePort: selectedServices[key].servicePort
-    });
+    var sel = selectedServices[key];
+    var mk = sel.hub + '||' + sel.machine;
+    if (!machineAddrs[mk]) {
+      machineAddrs[mk] = goApp.LoopbackAddr(toWSURL(sel.hub), sel.machine);
+      promises.push(machineAddrs[mk].then(function (addr) { machineAddrs[mk] = addr; }));
+    }
   });
 
-  if (requests.length === 0) {
+  if (promises.length === 0) {
     updateConnectButton();
     checkDirty();
     refreshCurrentPane();
@@ -2306,14 +2326,13 @@ function resolveAllPortsAndUpdate() {
     return;
   }
 
-  goApp.ResolveAllPorts(JSON.stringify(requests)).then(function (assignments) {
-    if (assignments) {
-      assignments.forEach(function (a) {
-        if (selectedServices[a.key]) {
-          selectedServices[a.key].localPort = a.localPort;
-        }
-      });
-    }
+  Promise.all(promises).then(function () {
+    Object.keys(selectedServices).forEach(function (key) {
+      var sel = selectedServices[key];
+      var mk = sel.hub + '||' + sel.machine;
+      sel.bindAddr = machineAddrs[mk];
+      sel.localPort = sel.servicePort; // real remote port, no remapping
+    });
     updateConnectButton();
     checkDirty();
     refreshCurrentPane();
@@ -5883,7 +5902,7 @@ function buildConnections() {
     if (!groups[groupKey]) {
       groups[groupKey] = { hub: sel.hub, machine: sel.machine, services: [] };
     }
-    groups[groupKey].services.push({ name: sel.service, local: sel.localPort, remote: sel.servicePort });
+    groups[groupKey].services.push({ name: sel.service, remote: sel.servicePort });
   });
 
   // When file share mount is enabled, add connection entries for

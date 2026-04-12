@@ -319,13 +319,16 @@ service when the resolver is running:
 
 ## What changes in the codebase
 
-| Area | Change |
-|------|--------|
-| `cmd/tela/` | Loopback address computation, alias management (Windows), DNS resolver goroutine, `tela dns` subcommand |
-| `cmd/tela/` | Profile parser: `dns` block, `address` override per connection |
-| `cmd/telagui/` | Status tab: show resolved addresses. App Settings: DNS section |
-| `cmd/telad/` | No changes. The agent is unaware of client-side name resolution |
-| `cmd/telahubd/` | No changes. The hub is unaware of client-side name resolution |
+| Area | Change | Status |
+|------|--------|--------|
+| `internal/client/` | Loopback address computation, `bindLoopbackListener`, profile YAML `dns` and `address` fields | Done |
+| `internal/client/` | Windows loopback alias management (`loopback_windows.go`, `loopback_unix.go`) | Done |
+| `internal/client/control.go` | `BoundService.BindAddr` and `service_bound` event includes `bindAddr` | Done |
+| `cmd/telagui/app.go` | `LoopbackAddr` Wails binding for frontend address computation | Done |
+| `cmd/telagui/frontend/` | Status tab, Profiles tab, YAML preview use addresses instead of remapped ports | Done |
+| Awan Saya profile builder | `loopbackAddr()` JS, address display, YAML without `local:` lines, port-clash logic removed | Done |
+| `cmd/telad/` | No changes. The agent is unaware of client-side name resolution | N/A |
+| `cmd/telahubd/` | No changes. The hub is unaware of client-side name resolution | N/A |
 
 The feature is entirely client-side. No protocol changes, no hub
 changes, no agent changes.
