@@ -424,7 +424,7 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 	}
 
 	// Convert exported PortMapping to the internal portMapping type.
-	bindAddr := loopbackAddr("127.77", opts.HubURL, opts.MachineID)
+	bindAddr := LoopbackAddr("127.77", opts.HubURL, opts.MachineID)
 	mappings := make([]portMapping, 0, len(opts.Ports))
 	for _, p := range opts.Ports {
 		mappings = append(mappings, portMapping{
@@ -530,7 +530,7 @@ func buildMappings(portsFlag, servicesFlag string, legacyLocal, legacyTarget int
 	}
 
 	// Assign deterministic loopback addresses to all mappings.
-	addr := loopbackAddr("127.77", hubURL, machineID)
+	addr := LoopbackAddr("127.77", hubURL, machineID)
 	for i := range mappings {
 		mappings[i].bindAddr = addr
 	}
@@ -911,7 +911,7 @@ func runProfile(name string) {
 		// Compute the bind address for this machine.
 		machBindAddr := mc.address
 		if machBindAddr == "" {
-			machBindAddr = loopbackAddr(lbPrefix, mc.hub, mc.machine)
+			machBindAddr = LoopbackAddr(lbPrefix, mc.hub, mc.machine)
 		}
 
 		// Build mappings from profile services
@@ -1986,7 +1986,7 @@ persistent_keepalive_interval=25
 	// compatibility with callers that do not use persistent listeners).
 	mappings := overrideMappings
 	if len(mappings) == 0 && len(agentPorts) > 0 {
-		addr := loopbackAddr("127.77", hubURL, machineID)
+		addr := LoopbackAddr("127.77", hubURL, machineID)
 		for _, p := range agentPorts {
 			mappings = append(mappings, portMapping{local: p, remote: p, bindAddr: addr})
 		}
@@ -2056,7 +2056,7 @@ type portMapping struct {
 	bindAddr string // loopback address (e.g. "127.77.1.1"); empty means 127.0.0.1
 }
 
-// loopbackAddr computes a deterministic loopback address for a
+// LoopbackAddr computes a deterministic loopback address for a
 // hub+machine pair. The address is derived from SHA-256 so the same
 // machine always gets the same address across sessions.
 //
@@ -2065,7 +2065,7 @@ type portMapping struct {
 //	machine machine name
 //
 // Returns e.g. "127.77.42.17".
-func loopbackAddr(prefix, hubURL, machine string) string {
+func LoopbackAddr(prefix, hubURL, machine string) string {
 	h := sha256.Sum256([]byte(hubURL + "/" + machine))
 	o3 := (uint16(h[0])<<8|uint16(h[1]))%255 + 1
 	o4 := (uint16(h[2])<<8|uint16(h[3]))%255 + 1
@@ -2630,7 +2630,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 			if svcLbPrefix == "" {
 				svcLbPrefix = "127.77"
 			}
-			svcBindAddr = loopbackAddr(svcLbPrefix, hubURL, machine)
+			svcBindAddr = LoopbackAddr(svcLbPrefix, hubURL, machine)
 		}
 
 		// Build mappings from profile services
@@ -2764,7 +2764,7 @@ func serviceRunUserDaemon(svcStop <-chan struct{}) {
 			if userLbPrefix == "" {
 				userLbPrefix = "127.77"
 			}
-			userBindAddr = loopbackAddr(userLbPrefix, hubURL, machine)
+			userBindAddr = LoopbackAddr(userLbPrefix, hubURL, machine)
 		}
 
 		var mappings []portMapping

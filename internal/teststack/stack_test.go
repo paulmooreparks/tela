@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/paulmooreparks/tela/internal/client"
 	"github.com/paulmooreparks/tela/internal/hub"
 	"github.com/paulmooreparks/tela/internal/relay"
 )
@@ -107,17 +108,30 @@ func TestStackClientConnectsAndBindsListener(t *testing.T) {
 	const localPort uint16 = 15555
 	stack.Connect("barn", localPort, echoPort)
 
+	// The client binds on a deterministic loopback address (127.77.x.x)
+	// when available, falling back to 127.0.0.1 when the loopback alias
+	// cannot be added (e.g. Windows without elevation). Try both.
+	bindAddr := client.LoopbackAddr("127.77", stack.HubURL(), "barn")
+	loopbackTarget := fmt.Sprintf("%s:%d", bindAddr, echoPort)
+	fallbackTarget := fmt.Sprintf("127.0.0.1:%d", localPort)
+
 	// Wait for the client's local listener to come up. The Connect
 	// goroutine binds asynchronously after the WireGuard handshake
 	// completes, so we cannot dial immediately.
-	if err := waitForListener(fmt.Sprintf("127.0.0.1:%d", localPort), 10*time.Second); err != nil {
-		t.Fatalf("client listener never came up: %v", err)
+	listenTarget := loopbackTarget
+	if err := waitForListener(loopbackTarget, 10*time.Second); err != nil {
+		// Loopback address may not be routable (Windows without
+		// elevation). Try the fallback address.
+		if err2 := waitForListener(fallbackTarget, 5*time.Second); err2 != nil {
+			t.Fatalf("client listener never came up on %s (%v) or %s (%v)", loopbackTarget, err, fallbackTarget, err2)
+		}
+		listenTarget = fallbackTarget
 	}
 
 	// We can dial the local listener and write to it without error;
 	// we just cannot read echoed bytes back through the in-process
 	// gvisor stack. Verify the dial+write half of the path.
-	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
+	conn, err := net.Dial("tcp", listenTarget)
 	if err != nil {
 		t.Fatalf("dial local: %v", err)
 	}
