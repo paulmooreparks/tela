@@ -48,6 +48,20 @@ The hub acts as a blind relay. It forwards encrypted WireGuard packets between t
 
 Tela tunnels any TCP service. SSH, RDP, HTTP, PostgreSQL, SMB, VNC, or any other protocol that runs over TCP can be reached through a Tela tunnel. The hub does not need to understand the protocol being tunneled.
 
+## Tradeoffs of the userspace approach
+
+Running WireGuard in userspace is what makes Tela work without admin rights, kernel drivers, or TUN devices. It comes with real tradeoffs.
+
+**Performance.** Kernel WireGuard processes packets in the kernel network stack with zero copies between kernel and userspace. Tela's gVisor netstack does the same work in a Go process, which means system calls for every packet and garbage collector pauses. For bulk throughput (large file transfers, streaming), kernel WireGuard will saturate a gigabit link where Tela's userspace stack tops out lower. For the interactive protocols Tela targets (SSH, RDP, database queries, HTTP APIs), the difference is not noticeable.
+
+**TCP only, no raw IP routing.** Kernel WireGuard creates a real network interface that the OS routing table can use for arbitrary IP traffic, including UDP, ICMP, and multicast. Tela has no TUN device and no routing table entry. It tunnels TCP services only. No ping, no UDP, no "put my whole machine on the remote network." This is a deliberate design choice: the simplicity of TCP-only is what makes the no-admin, no-driver model work.
+
+**No OS-level integration.** A kernel VPN interface is visible to every process on the machine. Tela's tunnels are visible only to processes that connect to the loopback addresses Tela binds. This is usually a feature (less invasive, does not interfere with existing networking), but it means you cannot bridge networks or run services that require a real interface across the tunnel.
+
+**Single-process failure domain.** If the tela process crashes, all tunnels drop. A kernel WireGuard interface persists independently of any userspace process. Tela mitigates this by supporting OS service managers (systemd, Windows SCM, launchd) that restart the process automatically.
+
+If you need a full Layer 3 VPN with arbitrary IP routing and line-rate throughput, use kernel WireGuard or a tool built on it. If you need to reach specific TCP services through firewalls without installing drivers or requiring admin rights, the userspace tradeoff is worth it.
+
 ## How it works
 
 The agent (`telad`) and the client (`tela`) each create a userspace WireGuard tunnel using gVisor netstack. The hub (`telahubd`) relays encrypted WireGuard datagrams between them over WebSocket. After the initial connection, Tela automatically negotiates faster transports when available:
