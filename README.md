@@ -200,16 +200,6 @@ tela connect -profile work
 
 Profiles support environment variable expansion (`${VAR}`), service name resolution, deterministic loopback addressing, and connections across multiple hubs. See [REFERENCE.md section 7](REFERENCE.md#7-tela-the-client-cli) for the full profile schema.
 
-### Run with Docker (production)
-
-```bash
-docker compose up --build -d
-
-./tela connect -hub wss://your-hostname -machine barn
-```
-
-See [IMPLEMENTATION.md](IMPLEMENTATION.md) for the full Docker Compose setup.
-
 ### Enable authentication (recommended)
 
 On first startup, the hub auto-generates an owner token (secure by default). For Docker deployments, you can bootstrap authentication with an environment variable:
@@ -226,7 +216,7 @@ docker compose up --build -d
 
 # 4. Manage remotely from any workstation:
 tela admin access -hub wss://your-hub -token <owner-token>
-tela admin add-token bob -hub wss://your-hub -token <owner-token>
+tela admin tokens add bob -hub wss://your-hub -token <owner-token>
 tela admin access grant bob barn connect -hub wss://your-hub -token <owner-token>
 ```
 
@@ -310,7 +300,7 @@ telahubd portal list
 telahubd portal remove awansaya
 ```
 
-The `portal add` command discovers the portal's hub directory endpoint via `/.well-known/tela` (RFC 8615), registers the hub via its API, and stores the association in the hub config. See DESIGN.md section 8.5 for details.
+The `portal add` command discovers the portal's hub directory endpoint via `/.well-known/tela` (RFC 8615), registers the hub via its API, and stores the association in the hub config. See [Hub directories and portals](https://paulmooreparks.github.io/tela/guide/directories.html) in the book for the full explanation.
 
 ## Project structure
 
@@ -321,9 +311,8 @@ cmd/telahubd/      Hub server
 cmd/telagui/       Desktop client (Wails v2 app)
 internal/service/  Cross-platform OS service management (Windows SCM, systemd, launchd)
 internal/wsbind/   WireGuard conn.Bind over WebSocket/UDP/direct
-howto/             Guides (hub setup, services, networking, use cases)
-www/               Hub console (web UI)
-docker/            Dockerfile, docker-compose, Caddyfile
+console/           Hub console static files (embedded into telahubd at build time)
+howto/             How-to guides (hub setup, services, networking, use cases)
 ```
 
 ## Tradeoffs of the userspace approach

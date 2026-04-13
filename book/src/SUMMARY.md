@@ -39,12 +39,9 @@
 # Design Rationale
 
 - [Why a connectivity fabric](architecture/design.md)
-- [The access model](architecture/access-model.md)
 - [Remote administration](architecture/remote-admin.md)
 - [File sharing](architecture/file-sharing.md)
 - [Gateways](architecture/gateway.md)
-- [The portal protocol](architecture/portal-protocol.md)
-- [The Tela Design Language](architecture/tdl.md)
 
 ---
 
@@ -52,7 +49,10 @@
 
 - [A. CLI reference](guide/reference.md)
 - [B. Configuration file reference](guide/configuration.md)
-- [C. Glossary](glossary.md)
+- [C. Access model](architecture/access-model.md)
+- [D. Portal protocol](architecture/portal-protocol.md)
+- [E. Tela Design Language](architecture/tdl.md)
+- [F. Glossary](glossary.md)
 
 ---
 
