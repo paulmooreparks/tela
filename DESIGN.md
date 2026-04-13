@@ -1,4 +1,4 @@
-# **Tela - Design, Architecture, and Agent-Centric Development Strategy**
+# **Tela - Design, Architecture, and Agent-Centric Development Strategy
 
 ### *FOSS Remote-Access & Connectivity Fabric (SEA-rooted, Global-ready)*
 
@@ -6,7 +6,7 @@
 
 ---
 
-## **0. Purpose of This Document**
+## 0. Purpose of This Document
 
 Tela is a **FOSS connectivity fabric** that provides outbound-only tunnels, multiplexed TCP channels, zero-install client access, browser-mediated orchestration, helper-mediated local TCP bridging, and a stable substrate for future cloud services.
 
@@ -18,7 +18,7 @@ Any deviation must be explicitly approved by a human maintainer.
 
 ---
 
-## **0.1 Glossary**
+## 0.1 Glossary
 
 This glossary defines terms as they are used in Tela.
 
@@ -60,21 +60,21 @@ This glossary defines terms as they are used in Tela.
 | **VNC** | Virtual Network Computing; another example of a TCP service that can be tunneled. |
 | **WebSocket (WS/WSS)** | A persistent full-duplex connection over HTTP(S). Tela uses \wss://\ for secure transport once deployed. |
 
-# **1. Identity & Positioning**
+# **1. Identity & Positioning
 
-## **1.1 Name**
+## 1.1 Name
 
 **Tela**: Filipino for *fabric*.
 Represents a woven mesh of nodes, tunnels, and services.
 Short, global-friendly, SEA-rooted, and brandable.
 
-## **1.2 Positioning**
+## 1.2 Positioning
 
 Tela is the **engine**. Awan Saya is the **platform**.
 
-- **Tela : Awan Saya :: Docker : Kubernetes**
-- **Tela : Awan Saya :: WireGuard : Tailscale**
-- **Tela : Awan Saya :: git : GitHub**
+- **Tela : Awan Saya :: Docker : Kubernetes
+- **Tela : Awan Saya :: WireGuard : Tailscale
+- **Tela : Awan Saya :: git : GitHub
 
 Tela is the runtime, the connectivity substrate, the stable, boring, long-lived layer.
 Awan Saya is the orchestrator, the identity and policy layer, the multi-service cloud platform.
@@ -83,13 +83,13 @@ Critically, Awan Saya is also a **connectivity service**: it can serve as a rend
 
 Tela must remain small, stable, and protocol-frozen so Awan Saya can evolve rapidly above it.
 
-## **1.3 What Tela Is**
+## 1.3 What Tela Is
 
 Tela is a **connectivity fabric**, not a remote desktop tool.
 Remote desktop is simply the first module that runs on the fabric.
 
 Tela provides access to any machine or service from any locked-down environment with zero installation. It does this via outbound-only agents, browser orchestration, a helper binary for local TCP binding, multiplexed WebSocket channels, and protocol-agnostic tunneling.
-## **1.4 License**
+## 1.4 License
 
 Tela is released under the **Apache License 2.0**.
 
@@ -104,9 +104,9 @@ Apache 2.0 is chosen because:
 
 ---
 
-# **2. Goals & Non-Goals**
+# **2. Goals & Non-Goals
 
-## **2.1 Goals**
+## 2.1 Goals
 
 Tela must:
 
@@ -120,7 +120,7 @@ Tela must:
 - Use **minimal dependencies** and "boring tech."
 - Serve as the **substrate for Awan Saya**.
 
-## **2.2 Non-Goals**
+## 2.2 Non-Goals
 
 Tela must not:
 
@@ -135,23 +135,23 @@ Tela must not:
 
 ---
 
-# **3. Design Philosophy & Invariants**
+# **3. Design Philosophy & Invariants
 
-## **3.1 Stability First**
+## 3.1 Stability First
 
 Tela must be stable enough to run for 10+ years with minimal changes: frozen protocol structures, additive-only control messages, strict backward compatibility, minimal dependencies, predictable behavior.
 
-## **3.2 Boring Technology**
+## 3.2 Boring Technology
 
 Go for the agent (`telad`) and Hub (`telahubd`), vanilla JS for the browser, Go for the CLI. These choices minimize churn and maximize longevity.
 
 > **Implementation note:** The original design specified C/C++ for the agent and Node.js for the Hub. Both were implemented in Go, a deliberate simplification that preserves the "boring technology" intent while using a single language across all server-side components.
 
-## **3.3 Agent-Centric Development**
+## 3.3 Agent-Centric Development
 
 Tela assumes LLM agents will contribute code. Literate coding is mandatory, invariants must be explicit, "DO NOT MODIFY" markers must be used, concurrency models must be locked down, and protocol structures must be immutable.
 
-## **3.4 Guiding Invariants**
+## 3.4 Guiding Invariants
 
 Tela must always remain:
 
@@ -168,9 +168,9 @@ These invariants shape every architectural decision.
 
 ---
 
-# **4. Architecture Overview**
+# **4. Architecture Overview
 
-## **4.1 Components**
+## 4.1 Components
 
 - **telad**: Go static binary (daemon/agent). Runs on managed machines. Registers services with the Hub, brokers WireGuard sessions.
 - **telahubd**: Go HTTP+WebSocket server (Hub). Central coordination point. Serves hub console, `/api/status`, `/api/history`.
@@ -180,7 +180,7 @@ These invariants shape every architectural decision.
 
 > **Implementation note:** The original design specified separate "Agent" (C/C++), "Hub" (Node.js), "Helper" (Go), and "CLI" (Go) binaries. The implementation consolidates these into three Go binaries: `telad` (agent/daemon), `telahubd` (hub), and `tela` (client/helper/CLI).
 
-## **4.2 Data Flow**
+## 4.2 Data Flow
 
 ### Agent Connection
 
@@ -209,7 +209,7 @@ These invariants shape every architectural decision.
 
 All traffic flows through a single WebSocket per endpoint (Agent ↔ Hub, Helper ↔ Hub). Each WebSocket carries a control channel, heartbeat channel, multiple TCP data channels, and optional file transfer channels.
 
-## **4.3 Component Interaction Model**
+## 4.3 Component Interaction Model
 
 Tela uses a **three-party interaction model**:
 
@@ -219,18 +219,18 @@ Tela uses a **three-party interaction model**:
 | **Helper → Hub** | TCP forwarding, session token auth, local binding |
 | **Agent → Hub** | Service proxying, capability reporting, heartbeats |
 
-**The browser never carries data traffic. It only orchestrates.**
+**The browser never carries data traffic. It only orchestrates.
 Once the helper is launched, the browser can close.
 
 ---
 
-# **5. MeshCentral Integration Boundary**
+# **5. MeshCentral Integration Boundary
 
 MeshCentral is a mature, stable, widely deployed remote-access system with a proven agent transport layer. Tela builds on selected MeshCentral components to avoid reinventing complex, battle-tested functionality.
 
 This section defines exactly what Tela reuses, what Tela replaces, and why. This prevents the Hub from becoming an accidental fork.
 
-## **5.1 Components Reused**
+## 5.1 Components Reused
 
 Tela reuses only parts that are stable, protocol-agnostic, dependency-minimal, well-tested, and unlikely to change:
 
@@ -239,7 +239,7 @@ Tela reuses only parts that are stable, protocol-agnostic, dependency-minimal, w
 - **Minimal device registry logic**: agent ID storage, basic metadata, online/offline tracking. Not the full device management model.
 - **Core agent transport code**: socket abstraction, platform-specific networking, TLS handling, WebSocket framing. Everything above the transport layer is replaced.
 
-## **5.2 Components Replaced**
+## 5.2 Components Replaced
 
 Tela replaces all MeshCentral components that are UI-heavy, RDP-specific, opinionated, or tied to MeshCentral's identity/device management model:
 
@@ -251,7 +251,7 @@ Tela replaces all MeshCentral components that are UI-heavy, RDP-specific, opinio
 - **Authentication model**: Tela uses local auth (standalone) or SSO (Awan Saya).
 - **Protocol specification**: Tela freezes v1 for long-term stability; MeshCentral evolves faster.
 
-## **5.3 Rationale**
+## 5.3 Rationale
 
 > **Implementation note (§5.1-§5.3):** MeshCentral integration was not pursued. The current implementation (`telahubd`, `telad`, `tela`) is written entirely from scratch in Go, using `gorilla/websocket`, `wireguard-go`, and gVisor netstack. No MeshCentral code is integrated. The architectural intent (minimal hub, outbound-only agents, protocol-agnostic tunnels) is preserved.
 
@@ -259,11 +259,11 @@ MeshCentral would have solved the hardest problems (cross-platform agent, stable
 
 ---
 
-# **6. Protocol Specification**
+# **6. Protocol Specification
 
 This section is **authoritative**. All implementations must follow it exactly.
 
-## **6.1 Transport**
+## 6.1 Transport
 
 - TLS 1.3
 - WebSocket (wss://)
@@ -274,7 +274,7 @@ WebSocket is chosen because it works through corporate proxies, locked-down netw
 
 **Compression caveat:** Disabling compression means all tunneled data traverses the wire at full size. For bandwidth-heavy protocols like RDP, this is acceptable because RDP applies its own compression internally. For other protocols, the bandwidth cost of no compression is the explicit tradeoff for simplicity and side-channel resistance. If this becomes a bottleneck in production, compression may be revisited as an opt-in feature in a future phase, applied only to the data payload (never to headers or control messages).
 
-## **6.2 Multiplexing**
+## 6.2 Multiplexing
 
 One WebSocket, many logical channels. Each channel carries a single TCP stream or control stream.
 
@@ -295,7 +295,7 @@ One WebSocket, many logical channels. Each channel carries a single TCP stream o
 5. Either side sends `close`.
 6. Channel is freed.
 
-## **6.3 Frame Format (Immutable)**
+## 6.3 Frame Format (Immutable)
 
 This is the **frozen wire format**. It must never be changed in a breaking way.
 
@@ -333,7 +333,7 @@ typedef struct {
 - The header is **packed** with no alignment padding. Total on-wire size: **12 bytes**.
 - `payload_length` specifies the exact number of bytes following the header. The receiver must read exactly this many bytes before parsing the next frame.
 
-## **6.4 Control Messages**
+## 6.4 Control Messages
 
 JSON, additive-only, tolerant of unknown fields.
 
@@ -401,7 +401,7 @@ Helper authentication uses the single-use session token issued by the browser fl
 >
 > The spec's `hello`/`welcome` handshake, `open`/`close` channel lifecycle, and `heartbeat` frame type are not yet implemented. Heartbeats are handled via WebSocket ping/pong frames (20s/45s intervals).
 
-## **6.5 Session Tokens**
+## 6.5 Session Tokens
 
 Session tokens are short-lived, single-use JWTs (HS256 or EdDSA) containing: user ID, agent ID, expiration, nonce, permissions.
 
@@ -414,7 +414,7 @@ Session tokens are short-lived, single-use JWTs (HS256 or EdDSA) containing: use
 5. Hub validates token.
 6. Token is invalidated immediately.
 
-## **6.6 Backward Compatibility**
+## 6.6 Backward Compatibility
 
 ### Hard Rules
 
@@ -435,7 +435,7 @@ New control message types, new optional fields, new channel types, new capabilit
 - Hub must support multiple protocol versions.
 - Agents must ignore unknown fields.
 
-## **6.7 Error Handling**
+## 6.7 Error Handling
 
 ### Error Types
 
@@ -447,7 +447,7 @@ New control message types, new optional fields, new channel types, new capabilit
 - Channels may be closed individually.
 - Hub logs all errors.
 
-## **6.8 WireGuard L3 Transport**
+## 6.8 WireGuard L3 Transport
 
 For protocols that bind authentication to the target hostname (e.g., RDP with NLA/CredSSP), Tela supports an alternative transport mode: **WireGuard L3 tunneling**. This replaces the TCP-over-WebSocket relay (§4.2, §10.4) with a full IP-level tunnel.
 
@@ -589,11 +589,11 @@ Both transport modes coexist. The Hub does not distinguish between TCP-relay bin
 
 ---
 
-# **7. Tela Agent**
+# **7. Tela Agent
 
 The agent is the core runtime component that runs on every managed machine.
 
-## **7.1 Responsibilities**
+## 7.1 Responsibilities
 
 - Open and maintain outbound TLS+WebSocket connection to Hub.
 - Reconnect automatically; validate Hub certificate fingerprint; maintain heartbeats.
@@ -603,7 +603,7 @@ The agent is the core runtime component that runs on every managed machine.
 - Enforce policy (which services may be exposed, which ports may be forwarded).
 - Report metadata (OS, hostname, uptime, capabilities, tags).
 
-## **7.2 Implementation**
+## 7.2 Implementation
 
 - **Language:** Go
 - **Binary:** `telad`, static, cross-compiled, no CGO.
@@ -614,7 +614,7 @@ The agent is the core runtime component that runs on every managed machine.
 
 > **Implementation note (§7.2):** The `telad` binary also supports `service` subcommands for OS service management: `telad service install -config telad.yaml` copies the config to the system-wide path and registers a native OS service (Windows SCM, Linux systemd, macOS launchd). Other service subcommands: `start`, `stop`, `restart`, `uninstall`.
 
-## **7.3 Concurrency Model**
+## 7.3 Concurrency Model
 
 The agent uses a **strict, invariant concurrency model**.
 
@@ -633,7 +633,7 @@ These rules must never be violated:
 - No new global state without human approval.
 - No blocking calls on the main goroutine after startup.
 
-## **7.4 Configuration**
+## 7.4 Configuration
 
 YAML config file (`telad.yaml`) containing: hub URL, token, machine definitions (ID, display name, services, target host, OS, tags, location, owner). Loaded via `-config <path>` flag or `TELA_CONFIG` env var.
 
@@ -641,21 +641,21 @@ System-wide service path: `%ProgramData%\Tela\telad.yaml` (Windows) / `/etc/tela
 
 Flags and env vars override config file values. The agent must not fetch remote configs or auto-update its config file.
 
-## **7.5 Logging**
+## 7.5 Logging
 
 Connection events, errors, channel lifecycle events, service access events. Local only, plaintext, rotated automatically. No remote log upload in Tela core.
 
-## **7.6 Updates**
+## 7.6 Updates
 
 Manual, explicit, version-pinned. Awan Saya may later introduce remote updates and staged rollouts. Tela core remains manual.
 
 ---
 
-# **8. Tela Hub**
+# **8. Tela Hub
 
 The Hub is the central coordination point. It is intentionally lightweight and minimal.
 
-## **8.1 Responsibilities**
+## 8.1 Responsibilities
 
 - Accept agent and helper connections.
 - Authenticate users (local auth in Tela standalone).
@@ -667,7 +667,7 @@ The Hub is the central coordination point. It is intentionally lightweight and m
 
 The Hub is **not** an identity provider, dashboard engine, policy engine, orchestration system, or multi-tenant platform. Those belong to Awan Saya.
 
-## **8.2 Implementation**
+## 8.2 Implementation
 
 - **Language:** Go
 - **Binary:** `telahubd`, static, cross-compiled, no CGO.
@@ -680,7 +680,7 @@ The Hub is **not** an identity provider, dashboard engine, policy engine, orches
 > - `telahubd user bootstrap/list/add/remove/grant/revoke/rotate` for local CLI-based token and ACL management (see §13).
 > - `telahubd portal add/remove/list` for portal registration (see §8.5).
 
-## **8.3 Storage**
+## 8.3 Storage
 
 ### SQLite (Tela Standalone)
 
@@ -690,7 +690,7 @@ Users, agent registry, metadata, session logs. Simple, reliable, dependency-mini
 
 Multi-node deployments, HA, multi-tenant environments. Required for HA Hub (Phase 3) before Awan Saya exists. Tela’s single-node standalone mode remains SQLite-based.
 
-## **8.4 REST API**
+## 8.4 REST API
 
 Current hub endpoints:
 
@@ -709,7 +709,7 @@ Current hub endpoints:
 Legacy grant/revoke/rotate endpoints remain for backward compatibility.
 Additive-only changes. 12-month deprecation window.
 
-## **8.5 Portal Management**
+## 8.5 Portal Management
 
 Hub operators can register their hub with one or more Tela portals (like Awan Saya) using the `telahubd portal` subcommand:
 
@@ -729,23 +729,23 @@ portals:
 
 This mirrors the `tela remote` model on the client side: `tela remote add` registers a *user* with a portal, `telahubd portal add` registers a *hub* with a portal. The web-based "Add Hub" form in the portal UI remains available as an alternative for admins who don't have shell access to the hub.
 
-## **8.6 Multiplexing**
+## 8.6 Multiplexing
 
 Uses MeshCentral's multiplexing engine with Tela's protocol layered on top. Allocates channel IDs, routes frames, enforces channel lifecycle, detects errors, closes channels cleanly. Channel routing: Helper ↔ Hub ↔ Agent. No browser involvement in data path.
 
-## **8.7 Logging & Observability**
+## 8.7 Logging & Observability
 
 Agent connections, helper connections, authentication events, session creation, channel lifecycle, errors. Future metrics channels (Phase 3): active sessions, channel counts, bandwidth usage, agent health.
 
-## **8.8 Updates**
+## 8.8 Updates
 
 Manual, explicit, version-pinned. Awan Saya may later introduce rolling updates and multi-node orchestration.
 
 ---
 
-# **9. Tela Web**
+# **9. Tela Web
 
-## **9.1 Responsibilities**
+## 9.1 Responsibilities
 
 The browser UI performs **orchestration only**:
 
@@ -760,11 +760,11 @@ The browser UI performs **orchestration only**:
 - Display ephemeral `localhost:<port>` once the helper reports back via a short-lived polling endpoint or WebSocket.
 - Optionally provide in-browser fallback clients (SSH/RDP/terminal).
 
-## **9.2 Non-Responsibilities**
+## 9.2 Non-Responsibilities
 
 The browser must **never**: proxy TCP traffic, hold open a data channel, participate in multiplexing, or remain open for the session to continue. Once the helper is running, the browser can close.
 
-## **9.3 Helper Launch Reality**
+## 9.3 Helper Launch Reality
 
 Browsers **cannot launch executables directly**. The primary UX is:
 
@@ -777,17 +777,17 @@ Browsers **cannot launch executables directly**. The primary UX is:
 
 This is honest and reliable. The `tela://` URI scheme is a convenience optimization, not a requirement. First-time users download and run manually. Repeat users may register the URI scheme for one-click launch.
 
-## **9.3 Constraints**
+## 9.3 Constraints
 
 No frameworks. No build tools. No dependency creep. Vanilla JS only.
 
 ---
 
-# **10. Tela Helper**
+# **10. Tela Helper
 
 The helper is the key to Tela's zero-install local-client access. Implemented in **Go** (same toolchain as Tela CLI; produces small static binaries with no runtime dependencies).
 
-## **10.1 Responsibilities**
+## 10.1 Responsibilities
 
 - Validate Hub certificate fingerprint.
 - Open its own outbound TLS+WebSocket connection to Hub.
@@ -799,13 +799,13 @@ The helper is the key to Tela's zero-install local-client access. Implemented in
 - Self-terminate when session ends.
 - Best-effort cleanup after exit (see §10.3 Execution Model for platform caveats).
 
-## **10.2 Non-Responsibilities**
+## 10.2 Non-Responsibilities
 
 The helper must **not**: store credentials, store configuration, persist any state, modify system settings, install itself, run as a service, or write to protected directories. It must be a pure user-mode, ephemeral process.
 
 **Exception, WireGuard L3 mode (§6.8):** Creating a TUN adapter requires one-time admin/root elevation on the host OS. This is the same requirement as Tailscale. In TCP-relay mode, the helper requires no admin rights.
 
-## **10.3 Distribution & Signing**
+## 10.3 Distribution & Signing
 
 ### Source
 
@@ -833,7 +833,7 @@ Downloaded to a temporary directory, executed directly, receives arguments from 
 
 **Cleanup:** On exit, the helper attempts to delete its own binary. On Linux/macOS this is straightforward. On Windows, a running process cannot delete its own executable; the helper uses a best-effort deferred-delete mechanism (e.g., a short-lived batch wrapper or `MoveFileEx` with `MOVEFILE_DELAY_UNTIL_REBOOT`). Cleanup failure is non-fatal. Stale helper binaries in temp directories are harmless.
 
-## **10.4 Data Path**
+## 10.4 Data Path
 
 ```
 native client → helper → Hub → Agent → target service
@@ -841,7 +841,7 @@ native client → helper → Hub → Agent → target service
 
 The browser is not in the data path. It only requests the session token, launches the helper, and displays the port.
 
-## **10.5 Fallback Modes**
+## 10.5 Fallback Modes
 
 If the helper cannot execute (locked-down environment blocks downloads or execution):
 
@@ -851,9 +851,9 @@ If the helper cannot execute (locked-down environment blocks downloads or execut
 
 ---
 
-# **11. Tela CLI**
+# **11. Tela CLI
 
-## **11.1 Purpose & Rationale**
+## 11.1 Purpose & Rationale
 
 A Go static binary for administrative and automation workflows.
 
@@ -861,7 +861,7 @@ Go is chosen because: static binaries, instant cross-compilation, no runtime dep
 
 The CLI is intentionally not part of the core runtime.
 
-## **11.2 Core Commands**
+## 11.2 Core Commands
 
 Phase 1:
 
@@ -890,13 +890,13 @@ The CLI must remain additive-only. No subcommand removals or renames after relea
 
 ---
 
-# **12. Security Model**
+# **12. Security Model
 
 Tela's security model is intentionally simple, strong, and long-lived. This section is the **unified security reference** across agent, helper, and Hub.
 
 > **Implementation status:** Of the security properties described in §12.1-12.3, only **WireGuard E2E encryption (§12.5) is currently implemented**. Ed25519 agent identity, certificate pinning, and signed session tokens are designed but not yet built. The hub's WebSocket endpoint currently accepts any registering agent. See §12.6 for what the current implementation does and does not protect against.
 
-## **12.1 Identity** *(NOT YET IMPLEMENTED)*
+## 12.1 Identity** *(NOT YET IMPLEMENTED)*
 
 ### Agent Identity
 
@@ -920,23 +920,23 @@ Tela's security model is intentionally simple, strong, and long-lived. This sect
 
 *Current implementation: TLS is terminated externally (Cloudflare tunnel). `tela` and `telad` perform standard TLS CA validation; no fingerprint pinning.*
 
-## **12.2 Certificate Pinning** *(NOT YET IMPLEMENTED)*
+## 12.2 Certificate Pinning** *(NOT YET IMPLEMENTED)*
 
 Both agent and helper must: validate Hub certificate fingerprint, refuse to connect if mismatched, log all failures. This prevents MITM attacks even if TLS infrastructure is compromised.
 
 *Current implementation: not implemented. Standard TLS CA validation only.*
 
-## **12.3 Session Tokens** *(PARTIAL - shared secret only)*
+## 12.3 Session Tokens** *(PARTIAL - shared secret only)*
 
 Short-lived, single-use, signed by Hub, passed from browser → helper, validated by Hub, invalidated immediately after use. See §6.5 for full specification.
 
 *Current implementation: the `-token` flag carries a plain shared secret. The hub stores the token set by the registering `telad` and rejects clients that present a different value. Token is not signed, not time-limited, and not single-use.*
 
-## **12.4 Transport Security**
+## 12.4 Transport Security
 
 All traffic encrypted via TLS 1.3 over WebSocket.
 
-## **12.5 E2E Encryption**
+## 12.5 E2E Encryption
 
 **Implemented.** WireGuard (Curve25519 key exchange + ChaCha20-Poly1305 data) provides end-to-end encryption between `tela` (client) and `telad` (daemon). The Hub is a zero-knowledge relay; it sees only encrypted WireGuard datagrams and cannot inspect or tamper with tunnel traffic.
 
@@ -944,7 +944,7 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 > *The original design described WireGuard as optional Phase 2 work. It was implemented as the primary transport in the current version.*
 
-## **12.6 Threat Model**
+## 12.6 Threat Model
 
 ### Protects Against
 
@@ -969,11 +969,11 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 ---
 
-# **13. Authentication**
+# **13. Authentication
 
 > **Status:** Token-based authentication is implemented. The hub supports named token identities with role-based access control (owner/admin/user/viewer), per-machine ACLs, environment-variable bootstrap for Docker deployments, an admin REST API for remote management, and a `tela admin` CLI. A `console-viewer` identity is auto-generated at startup for the hub's built-in web console. When no tokens are configured, the hub runs in open mode (backward compatible). The spec's vision of bcrypt + cookies + TOTP for browser-based user auth is not yet implemented; the current system is token-based (like SSH `authorized_keys`).
 
-## **13.1 Tela Standalone (Before Awan Saya)**
+## 13.1 Tela Standalone (Before Awan Saya)
 
 ### Current implementation (token-based)
 
@@ -999,17 +999,17 @@ Tela Hub will include a minimal local authentication system for browser-based ac
 
 Intentionally simple and self-contained. No external dependencies.
 
-## **13.2 Awan Saya (Future)**
+## 13.2 Awan Saya (Future)
 
 Awan Saya replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise identity providers. Tela Hub becomes a **resource server**, not an identity provider.
 
 ---
 
-# **14. End-to-End Usage Flow**
+# **14. End-to-End Usage Flow
 
 > **Implementation status:** Steps dependent on user authentication ("Create local Tela user", "log in", "session token", "browser downloads helper") are not yet implemented. The current working flow is described in the tela README and `howto/` docs.
 
-## **14.1 Setup (Tela Standalone)**
+## 14.1 Setup (Tela Standalone)
 
 1. Deploy `telahubd` (via Docker Compose or as a service).
 2. Put it behind Cloudflare Tunnel or reverse proxy for TLS.
@@ -1017,7 +1017,7 @@ Awan Saya replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise id
 4. Run `telad -config telad.yaml` on target machines (or `telad service install -config telad.yaml` for a persisted service).
 5. *(Planned)* Register agents using provisioning tokens.
 
-## **14.2 Accessing a Machine from a Locked-Down Laptop**
+## 14.2 Accessing a Machine from a Locked-Down Laptop
 
 1. User opens browser → `https://tela.yourdomain.com`.
 2. User logs in.
@@ -1033,17 +1033,17 @@ Awan Saya replaces local auth with: Cloudflare Access, OIDC, SAML, enterprise id
 
 Browser can close once the helper is running. No VPN. No admin rights.
 
-## **14.3 In-Browser Fallback**
+## 14.3 In-Browser Fallback
 
 If the helper cannot run, the browser launches an in-browser RDP/SSH client. Performance is lower. No local-client mode.
 
 ---
 
-# **15. Literate Coding Standards**
+# **15. Literate Coding Standards
 
 Tela requires **literate coding** to ensure clarity, maintainability, safe LLM contributions, explicit invariants, and long-term stability. These standards apply to **all** Tela components.
 
-## **15.1 Narrative Header Blocks**
+## 15.1 Narrative Header Blocks
 
 Every source file must begin with a narrative header describing: purpose, architectural role, invariants, constraints, security boundaries, backward-compatibility requirements, and warnings for LLM agents.
 
@@ -1067,7 +1067,7 @@ Every source file must begin with a narrative header describing: purpose, archit
 */
 ```
 
-## **15.2 Inline Intent Comments**
+## 15.2 Inline Intent Comments
 
 Comments must explain **why**, not just **what**.
 
@@ -1076,7 +1076,7 @@ Comments must explain **why**, not just **what**.
 // which would break channel framing and cause desync.
 ```
 
-## **15.3 Embedded Protocol Excerpts**
+## 15.3 Embedded Protocol Excerpts
 
 Files that implement protocol logic must embed relevant protocol excerpts so LLM agents cannot drift:
 
@@ -1094,7 +1094,7 @@ Files that implement protocol logic must embed relevant protocol excerpts so LLM
 // Wire: big-endian, packed, 12 bytes total.
 ```
 
-## **15.4 "DO NOT MODIFY" Markers**
+## 15.4 "DO NOT MODIFY" Markers
 
 Used for public APIs, protocol structures, security-critical code, and concurrency primitives:
 
@@ -1104,7 +1104,7 @@ Used for public APIs, protocol structures, security-critical code, and concurren
 // Changing behavior breaks backward compatibility.
 ```
 
-## **15.5 Explicit Invariants**
+## 15.5 Explicit Invariants
 
 Every file must list invariants that LLM agents must not violate:
 
@@ -1116,11 +1116,11 @@ Every file must list invariants that LLM agents must not violate:
 // - Must not introduce recursion.
 ```
 
-## **15.6 No Hidden Magic**
+## 15.6 No Hidden Magic
 
 All behavior must be explicit. No implicit state machines. No "clever" code.
 
-## **15.7 Language-Specific Conventions**
+## 15.7 Language-Specific Conventions
 
 The examples above use C. Equivalent standards apply to all Tela languages:
 
@@ -1129,7 +1129,7 @@ The examples above use C. Equivalent standards apply to all Tela languages:
 Use JSDoc block comments at the top of every file:
 
 ```js
-/**
+/
  * tela_session_broker.js
  * Purpose: Allocates channels and routes traffic between helper and agent.
  *
@@ -1163,11 +1163,11 @@ package helper
 
 ---
 
-# **16. LLM Agent Guardrails**
+# **16. LLM Agent Guardrails
 
 Tela assumes LLM agents will contribute code. Strict guardrails are required.
 
-## **16.1 Hard Rules**
+## 16.1 Hard Rules
 
 LLM agents must **not**:
 
@@ -1181,7 +1181,7 @@ LLM agents must **not**:
 - Change naming conventions.
 - Remove warnings or invariants.
 
-## **16.2 Allowed Changes**
+## 16.2 Allowed Changes
 
 LLM agents may:
 
@@ -1196,7 +1196,7 @@ LLM agents may:
 
 All changes must be **additive** and **non-breaking**.
 
-## **16.3 Human Review Requirements**
+## 16.3 Human Review Requirements
 
 Human maintainers must review:
 
@@ -1209,9 +1209,9 @@ Human maintainers must review:
 
 ---
 
-# **17. Roadmap**
+# **17. Roadmap
 
-## **17.1 Phase 1 - Minimum Viable Fabric (0-3 months)**
+## 17.1 Phase 1 - Minimum Viable Fabric (0-3 months)
 
 This phase delivers the core Tela substrate. The 3-month timeline is feasible because core transport, multiplexing, agent lifecycle, and reconnect logic are inherited from MeshCentral (see §5). Net-new work is marked with †.
 
@@ -1228,7 +1228,7 @@ This phase delivers the core Tela substrate. The 3-month timeline is feasible be
 - Session tokens†
 - Protocol conformance test suite†
 
-## **17.2 Phase 2 - Fabric Extensions (3-6 months)**
+## 17.2 Phase 2 - Fabric Extensions (3-6 months)
 
 - macOS agent
 - Metadata + tagging
@@ -1240,7 +1240,7 @@ This phase delivers the core Tela substrate. The 3-month timeline is feasible be
 - Improved logging
 - E2E encryption (optional)
 
-## **17.3 Phase 3 - Substrate for Awan Saya (6-12 months)**
+## 17.3 Phase 3 - Substrate for Awan Saya (6-12 months)
 
 - Postgres backend
 - HA Hub
@@ -1249,7 +1249,7 @@ This phase delivers the core Tela substrate. The 3-month timeline is feasible be
 - Node grouping
 - Service catalogs (read-only)
 
-## **17.4 Phase 4 - Awan Saya v0.1 (12-18 months)**
+## 17.4 Phase 4 - Awan Saya v0.1 (12-18 months)
 
 - Hub registry (users register self-hosted Hubs with Awan Saya)
 - Relay infrastructure (Awan Saya provides stable, publicly-reachable relay endpoints)
@@ -1266,11 +1266,11 @@ Tela remains stable and unchanged except for additive features. See §18 for arc
 
 ---
 
-# **18. Awan Saya Architecture**
+# **18. Awan Saya Architecture
 
 This section previews how Awan Saya extends Tela from a self-hosted tool into a cloud service. Detailed Awan Saya specifications will live in a separate document; this section establishes the architectural contract between Tela and Awan Saya.
 
-## **18.1 Three Connectivity Models**
+## 18.1 Three Connectivity Models
 
 Tela's protocol is identical regardless of deployment model. The Hub does not know or care how it became reachable. This is the key architectural invariant that allows the three models below to coexist.
 
@@ -1317,7 +1317,7 @@ Awan Saya runs the Hub on the user's behalf. The user registers agents and creat
 
 This is the "Tailscale experience": sign up, install agents, connect.
 
-## **18.2 Hub Registry**
+## 18.2 Hub Registry
 
 Awan Saya maintains a **Hub registry**: a directory of Hubs, their owners, connectivity endpoints, and online/offline status.
 
@@ -1325,7 +1325,7 @@ Awan Saya maintains a **Hub registry**: a directory of Hubs, their owners, conne
 - **Managed Hubs** are created and lifecycle-managed by Awan Saya directly.
 - The registry maps stable Hub identifiers to live relay connections or managed instances.
 
-## **18.3 Relay Protocol**
+## 18.3 Relay Protocol
 
 The Awan Saya relay is transparent to the Tela protocol:
 
@@ -1338,7 +1338,7 @@ From Tela's perspective, the relay is equivalent to a reverse proxy. No changes 
 
 **E2E encryption note:** Because the relay terminates TLS, it can theoretically observe traffic in transit. This is the same concern that applies to any TLS-terminating proxy (including Cloudflare). The optional E2E encryption described in §12.5 mitigates this for deployments that require zero-trust relay transit.
 
-## **18.4 What Changes in Tela (Nothing)**
+## 18.4 What Changes in Tela (Nothing)
 
 This is the critical point: **Tela's protocol, agent, helper, and Hub implementations do not change.** The relay is an infrastructure layer below Tela; the Hub registry and managed hosting are Awan Saya features above Tela. Tela remains the stable substrate.
 
@@ -1351,7 +1351,7 @@ This is the critical point: **Tela's protocol, agent, helper, and Hub implementa
 | Managed Hub provisioning | Awan Saya |
 | SSO, RBAC, billing, dashboards | Awan Saya |
 
-## **18.5 Eliminating External Dependencies**
+## 18.5 Eliminating External Dependencies
 
 Awan Saya as a connectivity service means users no longer need:
 
@@ -1366,7 +1366,7 @@ Awan Saya as a connectivity service means users no longer need:
 
 Users who prefer full control continue using Model A (direct/standalone). Awan Saya is always optional.
 
-## **18.6 Analogy Summary**
+## 18.6 Analogy Summary
 
 | Layer | Self-hosted | Managed service |
 |-------|-------------|------------------|
@@ -1375,7 +1375,7 @@ Users who prefer full control continue using Model A (direct/standalone). Awan S
 | Docker | local engine | **Docker Hub / ECS** |
 | **Tela** | local Hub (Model A) | **Awan Saya** (Models B & C) |
 
-## **18.7 Portal - The Multi-Hub Aggregation Layer**
+## 18.7 Portal - The Multi-Hub Aggregation Layer
 
 Awan Saya provides a **Portal** at `awansaya.net/`, a centralized dashboard that aggregates status, machines, and services across all Hubs registered to a user's account.
 
@@ -1391,7 +1391,7 @@ The Portal is architecturally separate from the Hub Console:
 
 The Portal queries each registered hub's standard API endpoints (`/api/status`, `/api/history`) and presents a unified view. The hub does not need to know it is being aggregated.
 
-## **18.8 Path-Based Hub Routing**
+## 18.8 Path-Based Hub Routing
 
 Awan Saya uses **path-based routing** under a single domain rather than per-hub subdomains:
 
@@ -1410,7 +1410,7 @@ Benefits over subdomains:
 - Adding a hub is a config/database row, not a DNS record.
 - Self-hosted hubs still use their own domain (e.g. `tela.mycompany.com`); path-based routing applies only to Awan Saya-managed or relay-connected hubs.
 
-## **18.9 User-Centric Access Model**
+## 18.9 User-Centric Access Model
 
 In standalone Tela, a user must know the hub URL and any access token. In Awan Saya, the user sees **machines, not infrastructure**.
 
@@ -1448,7 +1448,7 @@ Connected. Listening:
 
 The user does not know or care that "Paul's Home" hub is at `192.168.1.50` behind NAT, reached via the Awan Saya relay. Awan Saya resolves the machine name to the correct hub, establishes the relay path, and handles authentication.
 
-## **18.10 CLI Integration - `tela` Talks to Hub Directories**
+## 18.10 CLI Integration - `tela` Talks to Hub Directories
 
 There is **one CLI**: `tela`. It supports **remotes**: named URLs pointing to hub directory services (such as Awan Saya). No separate `awansaya` CLI is needed.
 
@@ -1481,7 +1481,7 @@ When `-hub` is a short name (not `ws://` or `wss://`):
 
 When `-hub` is omitted, `tela` checks `TELA_HUB` (may be a URL or a short name). If unset → error.
 
-## **18.11 Hub Owner ≠ Hub User**
+## 18.11 Hub Owner ≠ Hub User
 
 A critical distinction: the person who runs a hub is not necessarily the person who uses machines on it.
 
@@ -1489,7 +1489,7 @@ A critical distinction: the person who runs a hub is not necessarily the person 
 
 This separation is what makes Awan Saya a **platform** rather than just a prettier standalone hub. The hub is infrastructure; the portal is the user-facing product.
 
-## **18.12 Hub Aliases - Named Hubs**
+## 18.12 Hub Aliases - Named Hubs
 
 Users should not need to memorize or type full WebSocket URLs. The `tela` CLI supports **hub names**: short identifiers that resolve to hub WebSocket URLs.
 
@@ -1506,7 +1506,7 @@ When the `-hub` flag (or `TELA_HUB` env var) does not start with `ws://` or `wss
 | Windows | `%APPDATA%\tela\hubs.yaml` |
 | Linux / macOS | `~/.tela/hubs.yaml` |
 
-**Config file format:**
+**Config file format:
 
 ```yaml
 hubs:
@@ -1545,7 +1545,7 @@ The `hub_directory` value tells the CLI where to query for hub listings. This is
 
 If `/.well-known/tela` returns 404 (e.g., an older directory service), the CLI falls back to the conventional `/api/hubs` path. The discovered path is stored in the config and used for all subsequent queries.
 
-**Hub directory endpoint (discovered):**
+**Hub directory endpoint (discovered):
 
 ```
 GET /api/hubs
@@ -1575,16 +1575,16 @@ This keeps the CLI ergonomic for daily use while preserving full URL support for
 
 ---
 
-# **19. Risks & Mitigations**
+# **19. Risks & Mitigations
 
-## **19.1 Agentic Coding Risks**
+## 19.1 Agentic Coding Risks
 
 - **Protocol drift** → mitigated by literate coding, embedded protocol excerpts, DO NOT MODIFY markers.
 - **Security regressions** → mitigated by human review requirements, explicit threat model.
 - **Concurrency bugs** → mitigated by strict invariants, locked concurrency model.
 - **Dependency creep** → mitigated by hard rules, boring tech philosophy.
 
-## **19.2 Platform Risks**
+## 19.2 Platform Risks
 
 - **Scope creep** → mitigated by Tela/Awan Saya separation.
 - **Identity complexity** → mitigated by deferring to Cloudflare Access.
@@ -1593,11 +1593,11 @@ This keeps the CLI ergonomic for daily use while preserving full URL support for
 
 ---
 
-# **20. Testing Strategy**
+# **20. Testing Strategy
 
 Tela’s emphasis on stability, backward compatibility, and 18-month support windows requires a structured testing approach.
 
-## **20.1 Protocol Conformance Tests**
+## 20.1 Protocol Conformance Tests
 
 A dedicated test suite must validate:
 
@@ -1609,7 +1609,7 @@ A dedicated test suite must validate:
 
 These tests are **mandatory before any release** and must run against every supported platform.
 
-## **20.2 Integration Tests**
+## 20.2 Integration Tests
 
 - Agent → Hub → Helper end-to-end tunnel establishment.
 - Session token lifecycle (issue, use, invalidate).
@@ -1617,13 +1617,13 @@ These tests are **mandatory before any release** and must run against every supp
 - Reconnect/heartbeat behavior.
 - Channel multiplexing under load.
 
-## **20.3 Regression Suite**
+## 20.3 Regression Suite
 
 - Every bug fix must include a regression test.
 - Every protocol change must include conformance tests for the new behavior.
 - Tests must cover Windows and Linux at minimum; macOS added in Phase 2.
 
-## **20.4 What Is Not Tested in Tela Core**
+## 20.4 What Is Not Tested in Tela Core
 
 - UI testing (Tela Web is minimal; manual verification is acceptable for Phase 1).
 - Performance benchmarking (deferred to Phase 3).

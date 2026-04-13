@@ -1,6 +1,6 @@
 # Tela File Sharing -- Design Document
 
-## 1. Overview
+## Overview
 
 Tela File Sharing adds a sandboxed file transfer channel to the existing
 WireGuard tunnel between `tela` (client) and `telad` (agent). Files flow
@@ -15,7 +15,7 @@ sharing is off by default and must be explicitly enabled per machine.
 This feature is native to the Tela protocol. It does not depend on SSH,
 SFTP, or any other service running on the agent machine.
 
-## 2. Design principles
+## Design principles
 
 **Secure by default.** File sharing is disabled unless the agent operator
 adds a `fileShare` block to the machine config. No flags, no environment
@@ -39,7 +39,7 @@ access than the operator has configured.
 tunnel. The hub relays opaque ciphertext. This is identical to how TCP
 service traffic works today.
 
-## 3. Agent configuration
+## Agent configuration
 
 ### 3.1 telad.yaml schema
 
@@ -107,7 +107,7 @@ type machineConfig struct {
 }
 ```
 
-## 4. Capability advertisement
+## Capability advertisement
 
 File sharing capability is advertised during session setup using the
 existing control message flow. No new message types are required for
@@ -152,7 +152,7 @@ The hub does not interpret capabilities. It stores them as opaque metadata
 for the status API and relays them during session signaling. No hub code
 changes are required beyond passing the field through.
 
-## 5. Protocol
+## Protocol
 
 File sharing uses a simple request/response protocol over a dedicated TCP
 connection inside the WireGuard tunnel. The agent listens on a fixed port
@@ -455,7 +455,7 @@ The port is not configurable. It is a protocol constant, like WireGuard's
 default 51820. This simplifies client implementation and avoids
 negotiation.
 
-## 6. Hub RBAC integration
+## Hub RBAC integration
 
 ### 6.1 Permission model
 
@@ -484,7 +484,7 @@ auth:
 
 This is not part of the initial implementation.
 
-## 7. Client interface
+## Client interface
 
 ### 7.1 CLI: `tela files`
 
@@ -555,7 +555,7 @@ Connected to barn via myhub
   Files: barn:/home/shared (read-only, 47 files)
 ```
 
-## 8. TelaVisor integration
+## TelaVisor integration
 
 ### 8.1 Immediate (Phase 1)
 
@@ -611,7 +611,7 @@ All file operations appear in the Commands tab of the log panel:
 [PUT]  files/write barn:"backup.yaml"  200  1.1 KB
 ```
 
-## 9. Awan Saya integration
+## Awan Saya integration
 
 ### 9.1 Portal dashboard
 
@@ -664,7 +664,7 @@ File operations can be logged to the hub's `/api/history` event stream:
 This flows through the existing history ring buffer and appears in the
 portal dashboard, hub console, and TelaVisor command log.
 
-## 10. Use cases
+## Use cases
 
 ### 10.1 Tela management
 
@@ -802,7 +802,7 @@ server for authorized Tela users. No separate file sharing service, no
 cloud storage, no email attachments. The files stay on the machines and
 travel through the encrypted tunnel.
 
-## 11. Implementation plan
+## Implementation plan
 
 ### Phase 1: Agent-side file server
 
@@ -843,7 +843,7 @@ travel through the encrypted tunnel.
 - Progress reporting via the control WebSocket
 - Transfer rate limiting
 
-## 12. Security checklist
+## Security checklist
 
 Before shipping, verify:
 
