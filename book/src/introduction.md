@@ -57,10 +57,6 @@ features built on top of it second.
 - The [Appendices](guide/reference.md) collect the reference data: the
   command-line reference, the configuration file reference, and the
   glossary. Use them as lookups, not as reading.
-- The [Project Status](ops/status.md) section is the live design-to-
-  implementation traceability matrix and the 1.0 readiness checklist.
-  These are project artifacts that the documentation site renders as
-  living documents; they are not part of the published book.
 
 The book is generated from the Markdown files in the
 [tela](https://github.com/paulmooreparks/tela) repository on every push to

@@ -728,8 +728,8 @@ Each row shows:
 The history is held in a fixed-size ring buffer in the hub. Older
 events are evicted as new ones arrive. The buffer survives within a
 single hub process and is reset when the hub restarts. Persistent audit
-log shipping is on the [1.0 roadmap](../ops/roadmap.md) under the
-*Audit log retention* item.
+log shipping is planned under the *Audit log retention* item in
+[ROADMAP-1.0.md](https://github.com/paulmooreparks/tela/blob/main/ROADMAP-1.0.md).
 
 ### Agents
 

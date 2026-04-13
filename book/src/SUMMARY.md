@@ -54,11 +54,6 @@
 - [B. Configuration file reference](guide/configuration.md)
 - [C. Glossary](glossary.md)
 
-# Project Status
-
-- [Status: design vs implementation](ops/status.md)
-- [Roadmap to 1.0](ops/roadmap.md)
-
 ---
 
 [Contributing](contributing.md)

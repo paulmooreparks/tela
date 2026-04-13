@@ -32,10 +32,10 @@ You will need [Wails v2](https://wails.io/) installed.
   list of architectural review items
 - [Why a connectivity fabric](architecture/design.md) -- the design
   rationale for the core architecture
-- [Status: design vs implementation](ops/status.md) -- the live
-  traceability matrix from design sections to implementation
-- [Roadmap to 1.0](ops/roadmap.md) -- the 1.0 readiness checklist (anything
-  unticked there is fair game)
+- [ROADMAP-1.0.md](https://github.com/paulmooreparks/tela/blob/main/ROADMAP-1.0.md) --
+  the 1.0 readiness checklist (anything unticked is fair game)
+- [STATUS.md](https://github.com/paulmooreparks/tela/blob/main/STATUS.md) --
+  the live traceability matrix from design sections to implementation
 
 ## Filing issues
 
