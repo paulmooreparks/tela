@@ -122,6 +122,16 @@ For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 p
 - If deferred: pick one identity protocol to support first (OIDC is the obvious candidate), and document the contract (which claims map to which roles, how revocation works, how the hub validates tokens).
 - If non-goal: document that SSO is the portal's job and the hub will only ever speak its own token format, and explain why.
 
+### Kernel TUN mode (exit node, full IP routing)
+- [ ] Decision: deferred to post-1.0.
+- Tela currently runs WireGuard entirely in userspace via gVisor netstack. This is the property that eliminates the need for admin rights, kernel drivers, and TUN devices. It also limits Tela to TCP-only tunneling with no OS-level network interface.
+- An optional kernel TUN mode would use wireguard-go's `tun.CreateTUN()` instead of `netstack.CreateNetTUN()`. The wireguard-go library already ships both constructors. The result: a real network interface, full IP routing (UDP, ICMP, multicast), exit-node support (route all system traffic through a remote machine), and kernel-speed packet processing. The cost: one-time admin/root elevation to create the TUN device.
+- **The two-mode model.** Userspace mode (default, no admin, TCP only) and kernel mode (opt-in, elevation required, full IP). Same hub, same agent protocol, same access model, same management tools. A fleet could mix both modes. A user could run userspace on a locked-down corporate laptop and kernel mode on a home machine.
+- **Why this matters.** The combination of both modes covers two populations that no single tool covers today: users who cannot install Tailscale on their corporate laptop (userspace mode), and users who want Tailscale's capabilities but self-hosted with their own hub and management UI (kernel mode).
+- **Implementation scope.** A `-tun` flag on `tela` and `telad` that switches the constructor. The real work is platform-specific route table management, DNS interception for exit-node mode, elevation prompts, and graceful TUN interface cleanup on exit.
+- **Android client.** An Android client would likely use kernel mode by default (Android's VpnService API provides a TUN interface without root). This is a natural extension of the same two-mode model.
+- If deferred past 1.x: document explicitly that Tela is TCP-only by design and that the userspace tradeoff is intentional, with a pointer to this roadmap item for the kernel-mode plan.
+
 ### Multi-tenant hub
 - [ ] Decision: deferred to 1.x, or non-goal forever.
 - Today the answer to "I have multiple teams" is "run multiple hubs." This is fine at small scale and starts to bite at the fleet tier. A multi-tenant hub would let one process serve multiple isolated organizations with separate identity, ACL, and history surfaces.

@@ -15,6 +15,8 @@
 [![beta channel](https://img.shields.io/badge/dynamic/json?label=beta&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fbeta.json&color=yellow)](https://github.com/paulmooreparks/tela/releases/download/channels/beta.json)
 [![stable channel](https://img.shields.io/badge/dynamic/json?label=stable&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fstable.json&color=brightgreen)](https://github.com/paulmooreparks/tela/releases/download/channels/stable.json)
 
+**[Read the book](https://paulmooreparks.github.io/tela/)** for the full reference: getting started, configuration, deployment guides, use cases, and design rationale.
+
 Tela is a free and open-source (FOSS) remote-access system that lets you reach TCP services on remote machines through an encrypted WireGuard tunnel. It works through firewalls, NATs, and corporate proxies without requiring inbound ports, VPN software, kernel drivers, or administrator privileges on either end.
 
 You run a small agent (`telad`) on the machine you want to reach. It connects outbound to a relay hub (`telahubd`). From any other machine, you run the client (`tela`) or the desktop app (TelaVisor) to connect through the hub. The hub pairs the two sides and relays encrypted traffic between them. It never sees the plaintext.
