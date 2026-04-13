@@ -180,6 +180,8 @@ func Main() {
 		cmdUpdate(os.Args[2:])
 	case "mount":
 		cmdMount(os.Args[2:])
+	case "dns":
+		cmdDNS(os.Args[2:])
 	case "service":
 		handleServiceCommand()
 	case "version", "--version":
@@ -217,6 +219,8 @@ Commands:
   channel   Show, set, inspect, or download from the release channel (dev|beta|stable).
             Run 'tela channel help' for details. 'tela channel download <binary>'
             fetches and SHA-256-verifies a binary from the configured channel.
+  dns       Local name resolution: 'tela dns hosts' prints hosts file entries
+            for all machines in a profile.
   update    Self-update the running tela binary from the configured release channel.
             Run 'tela update -dry-run' to see what would change without doing it.
   service   Manage tela as an OS service (install, start, stop, uninstall, status)
