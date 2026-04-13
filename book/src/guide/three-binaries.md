@@ -7,7 +7,7 @@ single static executable with no runtime dependencies.
 |--------|------|---------------|
 | `telahubd` | Hub relay. Brokers encrypted sessions between agents and clients. Sees only ciphertext. | A publicly reachable server. |
 | `telad` | Agent / daemon. Registers a machine with a hub and exposes selected TCP services through the encrypted tunnel. | The machine you want to reach. |
-| `tela` | Client CLI. Connects to a machine through a hub and forwards local TCP ports through the encrypted tunnel. | Any machine you want to connect *from*. |
+| `tela` | Client CLI. Connects to a machine through a hub and binds services on deterministic loopback addresses through the encrypted tunnel. | Any machine you want to connect *from*. |
 
 A connection involves all three:
 

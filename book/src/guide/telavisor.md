@@ -29,7 +29,7 @@ through Tela hubs:
    connection profile, launches `tela connect -profile`, and monitors the
    process.
 4. **Monitoring tunnel status.** The Status view shows each selected
-   service with its remote port, local port, and current state. Status
+   service with its remote port, local address, and current state. Status
    updates arrive in real time over tela's WebSocket control application
    programming interface (API).
 5. **Managing hubs.** View hub settings, manage tokens, configure
@@ -1166,7 +1166,7 @@ It is a control surface around the `tela` command-line process. The
 flow of a connection is:
 
 1. **TelaVisor writes a profile YAML file** with your selected hubs,
-   machines, services, and local port assignments. This is the same
+   machines, and services. This is the same
    file format documented in [REFERENCE.md](https://github.com/paulmooreparks/tela/blob/main/REFERENCE.md).
 2. **TelaVisor runs `tela connect -profile <path>`** as a child process.
 3. **The `tela` process opens a local control API** on a random

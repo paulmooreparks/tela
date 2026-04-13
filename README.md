@@ -66,7 +66,7 @@ Tela is built from three Go binaries and an optional desktop client:
 
 | Component | Description |
 |-----------|-------------|
-| **tela** | Client CLI. Connects to a hub, establishes a WireGuard tunnel, and binds local TCP ports so native clients (ssh, mstsc, psql, etc.) can connect. |
+| **tela** | Client CLI. Connects to a hub, establishes a WireGuard tunnel, and binds services on deterministic loopback addresses so native clients (ssh, mstsc, psql, etc.) can connect. |
 | **telad** | Agent daemon. Runs on the target machine, registers with the hub, and exposes local TCP services through the tunnel. Includes a built-in HTTP gateway for path-based routing to multiple services. |
 | **telahubd** | Hub server. Pairs agents with clients, relays encrypted traffic, and serves a built-in web console. |
 | **TelaVisor** | Desktop client. A graphical interface for managing connections, browsing remote files, and administering hubs. Built with Wails v2 (Go + JavaScript). |
@@ -181,9 +181,7 @@ connections:
     token: ${CORP_TOKEN}
     services:
       - remote: 22
-        local: 2201
       - remote: 8080
-        local: 9001
 
   - hub: corp-hub
     machine: staging-db
@@ -270,7 +268,7 @@ At a minimum, the hub must accept inbound HTTPS/WebSocket traffic from both `tel
 |-----------|---------|----------|-------|
 | **Hub** (`telahubd`) | TCP 443 for HTTPS + WebSocket | None | Optional: UDP 41820 for the UDP relay. |
 | **Agent** (`telad`) | None | TCP 443 to the hub | Optional: outbound UDP to hub:41820 and STUN. |
-| **Client** (`tela`) | None | TCP 443 to the hub | Optional: outbound UDP to hub:41820 and STUN. Binds localhost ports for apps. |
+| **Client** (`tela`) | None | TCP 443 to the hub | Optional: outbound UDP to hub:41820 and STUN. Binds loopback addresses for apps. |
 | **Portal** | TCP 80/443 for the portal UI and API | HTTPS to each hub's `/api/status` and `/api/history` | Proxies hub requests server-side. Browsers do not contact hubs directly. |
 
 See also: [howto/networking.md](howto/networking.md), [howto/hub.md](howto/hub.md), [howto/telad.md](howto/telad.md).
@@ -333,7 +331,7 @@ docker/            Dockerfile, docker-compose, Caddyfile
 | **Hub** | The central relay server (`telahubd`). Pairs agents with clients and relays encrypted traffic. Also serves the hub console. |
 | **Hub Console** | The web interface served by a hub (e.g., `https://hub.example.com/`). Shows registered machines, services, and session history. |
 | **Agent / telad** | A long-lived daemon on a managed machine. Registers with the hub and exposes local services through the tunnel. |
-| **Client / tela** | The CLI tool on the user's machine. Connects through the hub to an agent and binds local TCP ports for native clients. |
+| **Client / tela** | The CLI tool on the user's machine. Connects through the hub to an agent and binds services on deterministic loopback addresses for native clients. |
 | **TelaVisor** | The desktop client. Provides a graphical interface for connections, file browsing, and hub administration. |
 | **Machine** | A named resource registered by an agent (e.g., `barn`). One agent can register one or more machines. |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). |
