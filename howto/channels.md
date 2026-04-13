@@ -1,12 +1,8 @@
 # How to: Self-update and release channels
 
-This walkthrough covers Tela's release channel system end to end: how to inspect
-which channel a binary is on, how to switch channels, how to update binaries,
-and how to bootstrap a fresh box. It assumes you already have at least one
-Tela binary installed somewhere on your `PATH`.
+The commands in this chapter assume at least one Tela binary is already installed and on your `PATH`. To get the first binary onto a machine, see [Bootstrapping a fresh box](#bootstrapping-a-fresh-box) below.
 
-For the design model behind channels (what they are, how promotion works, when
-to cut a beta or a stable), see [RELEASE-PROCESS.md](../RELEASE-PROCESS.md).
+For the design model behind channels (what they are, how promotion works, when to cut a beta or a stable), see [RELEASE-PROCESS.md](../RELEASE-PROCESS.md).
 
 ## The mental model in one paragraph
 
@@ -204,7 +200,7 @@ different channel. Replace `telad-linux-amd64` with whichever binary you want
 
 ```powershell
 $m = Invoke-RestMethod https://github.com/paulmooreparks/tela/releases/download/channels/dev.json
-Invoke-WebRequest ($m.downloadBase + 'tela-windows-amd64.exe') -OutFile C:\Users\paul\bin\tela.exe
+Invoke-WebRequest ($m.downloadBase + 'tela-windows-amd64.exe') -OutFile tela.exe
 ```
 
 ### From an existing tela on a different box

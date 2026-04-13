@@ -1,8 +1,6 @@
 # How to set up `telad` (machines + services + connectivity)
 
-`telad` is the daemon that registers one or more "machines" with a Hub and exposes services (SSH/RDP/etc.) to clients.
-
-This doc focuses on configuration, authentication, and **what must be reachable** across deployment patterns.
+`telad` is the daemon that registers one or more machines with a hub and exposes services (SSH, RDP, and others) to clients.
 
 ## Two deployment patterns
 

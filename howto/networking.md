@@ -1,6 +1,6 @@
 # Networking & ports
 
-This doc makes the **reachability assumptions** explicit for Tela.
+The sections below make the reachability assumptions explicit for each component.
 
 ## Quick matrix
 
@@ -61,8 +61,8 @@ Optional:
 
 Local binding:
 
-- The client typically binds a loopback listener like `127.0.0.1:<port>` so local apps (SSH/RDP/etc.) can connect.
-  - This is “inbound” only from the local machine, not from the Internet.
+- The client binds a loopback listener at the machine's deterministic `127.88.x.x` address so local apps (SSH, RDP, and others) can connect. If a service port is taken, the client falls back to the same address on `realport + 10000`.
+  - This is local-only, not inbound from the Internet.
 
 ## Topology and addressing
 
