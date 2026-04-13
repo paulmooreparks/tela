@@ -11,79 +11,52 @@ The key idea is: production machines connect outbound to a hub, operators connec
 - Prefer **Pattern A (Endpoint agent)** on each production VM.
 - Expose the smallest possible set of services.
 - Use a dedicated hub for production.
-- **Always enable authentication** -- treat hub and agent tokens as secrets.
+- Always enable authentication. Treat hub and agent tokens as secrets.
 
 ---
 
 ## Step 1 - Stand up a production hub
 
-1. Deploy the hub on hardened infrastructure.
-2. Publish it as `wss://PROD-HUB`.
-3. Ensure:
-   - HTTPS/TLS is valid
-   - WebSockets work
-   - `/api/status` is reachable
-
-See [hub.md](hub.md) for the full deployment guide, including TLS setup with Caddy and cloud firewall rules.
-
-A simple starting point:
+See [Run a hub on the public internet](hub.md) for the full deployment guide, including TLS setup with a reverse proxy and cloud firewall rules. For a quick start on hardened infrastructure:
 
 ```bash
-docker compose up --build -d
+telahubd
 ```
 
-In real production you'll typically also:
+The hub prints an owner token on first start. Save it. Publish the hub as `wss://prod-hub.example.com`.
 
-- Run behind a reverse proxy (Caddy, nginx, or Cloudflare Tunnel)
-- Add monitoring
-- Enable token-based authentication (see next step)
+Verify:
+- HTTPS/TLS is valid
+- WebSockets work
+- `/api/status` is reachable
 
 ---
 
-## Step 1.5 - Enable authentication (required for production)
+## Step 2 - Set up authentication
 
-Production hubs must have authentication enabled. For Docker deployments:
-
-```bash
-# Generate an owner token
-openssl rand -hex 32
-
-# Add to docker-compose.yml environment:
-#   - TELA_OWNER_TOKEN=<your-token>
-
-# Redeploy
-docker compose up --build -d
-```
-
-For bare-metal deployments:
-
-```bash
-telahubd user bootstrap
-# → Save the owner token
-```
-
-Then create agent and operator identities:
+Create tokens for each production machine and each operator:
 
 ```bash
 # Create agent tokens (one per production machine)
-tela admin add-token agent-web01 -hub wss://PROD-HUB -token <owner-token>
-tela admin add-token agent-db01 -hub wss://PROD-HUB -token <owner-token>
+tela admin tokens add agent-web01 -hub wss://prod-hub.example.com -token <owner-token>
+tela admin tokens add agent-db01 -hub wss://prod-hub.example.com -token <owner-token>
+# Save each printed token -- they are not shown again
 
-# Grant machine registration access
-tela admin grant agent-web01 prod-web01 -hub wss://PROD-HUB -token <owner-token>
-tela admin grant agent-db01 prod-db01 -hub wss://PROD-HUB -token <owner-token>
+# Grant each agent permission to register its machine
+tela admin access grant agent-web01 prod-web01 register -hub wss://prod-hub.example.com -token <owner-token>
+tela admin access grant agent-db01 prod-db01 register -hub wss://prod-hub.example.com -token <owner-token>
 
-# Create operator identities
-tela admin add-token alice -hub wss://PROD-HUB -token <owner-token>
-tela admin grant alice prod-web01 -hub wss://PROD-HUB -token <owner-token>
-tela admin grant alice prod-db01 -hub wss://PROD-HUB -token <owner-token>
+# Create operator tokens
+tela admin tokens add alice -hub wss://prod-hub.example.com -token <owner-token>
+tela admin access grant alice prod-web01 connect -hub wss://prod-hub.example.com -token <owner-token>
+tela admin access grant alice prod-db01 connect -hub wss://prod-hub.example.com -token <owner-token>
 ```
 
-See [hub.md](hub.md) for the full list of `tela admin` commands.
+See [Run a hub on the public internet](hub.md) for the full list of `tela admin` commands.
 
 ---
 
-## Step 2 - Register production machines with `telad`
+## Step 3 - Register production machines with `telad`
 
 ### Pattern A - Endpoint agent
 
@@ -91,7 +64,7 @@ On each production VM, run `telad` with a config file:
 
 ```yaml
 # telad.yaml
-hub: wss://PROD-HUB
+hub: wss://prod-hub.example.com
 token: "<agent-web01-token>"
 
 machines:
@@ -100,13 +73,13 @@ machines:
 ```
 
 ```bash
-./telad -config telad.yaml
+telad -config telad.yaml
 ```
 
 Or with flags (quick start):
 
 ```bash
-./telad -hub wss://PROD-HUB -machine prod-web01 -ports "22" -token <agent-token>
+telad -hub wss://prod-hub.example.com -machine prod-web01 -ports "22" -token <agent-token>
 ```
 
 For persistent operation, install as a service:
@@ -116,62 +89,57 @@ telad service install -config telad.yaml
 telad service start
 ```
 
-See [services.md](services.md) for platform-specific details.
+See [Run Tela as an OS service](services.md) for platform-specific details.
 
 Guidance:
 
-- If you need DB access, consider requiring TLS on the DB itself.
+- If you need database access, require TLS on the database itself.
 - Avoid exposing wide port ranges.
 
 ### Pattern B - Gateway/bridge agent (use sparingly)
 
-Use only when endpoints cannot run `telad`.
-
-In that case, the gateway becomes a critical asset:
-
-- It must be isolated.
-- It must be tightly allowlisted (targets/ports).
+Use only when endpoints cannot run `telad`. The gateway becomes a critical asset: it must be isolated and tightly allowlisted to specific targets and ports.
 
 ---
 
-## Step 3 - Operator workflow
+## Step 4 - Operator workflow
 
 On an operator machine:
 
-1. Download `tela` and verify checksum.
+1. Download `tela` and verify the checksum.
 2. List machines:
 
 ```bash
-./tela machines -hub wss://PROD-HUB -token <your-token>
+tela machines -hub wss://prod-hub.example.com -token <your-token>
 ```
 
 3. Connect to a machine:
 
 ```bash
-./tela connect -hub wss://PROD-HUB -machine prod-web01 -token <your-token>
+tela connect -hub wss://prod-hub.example.com -machine prod-web01 -token <your-token>
 ```
 
-**Tip:** Set environment variables to avoid repeating flags:
-
-```bash
-export TELA_HUB=wss://PROD-HUB
-export TELA_TOKEN=<your-token>
-./tela machines
-./tela connect -machine prod-web01
-```
-
-4. Use tools via localhost:
+4. Use tools against the local address shown in the output:
 
 - SSH:
 
 ```bash
-ssh localhost
+ssh 127.88.x.x
 ```
 
 - Database (example):
 
 ```bash
-psql -h localhost -U postgres
+psql -h 127.88.x.x -U postgres
+```
+
+**Tip:** Set environment variables to avoid repeating flags:
+
+```bash
+export TELA_HUB=wss://prod-hub.example.com
+export TELA_TOKEN=<your-token>
+tela machines
+tela connect -machine prod-web01
 ```
 
 ---
@@ -181,8 +149,8 @@ psql -h localhost -U postgres
 - Tela encrypts the tunnel end-to-end; the hub relays ciphertext.
 - Production hardening is still necessary:
   - Patch systems
-  - Strong SSH auth
-  - Least privilege -- grant connect access only to the machines each operator needs
+  - Strong SSH authentication
+  - Least privilege -- grant `connect` access only to the machines each operator needs
   - Audit access -- check `/api/history` on the hub
   - Rotate tokens periodically -- use `tela admin rotate`
 - Separate hubs per environment are the simplest control boundary.
@@ -195,7 +163,7 @@ psql -h localhost -U postgres
 
 - Confirm `telad` is running on the production VM.
 - Confirm egress from the VM allows outbound HTTPS/WebSockets to the hub.
-- If auth is enabled, confirm the agent token is valid and has been granted access to register the machine.
+- If auth is enabled, confirm the agent token is valid and has been granted `register` access to the machine.
 
 ### Service reachable locally on the server but not via Tela
 

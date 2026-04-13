@@ -19,7 +19,7 @@
 - [Self-update and release channels](howto/channels.md)
 - [Run a hub on the public internet](howto/hub.md)
 - [Run an agent](howto/telad.md)
-- [Connect to services](howto/services.md)
+- [Run Tela as an OS service](howto/services.md)
 - [Set up a path-based gateway](howto/gateway.md)
 - [Networking caveats](howto/networking.md)
 

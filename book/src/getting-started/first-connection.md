@@ -25,11 +25,13 @@ inbound on either of them.
 On `hub.example.com`:
 
 ```bash
-sudo telahubd
+telahubd -port 8080
 ```
 
-By default, `telahubd` listens on port 80 (HTTP+WebSocket) and 41820 (UDP
-relay). Use a real config file with TLS for anything past a quick test. See
+`telahubd` listens on port 8080 (HTTP+WebSocket) and 41820 (UDP relay) in this
+example. The default is port 80, which requires elevated privileges on Linux;
+using a non-privileged port avoids that. Use a real config file with TLS for
+anything past a quick test. See
 [Run a hub on the public internet](../howto/hub.md) for the production
 walkthrough.
 
@@ -41,7 +43,7 @@ somewhere; you will need it for everything below.
 On `web01`:
 
 ```bash
-telad -hub wss://hub.example.com -machine web01 -token <owner-token> -ports 22
+telad -hub wss://hub.example.com:8080 -machine web01 -token <owner-token> -ports 22
 ```
 
 This registers `web01` with the hub and tells the hub that the agent will
@@ -53,7 +55,7 @@ list `web01` as a registered machine.
 On your laptop:
 
 ```bash
-tela connect -hub wss://hub.example.com -machine web01 -token <owner-token>
+tela connect -hub wss://hub.example.com:8080 -machine web01 -token <owner-token>
 ```
 
 The client opens a WireGuard tunnel through the hub to `web01` and binds
@@ -103,7 +105,7 @@ and `web01`, with keys neither side ever sent to the hub.
 - [Run a hub on the public internet](../howto/hub.md) for the real
   production setup with TLS, auth, and a service manager
 - [Run an agent](../howto/telad.md) for the agent's full deployment story
-- [Connect to services](../howto/services.md) for richer client usage
+- [Run Tela as an OS service](../howto/services.md) to survive reboots without manual restarts
 - [Self-update and release channels](../howto/channels.md) once you have
   more than one box
 - [TelaVisor desktop app](../guide/telavisor.md) for a GUI alternative

@@ -1,6 +1,6 @@
 # HOWTO - IoT / Edge Device Management (Tela)
 
-This guide shows how to use Tela to manage devices deployed behind NAT/firewalls you don't control (Raspberry Pi, kiosks, industrial controllers). The primary goal is reliable outbound-only SSH (and optionally web admin ports) without requiring port forwards.
+This guide shows how to use Tela to manage devices deployed behind NATs and firewalls you don't control (Raspberry Pi, kiosks, industrial controllers). The primary goal is reliable outbound-only SSH (and optionally web admin ports) without requiring port forwards.
 
 ---
 
@@ -9,65 +9,57 @@ This guide shows how to use Tela to manage devices deployed behind NAT/firewalls
 - **Pattern A (Endpoint agent)**: run `telad` on each device.
 - **Pattern B (Site gateway / bridge)**: run one `telad` at the customer site that can reach many devices.
 
-Pattern A is simplest per-device. Pattern B reduces software footprint on devices but increases the importance of gateway hardening.
+Pattern A is simplest per device. Pattern B reduces software footprint on devices but increases the importance of gateway hardening.
 
 ---
 
 ## Step 1 - Run a hub reachable from anywhere
 
-Deploy the hub somewhere reachable over HTTPS/WebSockets.
-
-Quick start:
+See [Run a hub on the public internet](hub.md) for the full deployment guide, including TLS and firewall setup. For a quick start on a host with a public address:
 
 ```bash
-docker compose up --build -d
+telahubd
 ```
 
-Publish it as `wss://YOUR-HUB`.
-
-See [hub.md](hub.md) for the full hub deployment guide, including TLS and firewall setup.
+The hub prints an owner token on first start. Save it. Publish the hub as `wss://hub.example.com`.
 
 ---
 
-## Step 1.5 - Enable authentication (recommended)
+## Step 2 - Set up authentication
 
 IoT devices on remote networks should always use authenticated connections:
 
 ```bash
-# On the hub machine (or via Docker env var TELA_OWNER_TOKEN)
-telahubd user bootstrap
-# → Save the owner token
+# Create an agent token (one per device, or one shared identity)
+tela admin tokens add device-agent -hub wss://hub.example.com -token <owner-token>
+# Save the printed token -- it is not shown again
 
-# Create an identity for each device (or one shared agent identity)
-tela admin add-token device-agent -hub wss://YOUR-HUB -token <owner-token>
-tela admin grant device-agent kiosk-001 -hub wss://YOUR-HUB -token <owner-token>
-tela admin grant device-agent kiosk-002 -hub wss://YOUR-HUB -token <owner-token>
+# Grant the agent permission to register each device
+tela admin access grant device-agent kiosk-001 register -hub wss://hub.example.com -token <owner-token>
+tela admin access grant device-agent kiosk-002 register -hub wss://hub.example.com -token <owner-token>
 
-# Create an operator identity
-tela admin add-token operator -hub wss://YOUR-HUB -token <owner-token>
-tela admin grant operator kiosk-001 -hub wss://YOUR-HUB -token <owner-token>
-tela admin grant operator kiosk-002 -hub wss://YOUR-HUB -token <owner-token>
+# Create an operator token
+tela admin tokens add operator -hub wss://hub.example.com -token <owner-token>
+tela admin access grant operator kiosk-001 connect -hub wss://hub.example.com -token <owner-token>
+tela admin access grant operator kiosk-002 connect -hub wss://hub.example.com -token <owner-token>
 ```
 
-See [hub.md](hub.md) for the full list of `tela admin` commands.
+See [Run a hub on the public internet](hub.md) for the full list of `tela admin` commands.
 
 ---
 
-## Step 2 - Endpoint pattern: install and run `telad` on a device
+## Step 3 - Endpoint pattern: install and run `telad` on a device
 
-### 2.1 Install `telad`
+### 3.1 Install `telad`
 
-Options:
+Download a prebuilt `telad` from GitHub Releases and copy the binary to the device.
 
-- Download a prebuilt `telad` from GitHub Releases (recommended).
-- Or build from source on a build machine and copy the binary.
-
-### 2.2 Create a minimal config
+### 3.2 Create a minimal config
 
 Example `telad.yaml` on the device:
 
 ```yaml
-hub: wss://YOUR-HUB
+hub: wss://hub.example.com
 token: "<device-agent-token>"
 machines:
   - name: kiosk-001
@@ -80,10 +72,10 @@ machines:
 Run:
 
 ```bash
-./telad -config telad.yaml
+telad -config telad.yaml
 ```
 
-### 2.3 Run as a service (recommended)
+### 3.3 Run as a service (recommended)
 
 For persistent operation, install `telad` as a service:
 
@@ -92,18 +84,18 @@ telad service install -config telad.yaml
 telad service start
 ```
 
-See [services.md](services.md) for platform-specific details.
+See [Run Tela as an OS service](services.md) for platform-specific details.
 
 ---
 
-## Step 3 - Site gateway pattern (bridge many devices)
+## Step 4 - Site gateway pattern (bridge many devices)
 
-Run one gateway VM/device at the site.
+Run one gateway VM or device at the site. Configure one machine entry per target.
 
 Example `telad.yaml`:
 
 ```yaml
-hub: wss://YOUR-HUB
+hub: wss://hub.example.com
 token: "<device-agent-token>"
 machines:
   - name: kiosk-001
@@ -121,39 +113,38 @@ machines:
 Run on the gateway:
 
 ```bash
-./telad -config telad.yaml
+telad -config telad.yaml
 ```
 
 Hardening guidance for gateways:
 
 - Put the gateway in a dedicated subnet.
 - Allowlist only required egress (hub URL).
-- Allowlist only required internal targets/ports.
+- Allowlist only required internal targets and ports.
 
 ---
 
-## Step 4 - Operator workflow with `tela`
+## Step 5 - Operator workflow with `tela`
 
 From your laptop:
 
-1. Download `tela` from GitHub Releases.
-2. Verify the checksum.
-3. List machines:
+1. Download `tela` from GitHub Releases and verify the checksum.
+2. List machines:
 
 ```bash
-./tela machines -hub wss://YOUR-HUB -token <operator-token>
+tela machines -hub wss://hub.example.com -token <operator-token>
 ```
 
-4. Connect to a device:
+3. Connect to a device:
 
 ```bash
-./tela connect -hub wss://YOUR-HUB -machine kiosk-001 -token <operator-token>
+tela connect -hub wss://hub.example.com -machine kiosk-001 -token <operator-token>
 ```
 
-5. SSH to localhost:
+4. SSH to the address shown in the output:
 
 ```bash
-ssh localhost
+ssh 127.88.x.x
 ```
 
 ---
@@ -162,19 +153,19 @@ ssh localhost
 
 ### Device flaps online/offline
 
-- Check device power/network stability.
-- Check whether outbound HTTPS is allowed.
+- Check device power and network stability.
+- Check whether outbound HTTPS is allowed from the device.
 
 ### `telad` logs "auth_required"
 
 - Check that the `token:` field is set in `telad.yaml` and the token is valid.
-- Verify the identity has been granted access to the machine: `tela admin grant <id> <machine> ...`
+- Verify the identity has been granted `register` access to the machine.
 
-### SSH connects but auth fails
+### SSH connects but authentication fails
 
-- Tela is only the transport. SSH auth is still handled by the device's SSH server.
+- Tela is only the transport. SSH authentication is still handled by the device's SSH server.
 
 ### Gateway can't reach targets
 
 - Confirm routing and firewall rules inside the site.
-- Validate `target` addresses from the gateway itself.
+- Validate `target` addresses from the gateway host itself.
