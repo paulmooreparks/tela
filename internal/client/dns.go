@@ -4,10 +4,29 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 )
 
 const defaultDNSSuffix = "tela"
+
+// defaultProfileName returns the name of the first profile found in
+// the profiles directory, or "" if none exist. This mirrors TV's
+// fallback logic so 'tela dns hosts' works without -profile.
+func defaultProfileName() string {
+	dir := profilesDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".yaml" {
+			return strings.TrimSuffix(e.Name(), ".yaml")
+		}
+	}
+	return ""
+}
 
 func cmdDNS(args []string) {
 	if len(args) == 0 {
@@ -50,11 +69,20 @@ Examples:
 
 func cmdDNSHosts(args []string) {
 	fs := flag.NewFlagSet("dns hosts", flag.ExitOnError)
-	profileName := fs.String("profile", "telavisor", "Profile name")
+	profileName := fs.String("profile", "", "Profile name (default: first available)")
 	suffix := fs.String("suffix", defaultDNSSuffix, "Domain suffix (empty for bare names)")
 	fs.Parse(args)
 
-	profile, err := loadProfile(*profileName)
+	name := *profileName
+	if name == "" {
+		name = defaultProfileName()
+	}
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "Error: no profiles found in "+profilesDir())
+		os.Exit(1)
+	}
+
+	profile, err := loadProfile(name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
