@@ -201,6 +201,54 @@ What it explicitly does not include:
 - [ ] Rate limiting on the admin API: token bucket per identity per endpoint
 - [ ] Hot reload for non-auth config changes (port, UDP host, log level, gateway routes) — or document the restart requirement explicitly
 
+### Per-service access control
+
+Today the `connect` permission is all-or-nothing at the machine level. If alice has `connect` on `barn`, she sees every port the agent exposes -- SSH, RDP, Jellyfin, a local admin panel, everything. There is no way to say "alice can reach Jellyfin but not SSH." The workaround (register the same physical machine under multiple names with different port sets) works but is ugly and fragile.
+
+This needs to be fixed before 1.0 because the access model is getting frozen. Adding service-scoped grants after 1.0 is an API and config schema change that has to be backward compatible -- much harder than doing it now.
+
+**What the model needs:**
+
+The `connect` permission gains an optional service filter. No filter means all services (current behavior, backward compatible). A non-empty filter means the hub shows the connecting client only the named services -- they are invisible for the session, not just blocked.
+
+Config shape:
+
+```yaml
+auth:
+  machines:
+    barn:
+      connectTokens:
+        - token: abc123...          # no filter -- sees all services (backward compat)
+        - token: def456...
+          services: [Jellyfin]      # sees only services named "Jellyfin" on this machine
+```
+
+CLI:
+
+```bash
+# Grant connect to all services (current behavior, unchanged)
+tela admin access grant alice barn connect
+
+# Grant connect to specific services only
+tela admin access grant alice barn connect --services Jellyfin,Plex
+```
+
+**What needs to change:**
+
+- [ ] Config schema: `connectTokens` entries gain an optional `services` field (list of service names). Entries without it behave exactly as today.
+- [ ] Auth store: `canConnect` gains awareness of the service filter; the hub filters the service list returned to the client at session setup time.
+- [ ] Admin API: `PUT /api/admin/access/{id}/machines/{m}` accepts an optional `services` list alongside the permissions list.
+- [ ] `tela admin access grant` gets a `--services` flag.
+- [ ] Auth store tests cover the service filter cases (empty filter, exact match, name mismatch).
+- [ ] The access view (`GET /api/admin/access`, `tela admin access`) shows service filters next to each connect grant.
+
+**Design constraints:**
+
+- Filtering is by service name (the `name:` field in the `telad` config), not by raw port number. Names are stable and meaningful; ports can change if the agent is reconfigured.
+- The filter is enforced at session setup on the hub, not by the agent. The agent never learns which services a particular client is allowed to see.
+- An agent that exposes a service with no name gets an auto-generated name (e.g., `port-22`). Unnamed services can be filtered by that generated name.
+- The `manage` and `register` permissions are unaffected. Service filtering applies only to `connect`.
+
 ### Agent identity
 - [ ] Each agent generates an Ed25519 keypair on first start and stores it locally
 - [ ] Hub stores the agent's public key on first registration (TOFU)
@@ -283,14 +331,15 @@ This is the order I would do things in if I were running the project, biased tow
 1. **CI and automated releases** — without this, every other improvement is fragile
 2. **Test harness for end-to-end scenarios** — unlocks confident refactoring of everything else
 3. **Tests for the auth and access paths** — these are the security boundary
-4. **Cert pinning** — the trust anchor that everything else relies on
-5. **Relay gateway design and v1 wire format alignment** — hub-to-hub transit is the defining feature for the *fleet* tier and the only 1.0 item that forces specific bits into the wire format (the TTL field). Design must be done before the protocol freeze, not after, or it has to wait for v2.
-6. **Protocol freeze with version field and v1 spec** — once locked, you can iterate freely
-7. **Code signing for Windows and macOS** — without this, downloads are scary
-8. **Security model document and troubleshooting guide** — the two most important user-facing docs you don't have yet
-9. **Relay gateway implementation** — once the wire format and design are locked in step 5, the implementation work (hub outbound mode, directory schema, audit log entries, documentation chapter) can run in parallel with the polish steps
-10. **Then start polishing** — mobile UX, installers, package managers, structured logging, metrics, rate limiting, graceful shutdown, agent identity
-11. **Make and publish the scope decisions** — routed mesh, hub federation, SSO/OIDC, multi-tenant hub. Deferred or rejected, but written down. This is the step that converts ambient ambiguity into a permanent commitment, and it has to happen before the tag, not after, or the decisions get made by accident in the first issue thread that asks for one of them.
+4. **Per-service access control** — access model schema change; must land before the model freezes at 1.0, not after
+5. **Cert pinning** — the trust anchor that everything else relies on
+6. **Relay gateway design and v1 wire format alignment** — hub-to-hub transit is the defining feature for the *fleet* tier and the only 1.0 item that forces specific bits into the wire format (the TTL field). Design must be done before the protocol freeze, not after, or it has to wait for v2.
+7. **Protocol freeze with version field and v1 spec** — once locked, you can iterate freely
+8. **Code signing for Windows and macOS** — without this, downloads are scary
+9. **Security model document and troubleshooting guide** — the two most important user-facing docs you don't have yet
+10. **Relay gateway implementation** — once the wire format and design are locked in step 6, the implementation work (hub outbound mode, directory schema, audit log entries, documentation chapter) can run in parallel with the polish steps
+11. **Then start polishing** — mobile UX, installers, package managers, structured logging, metrics, rate limiting, graceful shutdown, agent identity
+12. **Make and publish the scope decisions** — routed mesh, hub federation, SSO/OIDC, multi-tenant hub. Deferred or rejected, but written down. This is the step that converts ambient ambiguity into a permanent commitment, and it has to happen before the tag, not after, or the decisions get made by accident in the first issue thread that asks for one of them.
 
 ---
 
