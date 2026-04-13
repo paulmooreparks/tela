@@ -57,14 +57,21 @@ tela connect -hub wss://hub.example.com -machine web01 -token <owner-token>
 ```
 
 The client opens a WireGuard tunnel through the hub to `web01` and binds
-local port 22. Leave it running.
+SSH on a deterministic loopback address. The output shows the address:
+
+```
+Services available:
+  127.88.x.x:22    → SSH
+```
+
+Leave it running.
 
 ## Step 4: SSH
 
-In another terminal:
+In another terminal, use the address from the output:
 
 ```bash
-ssh localhost
+ssh user@127.88.x.x
 ```
 
 You're now SSH'd into `web01` through an end-to-end encrypted WireGuard

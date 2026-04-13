@@ -137,11 +137,11 @@ A service that failed to bind reads the bind error in red.
 
 Each service indicator dot is grey when disconnected, green when listening
 or active. The transitions between Listening and Active happen in real
-time as you start and stop sessions against the local ports from outside
-TelaVisor. Open `ssh -p 10022 user@localhost` against a Listening service
-and the dot stays green; the count next to "Active" goes up by one for
-the duration of the session and back to "Listening" when the session
-ends.
+time as you start and stop sessions against the local addresses from
+outside TelaVisor. Open `ssh user@127.88.42.17` against a Listening SSH
+service and the dot stays green; the count next to "Active" goes up by
+one for the duration of the session and back to "Listening" when the
+session ends.
 
 The status updates arrive over a local WebSocket that the `tela` process
 opens for TelaVisor to subscribe to. There is no polling. The values you
@@ -274,16 +274,13 @@ included in the profile. The columns show:
   encrypted tunnel, on the agent side.
 - **Protocol.** The transport protocol of the service (almost always
   `tcp` because Tela is a TCP fabric).
-- **Local address.** The local socket the `tela` process binds when the
-  profile is connected. By default this is `localhost:NNNN`, where
-  `NNNN` is automatically chosen by TelaVisor to avoid clashes with
-  ports already in use on your machine.
-
-You can click the local address to override the local port. This is
-useful when you want to assign a specific port (for example,
-`localhost:2222` for SSH) so that scripts or shortcuts can target a
-predictable address. TelaVisor remembers the override in the profile
-YAML.
+- **Local address.** The loopback address and port the `tela` process
+  binds when the profile is connected. Each machine gets a
+  deterministic address in `127.88.0.0/16` computed from the hub URL
+  and machine name. Services bind on their real remote ports at that
+  address (for example, `127.88.42.17:22` for SSH). The address is
+  stable across sessions. If a port is blocked by a system listener,
+  it is offset by 10000 while the address stays the same.
 
 When the tunnel is connected, the hub and machine checkboxes are
 disabled. This prevents accidental profile changes during an active

@@ -1,15 +1,27 @@
 # Service Routing Design
 
-Stable hostnames for tunneled services. Post-1.0 (1.x target).
+> **Superseded.** The core addressing problem described here was solved
+> by the deterministic loopback addressing feature (Phase 1) documented
+> in [DESIGN-local-names.md](DESIGN-local-names.md). Each machine now
+> gets a stable `127.88.x.x` address computed from the hub URL and
+> machine name, and services bind on their real ports. The DNS-based
+> hostname resolution described below is planned as Phase 2. This
+> document is retained for historical context.
+
+Stable hostnames for tunneled services. Phase 2 of local name resolution.
 Does not affect the wire format or the relay protocol.
 
-## Problem
+## Problem (solved by Phase 1)
 
-Today a tunneled service binds to `localhost:{dynamically-assigned-port}`.
-The user runs `mstsc /v localhost:13390` or `ssh -p 10022 localhost`.
-The port number changes when the profile is edited or ports are
-reassigned. There is no stable, human-memorable address for a tunneled
-service.
+Previously, a tunneled service bound to `localhost:{dynamically-assigned-port}`.
+The user ran `mstsc /v localhost:13390` or `ssh -p 10022 localhost`.
+The port number changed when the profile was edited or ports were
+reassigned. There was no stable address for a tunneled service.
+
+Phase 1 solved the addressing half: each machine now gets a deterministic
+`127.88.x.x` loopback IP so services use real ports without clashing.
+The remaining problem is the name half: `ssh user@127.88.42.17` is
+stable but not human-memorable.
 
 The goal: `mstsc /v work-laptop-rdp` or `ssh owlsnest-ssh` with no
 port number, surviving reconnects and profile changes.

@@ -140,11 +140,12 @@ You can also connect by service name:
 ./tela connect -hub ws://localhost -machine mybox -services ssh
 ```
 
-Once connected, use your usual tools against localhost:
+Once connected, each machine gets a deterministic loopback address.
+Use the address from the `tela connect` output with your usual tools:
 
 ```bash
-ssh localhost
-mstsc /v:localhost
+ssh user@127.88.x.x
+mstsc /v:127.88.x.x
 ```
 
 To avoid repeating flags, set environment variables:
@@ -194,10 +195,10 @@ connections:
 ```bash
 tela connect -profile work
 # Opens parallel tunnels to both machines. Each auto-reconnects independently.
-# SSH: localhost:2201, Admin panel: localhost:9001, PostgreSQL: localhost:5432
+# Each machine gets a deterministic 127.88.x.x address; services use real ports.
 ```
 
-Profiles support environment variable expansion (`${VAR}`), service name resolution, local port remapping, and connections across multiple hubs. See [REFERENCE.md section 7](REFERENCE.md#7-tela-the-client-cli) for the full profile schema.
+Profiles support environment variable expansion (`${VAR}`), service name resolution, deterministic loopback addressing, and connections across multiple hubs. See [REFERENCE.md section 7](REFERENCE.md#7-tela-the-client-cli) for the full profile schema.
 
 ### Run with Docker (production)
 

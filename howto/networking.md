@@ -80,13 +80,13 @@ No. Because Tela runs WireGuard in userspace through gVisor, the `10.77.x.x` ses
 
 ### How do I find and reach services? Is there DNS?
 
-You do not use IP addresses or DNS to reach services through Tela. The workflow is:
+You do not use tunnel-internal IP addresses or DNS to reach services through Tela. The workflow is:
 
 1. You tell `tela` (or TelaVisor) which machine on which hub you want to connect to, and which services on that machine you want.
-2. `tela` binds a local TCP listener on `localhost` for each service (for example, `localhost:2222` for SSH, `localhost:5432` for PostgreSQL).
-3. You point your SSH client, browser, or database tool at that local address.
+2. Each machine gets a deterministic loopback address in the `127.88.0.0/16` range, computed from the hub URL and machine name. Services bind on their real remote ports at that address (for example, `127.88.42.17:22` for SSH, `127.88.42.17:5432` for PostgreSQL).
+3. You point your SSH client, browser, or database tool at that address and port.
 
-The hub resolves machine names; you never type a `10.77.x.x` address. If you lose track of which local port maps to which service, `tela status` lists the current bindings. TelaVisor shows them in the Status tab.
+The address is stable: the same machine always gets the same loopback IP across sessions and profiles. `tela status` lists the current bindings. TelaVisor shows them in the Status tab. If a service port is blocked by a system listener (for example, RDP on `0.0.0.0:3389`), the port is offset by 10000 while the address stays the same.
 
 ### Can I ping through the tunnel?
 

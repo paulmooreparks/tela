@@ -981,12 +981,14 @@ tela connect -hub myhub -machine web01 -services ssh,postgres
 tela connect -profile mixed-env
 ```
 
-After connecting, use `localhost:<port>` with your usual tools:
+After connecting, each machine gets a deterministic loopback address in
+`127.88.0.0/16`. Services bind on their real ports at that address. Use
+the address shown in the `tela connect` output with your usual tools:
 
 ```bash
-ssh localhost -p 22
-mstsc /v:localhost:3389
-psql -h localhost -p 5432 -U appuser mydb
+ssh user@127.88.42.17
+mstsc /v:127.88.42.17
+psql -h 127.88.42.17 -U appuser mydb
 ```
 
 #### tela machines
@@ -1321,10 +1323,8 @@ connections:
     machine: prod-web01
     token: ${CORP_TOKEN}
     services:
-      - remote: 22
-        local: 2201        # SSH on localhost:2201
-      - remote: 8080
-        local: 9001        # Admin panel on localhost:9001
+      - remote: 22         # SSH on 127.88.x.x:22
+      - remote: 8080       # Admin panel on 127.88.x.x:8080
 
   # Staging database (via cloud hub)
   - hub: staging-hub       # short name resolved via remote
@@ -1594,10 +1594,10 @@ tela connect \
   -token <alice-token>
 ```
 
-In a second terminal:
+In a second terminal, use the loopback address from the connect output:
 
 ```bash
-ssh user@localhost -p 22
+ssh user@127.88.x.x
 ```
 
 ### Step 7: Connect to PostgreSQL on db01
