@@ -2082,7 +2082,6 @@ func LoopbackAddr(prefix, hubURL, machine string) string {
 func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Listener, err error) {
 	// Try the deterministic loopback address first.
 	if m.bindAddr != "" {
-		// On Windows, ensure the loopback alias exists before binding.
 		if aliasErr := ensureLoopbackAlias(m.bindAddr); aliasErr == nil {
 			addr = m.bindAddr
 			port = m.remote // real service port on the loopback address
@@ -2091,9 +2090,17 @@ func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Liste
 			if err == nil {
 				return addr, port, ln, nil
 			}
-			log.Printf("  [loopback] %s:%d in use, falling back to 127.0.0.1:%d", addr, port, m.local)
-		} else {
-			log.Printf("  [loopback] alias for %s unavailable, falling back to 127.0.0.1:%d", m.bindAddr, m.local)
+			// The real port may be blocked by a wildcard listener (e.g.
+			// RDP on 0.0.0.0:3389). Stay on the loopback address but
+			// use an offset port so the address is still deterministic.
+			alt := m.remote + 10000
+			listenAddr = fmt.Sprintf("%s:%d", addr, alt)
+			ln, err = net.Listen("tcp", listenAddr)
+			if err == nil {
+				log.Printf("  [loopback] %s:%d in use (wildcard listener), using %s:%d", addr, m.remote, addr, alt)
+				return addr, alt, ln, nil
+			}
+			log.Printf("  [loopback] %s:%d and %s:%d both in use, falling back to 127.0.0.1", addr, m.remote, addr, alt)
 		}
 	}
 
