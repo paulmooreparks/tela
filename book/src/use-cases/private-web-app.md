@@ -46,14 +46,16 @@ Create a token for the agent and one token per user:
 ```bash
 # Create an agent token for the application server
 tela admin tokens add app-agent -hub wss://hub.example.com -token <owner-token>
-# Save the printed token -- it is not shown again
+# Save the printed token -- this is <app-agent-token> used in telad.yaml (Step 3)
 
 # Grant the agent permission to register the machine
 tela admin access grant app-agent myapp register -hub wss://hub.example.com -token <owner-token>
 
 # Create user tokens (one per person)
 tela admin tokens add alice -hub wss://hub.example.com -token <owner-token>
+# Save Alice's printed token -- give it to Alice to use with tela connect or tela login
 tela admin tokens add bob -hub wss://hub.example.com -token <owner-token>
+# Save Bob's printed token -- give it to Bob
 
 # Grant each user connect access to the machine
 tela admin access grant alice myapp connect -hub wss://hub.example.com -token <owner-token>
