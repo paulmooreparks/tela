@@ -33,6 +33,7 @@
 # Use Cases
 
 - [Personal cloud](use-cases/personal-cloud.md)
+- [Private web application](use-cases/private-web-app.md)
 - [Production access](use-cases/production-access.md)
 - [Distributed teams](use-cases/distributed-teams.md)
 - [MSP / IT support](use-cases/msp-it-support.md)

@@ -1,0 +1,250 @@
+# Private web application
+
+A web application running on a server that should be reachable only by users
+who have been explicitly granted access -- no public exposure, no VPN, no
+firewall rules to punch through.
+
+Common examples: an internal admin panel, a staging environment, a team
+dashboard, a self-hosted tool (Grafana, Gitea, Outline, etc.) that should
+not be reachable from the open internet.
+
+## How it works
+
+`telad` runs on the application server and registers the machine with the hub.
+It exposes the web application through its built-in path gateway -- a single
+tunnel port that routes HTTP requests to local services by URL prefix. Only
+users whose tokens have been granted `connect` permission on that machine can
+reach anything at all. The hub relays ciphertext; it cannot see request or
+response content.
+
+When a user connects, `tela` binds a local port (for example,
+`127.88.x.x:8080`). The user opens that address in a browser. The connection
+travels through the encrypted WireGuard tunnel to the application server, where
+`telad` forwards it to the local service. No inbound firewall rule is needed on
+the application server.
+
+---
+
+## Step 1 - Stand up a hub
+
+See [Run a hub on the public internet](../howto/hub.md) for the full
+deployment guide. For a quick start:
+
+```bash
+telahubd
+```
+
+The hub prints an owner token on first start. Save it. Publish the hub as
+`wss://hub.example.com`.
+
+---
+
+## Step 2 - Set up authentication
+
+Create a token for the agent and one token per user:
+
+```bash
+# Create an agent token for the application server
+tela admin tokens add app-agent -hub wss://hub.example.com -token <owner-token>
+# Save the printed token -- it is not shown again
+
+# Grant the agent permission to register the machine
+tela admin access grant app-agent myapp register -hub wss://hub.example.com -token <owner-token>
+
+# Create user tokens (one per person)
+tela admin tokens add alice -hub wss://hub.example.com -token <owner-token>
+tela admin tokens add bob -hub wss://hub.example.com -token <owner-token>
+
+# Grant each user connect access to the machine
+tela admin access grant alice myapp connect -hub wss://hub.example.com -token <owner-token>
+tela admin access grant bob myapp connect -hub wss://hub.example.com -token <owner-token>
+```
+
+Users without an explicit `connect` grant cannot reach the machine even if they
+hold a valid hub token.
+
+---
+
+## Step 3 - Configure and run `telad` on the application server
+
+### Single-service application
+
+If the application runs on one port (for example, port 3000), expose it
+directly without a gateway:
+
+```yaml
+# telad.yaml
+hub: wss://hub.example.com
+token: "<app-agent-token>"
+
+machines:
+  - name: myapp
+    services:
+      - port: 3000
+        name: web
+        proto: http
+```
+
+```bash
+telad -config telad.yaml
+```
+
+Users connect and open `http://127.88.x.x:3000/` in a browser.
+
+### Multi-service application (recommended for most web apps)
+
+If the application has separate frontend and backend processes -- a common
+arrangement for single-page applications -- use the path gateway to expose
+them through one port with no cross-origin issues:
+
+```yaml
+# telad.yaml
+hub: wss://hub.example.com
+token: "<app-agent-token>"
+
+machines:
+  - name: myapp
+    gateway:
+      port: 8080
+      routes:
+        - path: /api/
+          target: 4000    # REST API
+        - path: /
+          target: 3000    # frontend (SPA or server-rendered)
+```
+
+The gateway listens on port 8080 inside the tunnel. Requests to `/api/...`
+are forwarded to the local API process on port 4000. Everything else goes to
+the frontend on port 3000. Both local ports are invisible outside the server.
+The browser sees a single origin, so no Cross-Origin Resource Sharing (CORS)
+configuration is needed.
+
+To add an admin panel at a separate path:
+
+```yaml
+gateway:
+  port: 8080
+  routes:
+    - path: /admin/
+      target: 5000    # admin panel
+    - path: /api/
+      target: 4000    # REST API
+    - path: /
+      target: 3000    # frontend
+```
+
+Routes are matched by longest prefix first, regardless of their order in the
+file.
+
+For persistent operation, install `telad` as a service:
+
+```bash
+telad service install -config telad.yaml
+telad service start
+```
+
+See [Run Tela as an OS service](../howto/services.md) for platform-specific
+details.
+
+---
+
+## Step 4 - User workflow
+
+On each user's machine:
+
+1. Download `tela`.
+2. Store the hub token so it does not need to be passed on every command:
+
+```bash
+tela login wss://hub.example.com
+# Prompts for token
+```
+
+3. Connect:
+
+```bash
+tela connect -hub wss://hub.example.com -machine myapp
+```
+
+4. Open the address shown in the output in a browser:
+
+```
+http://127.88.x.x:8080/
+```
+
+For a single-service setup, the port matches the service port declared in
+`telad.yaml` (for example, `:3000`).
+
+### Connection profile (optional)
+
+If users connect to this application regularly, a profile avoids repeating
+flags:
+
+```yaml
+# ~/.tela/profiles/myapp.yaml
+connections:
+  - hub: wss://hub.example.com
+    token: ${MYAPP_TOKEN}
+    machine: myapp
+    services:
+      - name: gateway
+```
+
+```bash
+tela connect -profile myapp
+```
+
+Set `MYAPP_TOKEN` in the environment, or omit the `token` field if the token
+is already in the credential store.
+
+---
+
+## Revoking access
+
+To revoke a specific user's access:
+
+```bash
+# Remove connect permission for this machine only
+tela admin access revoke alice myapp -hub wss://hub.example.com -token <owner-token>
+
+# Or remove the identity entirely (disconnects immediately, deletes all permissions)
+tela admin access remove alice -hub wss://hub.example.com -token <owner-token>
+```
+
+Revocation takes effect immediately. Any active session from that token is
+terminated.
+
+---
+
+## Troubleshooting
+
+### Browser shows "connection refused"
+
+- Confirm the application is running on the server and listening on the
+  expected local port.
+- Confirm `telad` is running and the machine is online (`tela machines -hub
+  wss://hub.example.com`).
+- For gateway setups, confirm the `target` port in `telad.yaml` matches the
+  port the application actually listens on.
+
+### User can connect but gets a 404 on all paths
+
+- The gateway route for `/` may be missing. Add a catch-all route with
+  `path: /` pointing at the frontend service.
+- Confirm the frontend process is running and reachable from the server
+  itself (for example, `curl http://localhost:3000/`).
+
+### Browser loads the page but API calls fail
+
+- In a gateway setup, the API route path must match the path prefix the
+  frontend uses for its requests. If the frontend calls `/api/v1/users`, the
+  route must be `path: /api/` or `path: /api/v1/`.
+- The gateway does not proxy WebSocket connections. If the application uses
+  WebSockets for the API, expose the WebSocket service as a separate named
+  service alongside the gateway.
+
+### `tela connect` is refused ("auth_required" or 403)
+
+- Confirm the user's token has been granted `connect` access:
+  `tela admin access -hub wss://hub.example.com -token <owner-token>`
+- Confirm the token is stored correctly: `tela login wss://hub.example.com`.
