@@ -6,10 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org/)
 starting from 1.0.
 
 Pre-1.0 releases use `MAJOR.MINOR.PATCH-channel.N` tags. The
-changelog is organized by minor version (0.5, 0.6, 0.7) since
+changelog is organized by minor version (0.8, 0.9, ...) since
 patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
+
+## [0.9] - 2026-04-14
+
+The "release discipline" release. Stable baseline with comprehensive
+documentation accuracy pass and release process formalization.
 
 ### Added
 - User-level autostart for both tela and telad:
@@ -39,10 +44,10 @@ patch-level dev builds are too granular to list individually.
   services (mount queried `/services` which only has port-mapped
   machines; now queries `/tunnels`)
 
-## [0.7] - 2026-04-10 (in development)
+## [0.8] - 2026-04-10
 
 The "hardening" release. Focus on polish, onboarding reliability,
-and preparation for a public stable release.
+and preparation for a stable release.
 
 ### Added
 - File Share Mount card in Profiles tab with live preview showing

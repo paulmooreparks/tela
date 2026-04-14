@@ -81,3 +81,7 @@ The book is generated from the Markdown files in the
 Apache License 2.0. See the
 [LICENSE](https://github.com/paulmooreparks/tela/blob/main/LICENSE) file in
 the repository.
+
+## Version
+
+This edition documents Tela **v0.9.0**.

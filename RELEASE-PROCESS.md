@@ -209,25 +209,41 @@ The end-of-life date for the previous major is announced in the release notes fo
 
 **Cut a beta from a dev build:**
 
-```
-GitHub → Actions → Promote → Run workflow
-  source_tag:    v0.4.0-dev.42
-  target_channel: beta
-  target_version: (leave empty)
-```
+1. Diff the changelog since the last beta cut:
+   ```
+   git log <last-beta-tag>..HEAD --oneline
+   ```
+   Cross-reference each user-visible entry against the book. Update any affected chapter before promoting. The book and the binaries ship together.
 
-This creates `v0.4.0-beta.{N+1}` and triggers the beta release build.
+2. Run the promotion workflow:
+   ```
+   GitHub -> Actions -> Promote -> Run workflow
+     source_tag:     v0.4.0-dev.42
+     target_channel: beta
+     target_version: (leave empty)
+   ```
+
+   This creates `v0.4.0-beta.{N+1}` and triggers the beta release build.
 
 **Cut a stable from a beta build:**
 
-```
-GitHub → Actions → Promote → Run workflow
-  source_tag:    v0.4.0-beta.3
-  target_channel: stable
-  target_version: v0.4.0
-```
+1. Diff the changelog since the last stable cut:
+   ```
+   git log <last-stable-tag>..HEAD --oneline
+   ```
+   Same review as above. Also update the version line in `book/src/introduction.md` to match the new stable tag (e.g. `v0.9.0`). Commit that change before promoting so the published book reflects the release.
 
-This creates `v0.4.0` and triggers the stable release build. After it succeeds, bump `VERSION` to `0.5` in a follow-up commit so dev builds start counting toward the next minor.
+2. Run the promotion workflow:
+   ```
+   GitHub -> Actions -> Promote -> Run workflow
+     source_tag:     v0.4.0-beta.3
+     target_channel: stable
+     target_version: v0.4.0
+   ```
+
+   This creates `v0.4.0` and triggers the stable release build.
+
+3. After the stable build succeeds, bump `VERSION` to the next minor (e.g. `0.4` -> `0.5`) in a follow-up commit so dev builds start counting toward the next cycle.
 
 **Cut a hotfix:**
 
