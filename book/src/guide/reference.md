@@ -11,198 +11,302 @@ How-to Guides.
 The client CLI. Opens WireGuard tunnels to machines through a hub and binds
 local TCP listeners for their services. Requires no admin rights or kernel drivers.
 
-### Flags
+### `tela connect`
 
-| Flag | Env var | Default | Description |
-|------|---------|---------|-------------|
-| `-config <path>` | `TELAD_CONFIG` | (none) | Path to YAML config file |
-| `-hub <url>` | `TELA_HUB` | (none) | Hub WebSocket URL |
-| `-machine <name>` | `TELA_MACHINE` | (none) | Machine name for hub registry |
-| `-token <hex>` | `TELA_TOKEN` | (none) | Hub auth token |
-| `-ports <spec>` | `TELAD_PORTS` | (none) | Comma-separated port specs (see below) |
-| `-target-host <host>` | `TELAD_TARGET_HOST` | `127.0.0.1` | Target host for services (gateway mode) |
-| `-mtu <n>` | `TELAD_MTU` | `1100` | WireGuard tunnel MTU |
-| `-v` | | | Verbose logging |
-
-### Port spec format
-
-```
-port[:name[:description]]
+```bash
+tela connect -hub <hub> -machine <machine> [flags]
+tela connect -profile <name>
 ```
 
-Examples: `22`, `22:SSH`, `22:SSH:OpenSSH server`, `22:SSH,3389:RDP`
+| Flag | Env var | Description |
+|------|---------|-------------|
+| `-hub <url\|name>` | `TELA_HUB` | Hub URL (`wss://...`) or short name |
+| `-machine <name>` | `TELA_MACHINE` | Machine name |
+| `-token <hex>` | `TELA_TOKEN` | Hub auth token |
+| `-ports <spec>` | | Comma-separated ports or `local:remote` pairs |
+| `-services <names>` | | Comma-separated service names (resolved via hub API) |
+| `-profile <name>` | `TELA_PROFILE` | Named connection profile |
+| `-mtu <n>` | `TELA_MTU` | WireGuard tunnel MTU (default 1100) |
+| `-v` | | Verbose logging |
 
-### Config file (`telad.yaml`)
+When neither `-ports` nor `-services` is specified, all ports the agent
+advertises are forwarded. Each machine gets a deterministic loopback address
+in `127.88.0.0/16`; services bind on their real port numbers at that address.
 
-```yaml
-hub: wss://hub.example.com
-token: <default-token>
+### `tela machines`
 
-update:
-  channel: dev     # dev | beta | stable
-
-machines:
-  - name: web01
-    displayName: "Web Server 01"
-    hostname: web01.internal   # override OS hostname (useful in containers)
-    os: linux                  # defaults to runtime OS
-    tags: [production, web]
-    location: "US-East"
-    owner: ops-team
-    target: 127.0.0.1          # set to a remote IP for gateway mode
-    token: <override>          # per-machine token override
-    services:
-      - port: 22
-        name: SSH
-        description: "OpenSSH server"
-    # ports: [22, 3389]        # alternative to services; generates minimal entries
+```bash
+tela machines -hub <hub> [-token <token>]
 ```
 
-**Machine fields**
+### `tela services`
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Machine ID in the hub registry |
-| `displayName` | No | Human-friendly name for UIs |
-| `hostname` | No | Overrides `os.Hostname()` |
-| `os` | No | OS identifier; defaults to `runtime.GOOS` |
-| `tags` | No | Arbitrary string tags |
-| `location` | No | Physical or logical location string |
-| `owner` | No | Owner identifier string |
-| `target` | No | Target host; defaults to `127.0.0.1` |
-| `token` | No | Per-machine token (overrides top-level `token`) |
-| `ports` | * | Simple port list, e.g. `[22, 3389]` |
-| `services` | * | Detailed service descriptors (port, name, description) |
-| `gateway` | No | Path-based HTTP reverse proxy config (see below) |
-| `upstreams` | No | Dependency forwarding config (see below) |
-| `fileShare` | No | File sharing config (see below) |
-
-\* Either `ports` or `services` is required. If both are present, `services` takes precedence.
-
-### File share config
-
-```yaml
-fileShare:
-  enabled: true
-  directory: /home/shared    # absolute path; created on startup if missing
-  writable: false
-  maxFileSize: 50MB
-  maxTotalSize: 1GB
-  allowDelete: false
-  allowedExtensions: []      # empty = all allowed
-  blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
+```bash
+tela services -hub <hub> -machine <machine> [-token <token>]
 ```
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `enabled` | `false` | Enable file sharing for this machine |
-| `directory` | (required) | Absolute path to the shared directory |
-| `writable` | `false` | Allow uploads, mkdir, rename, move |
-| `maxFileSize` | `50MB` | Per-file upload limit |
-| `maxTotalSize` | (none) | Total directory size limit |
-| `allowDelete` | `false` | Allow deletion (requires `writable: true`) |
-| `allowedExtensions` | `[]` | Whitelist; empty means all allowed |
-| `blockedExtensions` | see above | Blacklist; applied after allowlist |
+### `tela status`
 
-### Upstream config
-
-Forwards local ports to configurable targets, letting you rewire service
-dependencies without changing service code.
-
-```yaml
-upstreams:
-  - port: 41000
-    name: service1
-    target: localhost:41000
-  - port: 1433
-    name: db
-    target: int-db.local:1433
+```bash
+tela status -hub <hub> [-token <token>]
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `port` | Yes | Local port to listen on |
-| `target` | Yes | Address to forward to (`host:port`) |
-| `name` | No | Label for logging |
+### `tela remote`
 
-### Gateway config
-
-Path-based HTTP reverse proxy that routes requests to different local services
-by URL prefix.
-
-```yaml
-gateway:
-  port: 8080
-  routes:
-    - path: /api/
-      target: 4000
-    - path: /metrics/
-      target: 4100
-    - path: /
-      target: 3000
+```bash
+tela remote add <name> <portal-url>   # add a hub directory remote
+tela remote remove <name>
+tela remote list
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `port` | Yes | Port to listen on inside the tunnel |
-| `routes[].path` | Yes | URL path prefix; longest match wins |
-| `routes[].target` | Yes | Local port to proxy to |
+### `tela profile`
 
-### `telad service` subcommands
+```bash
+tela profile list
+tela profile show <name>
+tela profile create <name>
+tela profile delete <name>
+```
+
+### `tela pair`
+
+```bash
+tela pair -hub <hub-url> -code <code>
+```
+
+Exchanges a pairing code for a hub token and stores it in the credential store.
+
+### `tela admin`
+
+Remote hub management. Requires an owner or admin token.
+
+Token resolution order: `-token` flag > `TELA_OWNER_TOKEN` > `TELA_TOKEN` > credential store.
+
+**access** -- unified identity and per-machine permissions view
+
+```bash
+tela admin access [-hub <hub>] [-token <token>]
+tela admin access grant <id> <machine> <perms>    # perms: connect,register,manage
+tela admin access revoke <id> <machine>
+tela admin access rename <id> <new-id>
+tela admin access remove <id>
+```
+
+**tokens** -- token identity CRUD
+
+```bash
+tela admin tokens list
+tela admin tokens add <id> [-role owner|admin|viewer]
+tela admin tokens remove <id>
+tela admin rotate <id>                             # regenerate a token
+```
+
+**portals** -- portal registrations on the hub
+
+```bash
+tela admin portals list
+tela admin portals add <name> -portal-url <url>
+tela admin portals remove <name>
+```
+
+**pair-code** -- one-time onboarding codes
+
+```bash
+tela admin pair-code [<machine>] [-type connect|register] [-expires <duration>] [-machines <list>]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-type` | `connect` | `connect` (for users) or `register` (for agents) |
+| `-expires` | `10m` | Duration: `10m`, `1h`, `24h`, `7d` |
+| `-machines` | `*` | Comma-separated machine IDs (connect type only) |
+
+**agent** -- remote management of `telad` through the hub
+
+```bash
+tela admin agent list
+tela admin agent config -machine <id>
+tela admin agent set -machine <id> <json>
+tela admin agent logs -machine <id> [-n 100]
+tela admin agent restart -machine <id>
+tela admin agent update -machine <id> [-version <v>]
+tela admin agent channel -machine <id>
+tela admin agent channel -machine <id> set <dev|beta|stable>
+```
+
+**hub** -- lifecycle management of the hub itself
+
+```bash
+tela admin hub status
+tela admin hub logs [-n 100]
+tela admin hub restart
+tela admin hub update [-version <v>]
+tela admin hub channel
+tela admin hub channel set <dev|beta|stable>
+```
+
+### `tela channel`
+
+```bash
+tela channel                                          # show current channel and latest version
+tela channel set <dev|beta|stable>
+tela channel set <ch> -manifest-base <url>            # override manifest URL prefix
+tela channel show [-channel <ch>]                     # print the channel manifest
+tela channel download <binary> [-channel <ch>] [-o <path>] [-force]
+```
+
+### `tela update`
+
+```bash
+tela update                              # update from the configured channel
+tela update -channel <dev|beta|stable>   # one-shot channel override
+tela update -dry-run
+```
+
+### `tela files`
+
+File operations on machines with file sharing enabled. Requires an active
+`tela connect` session.
 
 | Command | Description |
 |---------|-------------|
-| `telad service install -config <path>` | Install as an OS service from config file |
-| `telad service install -hub <url> -machine <name> -ports <spec>` | Install with inline config |
-| `telad service start` | Start the service |
-| `telad service stop` | Stop the service |
-| `telad service restart` | Restart the service |
-| `telad service status` | Show current state |
-| `telad service uninstall` | Remove the service |
+| `tela files ls -machine <m> [path]` | List files and directories |
+| `tela files get -machine <m> <remote> [-o <local>]` | Download a file |
+| `tela files put -machine <m> <local> [remote-name]` | Upload a file |
+| `tela files rm -machine <m> <path>` | Delete a file |
+| `tela files mkdir -machine <m> <path>` | Create a directory |
+| `tela files rename -machine <m> <path> <new-name>` | Rename (new name only, not a path) |
+| `tela files mv -machine <m> <src> <dst>` | Move within the share |
+| `tela files info -machine <m>` | Show share status (file count, total size) |
+
+### `tela mount`
+
+Starts a WebDAV server exposing file shares from connected machines. Requires
+an active `tela connect` session.
+
+```bash
+tela mount                     # start WebDAV server on port 18080
+tela mount -port 9999
+tela mount -mount T:           # Windows: map drive letter
+tela mount -mount ~/tela       # macOS/Linux: mount to directory
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-port` | `18080` | WebDAV listen port |
+| `-mount` | (none) | Drive letter (Windows `T:`) or directory path |
+
+When `-mount` is omitted, the WebDAV server starts but no OS mount is
+performed. Manual mount commands:
+
+```bash
+net use T: http://localhost:18080/            # Windows
+mount_webdav http://localhost:18080/ /Volumes/tela  # macOS
+gio mount dav://localhost:18080/              # Linux (GNOME)
+```
+
+### `tela service`
+
+Manage `tela` as a native OS service for always-on tunnel scenarios.
+
+```bash
+tela service install -config <profile.yaml>
+tela service start
+tela service stop
+tela service restart
+tela service status
+tela service uninstall
+```
 
 Config location when installed as a service:
 
 | Platform | Path |
 |----------|------|
-| Linux/macOS | `/etc/tela/telad.yaml` |
-| Windows | `%ProgramData%\Tela\telad.yaml` |
+| Linux/macOS | `/etc/tela/tela.yaml` |
+| Windows | `%ProgramData%\Tela\tela.yaml` |
 
-### `telad update`
+### `tela version`
 
 ```bash
-telad update                              # update from the configured channel
-telad update -channel <dev|beta|stable>   # one-shot channel override
-telad update -dry-run                     # show what would happen
+tela version
 ```
+
+### Connection profile schema
+
+Profiles define multiple hub/machine connections that launch in parallel with
+`tela connect -profile <name>`.
+
+Profile location:
+
+| Platform | Path |
+|----------|------|
+| Linux/macOS | `~/.tela/profiles/<name>.yaml` |
+| Windows | `%APPDATA%\tela\profiles\<name>.yaml` |
+
+Schema:
+
+```yaml
+connections:
+  - hub: wss://hub.example.com        # or short name
+    machine: web01
+    token: ${WEB_TOKEN}               # ${VAR} expansion is supported
+    services:
+      - remote: 22                    # forward by port number
+        local: 2201                   # optional local port remap
+      - name: postgres                # forward by service name (resolved via hub API)
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `connections[].hub` | Yes | Hub URL or short name |
+| `connections[].machine` | Yes | Machine name |
+| `connections[].token` | No | Auth token for this connection |
+| `connections[].services` | No | Port/service filter; omit to forward all |
+| `connections[].services[].remote` | * | Remote port number |
+| `connections[].services[].local` | No | Local port override (defaults to remote) |
+| `connections[].services[].name` | * | Service name resolved via hub API |
+
+\* Each service entry needs either `remote` or `name`, not both.
+
+### Hub name resolution
+
+When `-hub` is a short name (not `ws://` or `wss://`), `tela` resolves it in order:
+
+1. Configured remotes (via `tela remote add`): queries each remote's `/api/hubs`. First match wins.
+2. Local `hubs.yaml` fallback.
+3. Error if unresolved.
 
 ### Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TELAD_CONFIG` | (none) | Path to YAML config file |
-| `TELA_HUB` | (none) | Hub WebSocket URL |
-| `TELA_MACHINE` | (none) | Machine name |
-| `TELA_TOKEN` | (none) | Hub auth token |
-| `TELAD_PORTS` | (none) | Comma-separated port specs |
-| `TELAD_TARGET_HOST` | `127.0.0.1` | Target host for services |
-| `TELAD_MTU` | `1100` | WireGuard tunnel MTU |
+| Variable | Description |
+|----------|-------------|
+| `TELA_HUB` | Default hub URL or alias |
+| `TELA_MACHINE` | Default machine ID |
+| `TELA_TOKEN` | Default auth token |
+| `TELA_OWNER_TOKEN` | Owner/admin token (preferred by `tela admin`) |
+| `TELA_PROFILE` | Default connection profile name |
+| `TELA_MTU` | WireGuard tunnel MTU (default 1100) |
+| `TELA_MOUNT_PORT` | WebDAV listen port for `tela mount` (default 18080) |
 
-### Credential store
+### Config and credential storage
 
-Store a token so it does not need to appear in config files or shell history:
+| File | Platform | Path |
+|------|----------|------|
+| Credentials | Linux/macOS | `~/.tela/credentials.yaml` |
+| | Windows | `%APPDATA%\tela\credentials.yaml` |
+| Remotes config | Linux/macOS | `~/.tela/config.yaml` |
+| | Windows | `%APPDATA%\tela\config.yaml` |
+| Hub aliases | Linux/macOS | `~/.tela/hubs.yaml` |
+| | Windows | `%APPDATA%\tela\hubs.yaml` |
+| Connection profiles | Linux/macOS | `~/.tela/profiles/<name>.yaml` |
+| | Windows | `%APPDATA%\tela\profiles\<name>.yaml` |
+
+Token lookup order: `-token` flag > `TELA_TOKEN` env var > credential store.
 
 ```bash
-sudo telad login -hub wss://hub.example.com   # Linux/macOS (requires elevation)
-telad login -hub wss://hub.example.com         # Windows (run as Administrator)
-telad logout -hub wss://hub.example.com
+tela login wss://hub.example.com    # store a token
+tela logout wss://hub.example.com   # remove stored credentials
 ```
-
-| Platform | User-level | System-level |
-|----------|-----------|--------------|
-| Linux/macOS | `~/.tela/credentials.yaml` | `/etc/tela/credentials.yaml` |
-| Windows | `%APPDATA%\tela\credentials.yaml` | `%ProgramData%\Tela\credentials.yaml` |
-
-Token lookup order: `-token` flag > `TELA_TOKEN` env var > system credential store > user credential store.
 
 ---
 
@@ -306,9 +410,6 @@ fileShare:
 
 ### Upstream config
 
-Forwards local ports to configurable targets, letting you rewire service
-dependencies without changing service code.
-
 ```yaml
 upstreams:
   - port: 41000
@@ -326,9 +427,6 @@ upstreams:
 | `name` | No | Label for logging |
 
 ### Gateway config
-
-Path-based HTTP reverse proxy that routes requests to different local services
-by URL prefix.
 
 ```yaml
 gateway:
@@ -579,4 +677,3 @@ All admin endpoints require an owner or admin token via `Authorization: Bearer <
 | GET | `/api/history` | viewer+ | Recent connection events |
 | GET | `/.well-known/tela` | none | Hub discovery (RFC 8615) |
 | GET | `/api/hubs` | viewer+ | Hub listing for portal/CLI resolution |
-```
