@@ -35,8 +35,9 @@ Create tokens for each production machine and each operator:
 ```bash
 # Create agent tokens (one per production machine)
 tela admin tokens add agent-web01 -hub wss://prod-hub.example.com -token <owner-token>
+# Save the printed token -- this is <agent-web01-token> used in telad on prod-web01 (Step 3)
 tela admin tokens add agent-db01 -hub wss://prod-hub.example.com -token <owner-token>
-# Save each printed token -- they are not shown again
+# Save the printed token -- this is <agent-db01-token> used in telad on prod-db01 (Step 3)
 
 # Grant each agent permission to register its machine
 tela admin access grant agent-web01 prod-web01 register -hub wss://prod-hub.example.com -token <owner-token>
@@ -44,6 +45,7 @@ tela admin access grant agent-db01 prod-db01 register -hub wss://prod-hub.exampl
 
 # Create operator tokens
 tela admin tokens add alice -hub wss://prod-hub.example.com -token <owner-token>
+# Save the printed token -- give it to Alice for use with tela connect (Step 4)
 tela admin access grant alice prod-web01 connect -hub wss://prod-hub.example.com -token <owner-token>
 tela admin access grant alice prod-db01 connect -hub wss://prod-hub.example.com -token <owner-token>
 ```

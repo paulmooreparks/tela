@@ -41,15 +41,17 @@ Create tokens for agents and developers on each hub:
 ```bash
 # Create agent tokens (one per telad instance)
 tela admin tokens add telad-dev-db01 -hub wss://dev-hub.example.com -token <owner-token>
-# Save the printed token -- it is not shown again
+# Save the printed token -- this is <agent-token> used in telad on dev-db01 (Step 3)
 
 tela admin tokens add telad-staging-win01 -hub wss://staging-hub.example.com -token <staging-owner-token>
+# Save the printed token -- this is <agent-token> used in telad on staging-win01 (Step 3)
 
 # Grant each agent permission to register its machine
 tela admin access grant telad-dev-db01 dev-db01 register -hub wss://dev-hub.example.com -token <owner-token>
 
 # Create a developer token
 tela admin tokens add alice -hub wss://dev-hub.example.com -token <owner-token>
+# Save the printed token -- give it to Alice for use with tela connect (Step 4)
 tela admin access grant alice dev-db01 connect -hub wss://dev-hub.example.com -token <owner-token>
 ```
 

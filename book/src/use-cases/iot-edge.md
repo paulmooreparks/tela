@@ -30,7 +30,7 @@ IoT devices on remote networks should always use authenticated connections:
 ```bash
 # Create an agent token (one per device, or one shared identity)
 tela admin tokens add device-agent -hub wss://hub.example.com -token <owner-token>
-# Save the printed token -- it is not shown again
+# Save the printed token -- this is <device-agent-token> used in telad.yaml on each device (Step 3)
 
 # Grant the agent permission to register each device
 tela admin access grant device-agent kiosk-001 register -hub wss://hub.example.com -token <owner-token>
@@ -38,6 +38,7 @@ tela admin access grant device-agent kiosk-002 register -hub wss://hub.example.c
 
 # Create an operator token
 tela admin tokens add operator -hub wss://hub.example.com -token <owner-token>
+# Save the printed token -- this is <operator-token> used with tela connect (Step 5)
 tela admin access grant operator kiosk-001 connect -hub wss://hub.example.com -token <owner-token>
 tela admin access grant operator kiosk-002 connect -hub wss://hub.example.com -token <owner-token>
 ```

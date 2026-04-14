@@ -20,20 +20,24 @@ See [Run a hub on the public internet](../howto/hub.md) for the full hub deploym
 
 ## Step 2 - Enable authentication
 
-The hub prints an owner token on first start. Save it, then create identities for lab machines and students. These commands run on the hub machine:
+The hub prints an owner token on first start. Save it, then create identities for lab machines and students:
 
 ```bash
 # Create a shared agent token for lab machines
-telahubd user add lab-agent
-telahubd user grant lab-agent lab-pc-017
-telahubd user grant lab-agent lab-linux-03
+tela admin tokens add lab-agent -hub wss://lab-hub.example.com -token <owner-token>
+# Save the printed token -- this is <lab-agent-token> used in telad on each lab machine (Step 3)
+
+# Grant the agent permission to register each machine
+tela admin access grant lab-agent lab-pc-017 register -hub wss://lab-hub.example.com -token <owner-token>
+tela admin access grant lab-agent lab-linux-03 register -hub wss://lab-hub.example.com -token <owner-token>
 
 # Create per-student tokens
-telahubd user add student-alice
-telahubd user grant student-alice lab-pc-017
+tela admin tokens add student-alice -hub wss://lab-hub.example.com -token <owner-token>
+# Save the printed token -- give it to Alice for use with tela connect (Step 4)
+tela admin access grant student-alice lab-pc-017 connect -hub wss://lab-hub.example.com -token <owner-token>
 ```
 
-See [Run a hub on the public internet](../howto/hub.md) for remote token management with `tela admin`.
+See [Run a hub on the public internet](../howto/hub.md) for the full list of `tela admin` commands.
 
 ---
 

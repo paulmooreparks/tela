@@ -36,13 +36,14 @@ Create tokens for each agent and user:
 ```bash
 # Agent token (one per machine that will register with the hub)
 tela admin tokens add barn-agent -hub wss://hub.example.com -token <owner-token>
-# Save the printed token -- it is not shown again
+# Save the printed token -- this is <agent-token> used in telad (Step 3)
 
 # Grant the agent permission to register its machine
 tela admin access grant barn-agent barn register -hub wss://hub.example.com -token <owner-token>
 
 # User token (for the person connecting from client machines)
 tela admin tokens add alice -hub wss://hub.example.com -token <owner-token>
+# Save the printed token -- this is <your-token> used with tela connect (Step 4)
 tela admin access grant alice barn connect -hub wss://hub.example.com -token <owner-token>
 ```
 

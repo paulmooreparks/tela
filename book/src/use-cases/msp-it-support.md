@@ -30,7 +30,7 @@ The hub prints an owner token on first start. Save it, then create identities fo
 ```bash
 # Create an agent token for the customer's machines
 tela admin tokens add acme-agent -hub wss://acme-hub.example.com -token <owner-token>
-# Save the printed token -- it is not shown again
+# Save the printed token -- this is <agent-token> used in telad on each customer machine (Step 3)
 
 # Grant the agent permission to register each machine
 tela admin access grant acme-agent ws-01 register -hub wss://acme-hub.example.com -token <owner-token>
@@ -38,6 +38,7 @@ tela admin access grant acme-agent srv-01 register -hub wss://acme-hub.example.c
 
 # Create technician tokens (one per technician so access can be revoked individually)
 tela admin tokens add tech-bob -hub wss://acme-hub.example.com -token <owner-token>
+# Save the printed token -- give it to Bob for use with tela connect (Step 4)
 tela admin access grant tech-bob ws-01 connect -hub wss://acme-hub.example.com -token <owner-token>
 tela admin access grant tech-bob srv-01 connect -hub wss://acme-hub.example.com -token <owner-token>
 ```
