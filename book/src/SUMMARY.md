@@ -43,8 +43,6 @@
 # Operations
 
 - [Release process](ops/release-process.md)
-- [Roadmap to 1.0](ops/roadmap.md)
-- [Design vs. implementation](ops/status.md)
 
 # Design Rationale
 
