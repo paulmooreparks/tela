@@ -21,6 +21,8 @@ sudo mv telahubd /usr/local/bin/
 # Bootstrap auth (creates /etc/tela/telahubd.yaml with an owner token)
 sudo telahubd user bootstrap
 # → SAVE THE PRINTED TOKEN -- it will not be shown again.
+# You will use it to register agents (telad.yaml: token: <token>)
+# and to run admin commands (tela admin ... -token <token>).
 
 # Start the hub
 sudo telahubd
@@ -49,8 +51,11 @@ curl -Lo telahubd https://github.com/paulmooreparks/tela/releases/latest/downloa
 chmod +x telahubd
 sudo mv telahubd /usr/local/bin/
 
-# Bootstrap auth
+# Bootstrap auth (creates /etc/tela/telahubd.yaml with an owner token)
 sudo telahubd user bootstrap
+# → SAVE THE PRINTED TOKEN -- it will not be shown again.
+# You will use it to register agents (telad.yaml: token: <token>)
+# and to run admin commands (tela admin ... -token <token>).
 
 # Start the hub
 telahubd
@@ -71,9 +76,11 @@ sudo telahubd service start
 # Download (PowerShell)
 Invoke-WebRequest -Uri https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-windows-amd64.exe -OutFile telahubd.exe
 
-# Bootstrap auth (creates %ProgramData%\Tela\telahubd.yaml)
+# Bootstrap auth (creates %ProgramData%\Tela\telahubd.yaml with an owner token)
 .\telahubd.exe user bootstrap
-# → SAVE THE PRINTED TOKEN
+# → SAVE THE PRINTED TOKEN -- it will not be shown again.
+# You will use it to register agents (telad.yaml: token: <token>)
+# and to run admin commands (tela admin ... -token <token>).
 
 # Start the hub
 .\telahubd.exe
