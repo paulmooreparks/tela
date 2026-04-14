@@ -188,21 +188,23 @@ Selecting the *Profile Settings* row in the sidebar shows the
 profile-level configuration. This is the configuration that applies to
 the profile as a whole, not to any one machine.
 
-![Profiles tab, Profile Settings](../screens/telavisor-profiles-settings.png)
+![Profiles tab, Profile Settings](../screens/telavisor-profiles-profile-settings.png)
 
 The Profile Settings panel contains:
 
 - **Name.** The display name of the profile. The name is the file name
   of the YAML file (minus the extension) and is what appears in the
   profile dropdown.
-- **Mount.** The Web Distributed Authoring and Versioning (WebDAV) mount
-  configuration. Three controls: an *Enable* checkbox, a *Mount point*
-  field (the local path or drive letter to mount onto), a *Port* field
-  (the local TCP port the WebDAV server listens on), and an *Auto-mount
-  on connect* checkbox that mounts the share automatically when the
-  profile connects. The mount feature is the desktop equivalent of
-  `tela mount` from the command line, exposing remote file shares as a
-  native local drive.
+- **File Share Mount.** The Web Distributed Authoring and Versioning
+  (WebDAV) mount configuration. An *Enable* checkbox turns the mount
+  on or off. The *Mount point* field sets the local path or drive letter
+  to mount onto. The *Port* field sets the local TCP port the WebDAV
+  server listens on. The *Auto-mount on connect* checkbox mounts the
+  share automatically when the profile connects. Below these controls,
+  a live preview lists every machine in the profile that has file
+  sharing enabled. Each listed machine will appear as a folder under
+  the mount point when the tunnel is connected. The mount feature is
+  the desktop equivalent of `tela mount` from the command line.
 - **MTU.** The Maximum Transmission Unit override for the WireGuard
   interface. The default is 1100, which works on every network the
   project has tested against. The override is useful when a specific
@@ -477,6 +479,22 @@ Windows, `sudo` on Linux, an authentication prompt on macOS). The
 service uses the platform-native service manager: Windows Service
 Control Manager (SCM) on Windows, systemd on Linux, launchd on macOS.
 
+#### User Autostart
+
+Controls for running the `tela` client as a user-level autostart task
+that launches when you log in, without requiring administrator
+privileges. Unlike the System Service, User Autostart runs in your
+login session, which means it starts only after you log in and stops
+when you log out. It is suited to personal machines where you want
+the tunnel up for your own use but do not need it active before login
+or for other users.
+
+The Status field shows whether autostart is currently *Installed* or
+*Not installed*. Three buttons control it: *Install*, *Start*, and
+*Stop*. *Install* does not require elevation. On Windows, TelaVisor
+registers a Scheduled Task that triggers at login. On Linux, it writes
+a systemd user unit. On macOS, it installs a LaunchAgent.
+
 ## Infrastructure mode
 
 Switching the mode toggle in the title bar to *Infrastructure* changes
@@ -628,9 +646,8 @@ detail.
 
 #### Access
 
-The Access view (formerly called *ACLs* in older versions of TelaVisor)
-shows the unified per-identity, per-machine permission model. Each
-identity is a card showing its role pill, token preview, and the
+The Access view shows the unified per-identity, per-machine permission
+model. Each identity is a card showing its role pill, token preview, and the
 machines it has permissions on.
 
 ![Access view](../screens/telavisor-hub-access.png)
@@ -858,11 +875,30 @@ The Management card mirrors the layout of the hub Management card from
   channel's HEAD. The label, title, and disabled state are derived
   from the channel manifest via the agent's `update-status` mgmt
   action, so an agent on `dev` is never offered a `stable` build.
-  Clicking *Update* sends the existing `update` mgmt action to the
-  agent, which downloads the new release, verifies it against the
-  channel manifest's SHA-256, atomically swaps its binary, and either
-  exits (under a service manager) or relaunches itself (when running
-  standalone).
+  Clicking *Update* opens a confirmation dialog before proceeding.
+
+  ![Update Agent confirmation dialog](../screens/telavisor-agents-update.png)
+
+  The dialog names the machine and confirms that the agent will restart
+  after the update. Clicking *Update* in the dialog sends the `update`
+  mgmt action through the hub-mediated proxy. The agent downloads the
+  new release, verifies it against the channel manifest's SHA-256, and
+  atomically swaps its binary.
+
+  ![Agent detail during update](../screens/telavisor-agents-update2.png)
+
+  While the update is in progress the Software row shows a progress
+  indicator. The rest of the management panel remains visible. If the
+  agent is running under a service manager (Windows SCM, systemd,
+  launchd) it exits cleanly and the manager restarts it against the
+  new binary. If the agent is running standalone it relaunches itself.
+
+  ![Agent detail after update](../screens/telavisor-agents-update3.png)
+
+  Once the agent reconnects, the Software row reflects the new version.
+  The channel and version information updates automatically as the
+  agent re-reports its state through the management protocol.
+
 - **Restart.** Requests a graceful restart of the agent process.
 
 The Danger Zone at the bottom of the agent detail panel provides two
