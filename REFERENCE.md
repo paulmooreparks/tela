@@ -130,8 +130,6 @@ Tela negotiates the best available transport for each connection. See [section 9
 
 ---
 
-<!-- ANCHOR: command-reference -->
-
 ## 5. telahubd: running a hub
 
 ### What the hub does
