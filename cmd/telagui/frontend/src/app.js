@@ -791,11 +791,15 @@ function refreshStatus() {
           localDisplay = '<a href="http://' + httpAddr + ':' + svc.localPort + '" target="_blank" rel="noopener" class="status-svc-link">' + localAddr + '</a>';
         }
 
+        var statusCopyIcon = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 2 3v6A1.5 1.5 0 0 0 3.5 10.5H5"/></svg>';
+        var localCell = portFound
+          ? '<button type="button" class="copy-btn" onclick="copyToClipboard(' + JSON.stringify(localAddr) + ')" title="Copy address">' + statusCopyIcon + '</button>' + localDisplay
+          : localDisplay;
         html += '<div class="settings-row status-svc-row">'
           + '<span class="dot ' + indicatorClass + '"></span>'
           + '<div class="status-svc-name">' + escHtml(svc.service) + '</div>'
           + '<div class="status-svc-remote">' + (svc.servicePort ? ':' + svc.servicePort : '') + '</div>'
-          + '<div class="status-svc-local ' + localClass + '">' + localDisplay + '</div>'
+          + '<div class="status-svc-local ' + localClass + '">' + localCell + '</div>'
           + '<div class="status-svc-status">' + statusText + '</div>'
           + '</div>';
       });
@@ -2000,17 +2004,18 @@ function renderPreview() {
       var profileName = s.defaultProfile || '';
       var cli = 'tela connect -profile "' + profileName + '"';
 
+      var copyIcon = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 2 3v6A1.5 1.5 0 0 0 3.5 10.5H5"/></svg>';
       var html = '<div class="settings-group">'
         + '<div class="settings-group-header">Profile</div>'
         + '<div class="preview-info-row">'
         + '<span class="preview-info-label">File:</span>'
+        + '<button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById(\'preview-path\').textContent)" title="Copy path">' + copyIcon + '</button>'
         + '<code class="preview-info-value" id="preview-path">' + escHtml(path) + '</code>'
-        + '<button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById(\'preview-path\').textContent)" title="Copy path">&#x2398;</button>'
         + '</div>'
         + '<div class="preview-info-row">'
         + '<span class="preview-info-label">CLI:</span>'
+        + '<button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById(\'preview-cli\').textContent)" title="Copy command">' + copyIcon + '</button>'
         + '<code class="preview-info-value" id="preview-cli">' + escHtml(cli) + '</code>'
-        + '<button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById(\'preview-cli\').textContent)" title="Copy command">&#x2398;</button>'
         + '</div>'
         + '</div>';
 
