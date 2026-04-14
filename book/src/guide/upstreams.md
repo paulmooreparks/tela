@@ -22,7 +22,7 @@ machines:
         name: redis
 ```
 
-`telad` starts listening on `localhost:5432` and `localhost:6379` immediately on startup. Any process on the machine that connects to those ports gets forwarded to the respective targets.
+`telad` binds port 5432 and port 6379 on all interfaces immediately on startup. Any process on the machine that connects to those ports (including via `localhost`) gets forwarded to the respective targets.
 
 ### Field reference
 
@@ -52,12 +52,16 @@ The application calls `localhost:5432`. `telad` forwards to `db.staging.internal
 
 ## Upstreams through a Tela tunnel
 
-Because the upstream target is any reachable `host:port`, it can point at an address on another machine that is itself accessible through a Tela tunnel. This lets you chain connectivity:
+The upstream `target` field accepts any reachable `host:port`, including the deterministic loopback addresses that `tela connect` assigns to remote machines. When a machine runs both `telad` (as an agent registering its own services) and `tela` (as a client connected to a remote machine), an upstream can bridge the two.
 
-- An agent on machine A exposes a service on port 8080 through the tunnel.
-- The client connects and binds the service to `127.88.x.x:8080` locally.
-- A second agent on machine B has an upstream pointing at `127.88.x.x:8080`.
-- Any service on machine B that calls `localhost:8080` reaches the service on machine A.
+For example:
+
+- Machine A runs `telad` and exposes a service on port 8080.
+- Machine B runs `tela connect` to machine A. The service on machine A becomes reachable on machine B at its deterministic loopback address, for example `127.88.42.17:8080`.
+- Machine B also runs `telad` with an upstream: `port: 8080, target: 127.88.42.17:8080`.
+- Any application on machine B that calls `localhost:8080` reaches the service on machine A through the tunnel.
+
+Use `tela status` on machine B to find the exact loopback address assigned to machine A.
 
 This is an advanced pattern. For most cases, direct service exposure through the tunnel is simpler.
 
