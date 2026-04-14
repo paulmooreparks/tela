@@ -62,9 +62,9 @@ features built on top of it second.
   definition (C), the portal wire protocol (D), the Tela Design Language
   (E), and the glossary (F). Use them as lookups, not as reading.
 
-The book is generated from the Markdown files in the
-[tela](https://github.com/paulmooreparks/tela) repository on every push to
-`main`, so it never drifts from the code that ships.
+The book tracks the stable release. It is updated as part of the
+stable promotion process, so the version shown at the top of this page
+matches the binaries on the stable channel.
 
 ## Conventions
 
