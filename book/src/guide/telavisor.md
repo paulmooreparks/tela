@@ -63,7 +63,7 @@ visible.
 
 On first launch, TelaVisor's title bar shows the application name and
 version, the mode toggle in the center, and several icon buttons on the
-right side: a connection status indicator (a chain link), a file manager
+right side: a power button (the connection toggle), a file manager
 shortcut, an information button, an update warning indicator (only when an
 update is available), a settings gear, and a quit button. The window is
 resizable. Window position and size are saved on close and restored on the
@@ -112,14 +112,14 @@ that `tela` would bind to, and a status reading "Not connected."
 
 ![Status tab, disconnected](../screens/telavisor-status-disconnected.png)
 
-The chain-link icon in the title bar is grey and broken when disconnected.
-Clicking the green power button in the title bar starts the connection.
-The icon turns orange and pulses while the tunnel is being established,
+The power button in the title bar is grey when disconnected.
+Clicking it starts the connection.
+The button turns amber and pulses while the tunnel is being established,
 then turns solid green when the tunnel is up.
 
 When the tunnel is up, the Status page changes shape. The "Disconnected"
 badge becomes a green "Connected" badge with the process identifier (PID)
-of the tela child process in parentheses, the chain-link icon turns
+of the tela child process in parentheses, the power button turns
 green, and each service line updates to show its current state. A service
 that is bound and waiting for traffic reads "Listening." A service with
 an active session reads "Active" with the number of current connections.
@@ -1124,17 +1124,16 @@ appear in this case.
 
 ## Connection status icon
 
-The chain-link icon in the title bar indicates the current connection
+The power button in the title bar indicates the current connection
 state at a glance:
 
-- **Grey broken links.** Disconnected.
-- **Orange linked, pulsing.** Connecting.
-- **Green linked.** Connected.
-- **Amber broken, pulsing.** Disconnecting.
+- **Grey.** Disconnected.
+- **Amber, pulsing.** Connecting or disconnecting.
+- **Green.** Connected.
 
-You can click the icon at any time from any tab to navigate directly to
-the Status tab in Clients mode. This makes the icon a global *show me
-my tunnel state* shortcut.
+You can click the button at any time from any tab to toggle the connection.
+When connected, clicking it disconnects. When disconnected, clicking it
+connects using the current profile.
 
 ## System tray
 
