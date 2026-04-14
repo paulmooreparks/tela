@@ -1,10 +1,6 @@
 # What Tela is
 
-The introduction sketched the shape: Tela is a connectivity fabric, three
-small binaries, scaling from one laptop to a fleet. This chapter is the
-concept in depth. It covers the problem Tela was built to solve, the
-properties that make the design work, the things Tela is explicitly not
-trying to be, and why the project ships as three binaries instead of one.
+The introduction sketched the shape: Tela is a connectivity fabric, three small binaries, scaling from one laptop to a fleet. The sections below go deeper on the problem it solves, the properties that define the design, and the deliberate tradeoffs that set its scope.
 
 ## What it solves
 

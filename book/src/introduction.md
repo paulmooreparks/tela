@@ -50,13 +50,15 @@ features built on top of it second.
   process for hub and agent operators.
 - The [Design Rationale](architecture/design.md) section answers the
   *why* questions: why three small daemons rather than one, why the hub
-  is a blind relay, why the gateway is a primitive that recurs at four
-  layers, why the access model has the four roles it does. Read it after
-  the body of the book if you want to understand the project's design
-  decisions and the alternatives that were considered and rejected.
-- The [Appendices](guide/reference.md) collect the reference data: the
-  command-line reference, the configuration file reference, and the
-  glossary. Use them as lookups, not as reading.
+  is a blind relay, why remote administration works through the hub
+  rather than directly, why file sharing has its own dedicated protocol,
+  and why the gateway is a primitive that recurs at four layers. Read it
+  after the body of the book if you want to understand the project's
+  design decisions and the alternatives that were considered and rejected.
+- The [Appendices](guide/reference.md) collect reference data: the CLI
+  reference (A), the configuration file reference (B), the access model
+  definition (C), the portal wire protocol (D), the Tela Design Language
+  (E), and the glossary (F). Use them as lookups, not as reading.
 
 The book is generated from the Markdown files in the
 [tela](https://github.com/paulmooreparks/tela) repository on every push to

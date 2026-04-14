@@ -6,14 +6,6 @@ browser, so you can manage connections, hubs, agents, profiles, files, and
 credentials without ever opening a terminal. It runs on Windows, Linux, and
 macOS.
 
-This chapter is the canonical reference for everything TelaVisor does. It
-walks through every tab, every panel, every dialog, and every workflow,
-with screenshots for each. Read it linearly to learn the application from
-zero, or jump to the section for the feature you need. The
-[front-porch overview at TelaVisor.md](https://github.com/paulmooreparks/tela/blob/main/TelaVisor.md)
-in the repository points here for the substance; this chapter is the
-substance.
-
 ## What TelaVisor is, and what it is not
 
 TelaVisor manages the full life cycle of connecting to remote services

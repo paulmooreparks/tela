@@ -17,6 +17,8 @@
 - [The path gateway](guide/gateway.md)
 - [File sharing](guide/file-sharing.md)
 - [Upstreams](guide/upstreams.md)
+- [Hub administration](guide/admin.md)
+- [Hub web console](guide/hub-console.md)
 - [TelaVisor desktop app](guide/telavisor.md)
 
 # How-to Guides

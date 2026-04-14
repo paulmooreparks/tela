@@ -51,7 +51,7 @@ Notes:
 
 - `hub:` must be reachable from where `telad` runs.
   - For local development (no TLS), a `ws://localhost` hub URL is typical.
-- `token:` is required when the hub has authentication enabled (recommended for any Internet-facing hub). This is a token generated with `telahubd user add` or `tela admin add-token`.
+- `token:` is required when the hub has authentication enabled (recommended for any Internet-facing hub). This is a token generated with `telahubd user add` or `tela admin tokens add`.
 - If `target:` is omitted, `telad` assumes the services are local to the daemon host.
 
 ### Quick-start with flags
@@ -74,11 +74,11 @@ From any workstation with the hub's owner token:
 
 ```bash
 # Create an identity for this agent
-tela admin add-token barn-agent -hub wss://your-hub.example.com -token <owner-token>
+tela admin tokens add barn-agent -hub wss://your-hub.example.com -token <owner-token>
 # → Save the printed token
 
 # Grant the agent permission to register the machine
-tela admin grant barn-agent barn -hub wss://your-hub.example.com -token <owner-token>
+tela admin access grant barn-agent barn register -hub wss://your-hub.example.com -token <owner-token>
 ```
 
 Or directly on the hub machine:
@@ -193,6 +193,6 @@ If the Hub advertises UDP relay, `telad` may send UDP to the hub's UDP port.
   - Check the Hub is actually reachable from the daemon's network.
   - If the hub has auth enabled, check that `token:` is set and the token is valid.
 - `telad` logs "auth_required" or "forbidden":
-  - The token is missing, expired, or does not have permission to register this machine. Use `tela admin list-tokens` to verify the identity exists, and `tela admin grant` to grant machine access.
+  - The token is missing, expired, or does not have permission to register this machine. Use `tela admin tokens list` to verify the identity exists, and `tela admin access grant` to grant machine access.
 - Services show but connect fails:
   - In gateway mode, confirm reachability from daemon → target on the service port.

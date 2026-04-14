@@ -2,21 +2,6 @@
 
 The Tela **gateway** documented in this chapter is a built-in HTTP reverse proxy inside `telad`. It exposes one tunnel port and routes incoming HTTP requests to different local services based on URL path. It replaces the "I need an nginx in front of my services" piece of a typical microservice deployment.
 
-## The gateway primitive
-
-A *gateway* in Tela is the name for a class of forwarding primitives the project uses at several layers of the stack. The rule is the same in every instance: a node in the middle takes traffic that is going somewhere and lets it keep going, without changing what the traffic means. The node forwards. The node does not inspect beyond what the layer it operates at requires.
-
-Today, Tela ships four gateways:
-
-- **Path gateway (Layer 7).** The path-based HTTP reverse proxy inside `telad`. Routes requests by URL path to different local services. Content-aware (it must read the path) but transparent in every other respect. *This chapter is about this gateway.*
-- **Bridge gateway (Layer 4 inbound).** A `telad` instance running on a gateway machine that forwards tunnel TCP traffic to services on other LAN-reachable machines, instead of services on the same host. Content-blind. Documented as the *gateway agent* or *bridge agent* deployment pattern in [howto/telad.md](telad.md).
-- **Upstream gateway (Layer 4 outbound).** A configurable rerouting layer in `telad` that takes a local service's outbound dependency calls (e.g. `localhost:5432`) and forwards them to a different target. Content-blind. Documented in the [REFERENCE.md upstreams section](../REFERENCE.md#upstreams-dependency-routing).
-- **Relay gateway (Layer 3, single-hop).** The hub itself. Forwards opaque WireGuard ciphertext between a paired client and agent. Content-blind end to end (the blind-relay property). Documented in [DESIGN.md](../DESIGN.md).
-
-A fifth gateway, the **multi-hop relay gateway** that bridges sessions across more than one hub, is on the [1.0 roadmap](../ROADMAP-1.0.md) under *Important: Relay gateway*. It is the same primitive as the existing single-hop relay gateway, applied recursively so that one hub can forward a session to an agent registered with a different hub. The WireGuard handshake remains end to end between the original client and the destination agent. The bridging hub is blind to the payload, the same way today's hub is blind to the payload.
-
-The rest of this chapter is a how-to for the path gateway specifically. Read it for the Layer 7 instance; the other gateways have their own chapters or reference sections.
-
 ## When you want a gateway
 
 Use a gateway when you have several HTTP services on one machine and you want to reach all of them through a single tunnel port. Typical examples:
@@ -256,6 +241,6 @@ Make sure the service is not in the `services:` list anymore (or is intentionall
 
 ## See also
 
-- [REFERENCE.md, Gateway section](../REFERENCE.md#gateway-path-based-reverse-proxy) -- field-by-field configuration reference
-- [DESIGN-gateway.md](../DESIGN-gateway.md) -- design rationale, comparison to alternatives, implementation notes
-- [howto/telad.md](telad.md) -- general `telad` configuration including the unrelated **gateway/bridge agent** deployment pattern
+- [Gateways](../architecture/gateway.md) -- design rationale and the broader gateway primitive family
+- [Run an agent](telad.md) -- general `telad` configuration including the bridge agent deployment pattern
+- [Upstreams](../guide/upstreams.md) -- the outbound dependency routing counterpart to the path gateway

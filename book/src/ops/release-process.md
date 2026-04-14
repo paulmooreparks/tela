@@ -1,6 +1,6 @@
 # Release process
 
-This chapter covers how Tela releases are produced, channeled, and promoted. If you are a user, the [Self-update and release channels](../howto/channels.md) chapter is the practical guide; this chapter is the internal model for operators and maintainers cutting a release.
+Tela releases move through a three-channel pipeline: dev, beta, and stable. The [Self-update and release channels](../howto/channels.md) chapter in the How-to Guide covers the user-facing side. The sections below cover the internal model for operators and maintainers who need to cut a release, promote a channel, or issue a hotfix.
 
 ## Channels
 
@@ -16,7 +16,7 @@ Pre-1.0, every binary defaults to `dev`. The channel mechanism works for all thr
 
 Post-1.0, TelaVisor and the Tela binaries default to `stable`. New installations get the conservative line by default; opting into beta or dev becomes a deliberate choice.
 
-What changes at 1.0 is the meaning of `stable`, not its existence. Pre-1.0, a stable tag is "the most soaked thing we have, with no compatibility promise yet." Post-1.0 it carries the backward-compatibility guarantees described below.
+What changes at 1.0 is the meaning of `stable`, not its existence. Pre-1.0, a stable tag is the most soaked build available, with no compatibility promise. Post-1.0 it carries the backward-compatibility guarantees described below.
 
 Users can change channel through TelaVisor's Application Settings, through `tela channel set <name>`, or by editing the `update.channel` field in their hub or agent YAML config.
 
@@ -113,7 +113,7 @@ Pre-1.0:
 
 - **Dev**: every commit. No promise of stability.
 - **Beta**: cut on demand when a dev build deserves wider exposure. No fixed cadence.
-- **Stable**: cut on demand when a beta has soaked. Pre-1.0 stable releases carry no backward-compatibility promise -- that begins at `v1.0.0`. Use them as "the most-soaked thing we have," not as a long-term support line.
+- **Stable**: cut on demand when a beta has soaked. Pre-1.0 stable releases carry no backward-compatibility promise -- that begins at `v1.0.0`. Use them as the most-soaked build available, not as a long-term support line.
 
 Post-1.0:
 

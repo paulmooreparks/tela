@@ -1,12 +1,8 @@
 # First connection: hello, hub
 
-This walkthrough takes you from zero to "I just SSH'd into a remote machine
-through Tela." It assumes you have `tela`, `telad`, and `telahubd` binaries
-installed (see [Installation](installation.md)).
+Install `tela`, `telad`, and `telahubd` before starting (see [Installation](installation.md)). The steps below walk through a minimal three-machine setup: one hub, one agent, one client, ending at a working SSH connection.
 
-For a fully detailed end-to-end walkthrough including auth bootstrap, multiple
-machines, and per-service connections, see §8 of the
-[CLI reference](../guide/reference.md).
+For a complete walkthrough with auth bootstrap, multiple machines, and per-service connections, see the [Complete standalone walkthrough](../guide/reference.md#8-complete-standalone-walkthrough) in Appendix A.
 
 ## The shape of a Tela connection
 
