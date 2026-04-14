@@ -1,6 +1,19 @@
 # Run Tela as an OS service
 
-The `telad` agent and `telahubd` hub can run as native operating system services on Windows (Service Control Manager), Linux (systemd), and macOS (launchd). Installing them as services means tunnels survive reboots and logouts without manual intervention.
+## What you are setting up
+
+When you run `telad` or `telahubd` from a terminal, they stop when the terminal closes. That is fine for testing but not for production. A server that reboots at 3 AM should bring its tunnel back up automatically, without anyone logging in and running a command.
+
+This chapter covers installing `telad` and `telahubd` as native OS services so they start at boot, restart on failure, and survive logouts. The mechanism is the platform's own service manager -- Windows Service Control Manager (SCM), systemd on Linux, launchd on macOS -- which means standard service management tools (`sc`, `systemctl`, `launchctl`) all work on these processes.
+
+By the end of this chapter, `telad` (or `telahubd`, or both) will:
+
+- Start automatically when the machine boots, before any user logs in
+- Restart automatically if the process crashes
+- Accept `start`, `stop`, `restart`, and `status` commands from the OS service manager
+- Persist its configuration in the service metadata so no external config file needs to be present at startup
+
+The `tela` client also supports user-level autostart (starts at login, not at boot) for cases where you want a persistent client tunnel tied to your login session rather than to the machine. That is covered at the end of the chapter.
 
 ## How it works
 

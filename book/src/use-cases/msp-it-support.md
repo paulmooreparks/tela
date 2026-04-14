@@ -1,6 +1,21 @@
 # MSP and IT support
 
-An IT support provider that needs to reach customer machines (SSH, RDP, internal admin interfaces) without asking customers to open inbound ports.
+## The scenario
+
+You provide managed IT services or remote support to multiple customers. Each customer has Windows workstations and servers you need to reach for maintenance, troubleshooting, and remote desktop sessions. Today, this means asking customers to open RDP to the internet, maintaining per-customer VPN configs, or using a paid remote-access product.
+
+With Tela, you deploy a small hub per customer (or per customer segment). An agent runs on each customer machine, making an outbound connection to the hub with no firewall changes on the customer's side. Your technicians connect through the hub using individual tokens -- so you know who accessed which machine and when, and revoking a departed technician's access takes one command.
+
+From a technician's workstation, connecting to a customer's machines looks like:
+
+```
+Services available:
+  127.88.x.x:3389  → RDP          (acme-desktop-01)
+  127.88.y.y:3389  → RDP          (acme-desktop-02)
+  127.88.z.z:22    → SSH          (acme-server-01)
+```
+
+The customer's IT team does not need to configure anything on their firewall. The machines just work, from wherever the technician is.
 
 ## Recommended topology
 

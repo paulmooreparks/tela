@@ -1,6 +1,21 @@
 # IoT and edge devices
 
-Devices deployed behind NATs and firewalls you do not control: Raspberry Pis, kiosks, industrial controllers, point-of-sale terminals. The primary goal is reliable outbound-only SSH (and optionally web admin ports) without requiring port forwards on the site's network.
+## The scenario
+
+You have devices deployed in the field: Raspberry Pis running sensor software, kiosks at retail locations, industrial controllers at manufacturing sites, point-of-sale terminals at customer premises. These devices sit behind NATs and firewalls that you do not control and cannot configure. Getting SSH access to any of them for maintenance currently requires coordinating with the site's IT team to open a port, or shipping the device back, or driving out.
+
+With Tela, each device runs `telad` and makes an outbound connection to a central hub. From that point, you can SSH into any registered device from your workstation without any firewall changes at the site. The hub never has access to the device's filesystem or credentials -- it only relays the encrypted tunnel.
+
+When you need to reach a device fleet, your workstation sees:
+
+```
+Services available:
+  127.88.x.x:22    → SSH          (kiosk-store-042)
+  127.88.y.y:22    → SSH          (kiosk-store-107)
+  127.88.z.z:8080  → HTTP         (controller-plant-a)
+```
+
+Devices that go offline (power loss, network interruption) reconnect automatically when they come back. You get consistent SSH access regardless of where a device is deployed or what the local network looks like.
 
 ## Choose a deployment pattern
 

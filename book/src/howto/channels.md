@@ -1,6 +1,17 @@
 # Self-update and release channels
 
-Every Tela binary can update itself in place through a three-channel release pipeline: dev, beta, and stable. The sections below cover how to inspect and switch channels, trigger updates, and bootstrap a fresh machine that has no binary yet.
+## What this covers
+
+Once you have Tela binaries deployed across more than one machine, you face a maintenance question: how do you keep them up to date without logging into every machine and running a download by hand?
+
+Tela's answer is self-update through a release channel system. Each binary -- `tela`, `telad`, `telahubd`, TelaVisor -- knows which channel it is following (`dev`, `beta`, or `stable`), fetches the channel's JSON manifest from GitHub Releases, and updates itself in place. The update is verified against the manifest's SHA-256 before anything is written to disk. Agents and hubs can be updated remotely through the hub's management protocol, without SSH access to the machine.
+
+By the end of this chapter you will know how to:
+
+- Check what channel any binary is on and whether an update is available
+- Switch a binary to a different channel
+- Trigger an update from the command line, the admin API, or TelaVisor
+- Bootstrap a fresh machine that does not yet have any Tela binary installed
 
 The commands below assume at least one Tela binary is already installed and on your `PATH`. To get the first binary onto a machine, see [Bootstrapping a fresh box](#bootstrapping-a-fresh-box) below.
 

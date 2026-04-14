@@ -1,6 +1,21 @@
 # Production access
 
-A team that needs to reach production services (SSH, databases, internal admin panels) without a traditional bastion host and without opening inbound ports on production machines.
+## The scenario
+
+Your production infrastructure runs on cloud VMs or bare metal with no inbound ports open. Today, getting to a machine requires a bastion host, a VPN, or punching a hole in the firewall. Any of those approaches requires ongoing maintenance, introduces a shared-credential problem, and often ends up with broader access than intended ("connect to the VPN, now you can reach everything").
+
+With Tela, each production VM runs `telad` as an OS service. It makes an outbound connection to a dedicated production hub and registers itself, exposing only the specific ports the team needs -- SSH, a database port, an admin panel. Access is controlled per-machine and per-identity: the on-call engineer has SSH access to the web servers, the DBA has database access, neither has access to the other's machines.
+
+When a team member needs to connect, they run `tela connect` with their profile. They get a local address for each machine they have access to:
+
+```
+Services available:
+  127.88.x.x:22    → SSH          (web-01)
+  127.88.y.y:22    → SSH          (web-02)
+  127.88.z.z:5432  → port 5432    (db-01)
+```
+
+No bastion. No VPN. No shared credentials. If a team member leaves, their identity is removed from the hub and their access ends immediately -- nothing else changes on the production machines.
 
 ## Strong recommendation for production
 

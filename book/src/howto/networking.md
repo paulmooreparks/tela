@@ -1,6 +1,12 @@
 # Networking caveats
 
-Tela is designed to work through firewalls and NATs without special configuration, but there are assumptions about what each component can reach. The sections below make those assumptions explicit: what ports the hub needs, what outbound access the agent and client need, how the transport fallback cascade works, and the most common questions about topology, addressing, and session limits.
+## When to read this
+
+If `telad` is running and the hub is reachable but connections are not working, or if you are deploying Tela into a network environment with strict firewall rules, proxies, or unusual topology, this chapter is for you.
+
+Tela is designed to work through firewalls and Network Address Translation (NAT) without special configuration on the agent or client side. The hub is the only component that needs an inbound port. Both agents and clients connect to the hub outbound, over a standard HTTPS or WebSocket connection. In most environments that is all you need to know.
+
+The sections below make the networking requirements explicit for cases where the default assumptions do not hold: restricted outbound firewall rules, proxy environments, UDP relay configuration, and questions about how Tela's internal addressing works alongside your existing network.
 
 ## Quick matrix
 

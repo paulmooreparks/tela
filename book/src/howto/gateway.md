@@ -1,6 +1,23 @@
 # Set up a path-based gateway
 
-The gateway is a built-in HTTP reverse proxy inside `telad`. It lets you expose several local HTTP services through a single tunnel port, routed by URL path. For the design rationale and the broader gateway primitive family, see the [Gateways](../architecture/gateway.md) chapter in the Design Rationale section.
+## What you are setting up
+
+Picture a development machine running three HTTP services on different ports: a React frontend on port 3000, a REST API on port 4000, and a metrics endpoint on port 4100. Without a gateway, a colleague connecting through Tela would get three separate loopback bindings -- one per service port -- and the browser would see them as three different origins, triggering Cross-Origin Resource Sharing (CORS) issues every time the frontend calls the API.
+
+The path-based gateway solves this by exposing a single tunnel port (for example, 8080) that routes incoming HTTP requests to the right local service based on the URL path prefix. Your colleague connects to one address and one port. The browser sends all requests -- frontend, API calls, metrics -- to the same origin. No CORS. No extra configuration on the application side.
+
+When this chapter is done, a client connecting to your machine will see:
+
+```
+Services available:
+  127.88.x.x:8080  → HTTP
+```
+
+Requests to `http://127.88.x.x:8080/` go to the frontend. Requests to `http://127.88.x.x:8080/api/` go to the API. Requests to `http://127.88.x.x:8080/metrics/` go to the metrics endpoint. The routing is defined in your `telad.yaml` and takes effect without restarting anything except `telad`.
+
+The gateway is built into `telad`. It requires a few lines of YAML -- no separate binary, no nginx, no Caddy inside the tunnel.
+
+For the design rationale and the broader gateway primitive family, see the [Gateways](../architecture/gateway.md) chapter in the Design Rationale section.
 
 ## When you want a gateway
 

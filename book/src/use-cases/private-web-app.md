@@ -1,12 +1,19 @@
 # Private web application
 
-A web application running on a server that should be reachable only by users
-who have been explicitly granted access -- no public exposure, no VPN, no
-firewall rules to punch through.
+## The scenario
 
-Common examples: an internal admin panel, a staging environment, a team
-dashboard, a self-hosted tool (Grafana, Gitea, Outline, etc.) that should
-not be reachable from the open internet.
+You are running a web application that should not be reachable from the open internet. It might be an internal admin panel, a staging environment, a team dashboard, or a self-hosted tool like Grafana, Gitea, or Outline. Right now it either lives behind a VPN (complex to onboard users), has IP allowlisting (fragile when team members work from different locations), or is simply exposed to the public internet with a long URL and a hope that nobody finds it.
+
+With Tela, the application server runs `telad` with a path gateway configured. The gateway exposes a single tunnel port that routes HTTP requests by URL prefix to the right local service. The server has no inbound firewall rule. Users who have been explicitly granted access connect through the hub and get a local address in their browser:
+
+```
+Services available:
+  127.88.x.x:8080  → HTTP
+```
+
+They open `http://127.88.x.x:8080/` in a browser. The connection travels through an end-to-end encrypted WireGuard tunnel to the application server. The hub relays ciphertext and cannot see request or response content. Users without a valid token cannot reach the machine at all -- there is nothing to find, because the server never accepted an inbound connection from them.
+
+If the application has multiple services (a frontend, an API, a metrics endpoint), the gateway routes each URL prefix to the right local port, so the browser sees everything as the same origin and Cross-Origin Resource Sharing (CORS) issues do not arise.
 
 ## How it works
 
@@ -17,7 +24,7 @@ users whose tokens have been granted `connect` permission on that machine can
 reach anything at all. The hub relays ciphertext; it cannot see request or
 response content.
 
-When a user connects, `tela` binds a local port (for example,
+When a user connects, `tela` binds a local address (for example,
 `127.88.x.x:8080`). The user opens that address in a browser. The connection
 travels through the encrypted WireGuard tunnel to the application server, where
 `telad` forwards it to the local service. No inbound firewall rule is needed on

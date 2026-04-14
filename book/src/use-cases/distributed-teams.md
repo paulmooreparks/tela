@@ -1,6 +1,21 @@
 # Distributed teams
 
-A distributed engineering team that needs to access shared development and staging resources (SSH, databases, internal HTTP services) without a VPN and without opening inbound ports on the infrastructure.
+## The scenario
+
+Your engineering team is spread across multiple cities or time zones. You have shared development and staging infrastructure -- databases, internal HTTP services, build servers -- that team members need to reach from their home offices, co-working spaces, and laptops on the road.
+
+A team VPN works, but it requires a VPN server, client configuration on every laptop, and gives access to the whole network rather than specific services. Tela takes a different approach: each shared resource registers itself with a hub under a named identity, and each team member gets a token scoped to exactly the machines and services their role needs.
+
+When a developer connects, they see only the machines they have been granted access to:
+
+```
+Services available:
+  127.88.x.x:5432  → port 5432    (dev-db)
+  127.88.y.y:22    → SSH          (dev-build)
+  127.88.z.z:8080  → HTTP         (staging-app)
+```
+
+A new hire gets onboarded with a pairing code -- they redeem it with one command and immediately have access to the right machines. When they leave, their identity is removed and access ends across all machines at once.
 
 ## Design goals for teams
 

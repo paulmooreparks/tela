@@ -1,6 +1,24 @@
 # Personal cloud
 
-A homelab with a NAS, a development workstation, and a media server behind a residential router. You want to reach all of them from a laptop at a coffee shop or a corporate office without opening inbound ports on your home network.
+## The scenario
+
+You have several machines at home behind a residential router: a Network Attached Storage (NAS) device, a development workstation, a media server. Your router performs NAT and you either cannot or do not want to open inbound ports. From a coffee shop or a corporate office, you currently have no way to reach any of them.
+
+Tela solves this with a hub that lives on a small public VM (a $5/month server is plenty). Each home machine runs `telad`, which makes an outbound connection to the hub and registers itself. Your laptop runs `tela` and connects through the hub to whichever machine you need.
+
+When this is working, your laptop will have deterministic loopback addresses for each home machine:
+
+```
+Services available:
+  127.88.x.x:22    → SSH          (workstation)
+  127.88.y.y:22    → SSH          (NAS)
+  127.88.y.y:5000  → port 5000    (NAS web UI)
+  127.88.z.z:8096  → port 8096    (media server)
+```
+
+Each address is stable -- the same machine always gets the same `127.88.x.x` address regardless of which network your laptop is on. You can put these in your SSH config and bookmark the browser addresses.
+
+Nothing changes on your home router. No ports are forwarded. The home machines only make outbound connections.
 
 ## Prerequisites
 

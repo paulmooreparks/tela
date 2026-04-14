@@ -1,6 +1,20 @@
 # Run an agent
 
-The agent (`telad`) is the daemon that runs on the machine you want to reach. It registers one or more machines with a hub and exposes services (SSH, RDP, and others) to clients. This chapter covers installing it, configuring machines and services, authenticating with a hub, and the two deployment patterns: endpoint mode (the agent runs on the target machine itself) and gateway/bridge mode (the agent runs elsewhere and forwards to LAN-reachable targets).
+## What you are setting up
+
+The agent (`telad`) is the daemon that runs on -- or near -- the machine you want to reach. It makes an outbound connection to the hub, registers the machine under a name you choose, and tells the hub which TCP ports to expose to connecting clients. No inbound ports are required on the agent machine.
+
+Picture a Linux server named `barn` sitting on a private network behind a router. It has SSH on port 22 and a Postgres database on port 5432. Without Tela, reaching those services from the outside requires a VPN, a bastion host, or an open inbound port. With Tela, you install `telad` on `barn`, point it at your hub, and declare which ports to expose. From that moment, any client with the right token can connect to `barn`'s services through the hub -- from anywhere, without any firewall changes on `barn`'s network.
+
+By the end of this chapter you will have:
+
+- `telad` installed and configured with a `telad.yaml`
+- A machine registered with the hub under a name like `barn`
+- One or more services exposed through the tunnel (SSH, RDP, or any TCP service)
+- An agent token that scopes the agent's access to just what it needs
+- `telad` running as a managed OS service so it survives reboots
+
+The chapter covers two deployment patterns: the endpoint pattern (agent runs directly on the target machine, which is the most common case) and the gateway pattern (agent runs on a separate machine and forwards to LAN-reachable targets, which is useful for containers, Docker hosts, or machines you cannot install software on).
 
 ## Two deployment patterns
 

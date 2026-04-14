@@ -1,6 +1,21 @@
 # Education labs
 
-A university or training provider that needs to give students remote access to lab machines (Remote Desktop Protocol (RDP), Virtual Network Computing (VNC), SSH) without requiring a campus VPN. The recommended topology is one hub per lab or course, with the access model configured separately for students and instructors.
+## The scenario
+
+A university computer lab has 30 Linux workstations. Students need to connect to their assigned machine from home for coursework -- remote desktop, SSH, or a web-based IDE. The campus VPN is complex to set up, requires IT support for every student, and gives access to far more of the campus network than students should have.
+
+With Tela, each lab machine runs `telad` and registers with a lab-specific hub. Each student gets a token scoped to connect to their assigned machine only. Setup for a new student is a pairing code: they run one command to redeem it and they are ready to connect. An instructor token gives access to all machines in the lab for monitoring and support.
+
+From a student's laptop at home:
+
+```
+Services available:
+  127.88.x.x:3389  → RDP          (lab-machine-07)
+```
+
+They open Remote Desktop to that address and are on their lab machine. No VPN client. No campus IT ticket. No exposure to the rest of the campus network.
+
+At the end of the semester, the instructor removes all student tokens in one pass. The lab machines stay registered for the next cohort.
 
 ## Recommended topology
 

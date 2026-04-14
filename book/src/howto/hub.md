@@ -1,6 +1,22 @@
 # Run a hub on the public internet
 
-The hub is the one component that needs a public address. This chapter walks through deploying `telahubd` for production use: choosing a host, configuring TLS through a reverse proxy, enabling the UDP relay for faster tunnels, bootstrapping authentication, and registering with a portal. If you ran through the [First connection](../getting-started/first-connection.md) walkthrough on localhost, this chapter takes you from that to a real deployment.
+## What you are setting up
+
+The hub is a single Linux (or Windows, or macOS) server sitting on the public internet with an inbound port open. It does not need to be powerful -- a $5/month virtual machine (VM) works fine. It runs `telahubd`, which serves a single endpoint that handles both WebSocket connections from agents and clients and a UDP relay for faster WireGuard transport.
+
+Every agent and every client in your Tela deployment points at this hub. They connect outbound to it; it brokers the WireGuard sessions between them. It never decrypts tunnel traffic.
+
+By the end of this chapter you will have:
+
+- `telahubd` running as a managed OS service, listening on port 443 through a Caddy reverse proxy
+- A Let's Encrypt TLS certificate provisioned automatically
+- An owner token secured and ready to use for administration
+- Optionally, a UDP relay port open for faster tunnels
+- Optionally, the hub registered with a portal directory so clients can find it by name
+
+The hub's public URL will be `wss://hub.example.com`. Agents use that URL in their `telad.yaml`. Clients use it in their connection profiles. Nothing else needs to change when you add new machines -- they all find the hub the same way.
+
+This chapter takes you from "I ran through the [First connection](../getting-started/first-connection.md) walkthrough" to a production-grade deployment with TLS, authentication, and a service manager.
 
 ## Hub server: `telahubd`
 
