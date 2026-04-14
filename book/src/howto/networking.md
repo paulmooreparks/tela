@@ -6,9 +6,9 @@ Tela is designed to work through firewalls and NATs without special configuratio
 
 | Component | Needs inbound from Internet | Needs outbound | Default ports / protocols |
 |----------|------------------------------|---------------|---------------------------|
-| Hub (`telahubd`) | Yes | No (special) | Public: TCP 443 for HTTPS+WebSockets; Optional: UDP 41820 for UDP relay. The hub listens on `HUB_PORT` (default `80`) and `HUB_UDP_PORT` (default `41820`). |
-| Daemon (`telad`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `HUB_UDP_PORT` |
-| Client (`tela`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `HUB_UDP_PORT` |
+| Hub (`telahubd`) | Yes | No (special) | Public: TCP 443 for HTTPS+WebSockets; Optional: UDP 41820 for UDP relay. The hub listens on `TELAHUBD_PORT` (default `80`) and `TELAHUBD_UDP_PORT` (default `41820`). |
+| Daemon (`telad`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `TELAHUBD_UDP_PORT` |
+| Client (`tela`) | No | Yes | Outbound WebSocket to hub (`ws://` / `wss://`); optional outbound UDP to hub `TELAHUBD_UDP_PORT` |
 | Portal (browser UI) | n/a | Yes | Browser fetches `https://<hub>/api/status` and `https://<hub>/api/history` (cross-origin) |
 
 ## Hub requirements
@@ -19,14 +19,14 @@ Minimum:
 
 - Inbound TCP for **HTTPS + WebSockets**.
   - The hub serves HTTPS + WebSockets on a single public origin (typically TCP 443).
-  - Implementation note: the hub serves HTTP+WS on a single port (`HUB_PORT`, default `80`) and is commonly published on 443 via a reverse proxy.
+  - Implementation note: the hub serves HTTP+WS on a single port (`TELAHUBD_PORT`, default `80`) and is commonly published on 443 via a reverse proxy.
   - The reverse proxy must forward `Upgrade` / `Connection` headers to support WebSocket upgrades.
 
 Optional (performance / transport):
 
-- Inbound UDP `HUB_UDP_PORT` (default `41820`) to enable the hub's UDP relay.
+- Inbound UDP `TELAHUBD_UDP_PORT` (default `41820`) to enable the hub's UDP relay.
   - If this is not reachable (for example, you only expose the hub via a TCP-only tunnel), sessions still work via WebSockets; they may be slower.
-  - If the hub's domain resolves to a proxy (for example, Cloudflare), set `HUB_UDP_HOST` to the real public IP or a Domain Name System (DNS) name that resolves directly, and forward UDP on your router. Without this, clients send UDP to the proxy and it is silently dropped.
+  - If the hub's domain resolves to a proxy (for example, Cloudflare), set `TELAHUBD_UDP_HOST` to the real public IP or a Domain Name System (DNS) name that resolves directly, and forward UDP on your router. Without this, clients send UDP to the proxy and it is silently dropped.
 
 Portal visibility:
 
@@ -51,12 +51,12 @@ Portal visibility:
 
 Optional:
 
-- If UDP relay is enabled on the hub, `telad` may also send UDP to the hub's `HUB_UDP_PORT`.
+- If UDP relay is enabled on the hub, `telad` may also send UDP to the hub's `TELAHUBD_UDP_PORT`.
 
 ## Client (`tela`) requirements
 
 - Outbound WebSocket to the hub.
-- Optional outbound UDP to hub `HUB_UDP_PORT` when UDP relay is enabled.
+- Optional outbound UDP to hub `TELAHUBD_UDP_PORT` when UDP relay is enabled.
 
 Local binding:
 
@@ -109,7 +109,7 @@ Up to 254. The session index is an 8-bit counter; session index 0 is reserved, l
 
 When something "can't connect", check these in order:
 
-- Hub is reachable on TCP 443 (or wherever you publish `HUB_PORT`).
+- Hub is reachable on TCP 443 (or wherever you publish `TELAHUBD_PORT`).
 - Reverse proxy supports WebSockets.
 - Daemon can reach the hub URL from where it runs.
 - Daemon can reach its `target` host and the service ports behind it.

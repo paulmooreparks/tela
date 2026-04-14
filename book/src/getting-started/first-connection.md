@@ -2,7 +2,7 @@
 
 Install `tela`, `telad`, and `telahubd` before starting (see [Installation](installation.md)). The steps below walk through a minimal three-machine setup: one hub, one agent, one client, ending at a working SSH connection.
 
-For a complete walkthrough with auth bootstrap, multiple machines, and per-service connections, see the [Complete standalone walkthrough](../guide/reference.md#8-complete-standalone-walkthrough) in Appendix A.
+For the full CLI reference including all flags and configuration options, see [Appendix A: CLI reference](../guide/reference.md).
 
 ## The shape of a Tela connection
 

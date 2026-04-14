@@ -81,12 +81,14 @@ tela admin tokens add barn-agent -hub wss://your-hub.example.com -token <owner-t
 tela admin access grant barn-agent barn register -hub wss://your-hub.example.com -token <owner-token>
 ```
 
-Or directly on the hub machine:
+Or directly on the hub machine (when the hub is stopped):
 
 ```bash
 telahubd user add barn-agent
 telahubd user grant barn-agent barn
 ```
+
+Note: `telahubd user grant` creates a machine access control list entry for "barn" with no `registerToken` restriction, which means any known identity (including barn-agent) can register that machine. It also explicitly grants barn-agent connect access to "barn". To restrict registration to a specific token only, use `tela admin access grant barn-agent barn register` via the admin API instead.
 
 ### Providing the token
 

@@ -96,10 +96,15 @@ go build -o telahubd ./cmd/telahubd
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HUB_PORT` | `80` | HTTP + WebSocket listen port |
-| `HUB_UDP_PORT` | `41820` | UDP relay port |
-| `HUB_UDP_HOST` | *(empty)* | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
-| `HUB_NAME` | *(empty)* | Display name shown in portal and `/api/status` |
+| `TELAHUBD_PORT` | `80` | HTTP + WebSocket listen port |
+| `TELAHUBD_UDP_PORT` | `41820` | UDP relay port |
+| `TELAHUBD_UDP_HOST` | *(empty)* | Public IP/hostname advertised in UDP offers (for proxy/tunnel setups) |
+| `TELAHUBD_NAME` | *(empty)* | Display name shown in portal and `/api/status` |
+| `TELAHUBD_WWW_DIR` | *(empty)* | Serve hub console from disk instead of embedded files |
+| `TELA_OWNER_TOKEN` | *(empty)* | Bootstrap owner token on first startup; ignored if tokens already exist |
+| `TELAHUBD_PORTAL_URL` | *(empty)* | Portal URL for auto-registration on first startup |
+| `TELAHUBD_PORTAL_TOKEN` | *(empty)* | Portal admin token for auto-registration |
+| `TELAHUBD_PUBLIC_URL` | *(empty)* | This hub's own public URL, used when registering with a portal |
 
 ### Run locally
 
@@ -108,13 +113,13 @@ go build -o telahubd ./cmd/telahubd
 telahubd
 
 # With a display name
-HUB_NAME=myhub telahubd
+TELAHUBD_NAME=myhub telahubd
 
 # Custom ports
-HUB_PORT=9090 HUB_UDP_PORT=9091 telahubd
+TELAHUBD_PORT=9090 TELAHUBD_UDP_PORT=9091 telahubd
 
 # Behind Cloudflare/proxy -- advertise real IP for UDP relay
-HUB_UDP_HOST=myhost.example.com telahubd
+TELAHUBD_UDP_HOST=myhost.example.com telahubd
 ```
 
 ### Verify
@@ -477,5 +482,5 @@ From a machine on the Internet (or at least outside your LAN), verify:
 | Portal shows "Auth Error" for a hub | Viewer token out of sync or missing | Run `telahubd portal sync` on the hub, or restart the hub service |
 | Portal cards stay empty | Portal missing viewer token, or hub unreachable from portal server | Ensure the hub entry in the portal includes a valid viewer token |
 | `telad` connects but "auth_required" | Hub has auth enabled, agent has no token | Add a `token:` field to `telad.yaml` or pass `-token` on the command line |
-| UDP relay not working | TCP-only tunnel or firewall | Confirm UDP `HUB_UDP_PORT` is open inbound on the hub and outbound from both sides |
+| UDP relay not working | TCP-only tunnel or firewall | Confirm UDP `TELAHUBD_UDP_PORT` is open inbound on the hub and outbound from both sides |
 | "Machine not found" | Machine isn't registered | Run `tela machines -hub <hub>` to list available machines; confirm `telad` is running and connected |

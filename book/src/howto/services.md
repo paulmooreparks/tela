@@ -106,7 +106,7 @@ name: "My Hub"      # Display name (optional)
 
 > **Bootstrap ordering:** Run `telahubd user bootstrap` **before** `telahubd service install` if you want the installed config to already contain auth tokens. If you install the service first and then bootstrap, the bootstrap writes directly to the system config path (`/etc/tela/telahubd.yaml` or `%ProgramData%\Tela\telahubd.yaml`).
 
-> Environment variables (`HUB_PORT`, `HUB_UDP_PORT`, `HUB_NAME`) always override the config file.
+> Environment variables (`TELAHUBD_PORT`, `TELAHUBD_UDP_PORT`, `TELAHUBD_NAME`) always override the config file.
 
 ### Manage
 

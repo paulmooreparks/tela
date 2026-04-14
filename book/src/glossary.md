@@ -80,7 +80,7 @@ An optional feature of `telad` that exposes a sandboxed directory on the
 agent host for file transfer over the WireGuard tunnel. Disabled by default.
 Configured per machine under the `fileShare:` block in `telad.yaml`.
 
-See [File sharing](../howto/file-sharing.md).
+See [File sharing](../guide/file-sharing.md).
 
 ---
 
@@ -148,7 +148,7 @@ Permissions are granted with `tela admin access grant` and can use the wildcard
 `*` to apply to all machines. Owner and admin role tokens bypass all permission
 checks.
 
-See [Access model](access-model.md).
+See [Access model](../architecture/access-model.md).
 
 ---
 
@@ -218,7 +218,7 @@ A label on a token that controls hub-level API access. Four roles exist:
 The default role when none is specified is `user`. Roles are set at token
 creation time with the `-role` flag.
 
-See [Access model](access-model.md).
+See [Access model](../architecture/access-model.md).
 
 ---
 
