@@ -231,7 +231,7 @@ The end-of-life date for the previous major is announced in the release notes fo
    ```
    git log <last-stable-tag>..HEAD --oneline
    ```
-   Same review as above. Also update the version line in `book/src/introduction.md` to match the new stable tag (e.g. `v0.9.0`). Commit that change before promoting so the published book reflects the release.
+   Same review as above. Also update the version string in two places to match the new stable tag (e.g. `v0.9.0`): the italic line at the top of `book/src/introduction.md`, and the `textContent` string in `book/src/sidebar-version.js`. Commit those changes before promoting so the published book reflects the release.
 
 2. Run the promotion workflow:
    ```

@@ -1,5 +1,7 @@
 # Introduction
 
+*This edition documents Tela v0.9.0.*
+
 Tela is a connectivity fabric. It is a small set of programs that lets one
 machine reach a TCP service on another machine through an encrypted tunnel,
 without either side opening an inbound port, installing a virtual private
@@ -82,6 +84,3 @@ Apache License 2.0. See the
 [LICENSE](https://github.com/paulmooreparks/tela/blob/main/LICENSE) file in
 the repository.
 
-## Version
-
-This edition documents Tela **v0.9.0**.
