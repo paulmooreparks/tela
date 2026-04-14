@@ -69,35 +69,14 @@ hold a valid hub token.
 
 ## Step 3 - Configure and run `telad` on the application server
 
+Because `telad` uses userspace networking, the gateway can listen on port 80
+inside the tunnel without elevated privileges on either the server or the
+user's machine. Users browse to `http://127.88.x.x/` with no port number.
+
 ### Single-service application
 
-If the application runs on one port (for example, port 3000), expose it
-directly without a gateway:
-
-```yaml
-# telad.yaml
-hub: wss://hub.example.com
-token: "<app-agent-token>"
-
-machines:
-  - name: myapp
-    services:
-      - port: 3000
-        name: web
-        proto: http
-```
-
-```bash
-telad -config telad.yaml
-```
-
-Users connect and open `http://127.88.x.x:3000/` in a browser.
-
-### Multi-service application (recommended for most web apps)
-
-If the application has separate frontend and backend processes -- a common
-arrangement for single-page applications -- use the path gateway to expose
-them through one port with no cross-origin issues:
+If the application runs on one local port (for example, port 3000), route
+it through the gateway on port 80:
 
 ```yaml
 # telad.yaml
@@ -107,7 +86,32 @@ token: "<app-agent-token>"
 machines:
   - name: myapp
     gateway:
-      port: 8080
+      port: 80
+      routes:
+        - path: /
+          target: 3000    # application's local port
+```
+
+```bash
+telad -config telad.yaml
+```
+
+Users connect and open `http://127.88.x.x/` in a browser.
+
+### Multi-service application
+
+If the application has separate frontend and backend processes -- a common
+arrangement for single-page applications -- route them by path:
+
+```yaml
+# telad.yaml
+hub: wss://hub.example.com
+token: "<app-agent-token>"
+
+machines:
+  - name: myapp
+    gateway:
+      port: 80
       routes:
         - path: /api/
           target: 4000    # REST API
@@ -115,17 +119,16 @@ machines:
           target: 3000    # frontend (SPA or server-rendered)
 ```
 
-The gateway listens on port 8080 inside the tunnel. Requests to `/api/...`
-are forwarded to the local API process on port 4000. Everything else goes to
-the frontend on port 3000. Both local ports are invisible outside the server.
-The browser sees a single origin, so no Cross-Origin Resource Sharing (CORS)
-configuration is needed.
+Requests to `/api/...` are forwarded to the local API process on port 4000.
+Everything else goes to the frontend on port 3000. Both local ports are
+invisible outside the server. The browser sees a single origin, so no
+Cross-Origin Resource Sharing (CORS) configuration is needed.
 
 To add an admin panel at a separate path:
 
 ```yaml
 gateway:
-  port: 8080
+  port: 80
   routes:
     - path: /admin/
       target: 5000    # admin panel
@@ -171,11 +174,8 @@ tela connect -hub wss://hub.example.com -machine myapp
 4. Open the address shown in the output in a browser:
 
 ```
-http://127.88.x.x:8080/
+http://127.88.x.x/
 ```
-
-For a single-service setup, the port matches the service port declared in
-`telad.yaml` (for example, `:3000`).
 
 ### Connection profile (optional)
 
