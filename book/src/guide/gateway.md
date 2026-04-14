@@ -17,9 +17,9 @@ You do not need a gateway when you have only one HTTP service (just expose it as
 Without a gateway, a client connecting to a multi-service application gets one loopback address per machine, but one binding per service port:
 
 ```
-127.88.x.x:3000  → web UI
-127.88.x.x:4000  → REST API
-127.88.x.x:4100  → metrics
+127.88.x.x:3000  → port 3000
+127.88.x.x:4000  → port 4000
+127.88.x.x:4100  → port 4100
 ```
 
 The browser opens `http://127.88.x.x:3000` and calls the API on a different origin (`127.88.x.x:4000`). Same host, different port -- that is still a cross-origin request under browser CORS rules, which means either CORS headers on the API server, a hardcoded API URL in the UI code, or an extra proxy layer somewhere.
@@ -27,7 +27,7 @@ The browser opens `http://127.88.x.x:3000` and calls the API on a different orig
 With a gateway, the client gets one binding:
 
 ```
-127.88.x.x:8080  → gateway
+127.88.x.x:8080  → HTTP
 ```
 
 The browser opens `http://127.88.x.x:8080/`. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra configuration.
@@ -108,9 +108,11 @@ Output:
 
 ```
 Services available:
-  127.88.x.x:8080  → gateway
-  127.88.x.x:5432  → postgres
+  127.88.x.x:8080  → HTTP
+  127.88.x.x:5432  → port 5432
 ```
+
+Port labels come from the well-known port table (22=SSH, 80/8080=HTTP, 3389=RDP, etc.). Ports not in the table show as `port N`.
 
 If port 8080 conflicts with something local, override it:
 

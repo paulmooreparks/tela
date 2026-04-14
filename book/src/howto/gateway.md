@@ -21,9 +21,9 @@ You do **not** need a gateway when:
 Without a gateway, a developer connecting to a multi-service app gets one loopback address per machine, but one binding per service port:
 
 ```
-127.88.x.x:3000  → web UI
-127.88.x.x:4000  → REST API
-127.88.x.x:4100  → metrics
+127.88.x.x:3000  → port 3000
+127.88.x.x:4000  → port 4000
+127.88.x.x:4100  → port 4100
 ```
 
 The browser opens `http://127.88.x.x:3000` and tries to call the API. The API is on a different origin (`127.88.x.x:4000`) -- same host, different port, which still triggers Cross-Origin Resource Sharing (CORS) in the browser. The UI has to be configured with the API URL, or there has to be an extra proxy layer somewhere.
@@ -31,7 +31,7 @@ The browser opens `http://127.88.x.x:3000` and tries to call the API. The API is
 With a gateway, the developer gets one binding:
 
 ```
-127.88.x.x:8080  → gateway
+127.88.x.x:8080  → HTTP
 ```
 
 Opening `http://127.88.x.x:8080/` serves the UI. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra config.
@@ -128,9 +128,11 @@ You will see:
 
 ```
 Services available:
-  127.88.x.x:8080  → gateway
-  127.88.x.x:5432  → postgres
+  127.88.x.x:8080  → HTTP
+  127.88.x.x:5432  → port 5432
 ```
+
+Port labels come from the well-known port table (22=SSH, 80/8080=HTTP, 3389=RDP, etc.). Ports not in the table show as `port N`.
 
 Open `http://127.88.x.x:8080/` in a browser. The gateway serves the UI from local port 3000. API calls to `/api/...` are routed to local port 4000. Metrics calls to `/metrics/...` are routed to local port 4100.
 

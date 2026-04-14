@@ -96,7 +96,7 @@ tela admin access remove <id>
 
 ```bash
 tela admin tokens list
-tela admin tokens add <id> [-role owner|admin|viewer]
+tela admin tokens add <id> [-role owner|admin]
 tela admin tokens remove <id>
 tela admin rotate <id>                             # regenerate a token
 ```
@@ -112,7 +112,7 @@ tela admin portals remove <name>
 **pair-code** -- one-time onboarding codes
 
 ```bash
-tela admin pair-code [<machine>] [-type connect|register] [-expires <duration>] [-machines <list>]
+tela admin pair-code <machine> [-type connect|register] [-expires <duration>] [-machines <list>]
 ```
 
 | Flag | Default | Description |
@@ -605,7 +605,7 @@ Local token management on the hub machine. All subcommands accept `-config <path
 | Command | Description |
 |---------|-------------|
 | `telahubd user bootstrap` | Generate the first owner token (printed once) |
-| `telahubd user add <id> [-role owner\|admin\|viewer]` | Add a token identity |
+| `telahubd user add <id> [-role owner\|admin]` | Add a token identity |
 | `telahubd user list [-json]` | List identities |
 | `telahubd user grant <id> <machine>` | Grant connect access to a machine |
 | `telahubd user revoke <id> <machine>` | Revoke connect access |

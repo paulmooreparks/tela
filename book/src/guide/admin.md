@@ -32,7 +32,7 @@ The `-hub` flag accepts a short name if you have configured remotes, but the ful
 
 A hub's authorization state has two parts: identities (tokens) and permissions.
 
-An **identity** is a named token. It has a role: `owner`, `admin`, `user`, or `viewer`. Owner and admin tokens bypass all machine permission checks. User and viewer tokens are subject to per-machine access control.
+An **identity** is a named token. It has a role: `owner`, `admin`, or `user` (the default). Owner and admin tokens bypass all machine permission checks. User tokens are subject to per-machine access control. A `viewer` role exists but is reserved for the hub's auto-generated console token; it cannot be assigned when creating tokens.
 
 **Machine permissions** determine what a user-role token can do on a specific machine: `connect`, `register`, and `manage`. These are stored as entries in the access control list. A wildcard machine ID of `*` applies the permission to all machines.
 
@@ -46,9 +46,10 @@ For the formal definition of roles and permissions, see [Appendix C: Access mode
 # List all identities
 tela admin tokens list -hub wss://hub.example.com
 
-# Add a new identity
+# Add a new identity (default role: user)
 tela admin tokens add <id> -hub wss://hub.example.com
-tela admin tokens add <id> -hub wss://hub.example.com -role viewer
+# Add with elevated role
+tela admin tokens add <id> -hub wss://hub.example.com -role admin
 
 # Remove an identity
 tela admin tokens remove <id> -hub wss://hub.example.com
