@@ -89,7 +89,7 @@ Tela ships through three release channels:
 | Channel | What it is | Tag form |
 |---------|------------|----------|
 | `dev`   | Latest unstable build, every commit to main | `v0.6.0-dev.42` |
-| `beta`  | Promoted dev build that has soaked | `v0.6.0-beta.3` |
+| `beta`  | Promoted dev build ready for wider exposure | `v0.6.0-beta.3` |
 | `stable`| Promoted beta build, the conservative line | `v0.6.0`, `v0.6.1` |
 
 See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model and

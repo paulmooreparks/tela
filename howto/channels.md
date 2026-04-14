@@ -7,8 +7,8 @@ For the design model behind channels (what they are, how promotion works, when t
 ## The mental model in one paragraph
 
 Tela ships through three channels. **dev** updates on every commit to main.
-**beta** is a soaked dev build that a maintainer chose to graduate. **stable**
-is a soaked beta build, the conservative line. Each channel is described by a
+**beta** is a dev build that a maintainer judged ready for promotion. **stable**
+is a beta build that has been deemed ready for promotion to the conservative line. Each channel is described by a
 JSON manifest hosted on GitHub Releases that names the current tag and lists
 every binary published under that tag with its SHA-256. Every Tela binary --
 the `tela` client, `telad` agent, `telahubd` hub, and TelaVisor desktop app --

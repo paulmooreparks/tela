@@ -9,14 +9,14 @@ Tela ships through three release channels. A channel is a named pointer that res
 | Channel | Purpose | Cadence | Audience | Risk |
 |---------|---------|---------|----------|------|
 | **dev** | Latest unstable build. Every push to `main` produces a new dev build. | Per commit | Maintainers, contributors, dogfood rigs | Highest. May break, may have half-finished features. |
-| **beta** | Promoted dev builds that have soaked. Cut by hand when a dev build has been clean for a while. | Days to weeks | Early adopters, staging deployments, dev hubs | Moderate. Real bugs surface here. |
+| **beta** | Promoted dev builds ready for wider exposure. Cut by hand when a dev build is ready for promotion. | Days to weeks | Early adopters, staging deployments, dev hubs | Moderate. Real bugs surface here. |
 | **stable** | Promoted beta builds that have been exercised in beta. The default for new installations after 1.0. | Weeks to months | Production deployments, public hubs, package managers | Low. Bug fixes only between minor versions. |
 
 Pre-1.0, every binary defaults to `dev`. The channel mechanism works for all three channels today, but `dev` is the appropriate default while the project is moving fast and `stable` is not yet the load-bearing public face it will be after 1.0.
 
 Post-1.0, TelaVisor and the Tela binaries default to `stable`. New installations get the conservative line by default; opting into beta or dev becomes a deliberate choice.
 
-What changes at 1.0 is the meaning of `stable`, not its existence. Pre-1.0, a stable tag is the most soaked build available, with no compatibility promise. Post-1.0 it carries the backward-compatibility guarantees described below.
+What changes at 1.0 is the meaning of `stable`, not its existence. Pre-1.0, a stable tag is the build most ready for promotion, with no compatibility promise. Post-1.0 it carries the backward-compatibility guarantees described below.
 
 Users can change channel through TelaVisor's Application Settings, through `tela channel set <name>`, or by editing the `update.channel` field in their hub or agent YAML config.
 
@@ -113,7 +113,7 @@ Pre-1.0:
 
 - **Dev**: every commit. No promise of stability.
 - **Beta**: cut on demand when a dev build deserves wider exposure. No fixed cadence.
-- **Stable**: cut on demand when a beta has soaked. Pre-1.0 stable releases carry no backward-compatibility promise -- that begins at `v1.0.0`. Use them as the most-soaked build available, not as a long-term support line.
+- **Stable**: cut on demand when a beta is ready for promotion. Pre-1.0 stable releases carry no backward-compatibility promise -- that begins at `v1.0.0`. Use them as the build most ready for promotion, not as a long-term support line.
 
 Post-1.0:
 

@@ -59,7 +59,7 @@ binary. For macOS, a `.tar.gz` of the `.app` bundle.
 | Channel | What it is | Tag form |
 |---------|------------|----------|
 | `dev`   | Latest unstable build, every commit to main | `v0.8.0-dev.42` |
-| `beta`  | Promoted dev build that has soaked | `v0.8.0-beta.3` |
+| `beta`  | Promoted dev build ready for wider exposure | `v0.8.0-beta.3` |
 | `stable`| Promoted beta build, the conservative line | `v0.8.0`, `v0.6.1` |
 
 The model is documented in [Release process](../ops/release-process.md).
