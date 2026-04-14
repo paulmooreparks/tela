@@ -4,17 +4,35 @@ Install `tela`, `telad`, and `telahubd` before starting (see [Installation](inst
 
 For the full CLI reference including all flags and configuration options, see [Appendix A: CLI reference](../guide/reference.md).
 
-## The shape of a Tela connection
+## The scenario
 
-You will run three binaries, one on each of three machines:
+Picture two machines that cannot reach each other directly:
 
-- `telahubd` on a machine that has a public IP and is reachable from both
-  endpoints. We'll call this `hub.example.com`.
-- `telad` on the machine you want to reach. We'll call this `web01`.
-- `tela` on your laptop, where you actually want to type `ssh`.
+- **`web01`** is a Linux server sitting on a private network -- a home lab, a cloud VM behind NAT, a machine at a co-location facility, anything that has no publicly accessible inbound port. The name `web01` is just a label we give the machine inside Tela; it can be any string you choose. This is the machine you want to reach. It runs `telad`, the agent daemon.
+- **Your laptop** is wherever you are. It runs `tela`, the client. It also cannot accept inbound connections -- it is behind a home router or a corporate firewall.
 
-Both `telad` and `tela` connect outbound to `telahubd`. Nothing has to be open
-inbound on either of them.
+Because neither machine accepts inbound connections, they cannot talk to each other directly. The hub solves this.
+
+- **`hub.example.com`** is a small server with a public IP address. It does not need to be powerful -- it only brokers connections, it never decrypts tunnel traffic. It runs `telahubd`.
+
+Both `web01` and your laptop connect *outbound* to the hub. The hub pairs them together and starts relaying WireGuard packets between them. Once the WireGuard tunnel is up, your laptop can reach any port on `web01` as if the two machines were on the same network.
+
+When the walkthrough is done, your laptop will have a local address that reaches `web01`:
+
+```
+Services available:
+  127.88.x.x:22    → SSH
+```
+
+That `127.88.x.x` address is deterministic -- it is the same every time you connect to `web01` through this hub. You can put it in your SSH config, and it will always resolve to the same machine.
+
+## The three binaries, one on each machine
+
+- `telahubd` on `hub.example.com` -- the broker. Needs a public IP. Nothing sensitive passes through it in plaintext.
+- `telad` on `web01` -- the agent. Registers the machine with the hub and exposes its ports through the tunnel.
+- `tela` on your laptop -- the client. Connects to the hub, retrieves the tunnel to `web01`, and binds local addresses for each exposed port.
+
+Nothing has to be open inbound on `web01` or your laptop.
 
 ## Step 1: Start the hub
 
