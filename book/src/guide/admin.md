@@ -4,10 +4,10 @@ The `tela admin` subcommand manages a hub's tokens, access permissions, agent li
 
 ## Authentication
 
-Every `tela admin` command requires a hub URL and a token:
+Every `tela admin` command requires a hub URL and an owner or admin token. User-role tokens are rejected. The owner token is printed once when you run `telahubd user bootstrap` and is never displayed again.
 
 ```bash
-tela admin tokens list -hub wss://hub.example.com -token <token>
+tela admin tokens list -hub wss://hub.example.com -token <owner-token>
 ```
 
 If the token is omitted, `tela` resolves it in this order:

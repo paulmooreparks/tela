@@ -31,8 +31,15 @@ anything past a quick test. See
 [Run a hub on the public internet](../howto/hub.md) for the production
 walkthrough.
 
-On first start the hub auto-generates an owner token and prints it. Save it
+On first start the hub auto-generates an **owner token** and prints it. Save it
 somewhere; you will need it for everything below.
+
+The owner token is the highest-privilege credential on the hub -- treat it like
+a root password. This walkthrough uses it directly for both the agent and the
+client for simplicity. In a real deployment you would create separate
+lower-privilege tokens for each: one for the agent (register permission) and one
+per user (connect permission). See [Run a hub on the public
+internet](../howto/hub.md) for the production pattern.
 
 ## Step 2: Start the agent on web01
 

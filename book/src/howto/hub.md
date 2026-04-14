@@ -144,7 +144,11 @@ telahubd version
 
 ## Authentication
 
-On first startup, the hub auto-generates an owner token and prints it to stdout (secure by default). Save this token. It will not be displayed again.
+On first startup, the hub auto-generates an **owner token** and prints it to stdout (secure by default). Save this token. It will not be displayed again.
+
+The owner token is the highest-privilege credential on the hub. An identity with the owner role can add and remove all other identities, change permissions, restart the hub, and perform every administrative operation. Treat it like a root password: store it in a password manager or secrets vault, do not paste it into scripts or shell history, and do not distribute it to agents or end users. Create dedicated lower-privilege tokens for agents and users instead.
+
+In normal operation, the owner token is used only from a trusted administrator workstation to run `tela admin` commands. Day-to-day agent connections and user connections use tokens you create with `tela admin tokens add`, which carry the `user` role and are scoped to specific machines via the access control list.
 
 If you need an open hub (no authentication), remove all tokens from the config file and restart. The hub will log a warning when running in open mode.
 
@@ -208,12 +212,15 @@ tela admin portals remove awansaya -hub wss://your-hub.example.com -token <owner
 
 ### Using `telad` with auth
 
-When the hub has auth enabled, agents must provide a valid token:
+When the hub has auth enabled, agents must present a valid token. Do not use
+the owner token here. Create a dedicated agent identity with `tela admin tokens
+add` (user role) and grant it register permission on the relevant machine. See
+[Run an agent](telad.md) for the full setup.
 
 ```yaml
 # telad.yaml
 hub: wss://your-hub.example.com
-token: "<token-for-this-agent>"
+token: "<agent-token>"   # user-role token with register permission on this machine
 
 machines:
   - name: barn
@@ -224,16 +231,20 @@ machines:
 telad -config telad.yaml
 ```
 
-Or with a flag: `telad -hub wss://... -machine barn -ports "22,3389" -token <token>`
+Or with a flag: `telad -hub wss://... -machine barn -ports "22,3389" -token <agent-token>`
 
 ### Using `tela` (client) with auth
 
+Client connections use a user-role token with connect permission on the target
+machine. Do not use the owner token for routine client connections. Create a
+dedicated identity for each user or workstation with `tela admin tokens add`.
+
 ```bash
-tela connect -hub wss://your-hub.example.com -machine barn -token <your-token>
+tela connect -hub wss://your-hub.example.com -machine barn -token <user-token>
 
 # Or set env vars:
 export TELA_HUB=wss://your-hub.example.com
-export TELA_TOKEN=<your-token>
+export TELA_TOKEN=<user-token>
 tela connect -machine barn
 ```
 

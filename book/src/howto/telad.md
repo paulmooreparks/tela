@@ -34,7 +34,7 @@ Example `telad.yaml`:
 
 ```yaml
 hub: wss://your-hub.example.com
-token: "<token-for-this-agent>"
+token: "<agent-token>"   # user-role token with register permission; NOT the owner token
 
 machines:
   - name: barn
@@ -51,7 +51,7 @@ Notes:
 
 - `hub:` must be reachable from where `telad` runs.
   - For local development (no TLS), a `ws://localhost` hub URL is typical.
-- `token:` is required when the hub has authentication enabled (recommended for any Internet-facing hub). This is a token generated with `telahubd user add` or `tela admin tokens add`.
+- `token:` is required when the hub has authentication enabled (recommended for any Internet-facing hub). This is an agent token -- a user-role token with register permission on this machine -- generated with `tela admin tokens add` (or `telahubd user add` on the hub machine directly). Do not use the hub's owner token here.
 - If `target:` is omitted, `telad` assumes the services are local to the daemon host.
 
 ### Quick-start with flags
@@ -59,7 +59,7 @@ Notes:
 Instead of a config file, you can pass everything on the command line:
 
 ```bash
-telad -hub wss://your-hub.example.com -machine barn -ports "22:SSH,3389:RDP" -token <token>
+telad -hub wss://your-hub.example.com -machine barn -ports "22:SSH,3389:RDP" -token <agent-token>
 ```
 
 For production, prefer a config file and run `telad` as an OS service (see [Run Tela as an OS service](services.md)).
