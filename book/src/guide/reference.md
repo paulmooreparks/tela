@@ -246,25 +246,56 @@ Profile location:
 Schema:
 
 ```yaml
+id: ""                                # stable UUID, generated on first load
+name: "work-servers"                  # human-readable label (informational)
+mtu: 1100                             # WireGuard MTU for all connections in this profile
+mount:
+  mount: "T:"                         # drive letter (Windows) or directory path
+  port: 18080                         # WebDAV listen port
+  auto: false                         # auto-mount on connect
+dns:
+  loopback_prefix: "127.88"           # first two octets of the loopback range
 connections:
-  - hub: wss://hub.example.com        # or short name
+  - hub: wss://hub.example.com        # hub URL or short name
+    hubId: ""                         # stable hub UUID (populated lazily)
     machine: web01
+    agentId: ""                       # stable agent UUID (populated lazily)
     token: ${WEB_TOKEN}               # ${VAR} expansion is supported
+    address: ""                       # override loopback address (must be in 127.0.0.0/8)
     services:
       - remote: 22                    # forward by port number
         local: 2201                   # optional local port remap
       - name: postgres                # forward by service name (resolved via hub API)
 ```
 
+**Top-level fields:**
+
 | Field | Required | Description |
 |-------|----------|-------------|
-| `connections[].hub` | Yes | Hub URL or short name |
-| `connections[].machine` | Yes | Machine name |
-| `connections[].token` | No | Auth token for this connection |
-| `connections[].services` | No | Port/service filter; omit to forward all |
-| `connections[].services[].remote` | * | Remote port number |
-| `connections[].services[].local` | No | Local port override (defaults to remote) |
-| `connections[].services[].name` | * | Service name resolved via hub API |
+| `id` | No | Stable UUID; generated automatically on first load |
+| `name` | No | Human-readable profile label |
+| `mtu` | No | WireGuard MTU override for all connections (default 1100) |
+| `mount` | No | WebDAV mount settings |
+| `mount.mount` | No | Drive letter (e.g. `T:`) or directory path |
+| `mount.port` | No | WebDAV listen port (default 18080) |
+| `mount.auto` | No | Auto-mount on connect (default false) |
+| `dns.loopback_prefix` | No | First two octets of loopback range (default `127.88`) |
+| `connections` | Yes | List of hub+machine connections |
+
+**Connection entry fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `hub` | Yes | Hub URL or short name |
+| `hubId` | No | Stable hub UUID; populated lazily, do not set manually |
+| `machine` | Yes | Machine name |
+| `agentId` | No | Stable agent UUID; populated lazily, do not set manually |
+| `token` | No | Auth token; `${VAR}` references are expanded from the environment |
+| `address` | No | Loopback address override (must be in `127.0.0.0/8`) |
+| `services` | No | Port/service filter; omit to forward all ports |
+| `services[].remote` | * | Remote port number |
+| `services[].local` | No | Local port override (defaults to remote) |
+| `services[].name` | * | Service name resolved via hub API |
 
 \* Each service entry needs either `remote` or `name`, not both.
 

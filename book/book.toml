@@ -10,7 +10,7 @@
 # the docs can never drift from the code.
 
 [book]
-title = "Tela"
+title = "Tela: The Complete Reference"
 description = "FOSS encrypted remote-access fabric using WireGuard tunnels"
 authors = ["Paul Parks"]
 language = "en"

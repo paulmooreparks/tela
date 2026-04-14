@@ -172,6 +172,88 @@ Notes:
 
 `telad login` stores in the system credential store (requires elevation) and persists across service restarts.
 
+## Connection profiles (`profiles/<name>.yaml`)
+
+**Purpose:** Defines one or more hub/machine connections that `tela connect -profile <name>` opens in parallel, each with its own WireGuard tunnel and auto-reconnect.
+
+**File locations:**
+
+- Windows: `%APPDATA%\tela\profiles\<name>.yaml`
+- Linux/macOS: `~/.tela/profiles/<name>.yaml`
+
+An explicit file path can also be passed: `tela connect -profile /path/to/profile.yaml`
+
+**How it's created:** `tela profile create <name>`, or by writing the file directly.
+
+**Schema:**
+
+```yaml
+id: my-profile              # optional: stable identifier for this profile
+name: "My Profile"          # optional: display name
+mtu: 1100                   # optional: WireGuard tunnel MTU (default 1100)
+
+connections:
+  - hub: wss://hub.example.com    # or a short name resolved via a configured remote
+    machine: web01
+    token: ${WEB_TOKEN}           # ${VAR} expansion is supported; omit if stored in credentials.yaml
+    services:                     # omit to forward all ports the agent advertises
+      - remote: 22                # forward by port number
+        local: 2201               # optional: remap to a different local port (defaults to remote)
+      - name: postgres            # forward by service name (resolved via hub API at connect time)
+
+# Optional: start a WebDAV mount when the profile connects
+mount:
+  mount: T:                 # drive letter (Windows) or directory path (macOS/Linux)
+  port: 18080               # WebDAV listen port (default 18080)
+  auto: true                # mount automatically on connect
+
+# Optional: DNS configuration
+dns:
+  loopback_prefix: "127.88"  # prefix for per-machine loopback addresses
+```
+
+**Top-level fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | No | Stable identifier for this profile |
+| `name` | No | Display name |
+| `mtu` | No | WireGuard tunnel MTU; overrides the `-mtu` flag default of 1100 |
+| `connections` | Yes | List of hub/machine connections |
+| `mount` | No | WebDAV mount to start automatically on connect |
+| `dns` | No | DNS configuration |
+
+**Connection entry fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `hub` | Yes | Hub WebSocket URL (`wss://...`) or short name |
+| `hubId` | No | Stable hub UUID; populated lazily by `tela`, do not set manually |
+| `machine` | Yes | Machine name as registered with the hub |
+| `agentId` | No | Stable agent UUID; populated lazily by `tela`, do not set manually |
+| `token` | No | Auth token; omit if stored in `credentials.yaml` |
+| `address` | No | Override the loopback address for this machine (must be in `127.0.0.0/8`) |
+| `services` | No | Port or service filter; omit to forward everything the agent advertises |
+| `services[].remote` | * | Remote port number to forward |
+| `services[].local` | No | Local port to bind (defaults to `remote`) |
+| `services[].name` | * | Service name to resolve via the hub API |
+
+\* Each service entry needs either `remote` or `name`, not both.
+
+**Mount fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `mount` | No | Drive letter (Windows `T:`) or directory path to mount |
+| `port` | No | WebDAV listen port (default 18080) |
+| `auto` | No | If true, mount automatically when the profile connects |
+
+**Notes:**
+
+- Profile YAML supports `${VAR}` expansion so tokens can stay out of the file.
+- Multiple connections in one profile open in parallel; each reconnects independently on disconnect.
+- The default profile can be set with the `TELA_PROFILE` environment variable.
+
 ## `telad.yaml` (daemon / agent config)
 
 **Purpose:** Runs one `telad` process that can register one or more machines to a hub.
@@ -301,11 +383,12 @@ machines:
 **Schema:**
 
 ```yaml
+hubId: ""            # optional: stable identifier for this hub instance
 port: 80
 udpPort: 41820
 udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
 name: owlsnest
-wwwDir: ./www
+wwwDir: ""           # omit to use the embedded console
 
 # Optional: which release channel telahubd's self-update follows.
 # See RELEASE-PROCESS.md for the channel model.
@@ -317,7 +400,7 @@ auth:
   tokens:
     - id: alice
       token: <hex-string>
-      hubRole: owner         # "owner" | "admin" | "" (user)
+      hubRole: owner         # "owner" | "admin" | "viewer" | "" (user)
     - id: bob
       token: <hex-string>
       hubRole: ""            # regular user
@@ -332,9 +415,24 @@ auth:
       registerToken: <token>
       connectTokens:
         - <token>
-        - <token>
       manageTokens:
         - <token>
+
+# Portal registrations (managed via 'telahubd portal' or 'tela admin portals')
+portals:
+  awansaya:                        # portal name (key)
+    url: https://awansaya.net      # portal base URL
+    syncToken: <hex>               # per-hub sync token returned by portal on registration
+    hubDirectory: /api/hubs        # hub directory endpoint (discovered via /.well-known/tela)
+    # token is the portal admin token used only during registration; not persisted
+
+# Hub bridging (experimental): forward specific machines to a remote hub
+bridges:
+  - hubId: remote-hub              # identifier of the remote hub
+    url: wss://remote-hub.example.com
+    token: <token>                 # auth token on the remote hub
+    maxHops: 3                     # maximum relay hops (default 0 = unlimited)
+    machines: [web01, db01]        # machines to bridge to the remote hub
 ```
 
 ### Core fields
@@ -356,7 +454,7 @@ When `auth:` is absent or has no tokens, the hub runs in **open mode** (no authe
 | Field | Required | Description |
 |-------|----------|-------------|
 | `id` | yes | Human-friendly label (e.g. `alice`, `ci-bot`) |
-| `token` | yes | Hex secret (64-char recommended). Generated by `tela admin add-token` or `openssl rand -hex 32` |
+| `token` | yes | Hex secret (64-char recommended). Generated by `tela admin tokens add` or `openssl rand -hex 32` |
 | `hubRole` | no | `"owner"` \| `"admin"` \| `"viewer"` \| `""` (regular user) |
 
 **`auth.machines`**: per-machine access control:
