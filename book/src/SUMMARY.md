@@ -11,8 +11,13 @@
 # User Guide
 
 - [The three binaries](guide/three-binaries.md)
-- [TelaVisor desktop app](guide/telavisor.md)
+- [Credentials and pairing](guide/credentials.md)
+- [Connection profiles](guide/profiles.md)
 - [Hub directories and portals](guide/directories.md)
+- [The path gateway](guide/gateway.md)
+- [File sharing](guide/file-sharing.md)
+- [Upstreams](guide/upstreams.md)
+- [TelaVisor desktop app](guide/telavisor.md)
 
 # How-to Guides
 
