@@ -14,23 +14,23 @@ You do not need a gateway when you have only one HTTP service (just expose it as
 
 ## How it works
 
-Without a gateway, a client connecting to a multi-service application gets one local port per service:
+Without a gateway, a client connecting to a multi-service application gets one loopback address per machine, but one binding per service port:
 
 ```
-localhost:3000  -> web UI
-localhost:4000  -> REST API
-localhost:4100  -> metrics
+127.88.x.x:3000  → web UI
+127.88.x.x:4000  → REST API
+127.88.x.x:4100  → metrics
 ```
 
-The browser opens `localhost:3000` and calls the API on a different origin (`localhost:4000`). That is a cross-origin request, which means either CORS headers, a hardcoded API URL in the UI code, or an extra proxy layer somewhere.
+The browser opens `http://127.88.x.x:3000` and calls the API on a different origin (`127.88.x.x:4000`). Same host, different port -- that is still a cross-origin request under browser CORS rules, which means either CORS headers on the API server, a hardcoded API URL in the UI code, or an extra proxy layer somewhere.
 
-With a gateway, the client gets one port:
+With a gateway, the client gets one binding:
 
 ```
-localhost:8080  -> gateway
+127.88.x.x:8080  → gateway
 ```
 
-The browser opens `localhost:8080/`. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra configuration.
+The browser opens `http://127.88.x.x:8080/`. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra configuration.
 
 ## Configuration
 
@@ -107,8 +107,9 @@ tela connect -profile barn
 Output:
 
 ```
-localhost:8080  -> gateway (barn)
-localhost:5432  -> postgres (barn)
+Services available:
+  127.88.x.x:8080  → gateway
+  127.88.x.x:5432  → postgres
 ```
 
 If port 8080 conflicts with something local, override it:
@@ -151,7 +152,7 @@ connections:
         local: 14000
 ```
 
-Now `localhost:8080/api/...` reaches the API through the gateway, and `localhost:14000/...` reaches it directly.
+Now `http://127.88.x.x:8080/api/...` reaches the API through the gateway, and `http://127.88.x.x:14000/...` reaches it directly.
 
 ## Cross-environment use
 
@@ -171,7 +172,7 @@ connections:
         local: 18080
 ```
 
-`localhost:8080` is the prod application and `localhost:18080` is staging. The routing logic stays in each environment's `telad.yaml`, not in the client profile.
+Each hub+machine pair gets a unique deterministic loopback address, so prod and staging appear at different `127.88.x.x` addresses and never conflict on the same port. The `local: 18080` override is optional -- use it if you want port-based disambiguation instead of relying on the address. The routing logic stays in each environment's `telad.yaml`, not in the client profile.
 
 ## Limitations
 

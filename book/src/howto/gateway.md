@@ -18,23 +18,23 @@ You do **not** need a gateway when:
 
 ## What a gateway looks like to a user
 
-Without a gateway, a developer connecting to a multi-service app gets one local port per service:
+Without a gateway, a developer connecting to a multi-service app gets one loopback address per machine, but one binding per service port:
 
 ```
-localhost:3000  -> web UI
-localhost:4000  -> REST API
-localhost:4100  -> metrics
+127.88.x.x:3000  → web UI
+127.88.x.x:4000  → REST API
+127.88.x.x:4100  → metrics
 ```
 
-The browser opens `localhost:3000` and tries to call the API. The API is on a different origin (`localhost:4000`), so the browser refuses (Cross-Origin Resource Sharing (CORS)), or the UI has to be configured with the API URL, or there has to be an extra proxy layer somewhere.
+The browser opens `http://127.88.x.x:3000` and tries to call the API. The API is on a different origin (`127.88.x.x:4000`) -- same host, different port, which still triggers Cross-Origin Resource Sharing (CORS) in the browser. The UI has to be configured with the API URL, or there has to be an extra proxy layer somewhere.
 
-With a gateway, the developer gets one local port:
+With a gateway, the developer gets one binding:
 
 ```
-localhost:8080  -> gateway
+127.88.x.x:8080  → gateway
 ```
 
-Opening `localhost:8080/` serves the UI. The UI calls `localhost:8080/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra config.
+Opening `http://127.88.x.x:8080/` serves the UI. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra config.
 
 ## Configuring the gateway
 
@@ -127,11 +127,12 @@ tela connect -profile launchpad
 You will see:
 
 ```
-localhost:8080  -> gateway (launchpad)
-localhost:5432  -> postgres (launchpad)
+Services available:
+  127.88.x.x:8080  → gateway
+  127.88.x.x:5432  → postgres
 ```
 
-Open `http://localhost:8080/` in a browser. The gateway serves the UI from local port 3000. API calls to `/api/...` are routed to local port 4000. Metrics calls to `/metrics/...` are routed to local port 4100.
+Open `http://127.88.x.x:8080/` in a browser. The gateway serves the UI from local port 3000. API calls to `/api/...` are routed to local port 4000. Metrics calls to `/metrics/...` are routed to local port 4100.
 
 ### Renaming the local port
 
@@ -148,7 +149,7 @@ connections:
         local: 15432
 ```
 
-Now `localhost:18080` reaches the gateway. The gateway port on the agent side is still 8080.
+Now the gateway is at `http://127.88.x.x:18080/` instead of port 8080. The gateway port on the agent side is still 8080.
 
 ### Direct access alongside the gateway
 
@@ -184,9 +185,9 @@ connections:
 
 Now you have:
 
-- `localhost:8080/` -- the UI through the gateway
-- `localhost:8080/api/users` -- the API through the gateway (path-routed)
-- `localhost:14000/users` -- the API directly (bypassing the gateway)
+- `http://127.88.x.x:8080/` -- the UI through the gateway
+- `http://127.88.x.x:8080/api/users` -- the API through the gateway (path-routed)
+- `http://127.88.x.x:14000/users` -- the API directly (bypassing the gateway)
 
 This is useful when you want the browser experience for normal use and the direct port for debugging.
 
@@ -208,7 +209,7 @@ connections:
         local: 18080
 ```
 
-Now `localhost:8080` is the prod app and `localhost:18080` is the staging app. Two browser tabs, two environments, identical URL structure inside each tab. The gateway routes are part of each environment's `telad.yaml`, so the routing logic stays with the environment.
+Each hub+machine pair gets a unique deterministic loopback address, so prod and staging appear at different `127.88.x.x` addresses and never conflict on the same port. The `local: 18080` override is optional -- use it if you want port-based disambiguation rather than navigating by address. Open two browser tabs, one for each address, and both show the same URL path structure since the gateway routes are defined in each environment's `telad.yaml`.
 
 ## What the gateway does not do
 
