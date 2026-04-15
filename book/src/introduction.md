@@ -71,6 +71,10 @@ matches the binaries on the stable channel.
 - The three binaries are `tela` (client), `telad` (agent or daemon), and
   `telahubd` (hub or relay).
 - "TelaVisor" is the desktop graphical interface built on top of `tela`.
+- A "group" is one hub and the agents connected to it -- the basic
+  operational unit. A "fleet" is a collection of groups. The analogy is
+  a carrier battle group (hub as carrier, agents as support vessels) within
+  a fleet.
 - A "hub directory" is anything that responds to the small Tela directory
   protocol; a "portal" is a directory plus extras (dashboard, identity,
   audit). See [Hub directories and portals](guide/directories.md).

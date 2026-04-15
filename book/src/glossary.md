@@ -84,6 +84,32 @@ See [File sharing](../guide/file-sharing.md).
 
 ---
 
+## Fleet
+
+A collection of groups. A fleet may contain a single group (a simple
+single-hub deployment) or many groups across multiple sites, environments,
+or customers. The fleet is the unit of reasoning for operators who manage
+infrastructure at scale. Portals support fleet-scale deployments by listing
+multiple hubs in a single directory, letting clients resolve any hub by
+name without knowing its URL in advance.
+
+See also: [Group](#group), [Portal](#portal).
+
+---
+
+## Group
+
+One hub (`telahubd`) together with all the agents (`telad`) connected to
+it. A group is the basic operational unit of a Tela deployment. The analogy
+is a carrier battle group: the hub is the carrier, and the agents are the
+support vessels operating under it. A single-hub deployment is one group.
+A larger deployment, where separate hubs serve different environments or
+customer sites, is a fleet of groups.
+
+See also: [Hub](#hub), [Fleet](#fleet).
+
+---
+
 ## Hub
 
 A running instance of `telahubd`. The hub is the coordination point for the

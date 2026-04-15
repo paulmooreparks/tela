@@ -99,9 +99,17 @@ how promotions work.
 
 ## 4. Concepts and terminology
 
+### Group
+
+A group is one hub and all the agents connected to it. It is the basic operational unit of a Tela deployment. The analogy is a carrier battle group: the hub is the carrier, the agents are the support vessels operating under it. A simple single-hub deployment is one group. A multi-site deployment is a fleet of groups.
+
+### Fleet
+
+A fleet is a collection of groups. A fleet may contain one group or many. Portals support fleet-scale deployments by listing multiple hubs in a directory so clients can resolve any hub by name.
+
 ### Hub
 
-A hub is a running instance of `telahubd`. It is the central relay for a group of machines and their services. Each hub has a URL, for example `https://hub.example.com`.
+A hub is a running instance of `telahubd`. It is the center of a group: it pairs agents with clients, relays encrypted traffic, enforces access control, and serves the web console and admin API. Each hub has a URL, for example `https://hub.example.com`.
 
 ### Machine
 

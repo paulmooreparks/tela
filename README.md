@@ -333,6 +333,8 @@ If you need a full Layer 3 VPN with arbitrary IP routing and line-rate throughpu
 
 | Term | Meaning |
 |------|---------|
+| **Group** | One hub and all the agents connected to it. The basic operational unit. Analogous to a carrier battle group: the hub is the carrier, the agents are the support vessels. |
+| **Fleet** | A collection of groups. A single-hub deployment is one group; a multi-site or multi-environment deployment is a fleet. |
 | **Hub** | The central relay server (`telahubd`). Pairs agents with clients and relays encrypted traffic. Also serves the hub console. |
 | **Hub Console** | The web interface served by a hub (e.g., `https://hub.example.com/`). Shows registered machines, services, and session history. |
 | **Agent / telad** | A long-lived daemon on a managed machine. Registers with the hub and exposes local services through the tunnel. |

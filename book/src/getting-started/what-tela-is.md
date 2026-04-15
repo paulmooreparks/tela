@@ -1,6 +1,6 @@
 # What Tela is
 
-The introduction sketched the shape: Tela is a connectivity fabric, three small binaries, scaling from one laptop to a fleet. The sections below go deeper on the problem it solves, the properties that define the design, and the deliberate tradeoffs that set its scope.
+The introduction sketched the shape: Tela is a connectivity fabric, three small binaries, scaling from one laptop to a fleet. The basic operational unit is a *group*: one hub and all the agents connected to it. A collection of groups is a *fleet*. The sections below go deeper on the problem it solves, the properties that define the design, and the deliberate tradeoffs that set its scope.
 
 ## What it solves
 
