@@ -103,7 +103,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Cross-compile tela, telad, telahubd
+      - name: Cross-compile tela, telad, telahubd, telachand
         env:
           GOOS: ${{ matrix.target.goos }}
           GOARCH: ${{ matrix.target.goarch }}
@@ -112,3 +112,4 @@ jobs:
           go build -trimpath ./cmd/tela
           go build -trimpath ./cmd/telad
           go build -trimpath ./cmd/telahubd
+          go build -trimpath ./cmd/telachand
