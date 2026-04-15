@@ -76,27 +76,10 @@ func serviceHasUserFlag() bool {
 }
 
 func serviceInstall() {
-	// Locate the config file. Unlike telad, telachand always requires an
-	// explicit -config flag (no inline flag mode since config is small).
+	// telachand service install always requires -config; there is no
+	// inline-flags mode since the config is small and file-based.
 	var configPath string
 	userMode := false
-	for i, arg := range os.Args[3:] {
-		switch arg {
-		case "-config", "--config":
-			if i+1 < len(os.Args[3:]) {
-				configPath = os.Args[4+i]
-			}
-		case "--user", "-user":
-			userMode = true
-		}
-	}
-	// Simple re-parse using flag package for cleanliness.
-	_ = configPath
-	_ = userMode
-
-	// Re-parse properly.
-	configPath = ""
-	userMode = false
 	args := os.Args[3:]
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
