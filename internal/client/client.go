@@ -2088,23 +2088,29 @@ func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Liste
 	if m.bindAddr != "" {
 		if aliasErr := ensureLoopbackAlias(m.bindAddr); aliasErr == nil {
 			addr = m.bindAddr
-			port = loopbackPort(m.remote)
+			port = m.remote // real service port on the loopback address
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			ln, err = net.Listen("tcp", listenAddr)
 			if err == nil {
-				if port != m.remote {
-					log.Printf("  [loopback] %s: service port %d → local port %d", addr, m.remote, port)
+				// On Windows, a socket bound to 0.0.0.0:PORT with
+				// SO_EXCLUSIVEADDRUSE silently captures connections even when a
+				// more-specific bind succeeds. Verify the listener actually
+				// receives connections before advertising it.
+				if listenerShadowed(ln, listenAddr) {
+					ln.Close()
+					ln = nil
+					alt := m.remote + 10000
+					listenAddr = fmt.Sprintf("%s:%d", addr, alt)
+					ln, err = net.Listen("tcp", listenAddr)
+					if err == nil {
+						log.Printf("  [loopback] %s:%d shadowed by wildcard listener, using :%d", addr, m.remote, alt)
+						return addr, alt, ln, nil
+					}
+				} else {
+					return addr, port, ln, nil
 				}
-				return addr, port, ln, nil
 			}
-			// Preferred port busy; let OS pick a free port.
-			ln, err = net.Listen("tcp", addr+":0")
-			if err == nil {
-				port = uint16(ln.Addr().(*net.TCPAddr).Port)
-				log.Printf("  [loopback] %s: port %d in use, using :%d", addr, loopbackPort(m.remote), port)
-				return addr, port, ln, nil
-			}
-			log.Printf("  [loopback] cannot bind %s, falling back to 127.0.0.1", addr)
+			log.Printf("  [loopback] %s:%d and %s:%d both in use, falling back to 127.0.0.1", addr, m.remote, addr, port)
 		}
 	}
 
@@ -2126,7 +2132,7 @@ func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Liste
 		return addr, alt, ln, nil
 	}
 
-	return addr, m.local, nil, fmt.Errorf("could not bind %s:%d or 127.0.0.1:%d or 127.0.0.1:%d", m.bindAddr, loopbackPort(m.remote), m.local, alt)
+	return addr, m.local, nil, fmt.Errorf("could not bind %s:%d or 127.0.0.1:%d or 127.0.0.1:%d", m.bindAddr, m.remote, m.local, alt)
 }
 
 // portLabel returns a friendly name for well-known ports.
