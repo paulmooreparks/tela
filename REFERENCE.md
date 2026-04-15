@@ -1842,6 +1842,29 @@ For networking troubleshooting, see [howto/networking.md](howto/networking.md).
 
 ## Quick reference
 
+### telachand commands
+
+```bash
+# Start the channel daemon
+telachand -config telachand.yaml
+
+# Publish a channel manifest (scan files/ dir, compute SHA-256s, write manifest)
+telachand publish -channel dev -tag v0.11.0-dev.1 -config telachand.yaml
+telachand publish -channel stable -tag v0.10.0 -base-url http://192.168.1.10:9900/ -config telachand.yaml
+
+# OS service management
+telachand service install -config telachand.yaml      # system service (requires admin/root)
+telachand service install --user -config telachand.yaml  # user autostart (no admin required)
+telachand service start | stop | restart | status | uninstall [--user]
+telachand service run [--user]                         # invoked by the service manager
+
+# Self-update
+telachand update [-channel dev|beta|stable] [-dry-run] [-config telachand.yaml]
+
+# Version
+telachand version
+```
+
 ### telahubd commands
 
 ```bash

@@ -223,8 +223,176 @@ You asked for a specific version that is not the channel's current HEAD. Channel
 
 The hub or agent is running a binary from before the channel system was added. Update it via the legacy path first (run `telahubd update` or `telad update` from a shell on the box, or use the bootstrap one-liner above), and the channel-aware UI will start working on the next page load.
 
+## Self-hosted channel with telachand
+
+The default update channel fetches manifests from GitHub Releases. This works for most deployments, but there are cases where you need something different:
+
+- An air-gapped network with no internet access
+- A locked-down corporate environment where GitHub is blocked
+- Distributing custom builds that never go through the public release pipeline
+- Staging a release internally before promoting to a public channel
+
+The `telachand` binary (Tela Channel Daemon) handles all of these. It is a lightweight HTTP server that hosts channel manifests and binary files using the same manifest format and HTTP paths that the GitHub channel uses. Tela clients do not know or care whether they are talking to GitHub or to `telachand`.
+
+### Set up telachand
+
+Create a config file:
+
+```yaml
+# telachand.yaml
+listen: ":9900"
+data: /var/lib/telachand       # holds dev.json, beta.json, stable.json and files/
+publicURL: "http://192.168.1.10:9900"
+```
+
+Start the daemon:
+
+```bash
+telachand -config telachand.yaml
+```
+
+Install as a service for persistence:
+
+```bash
+sudo telachand service install -config /etc/tela/telachand.yaml
+sudo telachand service start
+```
+
+User-level autostart (no admin required):
+
+```bash
+telachand service install --user -config telachand.yaml
+telachand service start --user
+```
+
+### Populate the files directory
+
+Place the binaries you want to distribute under `{data}/files/`. The naming convention matches the GitHub release assets:
+
+```
+/var/lib/telachand/files/
+  tela-linux-amd64
+  tela-linux-arm64
+  tela-windows-amd64.exe
+  telad-linux-amd64
+  telad-windows-amd64.exe
+  telahubd-linux-amd64
+  telahubd-windows-amd64.exe
+  telachand-linux-amd64
+  telachand-windows-amd64.exe
+```
+
+### Publish a manifest
+
+Once the binaries are in place, run `telachand publish` to scan the directory, compute SHA-256 hashes, and write the manifest:
+
+```bash
+telachand publish -channel stable -tag v0.10.0 -config telachand.yaml
+```
+
+Output:
+
+```
+  tela-linux-amd64                              a1b2c3d4e5f6...  12345678 bytes
+  tela-windows-amd64.exe                        b2c3d4e5f6a1...  13456789 bytes
+  ...
+
+published stable channel manifest
+  tag:      v0.10.0
+  binaries: 9
+  base:     http://192.168.1.10:9900/files/
+  manifest: /var/lib/telachand/stable.json
+```
+
+The `stable.json` file is now live at `http://192.168.1.10:9900/stable.json`.
+
+Publish a different channel (for example, a dev build):
+
+```bash
+telachand publish -channel dev -tag v0.11.0-dev.1 -config telachand.yaml
+```
+
+Each channel has its own manifest. You can maintain all three simultaneously by publishing each independently.
+
+### Point Tela binaries at the self-hosted channel
+
+Set `update.manifestBase` in each binary's config to the telachand server's base URL:
+
+```yaml
+# telad.yaml
+update:
+  channel: stable
+  manifestBase: http://192.168.1.10:9900/
+```
+
+```yaml
+# telahubd.yaml
+update:
+  channel: stable
+  manifestBase: http://192.168.1.10:9900/
+```
+
+For the `tela` client and TelaVisor, set the manifest base in `~/.tela/credentials.yaml`:
+
+```yaml
+update:
+  channel: stable
+  manifestBase: http://192.168.1.10:9900/
+```
+
+After these changes, `tela update`, `telad update`, `telahubd update`, and the TelaVisor Update buttons all fetch from your telachand instance rather than GitHub.
+
+### Verify it works
+
+Check what the channel currently reports:
+
+```bash
+tela channel
+```
+
+```text
+  channel:         stable
+  manifest:        http://192.168.1.10:9900/stable.json
+  current version: dev
+  latest version:  v0.10.0  (update available)
+```
+
+Inspect the full manifest:
+
+```bash
+tela channel show -channel stable
+```
+
+### Publishing a new build
+
+When you have a new build to distribute:
+
+1. Copy the new binaries into `{data}/files/`, replacing the old ones.
+2. Run `telachand publish -channel <name> -tag <new-tag> -config telachand.yaml`.
+3. All configured clients will see the update on their next check.
+
+The publish step is the only manual step. The daemon itself does not need to restart.
+
+### telachand self-update
+
+`telachand` can update itself the same way the other binaries can:
+
+```bash
+telachand update                            # update from configured channel
+telachand update -channel stable            # one-shot channel override
+telachand update -dry-run                   # see what would happen
+```
+
+By default, `telachand` fetches its own updates from the official GitHub channel. To have it update from another `telachand` instance, set `update.base` in `telachand.yaml`:
+
+```yaml
+update:
+  channel: stable
+  base: http://primary-telachand.example.com:9900/
+```
+
 ## Related
 
 - [Release process](../ops/release-process.md) -- the channel model and how promotions work
-- [Appendix A: CLI reference](../guide/reference.md) -- full CLI reference for `tela channel`, `tela update`, `telad update`, `telahubd update`, `tela admin hub channel`, `tela admin agent channel`
-- [Appendix B: Configuration file reference](../guide/configuration.md) -- the `update.channel` and `update.manifestBase` fields in `telad.yaml`, `telahubd.yaml`, and `credentials.yaml`
+- [Appendix A: CLI reference](../guide/reference.md) -- full CLI reference for `tela channel`, `tela update`, `telad update`, `telahubd update`, `telachand publish`, `tela admin hub channel`, `tela admin agent channel`
+- [Appendix B: Configuration file reference](../guide/configuration.md) -- the `update.channel` and `update.manifestBase` fields in `telad.yaml`, `telahubd.yaml`, `credentials.yaml`, and `telachand.yaml`

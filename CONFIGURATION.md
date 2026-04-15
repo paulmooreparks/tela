@@ -555,6 +555,69 @@ When running as an OS service, `telad` and `telahubd` read their YAML from a sys
 - Windows: `%ProgramData%\Tela\telad.yaml` and `%ProgramData%\Tela\telahubd.yaml`
 - Linux/macOS: `/etc/tela/telad.yaml` and `/etc/tela/telahubd.yaml`
 
+## `telachand.yaml` (channel daemon config)
+
+**Binary:** `telachand`
+
+**Purpose:** Configures the Tela Channel Daemon, a lightweight HTTP server that hosts Tela release channel manifests and binary files. Deploy it when you want a self-hosted alternative to the default GitHub release channel.
+
+**Default config path:** none (pass with `-config`). When installed as a service, the config is copied to:
+
+- Windows: `%ProgramData%\Tela\telachand.yaml`
+- Linux/macOS: `/etc/tela/telachand.yaml`
+
+**Full example:**
+
+```yaml
+# Address the HTTP server listens on. Default: ":9900"
+listen: ":9900"
+
+# Directory that holds channel manifests (dev.json, beta.json, stable.json)
+# and a "files/" subdirectory of binary downloads.
+# Default: /var/lib/telachand (Linux/macOS), %ProgramData%\telachand (Windows)
+data: /var/lib/telachand
+
+# Public base URL that update clients use to reach this server.
+# Embedded in generated manifests as the downloadBase prefix.
+# Required for "telachand publish" unless -base-url is supplied on the CLI.
+publicURL: "http://192.168.1.10:9900"
+
+# Self-update channel for telachand itself.
+update:
+  channel: stable           # dev | beta | stable (default: stable)
+  # base: https://...       # optional: fetch telachand updates from a different server
+```
+
+**Field reference:**
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `listen` | `:9900` | HTTP listen address |
+| `data` | platform-specific | Root directory for manifests and binary files |
+| `publicURL` | (none) | Base URL embedded in published manifests as `downloadBase` |
+| `update.channel` | `stable` | Release channel for telachand's own self-update |
+| `update.base` | upstream | Override the manifest URL prefix for telachand's self-update |
+
+**Pointing tela, telad, or telahubd at a telachand instance:**
+
+Set `manifestBase` in each binary's update block to the telachand server's public URL:
+
+```yaml
+# telad.yaml
+update:
+  channel: stable
+  manifestBase: http://192.168.1.10:9900/
+```
+
+```yaml
+# telahubd.yaml
+update:
+  channel: stable
+  manifestBase: http://192.168.1.10:9900/
+```
+
+For the `tela` client and TelaVisor, set `update.manifestBase` in `credentials.yaml`, or use `tela channel set stable --base http://192.168.1.10:9900/`.
+
 ## Awan Saya: `portal/config.json` (hub directory)
 
 **Repo:** Awan Saya
