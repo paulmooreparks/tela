@@ -348,6 +348,15 @@ If you need a full Layer 3 VPN with arbitrary IP routing and line-rate throughpu
 | **Gateway** | A built-in HTTP reverse proxy in telad that routes requests by URL path to different local services through a single tunnel port. |
 | **Upstream** | A dependency route in telad that forwards outbound service calls from localhost to a configurable target, providing a virtual dispatch layer for service-to-service communication. |
 
+## Community
+
+- [Q&A](https://github.com/paulmooreparks/tela/discussions/categories/q-a) -- Setup and usage questions
+- [Ideas](https://github.com/paulmooreparks/tela/discussions/categories/ideas) -- Feature proposals
+- [Show and tell](https://github.com/paulmooreparks/tela/discussions/categories/show-and-tell) -- Deployments and integrations
+- [Announcements](https://github.com/paulmooreparks/tela/discussions/categories/announcements) -- Releases and project updates
+
+For confirmed bugs, open an [issue](https://github.com/paulmooreparks/tela/issues/new/choose). For security vulnerabilities, see [SECURITY.md](SECURITY.md).
+
 ## Documentation
 
 - [TELA-DESIGN-LANGUAGE.md](TELA-DESIGN-LANGUAGE.md) -- Tela Design Language (visual language specification)
