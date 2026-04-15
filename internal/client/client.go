@@ -2076,30 +2076,35 @@ func LoopbackAddr(prefix, hubURL, machine string) string {
 	return fmt.Sprintf("%s.%d.%d", prefix, o3, o4)
 }
 
-// bindLoopbackListener binds a TCP listener for the given portMapping using
-// the platform's preferred address and port. Falls back to an OS-assigned
-// port on the same address if the preferred port is already in use.
+// bindLoopbackListener binds a TCP listener on 127.0.0.1 for the given
+// portMapping. Tries the configured local port first, then local+10000 if
+// that port is already in use, then lets the OS assign a free port.
 //
 // Returns the address actually bound, the port actually bound, the
 // listener, and any error (only if all attempts failed).
 func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Listener, err error) {
-	addr, port = loopbackBind(m)
-	preferredPort := port
+	addr = "127.0.0.1"
 
-	ln, err = net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
+	ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", m.local))
 	if err == nil {
-		return addr, port, ln, nil
+		return addr, m.local, ln, nil
 	}
 
-	// Preferred port busy; let the OS assign a free port on the same address.
-	ln, err = net.Listen("tcp", addr+":0")
+	alt := m.local + 10000
+	ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", alt))
+	if err == nil {
+		log.Printf("  (port %d in use, remapped to %d)", m.local, alt)
+		return addr, alt, ln, nil
+	}
+
+	ln, err = net.Listen("tcp", "127.0.0.1:0")
 	if err == nil {
 		port = uint16(ln.Addr().(*net.TCPAddr).Port)
-		log.Printf("  [loopback] %s: port %d in use, using :%d", addr, preferredPort, port)
+		log.Printf("  (ports %d and %d in use, using :%d)", m.local, alt, port)
 		return addr, port, ln, nil
 	}
 
-	return addr, m.local, nil, fmt.Errorf("could not bind %s:%d", addr, preferredPort)
+	return addr, m.local, nil, fmt.Errorf("could not bind 127.0.0.1:%d or 127.0.0.1:%d", m.local, alt)
 }
 
 // portLabel returns a friendly name for well-known ports.
