@@ -789,7 +789,7 @@ function refreshStatus() {
 
         var statusCopyIcon = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 2 3v6A1.5 1.5 0 0 0 3.5 10.5H5"/></svg>';
         var localCell = portFound
-          ? '<button type="button" class="copy-btn" onclick="copyToClipboard(' + JSON.stringify(localAddr) + ')" title="Copy address">' + statusCopyIcon + '</button>' + localDisplay
+          ? '<button type="button" class="copy-btn" onclick="copyToClipboard(\'' + escAttr(localAddr) + '\')" title="Copy address">' + statusCopyIcon + '</button>' + localDisplay
           : localDisplay;
         html += '<div class="settings-row status-svc-row">'
           + '<span class="dot ' + indicatorClass + '"></span>'
@@ -6028,7 +6028,9 @@ function hubNameFromURL(url) {
 }
 
 function copyToClipboard(text) {
-  if (navigator.clipboard) {
+  if (window.runtime && window.runtime.ClipboardSetText) {
+    window.runtime.ClipboardSetText(text);
+  } else if (navigator.clipboard) {
     navigator.clipboard.writeText(text);
   }
 }
