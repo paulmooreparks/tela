@@ -3278,6 +3278,7 @@ function agentFormatBytes(n) {
 
 var filesView = 'machines'; // 'machines' | 'files'
 var filesCurrentMachine = '';
+var filesCurrentShare = '';
 var filesCurrentPath = '';
 var filesCurrentWritable = false;
 var filesCurrentAllowDelete = false;
@@ -3316,6 +3317,7 @@ function toggleHideDotfiles(hide) {
 function filesShowMachineList() {
   filesView = 'machines';
   filesCurrentMachine = '';
+  filesCurrentShare = '';
   filesCurrentPath = '';
   filesCurrentWritable = false;
   filesNavHistory = [];
@@ -3366,25 +3368,17 @@ function filesShowMachineList() {
           disabled = true;
         } else {
           var mc = caps[m.name];
-          var fs = mc && mc.fileShare;
-          if (fs && fs.enabled) {
+          var shares = (mc && mc.shares) || [];
+          if (shares.length > 0) {
             badge = '<span class="cap-tags">';
-            if (fs.writable) {
-              badge += '<span class="chip chip-cap-yes">Writable</span>';
-              if (fs.allowDelete) {
-                badge += '<span class="chip chip-cap-yes">Delete</span>';
+            shares.forEach(function (s) {
+              badge += '<span class="chip chip-cap-info">' + escHtml(s.name) + '</span>';
+              if (s.writable) {
+                badge += '<span class="chip chip-cap-yes">Writable</span>';
               } else {
-                badge += '<span class="chip chip-cap-no">No delete</span>';
+                badge += '<span class="chip chip-cap-no">Read only</span>';
               }
-            } else {
-              badge += '<span class="chip chip-cap-no">Read only</span>';
-            }
-            if (fs.maxFileSize) {
-              badge += '<span class="chip chip-cap-info">Max: ' + formatFileSize(fs.maxFileSize) + '</span>';
-            }
-            if (fs.blockedExtensions && fs.blockedExtensions.length > 0) {
-              badge += '<span class="chip chip-cap-info">Blocked: ' + escHtml(fs.blockedExtensions.join(', ')) + '</span>';
-            }
+            });
             badge += '</span>';
             disabled = false;
           } else {
@@ -3440,38 +3434,76 @@ function filesShowMachineList() {
 
 function filesOpenMachine(name) {
   filesCurrentMachine = name;
+  filesCurrentShare = '';
   filesCurrentPath = '';
   filesNavHistory = ['machines'];
   filesClearSelection();
 
-  // Determine writable and delete permissions from cached capabilities
+  // If the machine has exactly one share (from capabilities), skip the share
+  // list and enter it directly. The user can navigate up to see the share as a
+  // folder, and up again to return to the machine list.
   var mc = filesMachineCapabilities[name];
-  var fs = mc && mc.fileShare;
-  filesCurrentWritable = !!(fs && fs.enabled && fs.writable);
-  filesCurrentAllowDelete = !!(fs && fs.enabled && fs.writable && fs.allowDelete);
-
+  var shares = (mc && mc.shares) || [];
+  if (shares.length === 1) {
+    var s = shares[0];
+    filesCurrentShare = s.name;
+    filesCurrentWritable = !!s.writable;
+    filesCurrentAllowDelete = !!(s.writable && s.allowDelete);
+  }
   filesListDir(name, '');
 }
 
 // ── File list view ──
+// When filesCurrentShare === '', filesListDir fetches list-shares and renders
+// the shares as folder entries. Double-clicking one calls filesEnterShare().
+// When filesCurrentShare !== '', it fetches the actual directory listing.
 
 function filesListDir(machine, path) {
   filesView = 'files';
   var gen = ++filesListGeneration; // guard against stale responses
 
   document.getElementById('files-header').style.display = 'flex';
-  document.getElementById('files-actionbar').style.display = 'flex';
+  // Hide the action bar at the share-picker level (no upload/mkdir on shares).
+  document.getElementById('files-actionbar').style.display = filesCurrentShare ? 'flex' : 'none';
   document.getElementById('files-btn-back').disabled = (filesNavHistory.length === 0);
   document.getElementById('files-btn-up').disabled = false;
   filesRenderPath();
-  filesUpdateActionButtons();
+  if (filesCurrentShare) filesUpdateActionButtons();
 
   var listEl = document.getElementById('files-content');
   listEl.innerHTML = '<div class="files-empty">Loading...</div>';
 
+  // At the machine root (no share selected), fetch the share list and render
+  // each share as a folder entry. Entering one calls filesEnterShare().
+  if (!filesCurrentShare) {
+    var req = JSON.stringify({op: 'list-shares'});
+    goApp.FileShareRequest(machine, req).then(function (respJSON) {
+      if (gen !== filesListGeneration) return;
+      try {
+        var resp = JSON.parse(respJSON);
+        if (!resp.ok) {
+          listEl.innerHTML = '<div class="files-empty">' + escHtml(resp.error || 'No shares') + '</div>';
+          return;
+        }
+        filesCurrentPath = '';
+        filesCurrentEntries = (resp.shares || []).map(function (s) {
+          return { name: s.name, isDir: true, size: 0, modTime: '', _shareInfo: s };
+        });
+        filesRenderEntries();
+        filesUpdateStatusBar();
+      } catch (e) {
+        listEl.innerHTML = '<div class="files-empty">Could not read share list.</div>';
+      }
+    }).catch(function () {
+      if (gen !== filesListGeneration) return;
+      listEl.innerHTML = '<div class="files-empty">Could not connect to file share service.</div>';
+    });
+    return;
+  }
+
   var pageSize = 50;
   function fetchPage(offset, accumulated) {
-    var req = JSON.stringify({op: 'list', path: path, offset: offset, limit: pageSize});
+    var req = JSON.stringify({op: 'list', share: filesCurrentShare, path: path, offset: offset, limit: pageSize});
     goApp.FileShareRequest(machine, req).then(function (respJSON) {
       if (gen !== filesListGeneration) return;
       try {
@@ -3648,8 +3680,12 @@ function filesOnEntryDblClick(idx) {
   if (!entry) return;
 
   if (entry.isDir) {
-    var path = filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name;
-    filesNavigateTo(path);
+    if (entry._shareInfo) {
+      filesEnterShare(entry._shareInfo);
+    } else {
+      var path = filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name;
+      filesNavigateTo(path);
+    }
   } else {
     filesDownloadFile(entry.name, filesCurrentPath ? filesCurrentPath + '/' + entry.name : entry.name);
   }
@@ -3749,7 +3785,7 @@ function filesDrop(event, targetIdx) {
     var name = items[idx++];
     var srcPath = path ? path + '/' + name : name;
     var dstPath = targetDir + '/' + name;
-    var req = JSON.stringify({op: 'move', path: srcPath, newPath: dstPath});
+    var req = JSON.stringify({op: 'move', share: filesCurrentShare, path: srcPath, newPath: dstPath});
     goApp.FileShareRequest(machine, req).then(function (respJSON) {
       try { var resp = JSON.parse(respJSON); } catch (e) { /* skip */ }
       if (resp && resp.ok) tvLog('Moved ' + name + ' to ' + targetEntry.name + '/');
@@ -3787,7 +3823,7 @@ function filesDropParent(event) {
     var name = items[idx++];
     var srcPath = path ? path + '/' + name : name;
     var dstPath = parentDir ? parentDir + '/' + name : name;
-    var req = JSON.stringify({op: 'move', path: srcPath, newPath: dstPath});
+    var req = JSON.stringify({op: 'move', share: filesCurrentShare, path: srcPath, newPath: dstPath});
     goApp.FileShareRequest(machine, req).then(function (respJSON) {
       try { var resp = JSON.parse(respJSON); } catch (e) { /* skip */ }
       if (resp && resp.ok) tvLog('Moved ' + name + ' to parent');
@@ -3823,7 +3859,7 @@ function filesDropToBreadcrumb(event, targetPath) {
     var name = items[idx++];
     var srcPath = path ? path + '/' + name : name;
     var dstPath = targetPath ? targetPath + '/' + name : name;
-    var req = JSON.stringify({op: 'move', path: srcPath, newPath: dstPath});
+    var req = JSON.stringify({op: 'move', share: filesCurrentShare, path: srcPath, newPath: dstPath});
     goApp.FileShareRequest(machine, req).then(function (respJSON) {
       try { var resp = JSON.parse(respJSON); } catch (e) { /* skip */ }
       if (resp && resp.ok) tvLog('Moved ' + name + ' to /' + (targetPath || ''));
@@ -3845,6 +3881,16 @@ document.addEventListener('click', function (e) {
 
 // ── Navigation ──
 
+function filesEnterShare(shareInfo) {
+  filesNavHistory.push(filesCurrentMachine + ':share:');
+  filesCurrentShare = shareInfo.name;
+  filesCurrentWritable = !!shareInfo.writable;
+  filesCurrentAllowDelete = !!(shareInfo.writable && shareInfo.allowDelete);
+  filesCurrentPath = '';
+  filesClearSelection();
+  filesListDir(filesCurrentMachine, '');
+}
+
 function filesNavigateTo(path) {
   filesNavHistory.push(filesCurrentMachine + ':' + filesCurrentPath);
   filesCurrentPath = path;
@@ -3856,6 +3902,15 @@ function filesGoBack() {
   if (filesNavHistory.length === 0) return;
   var prev = filesNavHistory.pop();
   if (prev === 'machines') { filesShowMachineList(); return; }
+  // Return to machine root (share list view).
+  if (prev.indexOf(':share:') >= 0) {
+    filesCurrentMachine = prev.substring(0, prev.indexOf(':share:'));
+    filesCurrentShare = '';
+    filesCurrentPath = '';
+    filesClearSelection();
+    filesListDir(filesCurrentMachine, '');
+    return;
+  }
   var colonIdx = prev.indexOf(':');
   filesCurrentMachine = colonIdx >= 0 ? prev.substring(0, colonIdx) : prev;
   filesCurrentPath = colonIdx >= 0 ? prev.substring(colonIdx + 1) : '';
@@ -3865,7 +3920,25 @@ function filesGoBack() {
 
 function filesGoUp() {
   if (!filesCurrentMachine) return;
-  if (!filesCurrentPath) { filesShowMachineList(); return; }
+  if (!filesCurrentPath) {
+    if (filesCurrentShare) {
+      // At share root. If this machine has multiple shares show the share list;
+      // if only one share skip the one-item list and go to the machine list.
+      var mc = filesMachineCapabilities[filesCurrentMachine];
+      var shareCount = (mc && mc.shares) ? mc.shares.length : 0;
+      if (shareCount > 1) {
+        filesNavHistory.push(filesCurrentMachine + ':share:');
+        filesCurrentShare = '';
+        filesClearSelection();
+        filesListDir(filesCurrentMachine, '');
+      } else {
+        filesShowMachineList();
+      }
+    } else {
+      filesShowMachineList();
+    }
+    return;
+  }
   filesNavHistory.push(filesCurrentMachine + ':' + filesCurrentPath);
   var parts = filesCurrentPath.split('/');
   parts.pop();
@@ -3889,10 +3962,19 @@ function filesRenderPath() {
     el.innerHTML = '<span class="files-path-seg root">Machines</span>';
     return;
   }
-  // Machine root segment (drop target = machine root '')
+  // filesView === 'files': machine root (share='' path=''), share root (share!='' path=''), or subdir.
   var html = '<span class="files-path-seg root" onclick="filesShowMachineList()">Machines</span>';
   html += '<span class="files-path-sep">&#x203A;</span>';
-  html += '<span class="files-path-seg"' + dropAttrs('') + ' onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'\');">' + escHtml(filesCurrentMachine) + '</span>';
+
+  if (filesCurrentShare) {
+    // Inside a share: Machines > machine > share > path...
+    html += '<span class="files-path-seg" onclick="filesNavHistory.push(filesCurrentMachine+\':share:\'); filesCurrentShare=\'\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'\');">' + escHtml(filesCurrentMachine) + '</span>';
+    html += '<span class="files-path-sep">&#x203A;</span>';
+    html += '<span class="files-path-seg"' + dropAttrs('') + ' onclick="filesNavHistory.push(filesCurrentMachine+\':\'+filesCurrentPath); filesCurrentPath=\'\'; filesClearSelection(); filesListDir(filesCurrentMachine,\'\');">' + escHtml(filesCurrentShare) + '</span>';
+  } else {
+    // Machine root (share list): Machines > machine
+    html += '<span class="files-path-seg">' + escHtml(filesCurrentMachine) + '</span>';
+  }
   if (filesCurrentPath) {
     var parts = filesCurrentPath.split('/');
     var acc = '';
@@ -3930,7 +4012,7 @@ function filesDownloadFile(fileName, remotePath) {
   goApp.SaveFileDialog(fileName).then(function (localPath) {
     if (!localPath) return;
     tvLog('Downloading ' + remotePath + '...');
-    goApp.FileShareDownload(machine, remotePath, localPath).then(function (respJSON) {
+    goApp.FileShareDownload(machine, filesCurrentShare, remotePath, localPath).then(function (respJSON) {
       try { var resp = JSON.parse(respJSON); } catch (e) { showError('Download failed: invalid response'); return; }
       if (resp.ok) {
         tvLog('Downloaded ' + remotePath + ' (' + formatFileSize(resp.size) + ')');
@@ -3979,7 +4061,7 @@ function filesUpload() {
     var fileName = localPath.split(/[\\/]/).pop();
     var remoteName = path ? path + '/' + fileName : fileName;
     tvLog('Uploading ' + fileName + '...');
-    goApp.FileShareUpload(machine, localPath, remoteName).then(function (respJSON) {
+    goApp.FileShareUpload(machine, filesCurrentShare, localPath, remoteName).then(function (respJSON) {
       try { var resp = JSON.parse(respJSON); } catch (e) { showError('Upload failed: invalid response'); return; }
       if (resp.ok) {
         tvLog('Uploaded ' + fileName + ' (' + formatFileSize(resp.size) + ')');
@@ -4015,7 +4097,7 @@ function filesDeleteSelected() {
       }
       var name = names[idx++];
       var remotePath = path ? path + '/' + name : name;
-      var req = JSON.stringify({op: 'delete', path: remotePath});
+      var req = JSON.stringify({op: 'delete', share: filesCurrentShare, path: remotePath});
       goApp.FileShareRequest(machine, req).then(function (respJSON) {
         try { var resp = JSON.parse(respJSON); } catch (e) { /* ignore parse errors */ }
         if (resp && resp.ok) tvLog('Deleted ' + remotePath);
@@ -4034,7 +4116,7 @@ function filesNewFolder() {
   showPromptDialog('New Folder', '', '', 'Create').then(function (name) {
     if (!name) return;
     var fullPath = path ? path + '/' + name : name;
-    var req = JSON.stringify({op: 'mkdir', path: fullPath});
+    var req = JSON.stringify({op: 'mkdir', share: filesCurrentShare, path: fullPath});
     goApp.FileShareRequest(machine, req).then(function (respJSON) {
       try { var resp = JSON.parse(respJSON); } catch (e) { showError('New folder failed: invalid response'); return; }
       if (resp.ok) {
@@ -4059,7 +4141,7 @@ function filesRenameSelected() {
   showPromptDialog('Rename', 'Rename "' + entry.name + '" to:', entry.name, 'Rename').then(function (newName) {
     if (!newName || newName === entry.name) return;
     var oldPath = path ? path + '/' + entry.name : entry.name;
-    var req = JSON.stringify({op: 'rename', path: oldPath, newName: newName});
+    var req = JSON.stringify({op: 'rename', share: filesCurrentShare, path: oldPath, newName: newName});
     goApp.FileShareRequest(machine, req).then(function (respJSON) {
       try { var resp = JSON.parse(respJSON); } catch (e) { showError('Rename failed: invalid response'); return; }
       if (resp.ok) {

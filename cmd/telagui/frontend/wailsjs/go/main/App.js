@@ -130,16 +130,16 @@ export function ExportProfile() {
   return window['go']['main']['App']['ExportProfile']();
 }
 
-export function FileShareDownload(arg1, arg2, arg3) {
-  return window['go']['main']['App']['FileShareDownload'](arg1, arg2, arg3);
+export function FileShareDownload(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['FileShareDownload'](arg1, arg2, arg3, arg4);
 }
 
 export function FileShareRequest(arg1, arg2) {
   return window['go']['main']['App']['FileShareRequest'](arg1, arg2);
 }
 
-export function FileShareUpload(arg1, arg2, arg3) {
-  return window['go']['main']['App']['FileShareUpload'](arg1, arg2, arg3);
+export function FileShareUpload(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['FileShareUpload'](arg1, arg2, arg3, arg4);
 }
 
 export function ForceQuit() {

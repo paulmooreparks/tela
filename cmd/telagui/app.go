@@ -3158,7 +3158,7 @@ func (a *App) FileShareRequest(machine string, opJSON string) string {
 
 // FileShareDownload downloads a file from a connected machine's file share.
 // Returns the local path where the file was saved, or an error string.
-func (a *App) FileShareDownload(machine string, remotePath string, localPath string) string {
+func (a *App) FileShareDownload(machine string, share string, remotePath string, localPath string) string {
 	// HTTP logging handled by doRequest
 
 	base, token, err := controlEndpoint()
@@ -3166,7 +3166,7 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 		return errJSON(err.Error())
 	}
 
-	opJSON := fmt.Sprintf(`{"op":"read","path":%s}`, jsonString(remotePath))
+	opJSON := fmt.Sprintf(`{"op":"read","share":%s,"path":%s}`, jsonString(share), jsonString(remotePath))
 	req, _ := http.NewRequest("POST", base+"/files/"+machine, strings.NewReader(opJSON+"\n"))
 	req.Header.Set("Authorization", "Bearer "+token)
 
@@ -3247,7 +3247,7 @@ func (a *App) FileShareDownload(machine string, remotePath string, localPath str
 }
 
 // FileShareUpload uploads a local file to a connected machine's file share.
-func (a *App) FileShareUpload(machine string, localPath string, remoteName string) string {
+func (a *App) FileShareUpload(machine string, share string, localPath string, remoteName string) string {
 	// HTTP logging handled by doRequest
 
 	base, token, err := controlEndpoint()
@@ -3278,8 +3278,8 @@ func (a *App) FileShareUpload(machine string, localPath string, remoteName strin
 		f.Seek(0, io.SeekStart)
 
 		// Write request header
-		header := fmt.Sprintf(`{"op":"write","path":%s,"size":%d,"checksum":"%s"}`+"\n",
-			jsonString(remoteName), info.Size(), checksum)
+		header := fmt.Sprintf(`{"op":"write","share":%s,"path":%s,"size":%d,"checksum":"%s"}`+"\n",
+			jsonString(share), jsonString(remoteName), info.Size(), checksum)
 		pw.Write([]byte(header))
 
 		// Write chunks

@@ -66,11 +66,11 @@ export function EnsureTool(arg1:string):Promise<string>;
 
 export function ExportProfile():Promise<void>;
 
-export function FileShareDownload(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function FileShareDownload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function FileShareRequest(arg1:string,arg2:string):Promise<string>;
 
-export function FileShareUpload(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function FileShareUpload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function ForceQuit():Promise<void>;
 
