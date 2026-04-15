@@ -739,25 +739,18 @@ function refreshStatus() {
         var localClass = 'inactive';
 
         if (state.connected) {
-          var bindDisplay = svc.bindAddr ? svc.bindAddr + ':' + svc.localPort : 'localhost:' + svc.localPort;
           var tunnelKey = g.machine + ':' + svc.localPort;
           var tunnelCount = activeTunnels[tunnelKey] || 0;
-          var portFound = state.output && (state.output.indexOf(bindDisplay) !== -1 || state.output.indexOf('localhost:' + svc.localPort) !== -1);
+          var portFound = false;
+          var machineConnected = false;
 
-          // In attached mode, we don't have stdout output.
-          // Check if the service appears in the bound services list.
-          if (!portFound && state.attached && boundServicesCache && boundServicesCache.length > 0) {
+          // Determine if this service has a bound listener via the control API.
+          if (boundServicesCache && boundServicesCache.length > 0) {
             for (var si = 0; si < boundServicesCache.length; si++) {
               var bs = boundServicesCache[si];
-              if (parseInt(bs.local) === parseInt(svc.localPort) && bs.machine === g.machine) {
-                portFound = true;
-                break;
-              }
-            }
-            // If no exact match, try matching by machine only (port may differ from profile)
-            if (!portFound) {
-              for (var si2 = 0; si2 < boundServicesCache.length; si2++) {
-                if (boundServicesCache[si2].machine === g.machine) {
+              if (bs.machine === g.machine) {
+                machineConnected = true;
+                if (parseInt(bs.local) === parseInt(svc.localPort)) {
                   portFound = true;
                   break;
                 }
@@ -775,6 +768,9 @@ function refreshStatus() {
               statusText = 'Listening';
               localClass = 'active';
             }
+          } else if (machineConnected) {
+            indicatorClass = 'dot-offline';
+            statusText = 'Unavailable';
           } else {
             indicatorClass = 'dot-degraded';
             statusText = 'Connecting...';
@@ -818,12 +814,22 @@ if (window.runtime) {
       var evt = JSON.parse(eventJSON);
       if (evt.type === 'service_bound' || evt.type === 'connection_state' || evt.type === 'tunnel_activity') {
         if (evt.type === 'service_bound' && evt.machine && evt.name && evt.remote) {
-          // Update remote port and bind address from tela's actual bound service
+          // Record in the bound services cache so refreshStatus can detect it.
+          if (!boundServicesCache) boundServicesCache = [];
+          boundServicesCache.push({
+            name: evt.name,
+            local: evt.local,
+            remote: evt.remote,
+            bindAddr: evt.bindAddr || '',
+            machine: evt.machine,
+            hub: evt.hub || ''
+          });
+          // Update the selected service's local port with the actual bound port
+          // (may differ from profile port if remapped due to conflict).
+          // Match by machine + remote port since port-based services have no name.
           Object.keys(selectedServices).forEach(function (key) {
             var sel = selectedServices[key];
-            if (sel.machine === evt.machine && sel.service === evt.name) {
-              sel.servicePort = evt.remote;
-              if (evt.bindAddr) sel.bindAddr = evt.bindAddr;
+            if (sel.machine === evt.machine && sel.servicePort === evt.remote) {
               if (evt.local) sel.localPort = evt.local;
             }
           });
@@ -918,7 +924,7 @@ if (window.runtime) {
     // Fetch bound services, then refresh UI
     function fetchAndRefresh() {
       goApp.GetControlServices().then(function (svcs) {
-        boundServicesCache = svcs || [];
+        applyBoundServices(svcs);
         onConnectionChanged();
       }).catch(function () {});
     }
@@ -2382,6 +2388,21 @@ function refreshCurrentPane() {
   });
 }
 
+// applyBoundServices stores the bound service list in the cache and updates
+// selectedServices local ports so the display shows the actual bound port
+// even when port+10000 remapping occurred.
+function applyBoundServices(services) {
+  boundServicesCache = services || [];
+  boundServicesCache.forEach(function (bs) {
+    Object.keys(selectedServices).forEach(function (key) {
+      var sel = selectedServices[key];
+      if (sel.machine === bs.machine && sel.servicePort === bs.remote) {
+        sel.localPort = bs.local;
+      }
+    });
+  });
+}
+
 // --- Connect/Disconnect Toggle ---
 
 // ── Connection State Management ──
@@ -2501,16 +2522,23 @@ function doConnect() {
     // may have fired before the WebSocket was listening).
     (function connectWS() {
       goApp.ConnectControlWS().then(function () {
-        // WebSocket connected. Check if services are already bound.
-        if (connPhase === 'connecting') {
-          goApp.GetControlServices().then(function (services) {
-            if (services && services.length > 0 && connPhase === 'connecting') {
+        // WebSocket connected. Fetch bound services -- events may have fired
+        // before the WebSocket was listening, so always populate the cache here.
+        goApp.GetControlServices().then(function (services) {
+          if (services && services.length > 0) {
+            applyBoundServices(services);
+          }
+          if (connPhase === 'connecting') {
+            if (boundServicesCache && boundServicesCache.length > 0) {
               tvLog('Connected');
               setConnPhase('connected');
               onConnectionChanged();
             }
-          });
-        }
+          } else {
+            // Already transitioned via service_bound event; just refresh display.
+            refreshStatus();
+          }
+        });
       }).catch(function () {
         if (connPhase === 'connecting' || connPhase === 'connected') {
           setTimeout(connectWS, 500);

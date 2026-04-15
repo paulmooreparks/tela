@@ -1632,6 +1632,23 @@ func (tb *tunnelBridge) DialContext(ctx context.Context, remotePort int) (net.Co
 	}
 }
 
+// bindLocal tries to open a TCP listener on 127.0.0.1 at the requested port.
+// If that port is in use it tries port+10000, then port+10001, port+10002, …
+// up to 65535, searching for any free port. Returns the listener and the port
+// actually bound, or an error if all candidates fail.
+func bindLocal(port uint16) (net.Listener, uint16, error) {
+	for p := int(port); p <= 65535; p++ {
+		if p != int(port) && p < int(port)+10000 {
+			continue // skip the range (port+1 … port+9999) to prefer the +10000 block
+		}
+		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+		if err == nil {
+			return l, uint16(p), nil
+		}
+	}
+	return nil, 0, fmt.Errorf("no free port found starting at %d", port)
+}
+
 // bindPersistentListeners creates TCP listeners for the given port mappings
 // and starts accept goroutines that route through the tunnel bridge. The
 // listeners survive session reconnects. Returns a cleanup function that
@@ -1646,20 +1663,23 @@ func bindPersistentListeners(mappings []portMapping, machineID, hubURL string, b
 	var listeners []net.Listener
 	log.Println("Services available:")
 	for _, m := range mappings {
-		addr, port, listener, err := bindLoopbackListener(m)
+		listener, boundPort, err := bindLocal(m.local)
 		if err != nil {
-			log.Printf("  SKIP %s:%d → %s (%v)", addr, m.remote, portLabel(m.remote), err)
+			log.Printf("  SKIP port %d (could not bind: %v)", m.local, err)
 			continue
 		}
-		log.Printf("  %s:%-5d → %s", addr, port, portLabel(m.remote))
+		if boundPort != m.local {
+			log.Printf("  localhost:%-5d → %s (port %d in use, remapped)", boundPort, portLabel(m.remote), m.remote)
+		} else {
+			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
+		}
 		listeners = append(listeners, listener)
 		addBoundService(BoundService{
-			Name:     portLabel(m.remote),
-			Local:    int(port),
-			Remote:   int(m.remote),
-			BindAddr: addr,
-			Machine:  machineID,
-			Hub:      hubURL,
+			Name:    portLabel(m.remote),
+			Local:   int(boundPort),
+			Remote:  int(m.remote),
+			Machine: machineID,
+			Hub:     hubURL,
 		})
 		go func(l net.Listener, remote uint16, local uint16, machine string) {
 			for {
@@ -1672,7 +1692,7 @@ func bindPersistentListeners(mappings []portMapping, machineID, hubURL string, b
 				}
 				go handleBridgedClient(ctx, bridge, localConn, int(remote), machine, int(local))
 			}
-		}(listener, m.remote, port, machineID)
+		}(listener, m.remote, boundPort, machineID)
 	}
 
 	return func() {
@@ -1981,20 +2001,23 @@ persistent_keepalive_interval=25
 	var listeners []net.Listener
 	log.Println("Services available:")
 	for _, m := range mappings {
-		addr, port, listener, err := bindLoopbackListener(m)
+		listener, boundPort, err := bindLocal(m.local)
 		if err != nil {
-			log.Printf("  SKIP %s:%d → %s (%v)", addr, m.remote, portLabel(m.remote), err)
+			log.Printf("  SKIP port %d (could not bind: %v)", m.local, err)
 			continue
 		}
-		log.Printf("  %s:%-5d → %s", addr, port, portLabel(m.remote))
+		if boundPort != m.local {
+			log.Printf("  localhost:%-5d → %s (port %d in use, remapped)", boundPort, portLabel(m.remote), m.remote)
+		} else {
+			log.Printf("  localhost:%-5d → %s", m.local, portLabel(m.remote))
+		}
 		listeners = append(listeners, listener)
 		addBoundService(BoundService{
-			Name:     portLabel(m.remote),
-			Local:    int(port),
-			Remote:   int(m.remote),
-			BindAddr: addr,
-			Machine:  machineID,
-			Hub:      hubURL,
+			Name:    portLabel(m.remote),
+			Local:   int(boundPort),
+			Remote:  int(m.remote),
+			Machine: machineID,
+			Hub:     hubURL,
 		})
 		go func(l net.Listener, remote uint16, local uint16, machine string) {
 			for {
@@ -2007,7 +2030,7 @@ persistent_keepalive_interval=25
 				}
 				go handleNetstackClient(tnet, localConn, int(remote), sessionAgentIP, machine, int(local))
 			}
-		}(listener, m.remote, port, machineID)
+		}(listener, m.remote, boundPort, machineID)
 	}
 
 	if len(listeners) == 0 {
@@ -2050,30 +2073,6 @@ func LoopbackAddr(prefix, hubURL, machine string) string {
 	o3 := (uint16(h[0])<<8|uint16(h[1]))%255 + 1
 	o4 := (uint16(h[2])<<8|uint16(h[3]))%255 + 1
 	return fmt.Sprintf("%s.%d.%d", prefix, o3, o4)
-}
-
-// bindLoopbackListener binds a TCP listener on 127.0.0.1 for the given
-// portMapping. Tries the configured local port first, then local+10000 if
-// that port is already in use.
-//
-// Returns the address actually bound, the port actually bound, the
-// listener, and any error (only if both attempts failed).
-func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Listener, err error) {
-	addr = "127.0.0.1"
-
-	ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", m.local))
-	if err == nil {
-		return addr, m.local, ln, nil
-	}
-
-	alt := m.local + 10000
-	ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", alt))
-	if err == nil {
-		log.Printf("  (port %d in use, remapped to %d)", m.local, alt)
-		return addr, alt, ln, nil
-	}
-
-	return addr, m.local, nil, fmt.Errorf("could not bind 127.0.0.1:%d or 127.0.0.1:%d", m.local, alt)
 }
 
 // portLabel returns a friendly name for well-known ports.

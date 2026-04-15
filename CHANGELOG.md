@@ -17,7 +17,7 @@ patch-level dev builds are too granular to list individually.
 - `list-shares` protocol operation returns available shares on a machine, used by `tela files info` and the WebDAV machine directory listing.
 
 ### Fixed
-- Port binding reverted to `127.0.0.1` with `port+10000` remapping on conflict: removes the per-machine 127.88.x.x loopback address scheme that caused Windows loopback shadowing (local SSH and RDP intercepting tunnel connections). Services that cannot bind their requested port try `local+10000`; if that also fails the service is skipped. TelaVisor no longer pre-computes 127.88 addresses for the initial display; the actual bound address and port appear after the listener is up.
+- Port binding reverted to `127.0.0.1`: removes the per-machine 127.88.x.x loopback address scheme that caused Windows loopback shadowing (local SSH and RDP intercepting tunnel connections). When a service port is already in use, tela tries `port+10000`, then `port+10001`, `port+10002`, and so on until a free port is found, so no service is skipped due to port conflicts between simultaneously connected machines. TelaVisor reads bound ports from the control API instead of parsing log output, and shows the actual bound port for each service. A service that truly cannot bind shows "Unavailable" rather than "Connecting..." so the distinction between a port conflict and a tunnel not yet established is visible.
 
 ### Changed
 - `fileShare` (singular) in telad config is deprecated; it is accepted and synthesized as a share named `legacy` with a startup warning. It will be removed in 1.0.
