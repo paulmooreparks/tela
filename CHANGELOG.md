@@ -11,6 +11,14 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Changed
+- Agent now multiplexes all WireGuard sessions over a single persistent
+  control WebSocket connection instead of dialing a new WebSocket per
+  session. Relay frames are tagged with a session ID so the hub can
+  route data frames to the correct client without per-session agent
+  connections. This reduces connection overhead and eliminates the
+  per-session WebSocket dial on the agent side.
+
 ## [0.9] - 2026-04-14
 
 The "release discipline" release. Stable baseline with comprehensive

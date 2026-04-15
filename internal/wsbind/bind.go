@@ -61,14 +61,21 @@ const (
 // Bind implements conn.Bind for WireGuard-over-WebSocket transport
 // with optional UDP relay upgrade.
 //
+// Two construction modes:
+//   - New: dedicated per-session WebSocket. Owns the WS; ws is non-nil.
+//   - NewMux: multiplexed over a shared WebSocket (agent controlWS). ws is
+//     nil; binary sends go through sendFn; RecvCh is provided externally
+//     by the agent's controlWS demuxer.
+//
 // WireGuard calls Close() then Open() during device state transitions
 // (e.g. Up). The bind must support this cycle -- Close/Open are
 // re-entrant and reset the receive path each time.
 type Bind struct {
-	ws        *websocket.Conn
-	writeMu   sync.Mutex  // gorilla/websocket requires serialized writes
-	RecvCh    chan []byte // binary WG datagrams from the reader goroutine(s)
-	mu        sync.Mutex  // protects closed, open
+	ws        *websocket.Conn    // nil in mux mode
+	sendFn    func([]byte) error // non-nil in mux mode; serialized by caller
+	writeMu   sync.Mutex         // gorilla/websocket requires serialized writes (ws mode only)
+	RecvCh    chan []byte        // binary WG datagrams from the reader goroutine(s)
+	mu        sync.Mutex         // protects closed, open
 	closed    chan struct{}
 	open      bool
 	sessionID uint32 // v1 relay frame session identifier (constant per connection)
@@ -101,6 +108,24 @@ func New(ws *websocket.Conn, bufSize int) *Bind {
 		ws:        ws,
 		sessionID: binary.BigEndian.Uint32(sid[:]),
 		RecvCh:    make(chan []byte, bufSize),
+		closed:    make(chan struct{}),
+		stunCh:    make(chan []byte, 2),
+		punchCh:   make(chan *net.UDPAddr, 1),
+	}
+}
+
+// NewMux creates a Bind for use in multiplexed mode, where multiple
+// sessions share a single controlWS. Binary frames are sent via sendFn
+// (which must be safe for concurrent use), and received frames are
+// delivered by the shared demuxer into recvCh. No WebSocket is owned.
+//
+// UDP relay still works in mux mode: each session has its own token pair
+// and its own UDP socket after UpgradeUDP succeeds.
+func NewMux(sessionID uint32, sendFn func([]byte) error, recvCh chan []byte) *Bind {
+	return &Bind{
+		sendFn:    sendFn,
+		sessionID: sessionID,
+		RecvCh:    recvCh,
 		closed:    make(chan struct{}),
 		stunCh:    make(chan []byte, 2),
 		punchCh:   make(chan *net.UDPAddr, 1),
@@ -183,12 +208,22 @@ func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 	return b.sendWS(bufs)
 }
 
-// sendWS writes datagrams through the WebSocket, each prefixed with the
-// v1 relay frame header. hop is 0; the hub overwrites it on first relay.
+// sendWS writes datagrams through the WebSocket (or sendFn in mux mode),
+// each prefixed with the v1 relay frame header. hop is 0; the hub
+// overwrites it on first relay.
 func (b *Bind) sendWS(bufs [][]byte) error {
+	if b.sendFn != nil {
+		// Mux mode: sendFn is already safe for concurrent use.
+		for _, buf := range bufs {
+			framed := relay.BuildDataFrame(buf, 0, b.sessionID)
+			if err := b.sendFn(framed); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
-
 	for _, buf := range bufs {
 		framed := relay.BuildDataFrame(buf, 0, b.sessionID)
 		if err := b.ws.WriteMessage(websocket.BinaryMessage, framed); err != nil {
@@ -590,8 +625,7 @@ func (b *Bind) ParseEndpoint(s string) (conn.Endpoint, error) {
 func (b *Bind) BatchSize() int { return 1 }
 
 // PeerIP returns the IP address of the WebSocket peer (the hub).
-// This is the actual TCP peer address, which may differ from the
-// hostname used to connect (e.g. resolved LAN IP vs public hostname).
+// Returns "" in mux mode (no dedicated per-session WebSocket).
 func (b *Bind) PeerIP() string {
 	if b.ws == nil {
 		return ""
@@ -603,18 +637,26 @@ func (b *Bind) PeerIP() string {
 	return host
 }
 
-// SendText sends a text (JSON control) message through the WebSocket,
-// serialized with WireGuard datagram sends to avoid concurrent writes.
+// SendText sends a text (JSON control) message through the WebSocket.
+// In mux mode, this is a no-op: text messages go through the session
+// goroutine's sendJSONFn parameter, not through the bind.
 func (b *Bind) SendText(data []byte) error {
+	if b.sendFn != nil {
+		return nil // mux mode: caller sends text via sendJSONFn
+	}
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
 	return b.ws.WriteMessage(websocket.TextMessage, data)
 }
 
-// SendControlFrame builds and sends a CONTROL relay frame through the
-// WebSocket, serialized with other writes via writeMu.
+// SendControlFrame builds and sends a CONTROL relay frame. In mux mode,
+// it goes through sendFn (the shared controlWS writer); in ws mode it
+// goes through the per-session WebSocket.
 func (b *Bind) SendControlFrame(payload []byte) error {
 	framed := relay.BuildControlFrame(payload, 0, b.sessionID)
+	if b.sendFn != nil {
+		return b.sendFn(framed)
+	}
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
 	return b.ws.WriteMessage(websocket.BinaryMessage, framed)
