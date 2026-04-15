@@ -1,6 +1,6 @@
 # Introduction
 
-*This edition documents Tela v0.9.0.*
+*This edition documents Tela v0.10.0.*
 
 Tela is a connectivity fabric. It is a small set of programs that lets one
 machine reach a TCP service on another machine through an encrypted tunnel,
