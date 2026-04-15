@@ -2077,36 +2077,41 @@ func LoopbackAddr(prefix, hubURL, machine string) string {
 }
 
 // bindLoopbackListener tries to bind a TCP listener for the given
-// portMapping. If m.bindAddr is set, it uses the deterministic loopback
-// address with the platform-specific port (see loopbackPort). If that
-// fails, it tries a random free port on the same address, then falls
-// back to 127.0.0.1 with legacy port-remapping.
+// portMapping. If m.bindAddr is set, it binds to that address on the
+// service's real remote port. If that fails, it falls back to
+// 127.0.0.1 with the legacy port-remapping behavior.
 //
 // Returns the address actually bound, the port actually bound, the
 // listener, and any error (only if all attempts failed).
 func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Listener, err error) {
+	// Try the deterministic loopback address first.
 	if m.bindAddr != "" {
 		if aliasErr := ensureLoopbackAlias(m.bindAddr); aliasErr == nil {
 			addr = m.bindAddr
-			port = loopbackPort(m.remote)
-			listenAddr := fmt.Sprintf("%s:%d", addr, port)
-			ln, err = net.Listen("tcp", listenAddr)
-			if err == nil {
-				if port != m.remote {
-					log.Printf("  [loopback] %s: service port %d → local port %d", addr, m.remote, port)
+			port = m.remote // real service port on the loopback address
+			// On Windows, a wildcard socket on 0.0.0.0:PORT captures all
+			// connections to that port regardless of which specific address
+			// tela binds. Check before binding: if a wildcard exists, skip
+			// straight to the alternate port so the listener we advertise
+			// actually receives connections.
+			if !wildcardBound(m.remote) {
+				listenAddr := fmt.Sprintf("%s:%d", addr, port)
+				ln, err = net.Listen("tcp", listenAddr)
+				if err == nil {
+					return addr, port, ln, nil
 				}
-				return addr, port, ln, nil
 			}
 
-			// Preferred port also busy (unlikely but possible); let the OS
-			// pick a free port on the loopback address.
-			ln, err = net.Listen("tcp", addr+":0")
+			// Wildcard listener detected or primary bind failed; try the
+			// loopback address with an alternate port.
+			alt := m.remote + 10000
+			listenAddr := fmt.Sprintf("%s:%d", addr, alt)
+			ln, err = net.Listen("tcp", listenAddr)
 			if err == nil {
-				port = uint16(ln.Addr().(*net.TCPAddr).Port)
-				log.Printf("  [loopback] %s: ports %d and %d in use, using :%d", addr, m.remote, loopbackPort(m.remote), port)
-				return addr, port, ln, nil
+				log.Printf("  [loopback] port %d has a wildcard listener, using :%d", m.remote, alt)
+				return addr, alt, ln, nil
 			}
-			log.Printf("  [loopback] cannot bind %s, falling back to 127.0.0.1", addr)
+			log.Printf("  [loopback] %s:%d and %s:%d both in use, falling back to 127.0.0.1", addr, m.remote, addr, alt)
 		}
 	}
 
@@ -2128,7 +2133,7 @@ func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Liste
 		return addr, alt, ln, nil
 	}
 
-	return addr, m.local, nil, fmt.Errorf("could not bind %s or 127.0.0.1:%d or 127.0.0.1:%d", addr+":"+fmt.Sprint(m.remote), m.local, alt)
+	return addr, m.local, nil, fmt.Errorf("could not bind %s:%d or 127.0.0.1:%d or 127.0.0.1:%d", m.bindAddr, m.remote, m.local, alt)
 }
 
 // portLabel returns a friendly name for well-known ports.
