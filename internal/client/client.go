@@ -2076,63 +2076,30 @@ func LoopbackAddr(prefix, hubURL, machine string) string {
 	return fmt.Sprintf("%s.%d.%d", prefix, o3, o4)
 }
 
-// bindLoopbackListener tries to bind a TCP listener for the given
-// portMapping. If m.bindAddr is set, it binds to that address on the
-// service's real remote port. If that fails, it falls back to
-// 127.0.0.1 with the legacy port-remapping behavior.
+// bindLoopbackListener binds a TCP listener for the given portMapping using
+// the platform's preferred address and port. Falls back to an OS-assigned
+// port on the same address if the preferred port is already in use.
 //
 // Returns the address actually bound, the port actually bound, the
 // listener, and any error (only if all attempts failed).
 func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Listener, err error) {
-	// Try the deterministic loopback address first.
-	if m.bindAddr != "" {
-		if aliasErr := ensureLoopbackAlias(m.bindAddr); aliasErr == nil {
-			addr = m.bindAddr
-			port = m.remote // real service port on the loopback address
-			listenAddr := fmt.Sprintf("%s:%d", addr, port)
-			ln, err = net.Listen("tcp", listenAddr)
-			if err == nil {
-				// On Windows, a socket bound to 0.0.0.0:PORT with
-				// SO_EXCLUSIVEADDRUSE silently captures connections even when a
-				// more-specific bind succeeds. Verify the listener actually
-				// receives connections before advertising it.
-				if listenerShadowed(ln, listenAddr) {
-					ln.Close()
-					ln = nil
-					alt := m.remote + 10000
-					listenAddr = fmt.Sprintf("%s:%d", addr, alt)
-					ln, err = net.Listen("tcp", listenAddr)
-					if err == nil {
-						log.Printf("  [loopback] %s:%d shadowed by wildcard listener, using :%d", addr, m.remote, alt)
-						return addr, alt, ln, nil
-					}
-				} else {
-					return addr, port, ln, nil
-				}
-			}
-			log.Printf("  [loopback] %s:%d and %s:%d both in use, falling back to 127.0.0.1", addr, m.remote, addr, port)
-		}
-	}
+	addr, port = loopbackBind(m)
+	preferredPort := port
 
-	// Fallback: legacy 127.0.0.1 with the requested local port.
-	addr = "127.0.0.1"
-	port = m.local
-	listenAddr := fmt.Sprintf("127.0.0.1:%d", port)
-	ln, err = net.Listen("tcp", listenAddr)
+	ln, err = net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
 	if err == nil {
 		return addr, port, ln, nil
 	}
 
-	// Last resort: 127.0.0.1 with port + 10000.
-	alt := m.local + 10000
-	listenAddr = fmt.Sprintf("127.0.0.1:%d", alt)
-	ln, err = net.Listen("tcp", listenAddr)
+	// Preferred port busy; let the OS assign a free port on the same address.
+	ln, err = net.Listen("tcp", addr+":0")
 	if err == nil {
-		log.Printf("  (port %d in use, remapped to %d)", m.local, alt)
-		return addr, alt, ln, nil
+		port = uint16(ln.Addr().(*net.TCPAddr).Port)
+		log.Printf("  [loopback] %s: port %d in use, using :%d", addr, preferredPort, port)
+		return addr, port, ln, nil
 	}
 
-	return addr, m.local, nil, fmt.Errorf("could not bind %s:%d or 127.0.0.1:%d or 127.0.0.1:%d", m.bindAddr, m.remote, m.local, alt)
+	return addr, m.local, nil, fmt.Errorf("could not bind %s:%d", addr, preferredPort)
 }
 
 // portLabel returns a friendly name for well-known ports.
