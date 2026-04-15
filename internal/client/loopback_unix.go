@@ -10,8 +10,8 @@ func ensureLoopbackAlias(addr string) error { return nil }
 // removeLoopbackAlias is a no-op on Unix systems.
 func removeLoopbackAlias(addr string) error { return nil }
 
-// wildcardBound always returns false on Unix. On Linux and macOS, a
-// more-specific address bind (e.g. 127.88.x.x:port) correctly takes
-// precedence over a wildcard 0.0.0.0:port listener, so no pre-bind
-// conflict detection is needed.
-func wildcardBound(port uint16) bool { return false }
+// loopbackPort returns the local port for a specific loopback listener.
+// On Linux and macOS, a more-specific address bind correctly takes
+// precedence over a wildcard 0.0.0.0:port listener, so the real
+// service port is used directly.
+func loopbackPort(remote uint16) uint16 { return remote }
