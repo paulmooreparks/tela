@@ -10,9 +10,9 @@ When you need to reach a device fleet, your workstation sees:
 
 ```
 Services available:
-  127.88.x.x:22    → SSH          (kiosk-store-042)
-  127.88.y.y:22    → SSH          (kiosk-store-107)
-  127.88.z.z:8080  → HTTP         (controller-plant-a)
+  localhost:22     → SSH          (kiosk-store-042)
+  localhost:10022  → SSH          (kiosk-store-107)
+  localhost:8080   → HTTP         (controller-plant-a)
 ```
 
 Devices that go offline (power loss, network interruption) reconnect automatically when they come back. You get consistent SSH access regardless of where a device is deployed or what the local network looks like.
@@ -158,7 +158,7 @@ tela connect -hub wss://hub.example.com -machine kiosk-001 -token <operator-toke
 4. SSH to the address shown in the output:
 
 ```bash
-ssh 127.88.x.x
+ssh -p PORT localhost
 ```
 
 ---

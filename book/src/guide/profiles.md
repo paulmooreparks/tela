@@ -126,7 +126,7 @@ connections:
     machine: barn
 
 dns:
-  loopback_prefix: "127.88"   # default; controls which /8 block addresses are drawn from
+  loopback_prefix: "127.88"   # prefix for 'tela dns hosts' entries; does not affect port binding
 ```
 
 See the [DNS names](#dns-names) section below for how to add machine names to your hosts file.

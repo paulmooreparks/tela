@@ -108,7 +108,7 @@ tela connect -hub wss://acme-hub.example.com -machine ws-01 -token <tech-token>
 4. Use the local address shown in the output. For RDP:
 
 ```powershell
-mstsc /v:127.88.x.x
+mstsc /v:localhost:PORT
 ```
 
 ---

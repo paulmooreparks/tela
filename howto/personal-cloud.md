@@ -141,16 +141,20 @@ The client prints the local address bound for each service. Use that address to 
 After `tela connect`:
 
 ```bash
-ssh 127.88.x.x
+ssh -p PORT localhost
 ```
+
+Use the port shown in the `tela connect` output.
 
 ### RDP (Windows)
 
 After `tela connect`:
 
 ```powershell
-mstsc /v:127.88.x.x
+mstsc /v:localhost:PORT
 ```
+
+Use the port shown in the `tela connect` output.
 
 ---
 

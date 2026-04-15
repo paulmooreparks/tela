@@ -8,10 +8,10 @@ With Tela, the application server runs `telad` with a path gateway configured. T
 
 ```
 Services available:
-  127.88.x.x:8080  → HTTP
+  localhost:8080   → HTTP
 ```
 
-They open `http://127.88.x.x:8080/` in a browser. The connection travels through an end-to-end encrypted WireGuard tunnel to the application server. The hub relays ciphertext and cannot see request or response content. Users without a valid token cannot reach the machine at all -- there is nothing to find, because the server never accepted an inbound connection from them.
+They open `http://localhost:8080/` in a browser. The connection travels through an end-to-end encrypted WireGuard tunnel to the application server. The hub relays ciphertext and cannot see request or response content. Users without a valid token cannot reach the machine at all -- there is nothing to find, because the server never accepted an inbound connection from them.
 
 If the application has multiple services (a frontend, an API, a metrics endpoint), the gateway routes each URL prefix to the right local port, so the browser sees everything as the same origin and Cross-Origin Resource Sharing (CORS) issues do not arise.
 
@@ -25,7 +25,7 @@ reach anything at all. The hub relays ciphertext; it cannot see request or
 response content.
 
 When a user connects, `tela` binds a local address (for example,
-`127.88.x.x:8080`). The user opens that address in a browser. The connection
+`localhost:8080`). The user opens that address in a browser. The connection
 travels through the encrypted WireGuard tunnel to the application server, where
 `telad` forwards it to the local service. No inbound firewall rule is needed on
 the application server.
@@ -78,7 +78,7 @@ hold a valid hub token.
 
 Because `telad` uses userspace networking, the gateway can listen on port 80
 inside the tunnel without elevated privileges on either the server or the
-user's machine. Users browse to `http://127.88.x.x/` with no port number.
+user's machine. Users browse to `http://localhost/` with no port number.
 
 ### Single-service application
 
@@ -103,7 +103,7 @@ machines:
 telad -config telad.yaml
 ```
 
-Users connect and open `http://127.88.x.x/` in a browser.
+Users connect and open `http://localhost/` in a browser.
 
 ### Multi-service application
 
@@ -181,7 +181,7 @@ tela connect -hub wss://hub.example.com -machine myapp
 4. Open the address shown in the output in a browser:
 
 ```
-http://127.88.x.x/
+http://localhost/
 ```
 
 ### Connection profile (optional)

@@ -10,9 +10,9 @@ From a technician's workstation, connecting to a customer's machines looks like:
 
 ```
 Services available:
-  127.88.x.x:3389  → RDP          (acme-desktop-01)
-  127.88.y.y:3389  → RDP          (acme-desktop-02)
-  127.88.z.z:22    → SSH          (acme-server-01)
+  localhost:3389   → RDP          (acme-desktop-01)
+  localhost:13389  → RDP          (acme-desktop-02)
+  localhost:22     → SSH          (acme-server-01)
 ```
 
 The customer's IT team does not need to configure anything on their firewall. The machines just work, from wherever the technician is.
@@ -122,7 +122,7 @@ tela connect -hub wss://acme-hub.example.com -machine ws-01 -token <tech-token>
 4. Use the local address shown in the output. For RDP:
 
 ```powershell
-mstsc /v:127.88.x.x
+mstsc /v:localhost:PORT
 ```
 
 ---

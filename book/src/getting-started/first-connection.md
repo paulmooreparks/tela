@@ -17,14 +17,14 @@ Because neither machine accepts inbound connections, they cannot talk to each ot
 
 Both `web01` and your laptop connect *outbound* to the hub. The hub pairs them together and starts relaying WireGuard packets between them. Once the WireGuard tunnel is up, your laptop can reach any port on `web01` as if the two machines were on the same network.
 
-When the walkthrough is done, your laptop will have a local address that reaches `web01`:
+When the walkthrough is done, your laptop will have a local port that reaches `web01`:
 
 ```
 Services available:
-  127.88.x.x:22    → SSH
+  localhost:22    → SSH
 ```
 
-That `127.88.x.x` address is deterministic -- it is the same every time you connect to `web01` through this hub. You can put it in your SSH config, and it will always resolve to the same machine.
+The port shown is what `tela` bound on your machine. Use that port whenever you connect to `web01`.
 
 ## The three binaries, one on each machine
 
@@ -84,17 +84,17 @@ SSH on a deterministic loopback address. The output shows the address:
 
 ```
 Services available:
-  127.88.x.x:22    → SSH
+  localhost:22    → SSH
 ```
 
 Leave it running.
 
 ## Step 4: SSH
 
-In another terminal, use the address from the output:
+In another terminal, use the port from the output:
 
 ```bash
-ssh user@127.88.x.x
+ssh -p 22 user@localhost
 ```
 
 You're now SSH'd into `web01` through an end-to-end encrypted WireGuard

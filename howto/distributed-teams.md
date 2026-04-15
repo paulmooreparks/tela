@@ -142,13 +142,13 @@ tela connect -hub wss://dev-hub.example.com -machine dev-db01 -token <your-token
 - SSH:
 
 ```bash
-ssh 127.88.x.x
+ssh -p PORT localhost
 ```
 
 - Postgres (example):
 
 ```bash
-psql -h 127.88.x.x -U postgres
+psql -h localhost -p PORT -U postgres
 ```
 
 **Tip:** Set environment variables to avoid repeating flags:

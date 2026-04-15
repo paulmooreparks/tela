@@ -31,7 +31,7 @@ tela connect -profile <name>
 
 When neither `-ports` nor `-services` is specified, all ports the agent
 advertises are forwarded. Each machine gets a deterministic loopback address
-in `127.88.0.0/16`; services bind on their real port numbers at that address.
+at `localhost:PORT`; each service binds at its configured local port, or a fallback port if that is taken.
 
 ### `tela machines`
 
@@ -410,34 +410,42 @@ machines:
 | `services` | * | Detailed service descriptors (port, name, description) |
 | `gateway` | No | Path-based HTTP reverse proxy config (see below) |
 | `upstreams` | No | Dependency forwarding config (see below) |
-| `fileShare` | No | File sharing config (see below) |
+| `shares` | No | Named file share list (see below) |
 
 \* Either `ports` or `services` is required. If both are present, `services` takes precedence.
 
 ### File share config
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: /home/shared    # absolute path; created on startup if missing
-  writable: false
-  maxFileSize: 50MB
-  maxTotalSize: 1GB
-  allowDelete: false
-  allowedExtensions: []      # empty = all allowed
-  blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
+shares:
+  - name: shared
+    path: /home/shared       # absolute path; created on startup if missing
+    writable: false
+    maxFileSize: 50MB
+    maxTotalSize: 1GB
+    allowDelete: false
+    allowedExtensions: []    # empty = all allowed
+    blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
+  - name: uploads
+    path: /home/uploads
+    writable: true
+    allowDelete: true
 ```
+
+Each entry in `shares` is a named share. Clients navigate to a share by name before browsing files.
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `enabled` | `false` | Enable file sharing for this machine |
-| `directory` | (required) | Absolute path to the shared directory |
+| `name` | (required) | Share name shown to clients |
+| `path` | (required) | Absolute path to the shared directory |
 | `writable` | `false` | Allow uploads, mkdir, rename, move |
 | `maxFileSize` | `50MB` | Per-file upload limit |
 | `maxTotalSize` | (none) | Total directory size limit |
 | `allowDelete` | `false` | Allow deletion (requires `writable: true`) |
 | `allowedExtensions` | `[]` | Whitelist; empty means all allowed |
 | `blockedExtensions` | see above | Blacklist; applied after allowlist |
+
+The deprecated `fileShare:` (singular) key is accepted and synthesized as a share named `legacy`. It will be removed in 1.0.
 
 ### Upstream config
 

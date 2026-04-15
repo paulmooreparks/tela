@@ -6,17 +6,17 @@ You have several machines at home behind a residential router: a Network Attache
 
 Tela solves this with a hub that lives on a small public VM (a $5/month server is plenty). Each home machine runs `telad`, which makes an outbound connection to the hub and registers itself. Your laptop runs `tela` and connects through the hub to whichever machine you need.
 
-When this is working, your laptop will have deterministic loopback addresses for each home machine:
+When this is working, your laptop will have local ports for each home machine's services:
 
 ```
 Services available:
-  127.88.x.x:22    → SSH          (workstation)
-  127.88.y.y:22    → SSH          (NAS)
-  127.88.y.y:5000  → port 5000    (NAS web UI)
-  127.88.z.z:8096  → port 8096    (media server)
+  localhost:22     → SSH          (workstation)
+  localhost:10022  → SSH          (NAS)
+  localhost:5000   → port 5000    (NAS web UI)
+  localhost:8096   → port 8096    (media server)
 ```
 
-Each address is stable -- the same machine always gets the same `127.88.x.x` address regardless of which network your laptop is on. You can put these in your SSH config and bookmark the browser addresses.
+Use the port shown in the output to connect. To pin a service to a specific local port across reconnects, set `local:` on that service in your profile.
 
 Nothing changes on your home router. No ports are forwarded. The home machines only make outbound connections.
 
@@ -153,16 +153,20 @@ The client prints the local address bound for each service. Use that address to 
 After `tela connect`:
 
 ```bash
-ssh 127.88.x.x
+ssh -p PORT localhost
 ```
+
+Use the port shown in the `tela connect` output.
 
 ### RDP (Windows)
 
 After `tela connect`:
 
 ```powershell
-mstsc /v:127.88.x.x
+mstsc /v:localhost:PORT
 ```
+
+Use the port shown in the `tela connect` output.
 
 ---
 

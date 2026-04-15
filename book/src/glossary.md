@@ -78,7 +78,7 @@ Tela is not a routed mesh in the Tailscale, Nebula, or ZeroTier sense.
 
 An optional feature of `telad` that exposes a sandboxed directory on the
 agent host for file transfer over the WireGuard tunnel. Disabled by default.
-Configured per machine under the `fileShare:` block in `telad.yaml`.
+Configured per machine under the `shares:` list in `telad.yaml`.
 
 See [File sharing](../guide/file-sharing.md).
 

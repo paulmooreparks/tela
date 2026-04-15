@@ -14,23 +14,23 @@ You do not need a gateway when you have only one HTTP service (just expose it as
 
 ## How it works
 
-Without a gateway, a client connecting to a multi-service application gets one loopback address per machine, but one binding per service port:
+Without a gateway, a client connecting to a multi-service application gets one binding per service port:
 
 ```
-127.88.x.x:3000  → port 3000
-127.88.x.x:4000  → port 4000
-127.88.x.x:4100  → port 4100
+localhost:3000   → port 3000
+localhost:4000   → port 4000
+localhost:4100   → port 4100
 ```
 
-The browser opens `http://127.88.x.x:3000` and calls the API on a different origin (`127.88.x.x:4000`). Same host, different port -- that is still a cross-origin request under browser CORS rules, which means either CORS headers on the API server, a hardcoded API URL in the UI code, or an extra proxy layer somewhere.
+The browser opens `http://localhost:3000` and calls the API on a different origin (`localhost:4000`). Same host, different port -- that is still a cross-origin request under browser CORS rules, which means either CORS headers on the API server, a hardcoded API URL in the UI code, or an extra proxy layer somewhere.
 
 With a gateway, the client gets one binding:
 
 ```
-127.88.x.x:8080  → HTTP
+localhost:8080   → HTTP
 ```
 
-The browser opens `http://127.88.x.x:8080/`. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra configuration.
+The browser opens `http://localhost:8080/`. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra configuration.
 
 ## Configuration
 
@@ -108,8 +108,8 @@ Output:
 
 ```
 Services available:
-  127.88.x.x:8080  → HTTP
-  127.88.x.x:5432  → port 5432
+  localhost:8080   → HTTP
+  localhost:5432   → port 5432
 ```
 
 Port labels come from the well-known port table (22=SSH, 80/8080=HTTP, 3389=RDP, etc.). Ports not in the table show as `port N`.
@@ -154,7 +154,7 @@ connections:
         local: 14000
 ```
 
-Now `http://127.88.x.x:8080/api/...` reaches the API through the gateway, and `http://127.88.x.x:14000/...` reaches it directly.
+Now `http://localhost:8080/api/...` reaches the API through the gateway, and `http://localhost:14000/...` reaches it directly.
 
 ## Cross-environment use
 
@@ -174,7 +174,7 @@ connections:
         local: 18080
 ```
 
-Each hub+machine pair gets a unique deterministic loopback address, so prod and staging appear at different `127.88.x.x` addresses and never conflict on the same port. The `local: 18080` override is optional -- use it if you want port-based disambiguation instead of relying on the address. The routing logic stays in each environment's `telad.yaml`, not in the client profile.
+When connecting to both environments simultaneously, use `local:` overrides to put them on different ports. Without an override, both gateways would try to bind `localhost:8080` and the second would fall back to `localhost:18080`. Making it explicit avoids relying on fallback behavior. The routing logic stays in each environment's `telad.yaml`, not in the client profile.
 
 ## Limitations
 

@@ -79,7 +79,7 @@ tela connect -hub wss://lab-hub.example.com -machine lab-pc-017 -token <student-
 4. Use the local address shown in the output. For RDP:
 
 ```powershell
-mstsc /v:127.88.x.x
+mstsc /v:localhost:PORT
 ```
 
 ---

@@ -57,11 +57,9 @@ The upstream `target` field accepts any reachable `host:port`, including the det
 For example:
 
 - Machine A runs `telad` and exposes a service on port 8080.
-- Machine B runs `tela connect` to machine A. The service on machine A becomes reachable on machine B at its deterministic loopback address, for example `127.88.42.17:8080`.
-- Machine B also runs `telad` with an upstream: `port: 8080, target: 127.88.42.17:8080`.
+- Machine B runs `tela connect` to machine A. The service on machine A becomes reachable on machine B at `localhost:PORT` -- for example, `localhost:8080` if that port is free, or `localhost:18080` if it is taken. Use `tela status` on machine B to find the exact port.
+- Machine B also runs `telad` with an upstream: `port: 8080, target: localhost:8080` (substitute the actual bound port).
 - Any application on machine B that calls `localhost:8080` reaches the service on machine A through the tunnel.
-
-Use `tela status` on machine B to find the exact loopback address assigned to machine A.
 
 This is an advanced pattern. For most cases, direct service exposure through the tunnel is simpler.
 

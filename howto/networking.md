@@ -61,7 +61,7 @@ Optional:
 
 Local binding:
 
-- The client binds a loopback listener at the machine's deterministic `127.88.x.x` address so local apps (SSH, RDP, and others) can connect. If a service port is taken, the client falls back to the same address on `realport + 10000`.
+- The client binds a loopback listener on `127.0.0.1` at the service's configured local port so local apps (SSH, RDP, and others) can connect. If that port is taken, the client tries `localport + 10000`, `localport + 10001`, and so on until a free port is found. The bound port is shown in the `tela connect` output and in TelaVisor's Status tab.
   - This is local-only, not inbound from the Internet.
 
 ## Topology and addressing
@@ -83,10 +83,10 @@ No. Because Tela runs WireGuard in userspace through gVisor, the `10.77.x.x` ses
 You do not use tunnel-internal IP addresses or DNS to reach services through Tela. The workflow is:
 
 1. You tell `tela` (or TelaVisor) which machine on which hub you want to connect to, and which services on that machine you want.
-2. Each machine gets a deterministic loopback address in the `127.88.0.0/16` range, computed from the hub URL and machine name. Services bind on their real remote ports at that address (for example, `127.88.42.17:22` for SSH, `127.88.42.17:5432` for PostgreSQL).
-3. You point your SSH client, browser, or database tool at that address and port.
+2. `tela` binds each service at `localhost:PORT` on your machine. The port is the configured local port for that service, or the service's native port if no local port is configured. If the port is in use, the client tries successive fallback ports starting at `localport + 10000`.
+3. You point your SSH client, browser, or database tool at `localhost:PORT`.
 
-The address is stable: the same machine always gets the same loopback IP across sessions and profiles. `tela status` lists the current bindings. TelaVisor shows them in the Status tab. If a service port is blocked by a system listener (for example, RDP on `0.0.0.0:3389`), the port is offset by 10000 while the address stays the same.
+`tela connect` and `tela status` print the bound address and port for each service. TelaVisor shows them in the Status tab. To pin a service to a specific local port across reconnects, set `local:` on that service in your profile.
 
 ### Can I ping through the tunnel?
 

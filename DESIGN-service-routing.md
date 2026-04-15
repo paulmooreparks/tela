@@ -1,12 +1,6 @@
 # Service Routing Design
 
-> **Superseded.** The core addressing problem described here was solved
-> by the deterministic loopback addressing feature (Phase 1) documented
-> in [DESIGN-local-names.md](DESIGN-local-names.md). Each machine now
-> gets a stable `127.88.x.x` address computed from the hub URL and
-> machine name, and services bind on their real ports. The DNS-based
-> hostname resolution described below is planned as Phase 2. This
-> document is retained for historical context.
+> **Superseded.** The per-machine `127.88.x.x` loopback addressing scheme described in this document was implemented, then reverted in 0.10 due to loopback shadowing on Windows (local SSH and RDP intercepting tunnel connections). Services now bind at `127.0.0.1:PORT` using dynamic port assignment, with the port shown in `tela connect` output. The DNS-based hostname resolution described below (Phase 2) has not been implemented. This document is retained for historical context.
 
 Stable hostnames for tunneled services. Phase 2 of local name resolution.
 Does not affect the wire format or the relay protocol.

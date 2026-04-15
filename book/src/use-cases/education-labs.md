@@ -10,7 +10,7 @@ From a student's laptop at home:
 
 ```
 Services available:
-  127.88.x.x:3389  → RDP          (lab-machine-07)
+  localhost:3389   → RDP          (lab-machine-07)
 ```
 
 They open Remote Desktop to that address and are on their lab machine. No VPN client. No campus IT ticket. No exposure to the rest of the campus network.
@@ -96,7 +96,7 @@ tela connect -hub wss://lab-hub.example.com -machine lab-pc-017 -token <student-
 4. Use the local address shown in the output. For RDP:
 
 ```powershell
-mstsc /v:127.88.x.x
+mstsc /v:localhost:PORT
 ```
 
 ---

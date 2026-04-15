@@ -144,7 +144,7 @@ tela connect -hub wss://hub.example.com -machine kiosk-001 -token <operator-toke
 4. SSH to the address shown in the output:
 
 ```bash
-ssh 127.88.x.x
+ssh -p PORT localhost
 ```
 
 ---

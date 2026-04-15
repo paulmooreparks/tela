@@ -10,7 +10,7 @@ A native file transfer channel removes all of those prerequisites. If `telad` is
 
 ## The design principles
 
-**Secure by default.** File sharing is disabled unless the agent operator adds a `fileShare` block to the machine config. No flag, no environment variable, and no runtime prompt can enable it implicitly. The operator must take a deliberate action.
+**Secure by default.** File sharing is disabled unless the agent operator adds a `shares:` entry to the machine config. No flag, no environment variable, and no runtime prompt can enable it implicitly. The operator must take a deliberate action.
 
 **Sandboxed.** All file operations are confined to a single declared directory. Path traversal outside the sandbox is rejected by the server using `filepath.Rel` to detect any attempt to escape, and `os.Lstat` to detect symlinks. No operation is delegated to OS-level permissions alone.
 
@@ -28,7 +28,7 @@ This is the same pattern used for service forwarding: the client dials a TCP por
 
 ## The permission model
 
-File sharing piggybacks on the existing `connect` permission. A token that can connect to a machine can use file sharing on that machine, subject to the agent's `fileShare` configuration. A separate `canTransferFiles` permission would create a combinatorial matrix (connect with files, connect without files, files without connect) for limited practical benefit. The agent operator already controls the meaningful distinctions: writable or read-only, delete allowed or not, which extensions are permitted.
+File sharing piggybacks on the existing `connect` permission. A token that can connect to a machine can use file sharing on that machine, subject to the agent's `shares:` configuration. A separate `canTransferFiles` permission would create a combinatorial matrix (connect with files, connect without files, files without connect) for limited practical benefit. The agent operator already controls the meaningful distinctions: writable or read-only, delete allowed or not, which extensions are permitted.
 
 ## Chunked transfer
 

@@ -10,9 +10,9 @@ When a developer connects, they see only the machines they have been granted acc
 
 ```
 Services available:
-  127.88.x.x:5432  → port 5432    (dev-db)
-  127.88.y.y:22    → SSH          (dev-build)
-  127.88.z.z:8080  → HTTP         (staging-app)
+  localhost:5432   → port 5432    (dev-db)
+  localhost:22     → SSH          (dev-build)
+  localhost:8080   → HTTP         (staging-app)
 ```
 
 A new hire gets onboarded with a pairing code -- they redeem it with one command and immediately have access to the right machines. When they leave, their identity is removed and access ends across all machines at once.
@@ -152,13 +152,13 @@ tela connect -hub wss://dev-hub.example.com -machine dev-db01 -token <your-token
 - SSH:
 
 ```bash
-ssh 127.88.x.x
+ssh -p PORT localhost
 ```
 
 - Postgres (example):
 
 ```bash
-psql -h 127.88.x.x -U postgres
+psql -h localhost -p PORT -U postgres
 ```
 
 **Tip:** Set environment variables to avoid repeating flags:

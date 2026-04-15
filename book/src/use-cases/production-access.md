@@ -10,9 +10,9 @@ When a team member needs to connect, they run `tela connect` with their profile.
 
 ```
 Services available:
-  127.88.x.x:22    → SSH          (web-01)
-  127.88.y.y:22    → SSH          (web-02)
-  127.88.z.z:5432  → port 5432    (db-01)
+  localhost:22     → SSH          (web-01)
+  localhost:10022  → SSH          (web-02)
+  localhost:5432   → port 5432    (db-01)
 ```
 
 No bastion. No VPN. No shared credentials. If a team member leaves, their identity is removed from the hub and their access ends immediately -- nothing else changes on the production machines.
@@ -137,13 +137,13 @@ tela connect -hub wss://prod-hub.example.com -machine prod-web01 -token <your-to
 - SSH:
 
 ```bash
-ssh 127.88.x.x
+ssh -p PORT localhost
 ```
 
 - Database (example):
 
 ```bash
-psql -h 127.88.x.x -U postgres
+psql -h localhost -p PORT -U postgres
 ```
 
 **Tip:** Set environment variables to avoid repeating flags:
