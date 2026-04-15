@@ -243,8 +243,8 @@ func SetVersion(v string) {
 // capabilities is an optional field in control messages that advertises
 // features supported by the agent for this machine.
 type capabilities struct {
-	FileShare  *fileShareCapability `json:"fileShare,omitempty"`
-	Management bool                 `json:"management,omitempty"`
+	Shares     []fileShareCapability `json:"shares,omitempty"`
+	Management bool                  `json:"management,omitempty"`
 }
 
 type controlMessage struct {
@@ -318,9 +318,10 @@ type machineConfig struct {
 	Owner       string              `yaml:"owner,omitempty"`
 	Ports       []uint16            `yaml:"ports,omitempty"`
 	Services    []serviceDescriptor `yaml:"services,omitempty"`
-	Target      string              `yaml:"target,omitempty"` // defaults to 127.0.0.1
-	Token       string              `yaml:"token,omitempty"`  // overrides top-level token
-	FileShare   fileShareConfig     `yaml:"fileShare,omitempty"`
+	Target      string              `yaml:"target,omitempty"`    // defaults to 127.0.0.1
+	Token       string              `yaml:"token,omitempty"`     // overrides top-level token
+	FileShare   fileShareConfig     `yaml:"fileShare,omitempty"` // deprecated; use shares
+	Shares      []shareConfig       `yaml:"shares,omitempty"`
 	Gateway     *gatewayConfig      `yaml:"gateway,omitempty"`
 	Upstreams   []upstreamConfig    `yaml:"upstreams,omitempty"`
 }
@@ -339,7 +340,7 @@ type registration struct {
 	Token                 string
 	Ports                 []uint16
 	Services              []serviceDescriptor
-	FileShare             *parsedFileShareConfig
+	Shares                []parsedFileShareConfig
 	Gateway               *gatewayConfig
 }
 
@@ -455,7 +456,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 			Ports       []uint16            `json:"ports,omitempty"`
 			Services    []serviceDescriptor `json:"services,omitempty"`
 			Target      string              `json:"target,omitempty"`
-			FileShare   fileShareConfig     `json:"fileShare,omitempty"`
+			Shares      []shareConfig       `json:"shares,omitempty"`
 			Gateway     *gatewayConfig      `json:"gateway,omitempty"`
 			Upstreams   []upstreamConfig    `json:"upstreams,omitempty"`
 		}
@@ -466,7 +467,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 				Hostname: m.Hostname, OS: m.OS,
 				Tags: m.Tags, Location: m.Location, Owner: m.Owner,
 				Ports: m.Ports, Services: m.Services, Target: m.Target,
-				FileShare: m.FileShare, Gateway: m.Gateway, Upstreams: m.Upstreams,
+				Shares: m.Shares, Gateway: m.Gateway, Upstreams: m.Upstreams,
 			}
 		}
 
@@ -1647,16 +1648,17 @@ func runMultiMachine(cfg *configFile, configPath string) {
 			if machineOS == "" {
 				machineOS = runtime.GOOS
 			}
-			// Parse file share config if present.
-			var fsCfg *parsedFileShareConfig
-			if mc.FileShare.Enabled {
-				var err error
-				fsCfg, err = parseFileShareConfig(mc.FileShare)
-				if err != nil {
-					log.Fatalf("[%s] fileShare config error: %v", mc.Name, err)
-				}
-				if err := ensureShareDir(fsCfg.directory); err != nil {
-					log.Fatalf("[%s] fileShare directory error: %v", mc.Name, err)
+			// Parse file share config.
+			shares, deprecations, err := parseSharesConfig(mc.Shares, mc.FileShare)
+			if err != nil {
+				log.Fatalf("[%s] file share config error: %v", mc.Name, err)
+			}
+			for _, w := range deprecations {
+				log.Printf("[%s] WARNING: %s", mc.Name, w)
+			}
+			for _, s := range shares {
+				if err := ensureShareDir(s.directory); err != nil {
+					log.Fatalf("[%s] share %q directory error: %v", mc.Name, s.name, err)
 				}
 			}
 
@@ -1674,7 +1676,7 @@ func runMultiMachine(cfg *configFile, configPath string) {
 				Token:                 mc.Token,
 				Ports:                 mc.Ports,
 				Services:              mc.Services,
-				FileShare:             fsCfg,
+				Shares:                shares,
 				Gateway:               mc.Gateway,
 			}
 			mergeGatewayIntoRegistration(&reg, mc.Gateway)
@@ -1906,7 +1908,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		Token:                 reg.Token,
 		Ports:                 reg.Ports,
 		Services:              reg.Services,
-		Capabilities:          buildCapabilities(reg.FileShare),
+		Capabilities:          buildCapabilities(reg.Shares),
 	}
 	if err := ws.WriteJSON(&regMsg); err != nil {
 		lg.Printf("register failed: %v", err)
@@ -1983,7 +1985,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 								Token:        reg.Token,
 								Ports:        reg.Ports,
 								Services:     reg.Services,
-								Capabilities: buildCapabilities(reg.FileShare),
+								Capabilities: buildCapabilities(reg.Shares),
 							}
 							if err := ws.WriteJSON(&regMsg); err != nil {
 								lg.Printf("re-register failed: %v", err)
@@ -2061,11 +2063,11 @@ func runSessionWorker(ctx context.Context, lg *log.Logger, hubURL string, reg re
 	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)
 
 	lg.Printf("[session %s] starting -- agent=%s helper=%s", sessionID[:8], sessionAgentIP, sessionHelperIP)
-	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, reg.FileShare, reg.Gateway, sessionAgentIP, sessionHelperIP)
+	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, reg.Shares, reg.Gateway, sessionAgentIP, sessionHelperIP)
 	lg.Printf("[session %s] ended", sessionID[:8])
 }
 
-func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, fsCfg *parsedFileShareConfig, gwCfg *gatewayConfig, sessionAgentIP, sessionHelperIP string) {
+func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, shares []parsedFileShareConfig, gwCfg *gatewayConfig, sessionAgentIP, sessionHelperIP string) {
 	// Generate ephemeral WireGuard keypair
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
@@ -2076,7 +2078,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	pubKeyHex := hex.EncodeToString(privKey.PublicKey().Bytes())
 
 	// Send our public key and port list back to helper (via hub relay)
-	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports, Capabilities: buildCapabilities(fsCfg)}
+	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports, Capabilities: buildCapabilities(shares)}
 	if err := ws.WriteJSON(&keyMsg); err != nil {
 		lg.Printf("failed to send pubkey: %v", err)
 		return
@@ -2174,7 +2176,7 @@ persistent_keepalive_interval=25
 	}
 
 	// Start file share listener if configured
-	cleanupFileShare := startFileShareListener(lg, tnet, sessionAgentIP, fsCfg)
+	cleanupFileShare := startFileShareListener(lg, tnet, sessionAgentIP, shares)
 
 	// Start gateway if configured
 	cleanupGateway := startGatewayListener(lg, tnet, sessionAgentIP, gwCfg, targetHost)

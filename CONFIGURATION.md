@@ -324,32 +324,45 @@ Notes:
 
 **File share configuration:**
 
-Each machine can expose a sandboxed directory for file transfer through the WireGuard tunnel. File sharing is off by default and must be explicitly enabled.
+Each machine can expose one or more sandboxed directories for file transfer through the WireGuard tunnel. File sharing is off by default and must be explicitly enabled.
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: /home/shared
-  writable: true
-  maxFileSize: 50MB
-  maxTotalSize: 1GB
-  allowDelete: false
-  allowedExtensions: []
-  blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
+shares:
+  - name: docs
+    path: /home/shared/docs
+    writable: true
+    maxFileSize: 50MB
+    maxTotalSize: 1GB
+    allowDelete: false
+    allowedExtensions: []
+    blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
+  - name: uploads
+    path: /home/shared/uploads
+    writable: true
+    allowDelete: true
 ```
 
-File share fields:
+Share fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | `false` | Enables file sharing for this machine |
-| `directory` | string | (required) | Absolute path to the shared directory. Created on startup if missing. |
+| `name` | string | (required) | Share name. Used in WebDAV paths and `tela files` commands. |
+| `path` | string | (required) | Absolute path to the shared directory. Created on startup if missing. |
 | `writable` | bool | `false` | Allows clients to upload files, create directories, rename, and move |
 | `maxFileSize` | string | `50MB` | Maximum size of a single uploaded file. Supports KB, MB, GB suffixes. |
 | `maxTotalSize` | string | (none) | Maximum total size of all files in the shared directory |
 | `allowDelete` | bool | `false` | Allows clients to delete files. Requires `writable: true`. |
 | `allowedExtensions` | []string | `[]` | Whitelist of file extensions. Empty means all extensions are allowed (subject to `blockedExtensions`). |
 | `blockedExtensions` | []string | see above | Blacklist of file extensions. Applied after `allowedExtensions`. |
+
+**Deprecated:** The `fileShare` (singular) key is still accepted and is synthesized as a share named `legacy`. It will be removed in 1.0. Migrate to the `shares` list.
+
+```yaml
+# Deprecated -- use shares instead
+fileShare:
+  enabled: true
+  directory: /home/shared
+```
 
 **Example (two machines):**
 

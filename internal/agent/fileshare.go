@@ -67,7 +67,8 @@ const fileShareStallTimeout = 30 * time.Second
 // Maximum chunk size for chunked transfer (16 KB).
 const maxChunkSize = 16384
 
-// fileShareConfig is the YAML schema for per-machine file sharing.
+// fileShareConfig is the deprecated single-share YAML schema.
+// Use shares instead. fileShare support will be removed in 1.0.
 type fileShareConfig struct {
 	Enabled           bool     `yaml:"enabled"`
 	Directory         string   `yaml:"directory"`
@@ -79,9 +80,21 @@ type fileShareConfig struct {
 	BlockedExtensions []string `yaml:"blockedExtensions,omitempty"`
 }
 
-// fileShareCapability is advertised in control messages.
+// shareConfig is the YAML schema for a named file share entry.
+type shareConfig struct {
+	Name              string   `yaml:"name"`
+	Path              string   `yaml:"path"`
+	Writable          bool     `yaml:"writable,omitempty"`
+	MaxFileSize       string   `yaml:"maxFileSize,omitempty"` // "50MB", "1GB", etc.
+	MaxTotalSize      string   `yaml:"maxTotalSize,omitempty"`
+	AllowDelete       bool     `yaml:"allowDelete,omitempty"`
+	AllowedExtensions []string `yaml:"allowedExtensions,omitempty"`
+	BlockedExtensions []string `yaml:"blockedExtensions,omitempty"`
+}
+
+// fileShareCapability describes one share in the capabilities advertisement.
 type fileShareCapability struct {
-	Enabled           bool     `json:"enabled"`
+	Name              string   `json:"name"`
 	Writable          bool     `json:"writable"`
 	AllowDelete       bool     `json:"allowDelete"`
 	MaxFileSize       int64    `json:"maxFileSize"`
@@ -91,6 +104,7 @@ type fileShareCapability struct {
 
 // parsedFileShareConfig holds validated, ready-to-use file share settings.
 type parsedFileShareConfig struct {
+	name              string
 	enabled           bool
 	directory         string // absolute, cleaned path
 	writable          bool
@@ -101,24 +115,26 @@ type parsedFileShareConfig struct {
 	blockedExtensions map[string]bool
 }
 
-// buildCapabilities returns a capabilities struct for control messages,
-// or nil if no capabilities are active.
-func buildCapabilities(fsCfg *parsedFileShareConfig) *capabilities {
+// buildCapabilities returns a capabilities struct for control messages.
+func buildCapabilities(shares []parsedFileShareConfig) *capabilities {
 	c := &capabilities{Management: true}
-	if fsCfg != nil && fsCfg.enabled {
-		cap := &fileShareCapability{
-			Enabled:     true,
-			Writable:    fsCfg.writable,
-			AllowDelete: fsCfg.allowDelete,
-			MaxFileSize: fsCfg.maxFileSize,
+	for _, s := range shares {
+		if !s.enabled {
+			continue
 		}
-		for ext := range fsCfg.blockedExtensions {
+		cap := fileShareCapability{
+			Name:        s.name,
+			Writable:    s.writable,
+			AllowDelete: s.allowDelete,
+			MaxFileSize: s.maxFileSize,
+		}
+		for ext := range s.blockedExtensions {
 			cap.BlockedExtensions = append(cap.BlockedExtensions, ext)
 		}
-		for ext := range fsCfg.allowedExtensions {
+		for ext := range s.allowedExtensions {
 			cap.AllowedExtensions = append(cap.AllowedExtensions, ext)
 		}
-		c.FileShare = cap
+		c.Shares = append(c.Shares, cap)
 	}
 	return c
 }
@@ -143,29 +159,30 @@ func init() {
 	}
 }
 
-// parseFileShareConfig validates and normalizes a fileShareConfig.
-func parseFileShareConfig(cfg fileShareConfig) (*parsedFileShareConfig, error) {
-	if !cfg.Enabled {
-		return nil, nil
+// parseShareConfig validates and normalizes a single shareConfig.
+func parseShareConfig(cfg shareConfig) (*parsedFileShareConfig, error) {
+	if cfg.Name == "" {
+		return nil, fmt.Errorf("share name is required")
 	}
-	if cfg.Directory == "" {
-		return nil, fmt.Errorf("fileShare.directory is required when enabled")
+	if cfg.Path == "" {
+		return nil, fmt.Errorf("shares[%s].path is required", cfg.Name)
 	}
 
-	absDir, err := filepath.Abs(cfg.Directory)
+	absDir, err := filepath.Abs(cfg.Path)
 	if err != nil {
-		return nil, fmt.Errorf("fileShare.directory: %w", err)
+		return nil, fmt.Errorf("shares[%s].path: %w", cfg.Name, err)
 	}
 	absDir = filepath.Clean(absDir)
 
 	// Reject system directories.
 	for _, sysDir := range systemDirs {
 		if strings.EqualFold(absDir, sysDir) {
-			return nil, fmt.Errorf("fileShare.directory must not be a system directory: %s", absDir)
+			return nil, fmt.Errorf("shares[%s].path must not be a system directory: %s", cfg.Name, absDir)
 		}
 	}
 
 	p := &parsedFileShareConfig{
+		name:        cfg.Name,
 		enabled:     true,
 		directory:   absDir,
 		writable:    cfg.Writable,
@@ -174,14 +191,14 @@ func parseFileShareConfig(cfg fileShareConfig) (*parsedFileShareConfig, error) {
 
 	// allowDelete requires writable
 	if p.allowDelete && !p.writable {
-		return nil, fmt.Errorf("fileShare.allowDelete requires writable: true")
+		return nil, fmt.Errorf("shares[%s].allowDelete requires writable: true", cfg.Name)
 	}
 
 	// Parse size limits.
 	if cfg.MaxFileSize != "" {
 		n, err := parseSize(cfg.MaxFileSize)
 		if err != nil {
-			return nil, fmt.Errorf("fileShare.maxFileSize: %w", err)
+			return nil, fmt.Errorf("shares[%s].maxFileSize: %w", cfg.Name, err)
 		}
 		p.maxFileSize = n
 	} else {
@@ -191,7 +208,7 @@ func parseFileShareConfig(cfg fileShareConfig) (*parsedFileShareConfig, error) {
 	if cfg.MaxTotalSize != "" {
 		n, err := parseSize(cfg.MaxTotalSize)
 		if err != nil {
-			return nil, fmt.Errorf("fileShare.maxTotalSize: %w", err)
+			return nil, fmt.Errorf("shares[%s].maxTotalSize: %w", cfg.Name, err)
 		}
 		p.maxTotalSize = n
 	}
@@ -218,6 +235,50 @@ func parseFileShareConfig(cfg fileShareConfig) (*parsedFileShareConfig, error) {
 	}
 
 	return p, nil
+}
+
+// parseSharesConfig processes the shares list and legacy fileShare field.
+// If only shares is set, those are parsed directly. If only fileShare is set,
+// it is synthesized as a share named "legacy" and a deprecation warning is
+// returned. If both are set, fileShare is synthesized as "legacy" alongside
+// the named shares; it is an error if any named share is already called "legacy".
+func parseSharesConfig(shares []shareConfig, legacy fileShareConfig) ([]parsedFileShareConfig, []string, error) {
+	var result []parsedFileShareConfig
+	var deprecations []string
+
+	if legacy.Enabled {
+		for _, s := range shares {
+			if s.Name == "legacy" {
+				return nil, nil, fmt.Errorf("share name 'legacy' is reserved for deprecated fileShare compatibility; rename the share or remove fileShare")
+			}
+		}
+		deprecations = append(deprecations, "fileShare is deprecated; use shares instead. Support will be removed in 1.0.")
+		legacyCfg := shareConfig{
+			Name:              "legacy",
+			Path:              legacy.Directory,
+			Writable:          legacy.Writable,
+			MaxFileSize:       legacy.MaxFileSize,
+			MaxTotalSize:      legacy.MaxTotalSize,
+			AllowDelete:       legacy.AllowDelete,
+			AllowedExtensions: legacy.AllowedExtensions,
+			BlockedExtensions: legacy.BlockedExtensions,
+		}
+		p, err := parseShareConfig(legacyCfg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("fileShare: %w", err)
+		}
+		result = append(result, *p)
+	}
+
+	for _, s := range shares {
+		p, err := parseShareConfig(s)
+		if err != nil {
+			return nil, nil, err
+		}
+		result = append(result, *p)
+	}
+
+	return result, deprecations, nil
 }
 
 // parseSize parses a human-readable size string like "50MB", "1GB", "100KB".
@@ -345,6 +406,7 @@ func ensureShareDir(dir string) error {
 
 type fsRequest struct {
 	Op       string `json:"op"`
+	Share    string `json:"share,omitempty"` // target share name
 	Path     string `json:"path"`
 	Size     int64  `json:"size,omitempty"`
 	Checksum string `json:"checksum,omitempty"`
@@ -354,14 +416,22 @@ type fsRequest struct {
 	Limit    int    `json:"limit,omitempty"`   // pagination: return at most N entries (0 = all)
 }
 
+// fsShareInfo describes a single share in a list-shares response.
+type fsShareInfo struct {
+	Name        string `json:"name"`
+	Writable    bool   `json:"writable,omitempty"`
+	AllowDelete bool   `json:"allowDelete,omitempty"`
+}
+
 type fsResponse struct {
-	OK       bool      `json:"ok"`
-	Error    string    `json:"error,omitempty"`
-	Entries  []fsEntry `json:"entries,omitempty"`
-	Size     int64     `json:"size,omitempty"`
-	ModTime  string    `json:"modTime,omitempty"`
-	Checksum string    `json:"checksum,omitempty"`
-	Total    int       `json:"total,omitempty"` // total entry count before pagination
+	OK       bool          `json:"ok"`
+	Error    string        `json:"error,omitempty"`
+	Entries  []fsEntry     `json:"entries,omitempty"`
+	Shares   []fsShareInfo `json:"shares,omitempty"` // for list-shares
+	Size     int64         `json:"size,omitempty"`
+	ModTime  string        `json:"modTime,omitempty"`
+	Checksum string        `json:"checksum,omitempty"`
+	Total    int           `json:"total,omitempty"` // total entry count before pagination
 }
 
 type fsEntry struct {
@@ -375,8 +445,15 @@ type fsEntry struct {
 
 // startFileShareListener starts the file share TCP listener inside the
 // netstack. It returns a cleanup function that closes the listener.
-func startFileShareListener(lg *log.Logger, tnet *netstack.Net, agentIP string, cfg *parsedFileShareConfig) func() {
-	if cfg == nil || !cfg.enabled {
+func startFileShareListener(lg *log.Logger, tnet *netstack.Net, agentIP string, shares []parsedFileShareConfig) func() {
+	// Collect enabled shares.
+	var active []parsedFileShareConfig
+	for _, s := range shares {
+		if s.enabled {
+			active = append(active, s)
+		}
+	}
+	if len(active) == 0 {
 		return func() {}
 	}
 
@@ -387,11 +464,11 @@ func startFileShareListener(lg *log.Logger, tnet *netstack.Net, agentIP string, 
 		return func() {}
 	}
 
-	mode := "read-only"
-	if cfg.writable {
-		mode = "read-write"
+	names := make([]string, len(active))
+	for i, s := range active {
+		names[i] = s.name
 	}
-	lg.Printf("[fileshare] listening on %s (%s, dir=%s)", listenAddr, mode, cfg.directory)
+	lg.Printf("[fileshare] listening on %s (%d shares: %v)", listenAddr, len(active), names)
 
 	var connCount int32
 	var connMu sync.Mutex
@@ -420,7 +497,7 @@ func startFileShareListener(lg *log.Logger, tnet *netstack.Net, agentIP string, 
 					connCount--
 					connMu.Unlock()
 				}()
-				handleFileShareConn(lg, c, cfg)
+				handleFileShareConn(lg, c, active)
 			}(conn)
 		}
 	}()
@@ -429,7 +506,7 @@ func startFileShareListener(lg *log.Logger, tnet *netstack.Net, agentIP string, 
 }
 
 // handleFileShareConn processes file share requests on a single connection.
-func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConfig) {
+func handleFileShareConn(lg *log.Logger, conn net.Conn, shares []parsedFileShareConfig) {
 	// Use a single bufio.Reader for the entire connection lifetime.
 	// json.Decoder buffers ahead and would consume chunk data meant for
 	// the write handler, so we read JSON lines manually instead.
@@ -446,6 +523,29 @@ func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConf
 		var req fsRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeResponse(conn, fsResponse{OK: false, Error: "invalid request"})
+			continue
+		}
+
+		// list-shares does not require a specific share.
+		if req.Op == "list-shares" {
+			handleListShares(lg, conn, shares)
+			continue
+		}
+
+		// All other ops route to a named share.
+		var cfg *parsedFileShareConfig
+		for i := range shares {
+			if shares[i].name == req.Share {
+				cfg = &shares[i]
+				break
+			}
+		}
+		if cfg == nil {
+			if req.Share == "" {
+				writeResponse(conn, fsResponse{OK: false, Error: "share name required"})
+			} else {
+				writeResponse(conn, fsResponse{OK: false, Error: "unknown share: " + req.Share})
+			}
 			continue
 		}
 
@@ -471,6 +571,22 @@ func handleFileShareConn(lg *log.Logger, conn net.Conn, cfg *parsedFileShareConf
 			writeResponse(conn, fsResponse{OK: false, Error: "unknown operation: " + req.Op})
 		}
 	}
+}
+
+// handleListShares returns the names and access flags of all active shares.
+func handleListShares(lg *log.Logger, conn net.Conn, shares []parsedFileShareConfig) {
+	var info []fsShareInfo
+	for _, s := range shares {
+		if s.enabled {
+			info = append(info, fsShareInfo{
+				Name:        s.name,
+				Writable:    s.writable,
+				AllowDelete: s.allowDelete,
+			})
+		}
+	}
+	lg.Printf("[fileshare] list-shares: %d shares", len(info))
+	writeResponse(conn, fsResponse{OK: true, Shares: info})
 }
 
 func writeResponse(conn net.Conn, resp fsResponse) {

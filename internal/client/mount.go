@@ -49,8 +49,8 @@ var (
 
 const mountPageSize = 500
 
-func mountCachedList(machine, path string) (*mountFsResponse, error) {
-	key := machine + ":" + path
+func mountCachedList(machine, share, path string) (*mountFsResponse, error) {
+	key := machine + ":" + share + ":" + path
 	mountDirCacheMu.Lock()
 	if e, ok := mountDirCache[key]; ok && time.Since(e.fetched) < mountCacheTTL {
 		mountDirCacheMu.Unlock()
@@ -62,8 +62,8 @@ func mountCachedList(machine, path string) (*mountFsResponse, error) {
 	var allEntries []mountFsEntry
 	offset := 0
 	for {
-		resp, err := mountFileShareRequest(machine, mountFsRequest{
-			Op: "list", Path: path, Offset: offset, Limit: mountPageSize,
+		resp, err := mountFileShareRequest(machine, share, mountFsRequest{
+			Op: "list", Share: share, Path: path, Offset: offset, Limit: mountPageSize,
 		})
 		if err != nil {
 			return nil, err
@@ -85,21 +85,22 @@ func mountCachedList(machine, path string) (*mountFsResponse, error) {
 	return combined, nil
 }
 
-func mountInvalidateCache(machine, path string) {
+func mountInvalidateCache(machine, share, path string) {
 	mountDirCacheMu.Lock()
 	defer mountDirCacheMu.Unlock()
-	delete(mountDirCache, machine+":"+path)
+	delete(mountDirCache, machine+":"+share+":"+path)
 	parent := filepath.Dir(path)
 	if parent == "." {
 		parent = ""
 	}
-	delete(mountDirCache, machine+":"+parent)
+	delete(mountDirCache, machine+":"+share+":"+parent)
 }
 
 // ── Protocol types ───────────────────────────────────────────────
 
 type mountFsRequest struct {
 	Op      string `json:"op"`
+	Share   string `json:"share,omitempty"` // target share name
 	Path    string `json:"path,omitempty"`
 	NewName string `json:"newName,omitempty"`
 	NewPath string `json:"newPath,omitempty"`
@@ -108,12 +109,20 @@ type mountFsRequest struct {
 	Limit   int    `json:"limit,omitempty"`
 }
 
+// mountShareInfo describes one share returned by list-shares.
+type mountShareInfo struct {
+	Name        string `json:"name"`
+	Writable    bool   `json:"writable,omitempty"`
+	AllowDelete bool   `json:"allowDelete,omitempty"`
+}
+
 type mountFsResponse struct {
-	OK      bool           `json:"ok"`
-	Error   string         `json:"error,omitempty"`
-	Entries []mountFsEntry `json:"entries,omitempty"`
-	Size    int64          `json:"size,omitempty"`
-	Total   int            `json:"total,omitempty"`
+	OK      bool             `json:"ok"`
+	Error   string           `json:"error,omitempty"`
+	Entries []mountFsEntry   `json:"entries,omitempty"`
+	Shares  []mountShareInfo `json:"shares,omitempty"` // for list-shares
+	Size    int64            `json:"size,omitempty"`
+	Total   int              `json:"total,omitempty"`
 }
 
 type mountFsEntry struct {
@@ -141,7 +150,8 @@ func mountLoadControlEndpoint() (string, string, error) {
 	return fmt.Sprintf("http://127.0.0.1:%d", info.Port), info.Token, nil
 }
 
-func mountFileShareRequest(machine string, op interface{}) (*mountFsResponse, error) {
+func mountFileShareRequest(machine, share string, op mountFsRequest) (*mountFsResponse, error) {
+	op.Share = share
 	reqBody, _ := json.Marshal(op)
 	reqBody = append(reqBody, '\n')
 
@@ -205,8 +215,8 @@ func mountFileShareRequest(machine string, op interface{}) (*mountFsResponse, er
 // mountDownloadToFile streams file content from a remote machine into dst
 // using the CHUNK protocol. The caller is responsible for seeking dst back
 // to the start and closing it.
-func mountDownloadToFile(machine, path string, dst *os.File) error {
-	reqBody, _ := json.Marshal(map[string]string{"op": "read", "path": path})
+func mountDownloadToFile(machine, share, path string, dst *os.File) error {
+	reqBody, _ := json.Marshal(map[string]string{"op": "read", "share": share, "path": path})
 	reqBody = append(reqBody, '\n')
 
 	url := mountControlBase + "/files/" + machine
@@ -273,10 +283,10 @@ func mountDownloadToFile(machine, path string, dst *os.File) error {
 
 // mountUploadFile writes file content to a remote machine using the control
 // API's file share proxy. It sends the data using the CHUNK protocol.
-func mountUploadFile(machine, path string, data []byte) error {
+func mountUploadFile(machine, share, path string, data []byte) error {
 	// Build the CHUNK-encoded body: JSON header line + CHUNK <size>\n<data> + CHUNK 0\n
 	var buf bytes.Buffer
-	header, _ := json.Marshal(map[string]interface{}{"op": "write", "path": path, "size": len(data)})
+	header, _ := json.Marshal(map[string]interface{}{"op": "write", "share": share, "path": path, "size": len(data)})
 	buf.Write(header)
 	buf.WriteByte('\n')
 	fmt.Fprintf(&buf, "CHUNK %d\n", len(data))
@@ -455,46 +465,53 @@ func cmdMount(args []string) {
 
 type mountFS struct{}
 
-func mountParsePath(name string) (machine, remotePath string) {
+func mountParsePath(name string) (machine, share, remotePath string) {
 	name = strings.TrimPrefix(name, "/")
 	if name == "" {
-		return "", ""
+		return "", "", ""
 	}
-	parts := strings.SplitN(name, "/", 2)
+	parts := strings.SplitN(name, "/", 3)
 	// Resolve sanitized directory name back to the original machine
 	// name so control API calls use the name the hub knows.
 	machine = mountResolveName(parts[0])
 	if len(parts) > 1 {
-		remotePath = parts[1]
+		share = parts[1]
+	}
+	if len(parts) > 2 {
+		remotePath = parts[2]
 	}
 	return
 }
 
 func (fs *mountFS) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
-	machine, remotePath := mountParsePath(name)
-	if machine == "" || remotePath == "" {
+	machine, share, remotePath := mountParsePath(name)
+	if machine == "" || share == "" || remotePath == "" {
 		return os.ErrPermission
 	}
-	resp, err := mountFileShareRequest(machine, mountFsRequest{Op: "mkdir", Path: remotePath})
+	resp, err := mountFileShareRequest(machine, share, mountFsRequest{Op: "mkdir", Path: remotePath})
 	if err != nil {
 		return err
 	}
 	if !resp.OK {
 		return fmt.Errorf("%s", resp.Error)
 	}
-	mountInvalidateCache(machine, remotePath)
+	mountInvalidateCache(machine, share, remotePath)
 	return nil
 }
 
 func (fs *mountFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
-	machine, remotePath := mountParsePath(name)
+	machine, share, remotePath := mountParsePath(name)
 
 	if machine == "" {
 		return &mountRootDir{}, nil
 	}
 
+	if share == "" {
+		return &mountMachineDir{machine: machine}, nil
+	}
+
 	if remotePath == "" {
-		return &mountMachineDir{machine: machine, path: ""}, nil
+		return &mountShareDir{machine: machine, share: share, path: ""}, nil
 	}
 
 	// Determine file vs directory from the parent directory listing.
@@ -505,49 +522,49 @@ func (fs *mountFS) OpenFile(ctx context.Context, name string, flag int, perm os.
 		parentPath = ""
 	}
 	baseName := filepath.Base(remotePath)
-	if parentResp, err := mountCachedList(machine, parentPath); err == nil {
+	if parentResp, err := mountCachedList(machine, share, parentPath); err == nil {
 		for _, e := range parentResp.Entries {
 			if e.Name == baseName && e.IsDir {
-				return &mountMachineDir{machine: machine, path: remotePath}, nil
+				return &mountShareDir{machine: machine, share: share, path: remotePath}, nil
 			}
 		}
 	}
 
 	writable := flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) != 0
-	return &mountTelaFile{machine: machine, path: remotePath, flag: flag, writable: writable}, nil
+	return &mountTelaFile{machine: machine, share: share, path: remotePath, flag: flag, writable: writable}, nil
 }
 
 func (fs *mountFS) RemoveAll(ctx context.Context, name string) error {
-	machine, remotePath := mountParsePath(name)
-	if machine == "" || remotePath == "" {
+	machine, share, remotePath := mountParsePath(name)
+	if machine == "" || share == "" || remotePath == "" {
 		return os.ErrPermission
 	}
-	resp, err := mountFileShareRequest(machine, mountFsRequest{Op: "delete", Path: remotePath})
+	resp, err := mountFileShareRequest(machine, share, mountFsRequest{Op: "delete", Path: remotePath})
 	if err != nil {
 		return err
 	}
 	if !resp.OK {
 		return fmt.Errorf("%s", resp.Error)
 	}
-	mountInvalidateCache(machine, remotePath)
+	mountInvalidateCache(machine, share, remotePath)
 	return nil
 }
 
 func (fs *mountFS) Rename(ctx context.Context, oldName, newName string) error {
-	oldMachine, oldPath := mountParsePath(oldName)
-	newMachine, newPath := mountParsePath(newName)
-	if oldMachine == "" || oldPath == "" || newMachine == "" || newPath == "" {
+	oldMachine, oldShare, oldPath := mountParsePath(oldName)
+	newMachine, newShare, newPath := mountParsePath(newName)
+	if oldMachine == "" || oldShare == "" || oldPath == "" || newMachine == "" || newShare == "" || newPath == "" {
 		return os.ErrPermission
 	}
-	if oldMachine != newMachine {
-		return fmt.Errorf("cannot move between machines")
+	if oldMachine != newMachine || oldShare != newShare {
+		return fmt.Errorf("cannot move between machines or shares")
 	}
 
 	oldDir := filepath.Dir(oldPath)
 	newDir := filepath.Dir(newPath)
 	if oldDir == newDir {
 		newBaseName := filepath.Base(newPath)
-		resp, err := mountFileShareRequest(oldMachine, mountFsRequest{Op: "rename", Path: oldPath, NewName: newBaseName})
+		resp, err := mountFileShareRequest(oldMachine, oldShare, mountFsRequest{Op: "rename", Path: oldPath, NewName: newBaseName})
 		if err != nil {
 			return err
 		}
@@ -555,7 +572,7 @@ func (fs *mountFS) Rename(ctx context.Context, oldName, newName string) error {
 			return fmt.Errorf("%s", resp.Error)
 		}
 	} else {
-		resp, err := mountFileShareRequest(oldMachine, mountFsRequest{Op: "move", Path: oldPath, NewPath: newPath})
+		resp, err := mountFileShareRequest(oldMachine, oldShare, mountFsRequest{Op: "move", Path: oldPath, NewPath: newPath})
 		if err != nil {
 			return err
 		}
@@ -563,20 +580,24 @@ func (fs *mountFS) Rename(ctx context.Context, oldName, newName string) error {
 			return fmt.Errorf("%s", resp.Error)
 		}
 	}
-	mountInvalidateCache(oldMachine, oldPath)
-	mountInvalidateCache(oldMachine, newPath)
+	mountInvalidateCache(oldMachine, oldShare, oldPath)
+	mountInvalidateCache(oldMachine, oldShare, newPath)
 	return nil
 }
 
 func (fs *mountFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
-	machine, remotePath := mountParsePath(name)
+	machine, share, remotePath := mountParsePath(name)
 
 	if machine == "" {
 		return &mountDirInfo{name: "/", modTime: time.Now()}, nil
 	}
 
-	if remotePath == "" {
+	if share == "" {
 		return &mountDirInfo{name: machine, modTime: time.Now()}, nil
+	}
+
+	if remotePath == "" {
+		return &mountDirInfo{name: share, modTime: time.Now()}, nil
 	}
 
 	parentPath := filepath.Dir(remotePath)
@@ -585,7 +606,7 @@ func (fs *mountFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
 	}
 	baseName := filepath.Base(remotePath)
 
-	resp, err := mountCachedList(machine, parentPath)
+	resp, err := mountCachedList(machine, share, parentPath)
 	if err != nil {
 		return nil, os.ErrNotExist
 	}
@@ -705,11 +726,10 @@ func (d *mountRootDir) Readdir(count int) ([]os.FileInfo, error) {
 	return mountReaddir(&d.entries, &d.pos, count)
 }
 
-// ── Machine directory ────────────────────────────────────────────
+// ── Machine directory (lists shares) ────────────────────────────
 
 type mountMachineDir struct {
 	machine string
-	path    string
 	entries []os.FileInfo
 	pos     int
 }
@@ -720,20 +740,54 @@ func (d *mountMachineDir) Read(p []byte) (int, error)                   { return
 func (d *mountMachineDir) Seek(offset int64, whence int) (int64, error) { return 0, nil }
 
 func (d *mountMachineDir) Stat() (os.FileInfo, error) {
-	name := d.machine
+	return &mountDirInfo{name: d.machine, modTime: time.Now()}, nil
+}
+
+func (d *mountMachineDir) Readdir(count int) ([]os.FileInfo, error) {
+	if d.entries == nil {
+		// Ask the agent for its share list.
+		resp, err := mountFileShareRequest(d.machine, "", mountFsRequest{Op: "list-shares"})
+		if err != nil {
+			return nil, io.EOF
+		}
+		log.Printf("[mount] Readdir %s: %d shares", d.machine, len(resp.Shares))
+		for _, s := range resp.Shares {
+			d.entries = append(d.entries, &mountDirInfo{name: s.Name, modTime: time.Now()})
+		}
+	}
+	return mountReaddir(&d.entries, &d.pos, count)
+}
+
+// ── Share directory (lists files within one share) ───────────────
+
+type mountShareDir struct {
+	machine string
+	share   string
+	path    string
+	entries []os.FileInfo
+	pos     int
+}
+
+func (d *mountShareDir) Close() error                                 { return nil }
+func (d *mountShareDir) Write(p []byte) (int, error)                  { return 0, os.ErrPermission }
+func (d *mountShareDir) Read(p []byte) (int, error)                   { return 0, io.EOF }
+func (d *mountShareDir) Seek(offset int64, whence int) (int64, error) { return 0, nil }
+
+func (d *mountShareDir) Stat() (os.FileInfo, error) {
+	name := d.share
 	if d.path != "" {
 		name = filepath.Base(d.path)
 	}
 	return &mountDirInfo{name: name, modTime: time.Now()}, nil
 }
 
-func (d *mountMachineDir) Readdir(count int) ([]os.FileInfo, error) {
+func (d *mountShareDir) Readdir(count int) ([]os.FileInfo, error) {
 	if d.entries == nil {
-		resp, err := mountCachedList(d.machine, d.path)
+		resp, err := mountCachedList(d.machine, d.share, d.path)
 		if err != nil {
 			return nil, io.EOF
 		}
-		log.Printf("[mount] Readdir %s/%s: %d entries", d.machine, d.path, len(resp.Entries))
+		log.Printf("[mount] Readdir %s/%s/%s: %d entries", d.machine, d.share, d.path, len(resp.Entries))
 		for _, e := range resp.Entries {
 			// Skip entries with names containing characters invalid in XML 1.0
 			// (control chars 0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F). These break
@@ -762,6 +816,7 @@ func (d *mountMachineDir) Readdir(count int) ([]os.FileInfo, error) {
 
 type mountTelaFile struct {
 	machine    string
+	share      string
 	path       string
 	flag       int
 	tmpFile    *os.File // lazy-loaded content spooled to a temp file (reads)
@@ -778,8 +833,8 @@ func (f *mountTelaFile) Close() error {
 		if size > 0 {
 			f.writeTmp.Seek(0, io.SeekStart)
 			data, _ := io.ReadAll(f.writeTmp)
-			if err := mountUploadFile(f.machine, f.path, data); err != nil {
-				log.Printf("[mount] upload %s/%s failed: %v", f.machine, f.path, err)
+			if err := mountUploadFile(f.machine, f.share, f.path, data); err != nil {
+				log.Printf("[mount] upload %s/%s/%s failed: %v", f.machine, f.share, f.path, err)
 				f.writeTmp.Close()
 				os.Remove(f.writeTmp.Name())
 				return err
@@ -787,7 +842,7 @@ func (f *mountTelaFile) Close() error {
 		}
 		f.writeTmp.Close()
 		os.Remove(f.writeTmp.Name())
-		mountInvalidateCache(f.machine, f.path)
+		mountInvalidateCache(f.machine, f.share, f.path)
 	}
 	// Clean up read temp file
 	if f.tmpFile != nil {
@@ -877,7 +932,7 @@ func (f *mountTelaFile) ensureLoaded() error {
 		return err
 	}
 
-	if err := mountDownloadToFile(f.machine, f.path, tmp); err != nil {
+	if err := mountDownloadToFile(f.machine, f.share, f.path, tmp); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())
 		return err
@@ -895,7 +950,7 @@ func (f *mountTelaFile) Stat() (os.FileInfo, error) {
 	}
 	baseName := filepath.Base(f.path)
 
-	resp, err := mountCachedList(f.machine, parentPath)
+	resp, err := mountCachedList(f.machine, f.share, parentPath)
 	if err != nil {
 		return nil, os.ErrNotExist
 	}

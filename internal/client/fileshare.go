@@ -98,24 +98,49 @@ func listTunnelMachines() []string {
 	return out
 }
 
-// startFileEventSubscription opens a subscribe connection to telad's file
-// share port and forwards events through the control WebSocket. Runs until
-// the connection closes or the stop channel is signalled.
+// startFileEventSubscription opens subscribe connections to all shares on a
+// machine and forwards events through the control WebSocket. One goroutine
+// is started per share. All goroutines are stopped when the stop channel
+// is closed.
 func startFileEventSubscription(machine string, stop chan struct{}) {
+	// Discover available shares before subscribing.
 	conn, err := tryDialFileShare(machine)
 	if err != nil {
-		return // no file share on this machine
+		return // no file share listener on this machine
+	}
+	listReq, _ := json.Marshal(fsRequest{Op: "list-shares"})
+	listReq = append(listReq, '\n')
+	conn.Write(listReq)
+	reader := bufio.NewReader(conn)
+	respLine, err := reader.ReadBytes('\n')
+	conn.Close()
+	if err != nil {
+		return
+	}
+	var listResp fsResponse
+	if json.Unmarshal(respLine, &listResp) != nil || !listResp.OK {
+		return
 	}
 
-	// Send subscribe request
-	req, _ := json.Marshal(fsRequest{Op: "subscribe"})
+	for _, share := range listResp.Shares {
+		go subscribeShare(machine, share.Name, stop)
+	}
+}
+
+// subscribeShare subscribes to file events for one named share.
+func subscribeShare(machine, shareName string, stop chan struct{}) {
+	conn, err := tryDialFileShare(machine)
+	if err != nil {
+		return
+	}
+
+	req, _ := json.Marshal(fsRequest{Op: "subscribe", Share: shareName})
 	req = append(req, '\n')
 	if _, err := conn.Write(req); err != nil {
 		conn.Close()
 		return
 	}
 
-	// Read the confirmation response
 	reader := bufio.NewReader(conn)
 	respLine, err := reader.ReadBytes('\n')
 	if err != nil {
@@ -128,38 +153,30 @@ func startFileEventSubscription(machine string, stop chan struct{}) {
 		return
 	}
 
-	log.Printf("[fileshare] subscribed to events from %s", machine)
+	log.Printf("[fileshare] subscribed to events from %s/%s", machine, shareName)
 
-	// Forward events until stopped
+	defer conn.Close()
+
 	go func() {
-		defer conn.Close()
-
-		// Close connection when stop is signalled
-		go func() {
-			<-stop
-			conn.Close()
-		}()
-
-		for {
-			// Set a read deadline so we detect dead connections.
-			// telad sends events as they happen, so long silences are
-			// expected. 5 minutes is generous enough to avoid false
-			// positives while still detecting dead tunnels.
-			conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
-			line, err := reader.ReadBytes('\n')
-			if err != nil {
-				return
-			}
-
-			// Parse the event and add the machine name
-			var raw map[string]interface{}
-			if json.Unmarshal(line, &raw) != nil {
-				continue
-			}
-			raw["machine"] = machine
-			emitEvent(raw)
-		}
+		<-stop
+		conn.Close()
 	}()
+
+	for {
+		conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			return
+		}
+
+		var raw map[string]interface{}
+		if json.Unmarshal(line, &raw) != nil {
+			continue
+		}
+		raw["machine"] = machine
+		raw["share"] = shareName
+		emitEvent(raw)
+	}
 }
 
 // dialFileShare dials the file share port on a connected machine's tunnel.
@@ -286,6 +303,7 @@ func tryDialFileShare(machine string) (net.Conn, error) {
 
 type fsRequest struct {
 	Op       string `json:"op"`
+	Share    string `json:"share,omitempty"` // target share name
 	Path     string `json:"path"`
 	Size     int64  `json:"size,omitempty"`
 	Checksum string `json:"checksum,omitempty"`
@@ -295,14 +313,22 @@ type fsRequest struct {
 	Limit    int    `json:"limit,omitempty"`
 }
 
+// fsShareInfo describes one share returned by list-shares.
+type fsShareInfo struct {
+	Name        string `json:"name"`
+	Writable    bool   `json:"writable,omitempty"`
+	AllowDelete bool   `json:"allowDelete,omitempty"`
+}
+
 type fsResponse struct {
-	OK       bool      `json:"ok"`
-	Error    string    `json:"error,omitempty"`
-	Entries  []fsEntry `json:"entries,omitempty"`
-	Size     int64     `json:"size,omitempty"`
-	ModTime  string    `json:"modTime,omitempty"`
-	Checksum string    `json:"checksum,omitempty"`
-	Total    int       `json:"total,omitempty"`
+	OK       bool          `json:"ok"`
+	Error    string        `json:"error,omitempty"`
+	Entries  []fsEntry     `json:"entries,omitempty"`
+	Shares   []fsShareInfo `json:"shares,omitempty"` // for list-shares
+	Size     int64         `json:"size,omitempty"`
+	ModTime  string        `json:"modTime,omitempty"`
+	Checksum string        `json:"checksum,omitempty"`
+	Total    int           `json:"total,omitempty"`
 }
 
 type fsEntry struct {
@@ -353,14 +379,14 @@ Requires an active tela connect session with file sharing enabled on
 the target machine.
 
 Subcommands:
-  ls     [-machine <id>] [path]             List files
-  get    [-machine <id>] <path> [-o out]    Download a file
-  put    [-machine <id>] <local> [remote]   Upload a file
-  rm     [-machine <id>] <path>             Delete a file
-  mkdir  [-machine <id>] <path>             Create a directory
-  rename [-machine <id>] <path> <new-name>  Rename a file or directory
-  mv     [-machine <id>] <src> <dest>       Move a file or directory
-  info   [-machine <id>]                    Show file share status
+  ls     [-machine <id>] -share <name> [path]             List files
+  get    [-machine <id>] -share <name> <path> [-o out]    Download a file
+  put    [-machine <id>] -share <name> <local> [remote]   Upload a file
+  rm     [-machine <id>] -share <name> <path>             Delete a file
+  mkdir  [-machine <id>] -share <name> <path>             Create a directory
+  rename [-machine <id>] -share <name> <path> <new-name>  Rename a file or directory
+  mv     [-machine <id>] -share <name> <src> <dest>       Move a file or directory
+  info   [-machine <id>]                                   Show file share status
 
 `)
 }
@@ -391,10 +417,15 @@ func sendRequest(conn net.Conn, req fsRequest) (*fsResponse, *bufio.Reader, erro
 func cmdFilesLs(args []string) {
 	fs := flag.NewFlagSet("files ls", flag.ExitOnError)
 	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	share := fs.String("share", envOrDefault("TELA_SHARE", ""), "Share name")
 	fs.Parse(args)
 
 	if *machine == "" {
 		fmt.Fprintln(os.Stderr, "Error: -machine is required")
+		os.Exit(1)
+	}
+	if *share == "" {
+		fmt.Fprintln(os.Stderr, "Error: -share is required")
 		os.Exit(1)
 	}
 
@@ -403,7 +434,7 @@ func cmdFilesLs(args []string) {
 		path = fs.Arg(0)
 	}
 
-	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "list", Path: path})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "list", Share: *share, Path: path})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -432,16 +463,17 @@ func cmdFilesLs(args []string) {
 func cmdFilesGet(args []string) {
 	fs := flag.NewFlagSet("files get", flag.ExitOnError)
 	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	share := fs.String("share", envOrDefault("TELA_SHARE", ""), "Share name")
 	output := fs.String("o", "", "Output file path (default: same name in current dir)")
 	fs.Parse(args)
 
-	if *machine == "" || fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela files get -machine <id> <remote-path> [-o local-path]")
+	if *machine == "" || *share == "" || fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files get -machine <id> -share <name> <remote-path> [-o local-path]")
 		os.Exit(1)
 	}
 	remotePath := fs.Arg(0)
 
-	resp, reader, err := fileShareRequest(*machine, fsRequest{Op: "read", Path: remotePath})
+	resp, reader, err := fileShareRequest(*machine, fsRequest{Op: "read", Share: *share, Path: remotePath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -513,10 +545,11 @@ func cmdFilesGet(args []string) {
 func cmdFilesPut(args []string) {
 	fs := flag.NewFlagSet("files put", flag.ExitOnError)
 	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	share := fs.String("share", envOrDefault("TELA_SHARE", ""), "Share name")
 	fs.Parse(args)
 
-	if *machine == "" || fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela files put -machine <id> <local-path> [remote-name]")
+	if *machine == "" || *share == "" || fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files put -machine <id> -share <name> <local-path> [remote-name]")
 		os.Exit(1)
 	}
 
@@ -560,7 +593,7 @@ func cmdFilesPut(args []string) {
 	defer conn.Close()
 
 	// Send write request header
-	req := fsRequest{Op: "write", Path: remoteName, Size: info.Size(), Checksum: checksum}
+	req := fsRequest{Op: "write", Share: *share, Path: remoteName, Size: info.Size(), Checksum: checksum}
 	data, _ := json.Marshal(req)
 	data = append(data, '\n')
 	conn.Write(data)
@@ -607,15 +640,16 @@ func cmdFilesPut(args []string) {
 func cmdFilesRm(args []string) {
 	fs := flag.NewFlagSet("files rm", flag.ExitOnError)
 	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	share := fs.String("share", envOrDefault("TELA_SHARE", ""), "Share name")
 	fs.Parse(args)
 
-	if *machine == "" || fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela files rm -machine <id> <remote-path>")
+	if *machine == "" || *share == "" || fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files rm -machine <id> -share <name> <remote-path>")
 		os.Exit(1)
 	}
 	remotePath := fs.Arg(0)
 
-	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "delete", Path: remotePath})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "delete", Share: *share, Path: remotePath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -631,15 +665,16 @@ func cmdFilesRm(args []string) {
 func cmdFilesMkdir(args []string) {
 	fs := flag.NewFlagSet("files mkdir", flag.ExitOnError)
 	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	share := fs.String("share", envOrDefault("TELA_SHARE", ""), "Share name")
 	fs.Parse(args)
 
-	if *machine == "" || fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela files mkdir -machine <id> <path>")
+	if *machine == "" || *share == "" || fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files mkdir -machine <id> -share <name> <path>")
 		os.Exit(1)
 	}
 	dirPath := fs.Arg(0)
 
-	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "mkdir", Path: dirPath})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "mkdir", Share: *share, Path: dirPath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -655,16 +690,17 @@ func cmdFilesMkdir(args []string) {
 func cmdFilesRename(args []string) {
 	fs := flag.NewFlagSet("files rename", flag.ExitOnError)
 	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	share := fs.String("share", envOrDefault("TELA_SHARE", ""), "Share name")
 	fs.Parse(args)
 
-	if *machine == "" || fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: tela files rename -machine <id> <path> <new-name>")
+	if *machine == "" || *share == "" || fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files rename -machine <id> -share <name> <path> <new-name>")
 		os.Exit(1)
 	}
 	oldPath := fs.Arg(0)
 	newName := fs.Arg(1)
 
-	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "rename", Path: oldPath, NewName: newName})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "rename", Share: *share, Path: oldPath, NewName: newName})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -680,16 +716,17 @@ func cmdFilesRename(args []string) {
 func cmdFilesMv(args []string) {
 	fs := flag.NewFlagSet("files mv", flag.ExitOnError)
 	machine := fs.String("machine", envOrDefault("TELA_MACHINE", ""), "Machine ID")
+	share := fs.String("share", envOrDefault("TELA_SHARE", ""), "Share name")
 	fs.Parse(args)
 
-	if *machine == "" || fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: tela files mv -machine <id> <source> <destination>")
+	if *machine == "" || *share == "" || fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tela files mv -machine <id> -share <name> <source> <destination>")
 		os.Exit(1)
 	}
 	srcPath := fs.Arg(0)
 	dstPath := fs.Arg(1)
 
-	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "move", Path: srcPath, NewPath: dstPath})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "move", Share: *share, Path: srcPath, NewPath: dstPath})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -712,8 +749,7 @@ func cmdFilesInfo(args []string) {
 		os.Exit(1)
 	}
 
-	// List root to verify connectivity and show basic info
-	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "list", Path: ""})
+	resp, _, err := fileShareRequest(*machine, fsRequest{Op: "list-shares"})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -723,22 +759,18 @@ func cmdFilesInfo(args []string) {
 		os.Exit(1)
 	}
 
-	fileCount := 0
-	dirCount := 0
-	var totalSize int64
-	for _, e := range resp.Entries {
-		if e.IsDir {
-			dirCount++
-		} else {
-			fileCount++
-			totalSize += e.Size
+	fmt.Printf("Machine: %s\n", *machine)
+	fmt.Printf("Shares:  %d\n", len(resp.Shares))
+	for _, s := range resp.Shares {
+		access := "read-only"
+		if s.Writable {
+			access = "read-write"
+			if s.AllowDelete {
+				access = "read-write (delete allowed)"
+			}
 		}
+		fmt.Printf("  %s  %s\n", s.Name, access)
 	}
-
-	fmt.Printf("Machine:     %s\n", *machine)
-	fmt.Printf("Files:       %d\n", fileCount)
-	fmt.Printf("Directories: %d\n", dirCount)
-	fmt.Printf("Total size:  %s\n", formatSize(totalSize))
 }
 
 func formatSize(b int64) string {

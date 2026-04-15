@@ -11,6 +11,13 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Added
+- Multiple named file shares per agent machine: replace the single `fileShare` config with a `shares` list, each with a `name` and `path`. WebDAV mount paths change from `/machine/path` to `/machine/share/path`. `tela files` subcommands gain a required `-share` flag.
+- `list-shares` protocol operation returns available shares on a machine, used by `tela files info` and the WebDAV machine directory listing.
+
+### Changed
+- `fileShare` (singular) in telad config is deprecated; it is accepted and synthesized as a share named `legacy` with a startup warning. It will be removed in 1.0.
+
 ## [0.9] - 2026-04-14
 
 The "release discipline" release. Stable baseline with comprehensive
