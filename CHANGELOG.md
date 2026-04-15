@@ -11,6 +11,11 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+## [0.10] - 2026-04-15
+
+The "multi-share and loopback" release. Named file shares, reliable port
+binding on Windows, and TelaVisor file browser share navigation.
+
 ### Added
 - `telachand`: new Tela Channel Daemon binary. Hosts channel manifests and binary files over HTTP so operators can run a self-hosted alternative to the default GitHub release channel. Supports `publish` (scan a files directory, compute SHA-256s, write a manifest), `service install/start/stop/status` (system and user autostart on all platforms), `update` (self-update from any channel), and the same YAML config and service patterns as the other Tela binaries. Configure tela/telad/telahubd/TelaVisor to point their update base URL at a running `telachand` instance.
 - Multiple named file shares per agent machine: replace the single `fileShare` config with a `shares` list, each with a `name` and `path`. WebDAV mount paths change from `/machine/path` to `/machine/share/path`. `tela files` subcommands gain a required `-share` flag.
@@ -19,6 +24,7 @@ patch-level dev builds are too granular to list individually.
 
 ### Fixed
 - Port binding reverted to `127.0.0.1`: removes the per-machine 127.88.x.x loopback address scheme that caused Windows loopback shadowing (local SSH and RDP intercepting tunnel connections). When a service port is already in use, tela tries `port+10000`, then `port+10001`, `port+10002`, and so on until a free port is found, so no service is skipped due to port conflicts between simultaneously connected machines. TelaVisor reads bound ports from the control API instead of parsing log output, and shows the actual bound port for each service. A service that truly cannot bind shows "Unavailable" rather than "Connecting..." so the distinction between a port conflict and a tunnel not yet established is visible.
+- Copy buttons in TelaVisor Status tab now work (used Wails clipboard API; fixed HTML attribute encoding for the onclick handler).
 
 ### Changed
 - `fileShare` (singular) in telad config is deprecated; it is accepted and synthesized as a share named `legacy` with a startup warning. It will be removed in 1.0.
