@@ -187,3 +187,169 @@ git push origin hotfix/v0.4.x v0.4.1
 ```
 
 The tag push triggers a stable release build for `v0.4.1`. Then merge the cherry-picked commit forward into `main` so it is not lost.
+
+## Self-hosted channels with telachand
+
+The `telachand` binary (Tela Channel Daemon) is a drop-in replacement for the GitHub release host. It serves the same manifest format and file paths over plain HTTP. Tela clients point `update.manifestBase` at it and thereafter treat it identically to the GitHub channel.
+
+Use cases:
+
+- Air-gapped or firewall-restricted networks where GitHub is unreachable
+- Distributing custom or private builds that never enter the public pipeline
+- Staging a release internally before pushing it to the public channel
+- Developer workflows where every local build becomes immediately available for self-update across a local fleet
+
+### Deploy telachand
+
+Create a config file on the host that will serve your channel:
+
+```yaml
+# telachand.yaml
+listen: ":9900"
+data: /var/lib/telachand    # holds dev.json, beta.json, stable.json, and files/
+publicURL: "http://192.168.1.10:9900"
+
+update:
+  channel: stable           # telachand's own self-update channel
+```
+
+Start it:
+
+```bash
+telachand -config telachand.yaml
+```
+
+Install as a persistent service:
+
+```bash
+# System service (requires admin/root)
+sudo telachand service install -config /etc/tela/telachand.yaml
+sudo telachand service start
+
+# User autostart (no admin required)
+telachand service install --user -config telachand.yaml
+telachand service start --user
+```
+
+The daemon serves three routes:
+
+- `GET /{channel}.json` -- channel manifest
+- `GET /files/{name}` -- binary download
+- `GET /` -- health/status JSON
+
+### Populate the files directory
+
+Drop binaries into `{data}/files/` using the same naming convention as GitHub release assets:
+
+```
+{data}/files/
+  tela-linux-amd64
+  tela-linux-arm64
+  tela-windows-amd64.exe
+  telad-linux-amd64
+  telad-linux-arm64
+  telad-windows-amd64.exe
+  telahubd-linux-amd64
+  telahubd-linux-arm64
+  telahubd-windows-amd64.exe
+  telachand-linux-amd64
+  telachand-linux-arm64
+  telachand-windows-amd64.exe
+  telavisor-windows-amd64.exe
+```
+
+Only include the binaries you want to distribute. The manifest lists whatever is present; clients look up their own platform entry.
+
+### Publish a manifest
+
+After placing binaries, generate the manifest:
+
+```bash
+telachand publish -channel dev -tag v0.11.0-dev.1 -config telachand.yaml
+```
+
+Output:
+
+```
+  tela-linux-amd64            a1b2c3d4e5f6...  12345678 bytes
+  tela-windows-amd64.exe      b2c3d4e5f6a1...  13456789 bytes
+  ...
+
+published dev channel manifest
+  tag:      v0.11.0-dev.1
+  binaries: 9
+  base:     http://192.168.1.10:9900/files/
+  manifest: /var/lib/telachand/dev.json
+```
+
+The manifest is live immediately. The daemon does not need to restart. Each channel has its own manifest; you can maintain all three simultaneously.
+
+### Point binaries at the self-hosted channel
+
+Set `update.manifestBase` in each binary's config:
+
+```yaml
+# telad.yaml
+update:
+  channel: dev
+  manifestBase: http://192.168.1.10:9900/
+```
+
+```yaml
+# telahubd.yaml
+update:
+  channel: dev
+  manifestBase: http://192.168.1.10:9900/
+```
+
+For the `tela` client and TelaVisor, set it in `~/.tela/credentials.yaml`:
+
+```yaml
+update:
+  channel: dev
+  manifestBase: http://192.168.1.10:9900/
+```
+
+After this, `tela update`, `telad update`, `telahubd update`, and the TelaVisor Update buttons all pull from your telachand instance.
+
+### Verify
+
+```bash
+tela channel
+```
+
+```text
+  channel:         dev
+  manifest:        http://192.168.1.10:9900/dev.json
+  current version: dev
+  latest version:  v0.11.0-dev.1  (update available)
+```
+
+### Publishing new builds
+
+When you have new binaries:
+
+1. Copy them into `{data}/files/`, replacing the previous versions.
+2. Run `telachand publish -channel <name> -tag <new-tag>`.
+3. Clients pull the update on their next `update` invocation.
+
+The manifest tag is arbitrary. For local dev builds, a short git hash or timestamp works well since `dev`-versioned binaries always update regardless of semver comparison.
+
+### telachand self-update
+
+`telachand` updates itself the same way the other binaries do:
+
+```bash
+telachand update                        # from configured channel
+telachand update -channel stable        # one-shot override
+telachand update -dry-run
+```
+
+By default it updates from the official GitHub channel. To pull from another telachand instance:
+
+```yaml
+# telachand.yaml
+update:
+  channel: stable
+  base: http://primary-channel.example.com:9900/
+```
