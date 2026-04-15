@@ -567,6 +567,9 @@ func (a *App) RestartToUpdate() error {
 		return fmt.Errorf("cannot determine executable path")
 	}
 
+	// Save window geometry before exit so the new instance restores position/size.
+	a.saveWindowGeometry()
+
 	// Apply the update now before relaunching.
 	a.applyPendingSelfUpdate()
 

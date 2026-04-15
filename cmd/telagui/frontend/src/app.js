@@ -5144,23 +5144,11 @@ function refreshSettings() {
 
 function gatherSettings() {
   var themeRadio = document.querySelector('input[name="setting-theme"]:checked');
-  // Preserve defaultProfile and binPath from current settings (they're managed in Client Settings tab now)
-  var existing = {};
-  try {
-    var csProfile = document.getElementById('cs-default-profile');
-    var csBinPath = document.getElementById('cs-binPath');
-    if (csProfile) existing.defaultProfile = csProfile.value;
-    if (csBinPath) {
-      var val = csBinPath.value.trim();
-      var def = csBinPath.getAttribute('data-default') || '';
-      existing.binPath = val === def ? '' : val;
-    }
-  } catch (e) {}
   var logInput = document.getElementById('setting-logMaxLines');
   var logVal = logInput ? parseInt(logInput.value, 10) : 5000;
   if (isNaN(logVal) || logVal < 100) logVal = 100;
 
-  return {
+  var s = {
     autoConnect: document.getElementById('setting-autoConnect').checked,
     reconnectOnDrop: document.getElementById('setting-reconnectOnDrop').checked,
     confirmDisconnect: document.getElementById('setting-confirmDisconnect').checked,
@@ -5169,11 +5157,24 @@ function gatherSettings() {
     minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
     autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
     verboseDefault: document.getElementById('setting-verboseDefault').checked,
-    defaultProfile: existing.defaultProfile || '',
-    binPath: existing.binPath || '',
     theme: themeRadio ? themeRadio.value : 'system',
     logMaxLines: logVal
   };
+
+  // defaultProfile and binPath are managed in Client Settings tab.
+  // Only include them when those DOM elements are present; when they are
+  // absent (e.g. update triggered from the update overlay) omit them so
+  // SaveSettings preserves whatever is already on disk.
+  var csProfile = document.getElementById('cs-default-profile');
+  var csBinPath = document.getElementById('cs-binPath');
+  if (csProfile) s.defaultProfile = csProfile.value;
+  if (csBinPath) {
+    var val = csBinPath.value.trim();
+    var def = csBinPath.getAttribute('data-default') || '';
+    s.binPath = val === def ? '' : val;
+  }
+
+  return s;
 }
 
 // Apply: save settings, disable Apply buttons, stay in dialog.
