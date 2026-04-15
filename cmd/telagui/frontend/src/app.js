@@ -1451,26 +1451,6 @@ function loadSavedSelections() {
         };
       });
     });
-    // Compute loopback addresses for loaded profile
-    var machineAddrs = {};
-    var addrPromises = [];
-    connections.forEach(function (conn) {
-      var mk = conn.hub + '||' + conn.machine;
-      if (!machineAddrs[mk]) {
-        machineAddrs[mk] = goApp.LoopbackAddr(conn.hub, conn.machine);
-        addrPromises.push(machineAddrs[mk].then(function (addr) { machineAddrs[mk] = addr; }));
-      }
-    });
-    if (addrPromises.length > 0) {
-      return Promise.all(addrPromises).then(function () {
-        Object.keys(selectedServices).forEach(function (key) {
-          var sel = selectedServices[key];
-          var mk = sel.hub + '||' + sel.machine;
-          sel.bindAddr = machineAddrs[mk];
-          sel.localPort = sel.servicePort;
-        });
-      });
-    }
   }).then(function () {
     takeSnapshot();
   }).catch(function (err) {
@@ -2315,40 +2295,14 @@ function toggleService(hubURL, machineId, serviceName, servicePort, checked) {
 }
 
 function resolveAllPortsAndUpdate() {
-  // Compute loopback addresses for each machine, then assign real
-  // remote ports as local ports (no clash because each machine gets
-  // its own unique loopback IP).
-  var machineAddrs = {}; // "hub||machine" -> Promise<addr>
-  var promises = [];
   Object.keys(selectedServices).forEach(function (key) {
     var sel = selectedServices[key];
-    var mk = sel.hub + '||' + sel.machine;
-    if (!machineAddrs[mk]) {
-      machineAddrs[mk] = goApp.LoopbackAddr(toWSURL(sel.hub), sel.machine);
-      promises.push(machineAddrs[mk].then(function (addr) { machineAddrs[mk] = addr; }));
-    }
+    sel.localPort = sel.servicePort;
   });
-
-  if (promises.length === 0) {
-    updateConnectButton();
-    checkDirty();
-    refreshCurrentPane();
-    refreshMountPreview();
-    return;
-  }
-
-  Promise.all(promises).then(function () {
-    Object.keys(selectedServices).forEach(function (key) {
-      var sel = selectedServices[key];
-      var mk = sel.hub + '||' + sel.machine;
-      sel.bindAddr = machineAddrs[mk];
-      sel.localPort = sel.servicePort; // real remote port, no remapping
-    });
-    updateConnectButton();
-    checkDirty();
-    refreshCurrentPane();
-    refreshMountPreview();
-  });
+  updateConnectButton();
+  checkDirty();
+  refreshCurrentPane();
+  refreshMountPreview();
 }
 
 // Build a stable fingerprint of user intent (which services are selected,

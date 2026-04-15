@@ -16,6 +16,9 @@ patch-level dev builds are too granular to list individually.
 - Multiple named file shares per agent machine: replace the single `fileShare` config with a `shares` list, each with a `name` and `path`. WebDAV mount paths change from `/machine/path` to `/machine/share/path`. `tela files` subcommands gain a required `-share` flag.
 - `list-shares` protocol operation returns available shares on a machine, used by `tela files info` and the WebDAV machine directory listing.
 
+### Fixed
+- Port binding reverted to `127.0.0.1` with `port+10000` remapping on conflict: removes the per-machine 127.88.x.x loopback address scheme that caused Windows loopback shadowing (local SSH and RDP intercepting tunnel connections). Services that cannot bind their requested port try `local+10000`; if that also fails the service is skipped. TelaVisor no longer pre-computes 127.88 addresses for the initial display; the actual bound address and port appear after the listener is up.
+
 ### Changed
 - `fileShare` (singular) in telad config is deprecated; it is accepted and synthesized as a share named `legacy` with a startup warning. It will be removed in 1.0.
 
