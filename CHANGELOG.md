@@ -11,6 +11,9 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Fixed
+- Loopback listener on Windows incorrectly advertised port when a wildcard socket (e.g. sshd on `0.0.0.0:22`, Remote Desktop on `0.0.0.0:3389`) was already bound: connections from external processes went to the wildcard service rather than tela. Replaced the post-bind TCP probe (which only worked within tela's own process) with a pre-bind `GetExtendedTcpTable` check that detects wildcard sockets authoritatively before attempting to bind.
+
 ### Added
 - Multiple named file shares per agent machine: replace the single `fileShare` config with a `shares` list, each with a `name` and `path`. WebDAV mount paths change from `/machine/path` to `/machine/share/path`. `tela files` subcommands gain a required `-share` flag.
 - `list-shares` protocol operation returns available shares on a machine, used by `tela files info` and the WebDAV machine directory listing.
