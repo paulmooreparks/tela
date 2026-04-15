@@ -2089,29 +2089,28 @@ func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Liste
 		if aliasErr := ensureLoopbackAlias(m.bindAddr); aliasErr == nil {
 			addr = m.bindAddr
 			port = m.remote // real service port on the loopback address
-			// On Windows, a wildcard socket on 0.0.0.0:PORT captures all
-			// connections to that port regardless of which specific address
-			// tela binds. Check before binding: if a wildcard exists, skip
-			// straight to the alternate port so the listener we advertise
-			// actually receives connections.
-			if !wildcardBound(m.remote) {
-				listenAddr := fmt.Sprintf("%s:%d", addr, port)
-				ln, err = net.Listen("tcp", listenAddr)
-				if err == nil {
+			listenAddr := fmt.Sprintf("%s:%d", addr, port)
+			ln, err = net.Listen("tcp", listenAddr)
+			if err == nil {
+				// On Windows, a socket bound to 0.0.0.0:PORT with
+				// SO_EXCLUSIVEADDRUSE silently captures connections even when a
+				// more-specific bind succeeds. Verify the listener actually
+				// receives connections before advertising it.
+				if listenerShadowed(ln, listenAddr) {
+					ln.Close()
+					ln = nil
+					alt := m.remote + 10000
+					listenAddr = fmt.Sprintf("%s:%d", addr, alt)
+					ln, err = net.Listen("tcp", listenAddr)
+					if err == nil {
+						log.Printf("  [loopback] %s:%d shadowed by wildcard listener, using :%d", addr, m.remote, alt)
+						return addr, alt, ln, nil
+					}
+				} else {
 					return addr, port, ln, nil
 				}
 			}
-
-			// Wildcard listener detected or primary bind failed; try the
-			// loopback address with an alternate port.
-			alt := m.remote + 10000
-			listenAddr := fmt.Sprintf("%s:%d", addr, alt)
-			ln, err = net.Listen("tcp", listenAddr)
-			if err == nil {
-				log.Printf("  [loopback] port %d has a wildcard listener, using :%d", m.remote, alt)
-				return addr, alt, ln, nil
-			}
-			log.Printf("  [loopback] %s:%d and %s:%d both in use, falling back to 127.0.0.1", addr, m.remote, addr, alt)
+			log.Printf("  [loopback] %s:%d and %s:%d both in use, falling back to 127.0.0.1", addr, m.remote, addr, port)
 		}
 	}
 
