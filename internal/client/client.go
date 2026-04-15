@@ -2076,20 +2076,6 @@ func LoopbackAddr(prefix, hubURL, machine string) string {
 	return fmt.Sprintf("%s.%d.%d", prefix, o3, o4)
 }
 
-// wildcardListenerOnPort reports whether any service is already accepting
-// connections on 127.0.0.1:port. A successful dial means something is bound
-// to 0.0.0.0:port (or 127.0.0.1:port directly), which on Windows will shadow
-// any more-specific loopback bind due to SO_EXCLUSIVEADDRUSE priority routing.
-// The timeout is kept short because we are only probing local listeners.
-func wildcardListenerOnPort(port uint16) bool {
-	c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond)
-	if err == nil {
-		c.Close()
-		return true
-	}
-	return false
-}
-
 // bindLoopbackListener tries to bind a TCP listener for the given
 // portMapping. If m.bindAddr is set, it binds to that address on the
 // service's real remote port. If that fails, it falls back to
@@ -2103,21 +2089,26 @@ func bindLoopbackListener(m portMapping) (addr string, port uint16, ln net.Liste
 		if aliasErr := ensureLoopbackAlias(m.bindAddr); aliasErr == nil {
 			addr = m.bindAddr
 			port = m.remote // real service port on the loopback address
-
-			// On Windows, a service bound to 0.0.0.0:PORT with SO_EXCLUSIVEADDRUSE
-			// takes routing precedence over any more-specific bind on the same port.
-			// net.Listen may succeed without error, but connections are silently
-			// delivered to the wildcard socket instead. Detect this before binding
-			// by probing 127.0.0.1:PORT; if reachable, use the offset port directly.
-			if wildcardListenerOnPort(port) {
-				port = m.remote + 10000
-				log.Printf("  [loopback] %s:%d shadowed by wildcard listener, using :%d", addr, m.remote, port)
-			}
-
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			ln, err = net.Listen("tcp", listenAddr)
 			if err == nil {
-				return addr, port, ln, nil
+				// On Windows, a socket bound to 0.0.0.0:PORT with
+				// SO_EXCLUSIVEADDRUSE silently captures connections even when a
+				// more-specific bind succeeds. Verify the listener actually
+				// receives connections before advertising it.
+				if listenerShadowed(ln, listenAddr) {
+					ln.Close()
+					ln = nil
+					alt := m.remote + 10000
+					listenAddr = fmt.Sprintf("%s:%d", addr, alt)
+					ln, err = net.Listen("tcp", listenAddr)
+					if err == nil {
+						log.Printf("  [loopback] %s:%d shadowed by wildcard listener, using :%d", addr, m.remote, alt)
+						return addr, alt, ln, nil
+					}
+				} else {
+					return addr, port, ln, nil
+				}
 			}
 			log.Printf("  [loopback] %s:%d and %s:%d both in use, falling back to 127.0.0.1", addr, m.remote, addr, port)
 		}
