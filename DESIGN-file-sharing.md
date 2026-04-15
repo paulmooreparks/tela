@@ -18,7 +18,7 @@ SFTP, or any other service running on the agent machine.
 ## Design principles
 
 **Secure by default.** File sharing is disabled unless the agent operator
-adds a `fileShare` block to the machine config. No flags, no environment
+adds a `shares` list to the machine config. No flags, no environment
 variables can enable it implicitly.
 
 **Sandboxed.** All file operations are confined to a single declared
@@ -47,23 +47,25 @@ service traffic works today.
 machines:
   - name: barn
     ports: [22, 3389]
-    fileShare:
-      enabled: true
-      directory: /home/shared          # absolute path, required
-      writable: false                  # default: false (read-only)
-      maxFileSize: 100MB               # per-file upload limit, default: 50MB
-      maxTotalSize: 1GB                # total directory size limit, default: none
-      allowDelete: false               # default: false
-      allowedExtensions: []            # empty = all allowed; e.g. [".txt", ".log", ".yaml"]
-      blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]  # override allowedExtensions
+    shares:
+      - name: files
+        path: /home/shared             # absolute path, required
+        writable: false                # default: false (read-only)
+        maxFileSize: 100MB             # per-file upload limit, default: 50MB
+        maxTotalSize: 1GB              # total directory size limit, default: none
+        allowDelete: false             # default: false
+        allowedExtensions: []          # empty = all allowed; e.g. [".txt", ".log", ".yaml"]
+        blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
 ```
+
+The `fileShare:` (singular) key is still accepted and is synthesized as a share named `legacy`. It will be removed at 1.0.
 
 ### 3.2 Field reference
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | `false` | Enables file sharing for this machine |
-| `directory` | string | (required) | Absolute path to the shared directory. Created on startup if it does not exist (0700 permissions on Unix, standard permissions on Windows). telad refuses to start if the path is a system directory. |
+| `name` | string | (required) | Share name. Used in WebDAV paths (`/machine/share/path`) and the `-share NAME` flag on `tela files` commands. |
+| `path` | string | (required) | Absolute path to the shared directory. Created on startup if it does not exist (0700 permissions on Unix, standard permissions on Windows). telad refuses to start if the path is a system directory. |
 | `writable` | bool | `false` | Allows clients to upload files. When false, only list and download are permitted. |
 | `maxFileSize` | string | `50MB` | Maximum size of a single uploaded file. Supports KB, MB, GB suffixes. |
 | `maxTotalSize` | string | (none) | Maximum total size of all files in the shared directory. Uploads that would exceed this limit are rejected. When unset, no total limit is enforced. |
@@ -73,10 +75,10 @@ machines:
 
 ### 3.3 Directory rules
 
-- The directory must be an absolute path.
+- Each share path must be an absolute path.
 - telad creates the directory on startup if it does not exist (with 0700
   permissions on Unix, standard permissions on Windows).
-- telad validates that the directory is not a system directory (`/`, `/etc`,
+- telad validates that no share path is a system directory (`/`, `/etc`,
   `C:\Windows`, `C:\`, etc.).
 - Symlinks inside the shared directory are not followed. A file operation
   on a symlink returns an error.
@@ -86,9 +88,9 @@ machines:
 ### 3.4 Go struct
 
 ```go
-type fileShareConfig struct {
-    Enabled           bool     `yaml:"enabled"`
-    Directory         string   `yaml:"directory"`
+type shareConfig struct {
+    Name              string   `yaml:"name"`
+    Path              string   `yaml:"path"`
     Writable          bool     `yaml:"writable,omitempty"`
     MaxFileSize       string   `yaml:"maxFileSize,omitempty"`       // "50MB", "1GB", etc.
     MaxTotalSize      string   `yaml:"maxTotalSize,omitempty"`
@@ -103,7 +105,8 @@ Added to `machineConfig`:
 ```go
 type machineConfig struct {
     // ... existing fields ...
-    FileShare fileShareConfig `yaml:"fileShare,omitempty"`
+    Shares    []shareConfig   `yaml:"shares,omitempty"`
+    FileShare *fileShareConfig `yaml:"fileShare,omitempty"` // deprecated: synthesized as shares[{name:"legacy"}]
 }
 ```
 
@@ -124,11 +127,9 @@ The agent's `register` message gains an optional `capabilities` field:
   "ports": [22, 3389],
   "services": [...],
   "capabilities": {
-    "fileShare": {
-      "enabled": true,
-      "writable": false,
-      "maxFileSize": 52428800
-    }
+    "shares": [
+      {"name": "files", "writable": false, "maxFileSize": 104857600}
+    ]
   }
 }
 ```
@@ -177,7 +178,7 @@ service.
   mechanism used for service forwarding).
 - The connection is inside the WireGuard tunnel, so it inherits E2E
   encryption.
-- The agent accepts the connection only when `fileShare.enabled` is true.
+- The agent accepts the connection only when at least one share is configured.
 
 ### 5.3 Message format
 
@@ -461,7 +462,7 @@ negotiation.
 
 File sharing piggybacks on the existing `connect` permission. If a token
 can connect to a machine, it can use file sharing on that machine (subject
-to the agent's `fileShare` config).
+to the agent's `shares` config).
 
 Rationale: file sharing is a feature of the tunnel, not a separate
 service. The agent operator controls what is shared and whether writes are
@@ -490,28 +491,28 @@ This is not part of the initial implementation.
 
 ```bash
 # List files on a connected machine
-tela files ls -machine barn
-tela files ls -machine barn subdir/
+tela files ls -machine barn -share files
+tela files ls -machine barn -share files subdir/
 
 # Download a file
-tela files get -machine barn readme.txt
-tela files get -machine barn readme.txt -o /local/path/readme.txt
+tela files get -machine barn -share files readme.txt
+tela files get -machine barn -share files readme.txt -o /local/path/readme.txt
 
 # Upload a file (if writable)
-tela files put -machine barn localfile.txt
-tela files put -machine barn localfile.txt remote-name.txt
+tela files put -machine barn -share files localfile.txt
+tela files put -machine barn -share files localfile.txt remote-name.txt
 
 # Delete a file (if allowDelete)
-tela files rm -machine barn old-log.txt
+tela files rm -machine barn -share files old-log.txt
 
 # Create a directory (if writable)
-tela files mkdir -machine barn subdir/new-folder
+tela files mkdir -machine barn -share files subdir/new-folder
 
 # Rename a file or directory (if writable)
-tela files rename -machine barn old-name.txt new-name.txt
+tela files rename -machine barn -share files old-name.txt new-name.txt
 
 # Move a file or directory (if writable)
-tela files mv -machine barn logs/old-log.txt archive/old-log.txt
+tela files mv -machine barn -share files logs/old-log.txt archive/old-log.txt
 
 # Show file sharing status for a machine
 tela files info -machine barn
@@ -552,7 +553,7 @@ status alongside the service bindings:
 ```
 Connected to barn via myhub
   SSH:  localhost:22 -> barn:22
-  Files: barn:/home/shared (read-only, 47 files)
+  Files: barn/files:/home/shared (read-only, 47 files)
 ```
 
 ## TelaVisor integration
@@ -594,7 +595,7 @@ panel that:
 - Offers a "Restart Agent" button (via SSH or a future management channel)
 
 **Log retrieval.** A "Remote Logs" tab that downloads log files from the
-shared directory. The agent operator points `fileShare.directory` at a
+shared directory. The agent operator configures a share pointing at a
 logs directory, and TelaVisor provides a log viewer.
 
 **Binary deployment.** In the Settings binary manager, an "Update Remote
@@ -678,22 +679,22 @@ required.
 machines:
   - name: web01
     ports: [22, 8080]
-    fileShare:
-      enabled: true
-      directory: /etc/tela
-      writable: true
-      allowedExtensions: [".yaml", ".yml"]
-      maxFileSize: 1MB
+    shares:
+      - name: config
+        path: /etc/tela
+        writable: true
+        allowedExtensions: [".yaml", ".yml"]
+        maxFileSize: 1MB
 ```
 
 **Log collection.** An operator shares the log directory. TelaVisor or a
 script pulls logs from multiple machines for analysis.
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: /var/log/tela
-  writable: false
+shares:
+  - name: logs
+    path: /var/log/tela
+    writable: false
 ```
 
 **Binary deployment.** An operator shares a staging directory. They upload
@@ -701,13 +702,13 @@ new telad binaries, then SSH in (or use a future management command) to
 swap and restart.
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: /opt/tela/staging
-  writable: true
-  allowedExtensions: []
-  blockedExtensions: []    # allow binaries in the staging dir
-  maxFileSize: 200MB
+shares:
+  - name: staging
+    path: /opt/tela/staging
+    writable: true
+    allowedExtensions: []
+    blockedExtensions: []    # allow binaries in the staging dir
+    maxFileSize: 200MB
 ```
 
 ### 10.2 Developer workflows
@@ -716,23 +717,23 @@ fileShare:
 and uploads a build artifact for testing:
 
 ```bash
-tela files put -machine staging api-server-v2.3.tar.gz
+tela files put -machine staging -share staging api-server-v2.3.tar.gz
 ```
 
 **Pulling database dumps.** A DBA connects to a database machine that
 shares a dump directory and downloads a backup:
 
 ```bash
-tela files get -machine db01 nightly-backup-2026-03-20.sql.gz
+tela files get -machine db01 -share dumps nightly-backup-2026-03-20.sql.gz
 ```
 
 **Sharing configuration between environments.** Pull the config from
 production, edit locally, push to staging:
 
 ```bash
-tela files get -machine prod-web app-config.yaml
+tela files get -machine prod-web -share config app-config.yaml
 # edit locally
-tela files put -machine staging-web app-config.yaml
+tela files put -machine staging-web -share config app-config.yaml
 ```
 
 ### 10.3 IT support / MSP
@@ -742,11 +743,11 @@ machine. The agent shares a diagnostics directory where scheduled tasks
 drop system info, event logs, and health reports:
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: C:\TelaDiagnostics
-  writable: false
-  maxTotalSize: 500MB
+shares:
+  - name: diagnostics
+    path: C:\TelaDiagnostics
+    writable: false
+    maxTotalSize: 500MB
 ```
 
 The tech downloads what they need without asking the customer to email
@@ -756,12 +757,12 @@ files or use a separate file sharing service.
 directory, then runs it via RDP or SSH:
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: C:\TelaStaging
-  writable: true
-  maxFileSize: 50MB
-  allowedExtensions: [".msi", ".msp", ".zip"]
+shares:
+  - name: staging
+    path: C:\TelaStaging
+    writable: true
+    maxFileSize: 50MB
+    allowedExtensions: [".msi", ".msp", ".zip"]
 ```
 
 ### 10.4 IoT / edge
@@ -770,7 +771,7 @@ fileShare:
 The operator uploads a firmware image and triggers an update:
 
 ```bash
-tela files put -machine sensor-42 firmware-v3.1.bin
+tela files put -machine sensor-42 -share firmware firmware-v3.1.bin
 ssh user@localhost "sudo /opt/update-firmware.sh"
 ```
 
@@ -779,8 +780,8 @@ log aggregator share their log directory read-only. The operator pulls
 logs on demand:
 
 ```bash
-tela files ls -machine sensor-42
-tela files get -machine sensor-42 syslog.txt
+tela files ls -machine sensor-42 -share logs
+tela files get -machine sensor-42 -share logs syslog.txt
 ```
 
 ### 10.5 Education / labs
@@ -806,13 +807,13 @@ travel through the encrypted tunnel.
 
 ### Phase 1: Agent-side file server
 
-1. Add `fileShareConfig` struct and YAML parsing to `telad`.
-2. Validate the shared directory on startup (exists, not a system dir,
+1. Add `shareConfig` struct and `shares:` YAML parsing to `telad`.
+2. Validate each share path on startup (exists, not a system dir,
    permissions).
 3. Start a TCP listener on port 17377 inside the gVisor netstack when
-   file sharing is enabled.
+   at least one share is configured.
 4. Implement the four operations (list, read, write, delete) with path
-   validation.
+   validation per share.
 5. Add `capabilities` field to the registration and `wg-pubkey` control
    messages.
 

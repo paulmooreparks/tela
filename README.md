@@ -68,7 +68,7 @@ Tela is built from three Go binaries and an optional desktop client:
 
 | Component | Description |
 |-----------|-------------|
-| **tela** | Client CLI. Connects to a hub, establishes a WireGuard tunnel, and binds services on deterministic loopback addresses so native clients (ssh, mstsc, psql, etc.) can connect. |
+| **tela** | Client CLI. Connects to a hub, establishes a WireGuard tunnel, and binds services on `127.0.0.1` with mapped ports so native clients (ssh, mstsc, psql, etc.) can connect. |
 | **telad** | Agent daemon. Runs on the target machine, registers with the hub, and exposes local TCP services through the tunnel. Includes a built-in HTTP gateway for path-based routing to multiple services. |
 | **telahubd** | Hub server. Pairs agents with clients, relays encrypted traffic, and serves a built-in web console. |
 | **TelaVisor** | Desktop client. A graphical interface for managing connections, browsing remote files, and administering hubs. Built with Wails v2 (Go + JavaScript). |
@@ -142,12 +142,12 @@ You can also connect by service name:
 ./tela connect -hub ws://localhost -machine mybox -services ssh
 ```
 
-Once connected, each machine gets a deterministic loopback address.
-Use the address from the `tela connect` output with your usual tools:
+Once connected, services bind on `127.0.0.1` with mapped ports.
+Use the address and port shown in the `tela connect` output with your usual tools:
 
 ```bash
-ssh user@127.88.x.x
-mstsc /v:127.88.x.x
+ssh user@localhost -p 10022
+mstsc /v:localhost:13389
 ```
 
 To avoid repeating flags, set environment variables:
@@ -195,7 +195,7 @@ connections:
 ```bash
 tela connect -profile work
 # Opens parallel tunnels to both machines. Each auto-reconnects independently.
-# Each machine gets a deterministic 127.88.x.x address; services use real ports.
+# Services bind on 127.0.0.1 with mapped ports shown in the connect output.
 ```
 
 Profiles support environment variable expansion (`${VAR}`), service name resolution, deterministic loopback addressing, and connections across multiple hubs. See [REFERENCE.md section 7](REFERENCE.md#7-tela-the-client-cli) for the full profile schema.
@@ -323,7 +323,7 @@ Running WireGuard in userspace is what makes Tela work without admin rights, ker
 
 **TCP only, no raw IP routing.** Kernel WireGuard creates a real network interface that the OS routing table can use for arbitrary IP traffic, including UDP, ICMP, and multicast. Tela has no TUN device and no routing table entry. It tunnels TCP services only. No ping, no UDP, no "put my whole machine on the remote network." This is a deliberate design choice: the simplicity of TCP-only is what makes the no-admin, no-driver model work.
 
-**No OS-level integration.** A kernel VPN interface is visible to every process on the machine. Tela's tunnels are visible only to processes that connect to the loopback addresses Tela binds. This is usually a feature (less invasive, does not interfere with existing networking), but it means you cannot bridge networks or run services that require a real interface across the tunnel.
+**No OS-level integration.** A kernel VPN interface is visible to every process on the machine. Tela's tunnels are visible only to processes that connect to the loopback ports Tela binds on `127.0.0.1`. This is usually a feature (less invasive, does not interfere with existing networking), but it means you cannot bridge networks or run services that require a real interface across the tunnel.
 
 **Single-process failure domain.** If the tela process crashes, all tunnels drop. A kernel WireGuard interface persists independently of any userspace process. Tela mitigates this by supporting OS service managers (systemd, Windows SCM, launchd) that restart the process automatically.
 
@@ -338,7 +338,7 @@ If you need a full Layer 3 VPN with arbitrary IP routing and line-rate throughpu
 | **Hub** | The central relay server (`telahubd`). Pairs agents with clients and relays encrypted traffic. Also serves the hub console. |
 | **Hub Console** | The web interface served by a hub (e.g., `https://hub.example.com/`). Shows registered machines, services, and session history. |
 | **Agent / telad** | A long-lived daemon on a managed machine. Registers with the hub and exposes local services through the tunnel. |
-| **Client / tela** | The CLI tool on the user's machine. Connects through the hub to an agent and binds services on deterministic loopback addresses for native clients. |
+| **Client / tela** | The CLI tool on the user's machine. Connects through the hub to an agent and binds services on `127.0.0.1` with mapped ports for native clients. |
 | **TelaVisor** | The desktop client. Provides a graphical interface for connections, file browsing, and hub administration. |
 | **Machine** | A named resource registered by an agent (e.g., `barn`). One agent can register one or more machines. |
 | **Service** | A TCP endpoint exposed through a machine (e.g., SSH on port 22, RDP on port 3389). |

@@ -677,39 +677,51 @@ Machine fields:
 | `services` | No | Detailed service descriptors (port, name, description) |
 | `gateway` | No | Path-based HTTP reverse proxy (see [gateway](#gateway-path-based-reverse-proxy)) |
 | `upstreams` | No | Dependency forwarding (see [upstreams](#upstreams-dependency-routing)) |
-| `fileShare` | No | File sharing configuration (see below) |
+| `shares` | No | File sharing configuration (see below); `fileShare` (singular) is accepted but deprecated |
 
 ### File sharing
 
-telad can expose a sandboxed directory for file transfer through the WireGuard tunnel. File sharing is off by default and must be explicitly enabled per machine.
+telad can expose one or more sandboxed directories for file transfer through the WireGuard tunnel. File sharing is off by default and must be explicitly enabled per machine.
 
 ```yaml
 machines:
   - name: barn
     ports: [22, 3389]
-    fileShare:
-      enabled: true
-      directory: C:\TelaShare     # absolute path, required when enabled
-      writable: true               # allow uploads and modifications (default: false)
-      maxFileSize: 50MB            # per-file upload limit (default: 50MB)
-      maxTotalSize: 1GB            # total directory size limit (default: none)
-      allowDelete: false           # allow file deletion (default: false, requires writable)
-      allowedExtensions: []        # whitelist; empty = all allowed
-      blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]  # blacklist
+    shares:
+      - name: files
+        path: C:\TelaShare          # absolute path, required
+        writable: true              # allow uploads and modifications (default: false)
+        maxFileSize: 50MB           # per-file upload limit (default: 50MB)
+        maxTotalSize: 1GB           # total directory size limit (default: none)
+        allowDelete: false          # allow file deletion (default: false, requires writable)
+        allowedExtensions: []       # whitelist; empty = all allowed
+        blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]  # blacklist
+      - name: logs
+        path: C:\Logs
+        writable: false
 ```
 
 File share configuration fields:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `enabled` | `false` | Enables file sharing for this machine |
-| `directory` | (required) | Absolute path to the shared directory. Created on startup if missing. |
+| `name` | (required) | Share name. Used in WebDAV paths and `tela files -share` commands. |
+| `path` | (required) | Absolute path to the shared directory. Created on startup if missing. |
 | `writable` | `false` | Allow uploads, mkdir, rename, move, and delete |
 | `maxFileSize` | `50MB` | Maximum size of a single uploaded file |
 | `maxTotalSize` | (none) | Maximum total size of all files in the directory |
 | `allowDelete` | `false` | Allow file deletion (requires `writable: true`) |
 | `allowedExtensions` | `[]` | Whitelist of file extensions (empty = all allowed) |
 | `blockedExtensions` | see above | Blacklist of file extensions |
+
+**Deprecated:** The `fileShare` (singular) key is still accepted and is synthesized as a share named `legacy`. It will be removed at 1.0. Migrate to the `shares` list.
+
+```yaml
+# Deprecated -- use shares: instead
+fileShare:
+  enabled: true
+  directory: C:\TelaShare
+```
 
 The shared directory must not be a system directory (`/`, `/etc`, `C:\Windows`, etc.). Symlinks inside the directory are never followed. All file operations are validated against the sandbox boundary. The directory and its contents are accessible only through authenticated Tela tunnel connections.
 
@@ -989,14 +1001,16 @@ tela connect -hub myhub -machine web01 -services ssh,postgres
 tela connect -profile mixed-env
 ```
 
-After connecting, each machine gets a deterministic loopback address in
-`127.88.0.0/16`. Services bind on their real ports at that address. Use
-the address shown in the `tela connect` output with your usual tools:
+After connecting, services bind on `127.0.0.1` with mapped ports. The first
+choice is the service's real port (for example, `localhost:22` for SSH). If that
+port is already in use, the client tries `port+10000` (`localhost:10022`), then
+`port+10001`, and so on until a free port is found. The actual bound address and
+port are shown in the `tela connect` output. Use them with your usual tools:
 
 ```bash
-ssh user@127.88.42.17
-mstsc /v:127.88.42.17
-psql -h 127.88.42.17 -U appuser mydb
+ssh user@localhost -p 10022
+mstsc /v:localhost:13389
+psql -h localhost -p 5432 -U appuser mydb
 ```
 
 #### tela machines
@@ -1219,13 +1233,13 @@ System config paths (written by `service install`):
 File operations on connected machines with file sharing enabled. Requires an active `tela connect` session.
 
 ```bash
-tela files ls -machine <machine> [path]
-tela files get -machine <machine> <remote-path> [-o local-path]
-tela files put -machine <machine> <local-path> [remote-name]
-tela files rm -machine <machine> <remote-path>
-tela files mkdir -machine <machine> <path>
-tela files rename -machine <machine> <path> <new-name>
-tela files mv -machine <machine> <source> <destination>
+tela files ls -machine <machine> -share <name> [path]
+tela files get -machine <machine> -share <name> <remote-path> [-o local-path]
+tela files put -machine <machine> -share <name> <local-path> [remote-name]
+tela files rm -machine <machine> -share <name> <remote-path>
+tela files mkdir -machine <machine> -share <name> <path>
+tela files rename -machine <machine> -share <name> <path> <new-name>
+tela files mv -machine <machine> -share <name> <source> <destination>
 tela files info -machine <machine>
 ```
 
@@ -1240,7 +1254,7 @@ tela files info -machine <machine>
 | `mv` | Move a file or directory to a different location within the share |
 | `info` | Show file share status (file count, directory count, total size) |
 
-All file operations use the `-machine` flag (or `TELA_MACHINE` env var) to identify the target machine. The machine must have `fileShare.enabled: true` in its telad config.
+All file operations use the `-machine` flag (or `TELA_MACHINE` env var) to identify the target machine and the `-share NAME` flag to select the share. The machine must have at least one entry in `shares:` in its telad config.
 
 File data is transferred through the WireGuard tunnel using a chunked protocol with SHA-256 checksums. The hub never sees file contents.
 
@@ -1331,8 +1345,8 @@ connections:
     machine: prod-web01
     token: ${CORP_TOKEN}
     services:
-      - remote: 22         # SSH on 127.88.x.x:22
-      - remote: 8080       # Admin panel on 127.88.x.x:8080
+      - remote: 22         # SSH on localhost:PORT (shown in connect output)
+      - remote: 8080       # Admin panel on localhost:PORT (shown in connect output)
 
   # Staging database (via cloud hub)
   - hub: staging-hub       # short name resolved via remote
@@ -1602,10 +1616,10 @@ tela connect \
   -token <alice-token>
 ```
 
-In a second terminal, use the loopback address from the connect output:
+In a second terminal, use the address and port shown in the connect output:
 
 ```bash
-ssh user@127.88.x.x
+ssh user@localhost -p PORT
 ```
 
 ### Step 7: Connect to PostgreSQL on db01

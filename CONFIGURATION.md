@@ -209,7 +209,7 @@ mount:
 
 # Optional: DNS configuration
 dns:
-  loopback_prefix: "127.88"  # prefix for per-machine loopback addresses
+  loopback_prefix: "127.88"  # prefix used by 'tela dns hosts' to generate /etc/hosts entries; does NOT control port binding
 ```
 
 **Top-level fields:**
@@ -221,7 +221,7 @@ dns:
 | `mtu` | No | WireGuard tunnel MTU; overrides the `-mtu` flag default of 1100 |
 | `connections` | Yes | List of hub/machine connections |
 | `mount` | No | WebDAV mount to start automatically on connect |
-| `dns` | No | DNS configuration |
+| `dns` | No | DNS configuration. `loopback_prefix` is used by `tela dns hosts` to generate /etc/hosts entries for named access; it does not control where services bind. |
 
 **Connection entry fields:**
 
@@ -346,7 +346,7 @@ Share fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | (required) | Share name. Used in WebDAV paths and `tela files` commands. |
+| `name` | string | (required) | Share name. Used in WebDAV paths (`/machine/share/path`) and the `-share NAME` flag on `tela files` commands. |
 | `path` | string | (required) | Absolute path to the shared directory. Created on startup if missing. |
 | `writable` | bool | `false` | Allows clients to upload files, create directories, rename, and move |
 | `maxFileSize` | string | `50MB` | Maximum size of a single uploaded file. Supports KB, MB, GB suffixes. |

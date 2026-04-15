@@ -6,25 +6,27 @@ File sharing is off by default and must be explicitly enabled per machine by the
 
 ## Enabling file sharing
 
-Add a `fileShare` block to a machine in `telad.yaml`:
+Add a `shares` list to a machine in `telad.yaml`. Each entry defines one shared directory with its own name and access controls.
 
 ```yaml
 machines:
   - name: barn
     ports: [22, 3389]
-    fileShare:
-      enabled: true
-      directory: /home/shared
+    shares:
+      - name: files
+        path: /home/shared
 ```
 
-`telad` creates the directory on startup if it does not exist. The path must be absolute. `telad` refuses to start if the path is a system directory (`/`, `/etc`, `C:\Windows`, and similar).
+`telad` creates each share directory on startup if it does not exist. Each path must be absolute. `telad` refuses to start if any share path is a system directory (`/`, `/etc`, `C:\Windows`, and similar).
+
+If you are upgrading from an older configuration that used `fileShare:` (singular), that key is still accepted and is synthesized as a share named `legacy`. It will be removed at 1.0. Migrate to the `shares` list.
 
 ### Configuration reference
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | `false` | Enables file sharing for this machine. Must be explicitly set to `true`. |
-| `directory` | string | required | Absolute path to the shared directory. |
+| `name` | string | required | Share name. Used in WebDAV paths (`/machine/share/path`) and the `-share NAME` flag on `tela files` commands. |
+| `path` | string | required | Absolute path to the shared directory. |
 | `writable` | bool | `false` | Allows clients to upload files and create directories. When false, only list and download are available. |
 | `allowDelete` | bool | `false` | Allows clients to delete files and empty directories. Requires `writable: true`. |
 | `maxFileSize` | string | `50MB` | Maximum size of a single uploaded file. Accepts `KB`, `MB`, and `GB` suffixes. |
@@ -35,23 +37,37 @@ machines:
 ### A read-only log share
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: /var/log/app
-  writable: false
+shares:
+  - name: logs
+    path: /var/log/app
+    writable: false
 ```
 
 ### A writable staging area
 
 ```yaml
-fileShare:
-  enabled: true
-  directory: /opt/staging
-  writable: true
-  allowDelete: true
-  maxFileSize: 200MB
-  maxTotalSize: 2GB
-  allowedExtensions: [".zip", ".tar.gz", ".yaml"]
+shares:
+  - name: staging
+    path: /opt/staging
+    writable: true
+    allowDelete: true
+    maxFileSize: 200MB
+    maxTotalSize: 2GB
+    allowedExtensions: [".zip", ".tar.gz", ".yaml"]
+```
+
+### Multiple shares on one machine
+
+```yaml
+shares:
+  - name: logs
+    path: /var/log/app
+    writable: false
+  - name: uploads
+    path: /opt/uploads
+    writable: true
+    allowDelete: true
+    maxFileSize: 50MB
 ```
 
 ## Access from the CLI
@@ -59,37 +75,37 @@ fileShare:
 The `tela files` subcommand provides operations on connected machines. An active tunnel must be established with `tela connect` first.
 
 ```bash
-# List files
-tela files ls -machine barn
-tela files ls -machine barn subdir/
+# List files in a share
+tela files ls -machine barn -share files
+tela files ls -machine barn -share files subdir/
 
 # Download a file
-tela files get -machine barn report.pdf
-tela files get -machine barn report.pdf -o /local/report.pdf
+tela files get -machine barn -share files report.pdf
+tela files get -machine barn -share files report.pdf -o /local/report.pdf
 
 # Upload a file (requires writable: true)
-tela files put -machine barn localfile.txt
-tela files put -machine barn localfile.txt remote-name.txt
+tela files put -machine barn -share files localfile.txt
+tela files put -machine barn -share files localfile.txt remote-name.txt
 
 # Delete a file (requires allowDelete: true)
-tela files rm -machine barn old-log.txt
+tela files rm -machine barn -share files old-log.txt
 
 # Create a directory (requires writable: true)
-tela files mkdir -machine barn archive/2026
+tela files mkdir -machine barn -share files archive/2026
 
 # Rename a file or directory (requires writable: true)
-tela files rename -machine barn old-name.txt new-name.txt
+tela files rename -machine barn -share files old-name.txt new-name.txt
 
 # Move a file or directory (requires writable: true)
-tela files mv -machine barn logs/jan.txt archive/2026/jan.txt
+tela files mv -machine barn -share files logs/jan.txt archive/2026/jan.txt
 
-# Show file sharing status for a machine
+# Show file sharing status for a machine (lists all shares)
 tela files info -machine barn
 ```
 
 ## Mounting as a local drive
 
-`tela mount` starts a WebDAV server that exposes Tela file shares as a local drive. Each connected machine with file sharing enabled appears as a top-level folder.
+`tela mount` starts a WebDAV server that exposes Tela file shares as a local drive. Each connected machine with file sharing enabled appears as a top-level folder, with each share as a subfolder inside it (`/machine/share/path`).
 
 ```bash
 # Windows: mount as drive letter T:
