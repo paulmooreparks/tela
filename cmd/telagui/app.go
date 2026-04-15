@@ -3483,6 +3483,21 @@ func (a *App) GetBinStatus() []BinaryInfo {
 	return results
 }
 
+// RefreshBinStatus force-fetches the channel manifest (bypassing the
+// in-memory cache) and returns current binary status. Used by the
+// Installed Tools "Refresh" button so it always reflects the latest
+// published version rather than a potentially stale cached response.
+func (a *App) RefreshBinStatus() []BinaryInfo {
+	store, _ := credstore.Load(credstore.UserPath())
+	var ch, base string
+	if store != nil {
+		ch = store.Update.Channel
+		base = store.Update.ManifestBase
+	}
+	tvChannelFetcher.Fetch(channelpkg.ManifestURL(base, channelpkg.Normalize(ch)))
+	return a.GetBinStatus()
+}
+
 // InstallBinary downloads a specific binary from the client's configured
 // release channel into the configured bin path. The download is verified
 // against the channel manifest's SHA-256 before being installed.

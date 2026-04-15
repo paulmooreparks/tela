@@ -1313,11 +1313,17 @@ function updateServiceAgent(btn) {
 // Shared: render a tools table with optional per-binary action buttons.
 // container: DOM element to fill. showActions: if true, show Update/Install buttons.
 // onDone: optional callback after rendering.
-function renderToolsTable(container, showActions, onDone) {
-  goApp.GetBinStatus().then(function (bins) {
+function renderToolsTable(container, showActions, onDone, forceRefresh) {
+  var binsFn = forceRefresh ? goApp.RefreshBinStatus() : goApp.GetBinStatus();
+  binsFn.then(function (bins) {
     goApp.GetVersion().then(function (guiVer) {
       var latest = (bins && bins.length > 0 && bins[0].latest) ? bins[0].latest : '';
-      if (updateInfo && updateInfo.version) latest = updateInfo.version;
+      if (!forceRefresh && updateInfo && updateInfo.version) latest = updateInfo.version;
+      if (forceRefresh && latest) {
+        latestVersion = latest;
+        if (updateInfo) updateInfo.version = latest;
+        refreshVersionBadges();
+      }
       var tvUpToDate = !latest || guiVer === latest;
 
       var html = '<table class="tools-table"><thead><tr><th>Tool</th><th>Installed</th><th>Available</th>';
@@ -5826,7 +5832,7 @@ function refreshClientSettings() {
 
 function refreshClientToolVersions() {
   var el = document.getElementById('cs-bin-status');
-  if (el) renderToolsTable(el, true);
+  if (el) renderToolsTable(el, true, null, true);
 }
 
 function importProfile() {

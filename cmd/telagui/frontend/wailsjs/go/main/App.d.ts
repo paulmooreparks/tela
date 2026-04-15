@@ -198,6 +198,8 @@ export function PortalSetSourceEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function QuitApp():Promise<void>;
 
+export function RefreshBinStatus():Promise<Array<main.BinaryInfo>>;
+
 export function ReleaseLocalPort(arg1:number):Promise<void>;
 
 export function RemoveCredential(arg1:string):Promise<void>;

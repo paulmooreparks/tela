@@ -394,6 +394,10 @@ export function QuitApp() {
   return window['go']['main']['App']['QuitApp']();
 }
 
+export function RefreshBinStatus() {
+  return window['go']['main']['App']['RefreshBinStatus']();
+}
+
 export function ReleaseLocalPort(arg1) {
   return window['go']['main']['App']['ReleaseLocalPort'](arg1);
 }
