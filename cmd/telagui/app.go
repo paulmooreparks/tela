@@ -537,16 +537,26 @@ func (a *App) RestartToUpdate() error {
 	}
 	ver := m.Version
 
-	// Disconnect if connected and wait for process to exit.
-	a.Disconnect()
-	a.waitForProcessExit(5 * time.Second)
+	// Download everything before disconnecting. The manifest's downloadBase
+	// may point at a tunnel endpoint (e.g. localhost:9900 via owlsnest-channel)
+	// that becomes unreachable once the profile is disconnected.
+	if !isPackageManaged() {
+		if err := a.downloadSelfUpdate(m); err != nil {
+			log.Printf("[update] downloadSelfUpdate failed: %v", err)
+			return fmt.Errorf("download telavisor: %w", err)
+		}
+	}
 
-	// Update tela CLI from the same manifest. installTool re-reads the
-	// manifest internally; that's fine, the Fetcher cache makes it free.
+	// installTool writes the CLI binary to the bin path. Do this before
+	// disconnect for the same reason as above.
 	if _, err := a.installTool("tela", ver); err != nil {
 		log.Printf("[update] installTool tela failed: %v", err)
 		return fmt.Errorf("update tela: %w", err)
 	}
+
+	// All downloads complete. Now disconnect and relaunch.
+	a.Disconnect()
+	a.waitForProcessExit(5 * time.Second)
 
 	if isPackageManaged() {
 		// Package-managed: CLI updated, GUI must be updated via package manager.
@@ -554,12 +564,6 @@ func (a *App) RestartToUpdate() error {
 		a.updatePending = false
 		a.mu.Unlock()
 		return nil
-	}
-
-	// Stage the new TelaVisor binary next to the running one.
-	if err := a.downloadSelfUpdate(m); err != nil {
-		log.Printf("[update] downloadSelfUpdate failed: %v", err)
-		return fmt.Errorf("download telavisor: %w", err)
 	}
 
 	exe := selfExePath()

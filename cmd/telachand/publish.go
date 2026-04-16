@@ -36,8 +36,8 @@ func cmdPublish(args []string) {
 		fs.Usage()
 		os.Exit(1)
 	}
-	if !channel.IsKnown(*channelName) {
-		fmt.Fprintf(os.Stderr, "error: unknown channel %q (must be dev, beta, or stable)\n", *channelName)
+	if !channel.IsValid(*channelName) {
+		fmt.Fprintf(os.Stderr, "error: invalid channel name %q (use lowercase letters, digits, hyphens)\n", *channelName)
 		os.Exit(1)
 	}
 

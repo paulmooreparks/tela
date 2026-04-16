@@ -1245,7 +1245,21 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	log.Printf("[hub] agent registered: %s (agentId %s) ports=%v version=%q%s", machineName, agentID, ports, msg.AgentVersion, tokenLog(msg.Token))
 	recordEvent(machineName, "agent-register", fmt.Sprintf("ports=%v", ports))
 
-	reply, _ := json.Marshal(map[string]string{"type": "registered", "machineId": machineName})
+	type registeredReply struct {
+		Type          string       `json:"type"`
+		MachineID     string       `json:"machineId"`
+		DefaultUpdate *updateConfig `json:"defaultUpdate,omitempty"`
+	}
+	replyMsg := registeredReply{Type: "registered", MachineID: machineName}
+	globalCfgMu.RLock()
+	if globalCfg.Update.Channel != "" || globalCfg.Update.ManifestBase != "" {
+		replyMsg.DefaultUpdate = &updateConfig{
+			Channel:      globalCfg.Update.Channel,
+			ManifestBase: globalCfg.Update.ManifestBase,
+		}
+	}
+	globalCfgMu.RUnlock()
+	reply, _ := json.Marshal(replyMsg)
 	ws.WriteMessage(websocket.TextMessage, reply)
 }
 

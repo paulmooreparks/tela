@@ -270,6 +270,7 @@ type controlMessage struct {
 	SessionID             string              `json:"sessionId,omitempty"`
 	SessionIdx            int                 `json:"sessionIdx,omitempty"`
 	Capabilities          *capabilities       `json:"capabilities,omitempty"`
+	DefaultUpdate         *updateConfig       `json:"defaultUpdate,omitempty"` // hub-pushed update defaults
 
 	// Management protocol fields (mgmt-request / mgmt-response)
 	RequestID string          `json:"requestId,omitempty"`
@@ -303,8 +304,8 @@ type configFile struct {
 // updateConfig controls which release channel telad follows for self-update.
 // See RELEASE-PROCESS.md for the channel model.
 type updateConfig struct {
-	Channel      string `yaml:"channel,omitempty"`      // "dev", "beta", "stable" (empty = dev)
-	ManifestBase string `yaml:"manifestBase,omitempty"` // override upstream manifest URL prefix
+	Channel      string `yaml:"channel,omitempty" json:"channel,omitempty"`           // "dev", "beta", "stable" (empty = dev)
+	ManifestBase string `yaml:"manifestBase,omitempty" json:"manifestBase,omitempty"` // override upstream manifest URL prefix
 }
 
 // machineConfig describes one machine to register with the hub.
@@ -1933,6 +1934,18 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		case "registered":
 			result = agentRegistered
 			lg.Printf("registered as: %s -- waiting for sessions", msg.MachineID)
+			if d := msg.DefaultUpdate; d != nil {
+				activeConfigMu.Lock()
+				if activeConfig.Update.Channel == "" && d.Channel != "" {
+					activeConfig.Update.Channel = d.Channel
+					lg.Printf("using hub default update channel: %s", d.Channel)
+				}
+				if activeConfig.Update.ManifestBase == "" && d.ManifestBase != "" {
+					activeConfig.Update.ManifestBase = d.ManifestBase
+					lg.Printf("using hub default manifest base: %s", d.ManifestBase)
+				}
+				activeConfigMu.Unlock()
+			}
 
 		case "error":
 			m := msg.Message

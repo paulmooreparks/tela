@@ -32,8 +32,8 @@ func cmdSelfUpdate(args []string) {
 	ch := cfg.Update.Channel
 	if *chOverride != "" {
 		ch = channel.Normalize(*chOverride)
-		if !channel.IsKnown(ch) {
-			fmt.Fprintf(os.Stderr, "error: unknown channel %q (expected dev|beta|stable)\n", *chOverride)
+		if !channel.IsValid(ch) {
+			fmt.Fprintf(os.Stderr, "error: invalid channel name %q (use lowercase letters, digits, hyphens)\n", *chOverride)
 			os.Exit(1)
 		}
 	}

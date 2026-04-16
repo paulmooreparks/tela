@@ -44,8 +44,9 @@ func TestNormalize(t *testing.T) {
 		{"  Beta  ", "beta"},
 		{"STABLE", "stable"},
 		{"", DefaultChannel},
-		{"garbage", DefaultChannel},
-		{"nightly", DefaultChannel},
+		{"garbage", "garbage"},   // valid custom name -- preserved
+		{"nightly", "nightly"},   // valid custom name -- preserved
+		{"My Channel!", DefaultChannel}, // invalid -- falls back
 	}
 	for _, c := range cases {
 		if got := Normalize(c.in); got != c.want {
@@ -63,7 +64,8 @@ func TestManifestURL(t *testing.T) {
 		{"https://example.com/ch", "beta", "https://example.com/ch/beta.json"},
 		{"https://example.com/ch/", "beta", "https://example.com/ch/beta.json"},
 		{"https://example.com/ch/", "STABLE", "https://example.com/ch/stable.json"},
-		{"https://example.com/ch/", "garbage", "https://example.com/ch/" + DefaultChannel + ".json"},
+		{"https://example.com/ch/", "garbage", "https://example.com/ch/garbage.json"},
+		{"https://example.com/ch/", "My Channel!", "https://example.com/ch/" + DefaultChannel + ".json"},
 	}
 	for _, c := range cases {
 		if got := ManifestURL(c.base, c.name); got != c.want {
@@ -136,7 +138,7 @@ func TestValidate(t *testing.T) {
 		name   string
 		mutate func(*Manifest)
 	}{
-		{"unknown channel", func(m *Manifest) { m.Channel = "nightly" }},
+		{"invalid channel", func(m *Manifest) { m.Channel = "My Channel!" }},
 		{"missing version", func(m *Manifest) { m.Version = "" }},
 		{"missing tag", func(m *Manifest) { m.Tag = "" }},
 		{"missing downloadBase", func(m *Manifest) { m.DownloadBase = "" }},

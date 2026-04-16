@@ -55,7 +55,9 @@ type Manifest struct {
 	Binaries     map[string]BinaryEntry `json:"binaries"`
 }
 
-// IsKnown reports whether name is one of the three known channel names.
+// IsKnown reports whether name is one of the three standard channel names.
+// Custom channel names are valid when paired with a manifestBase override;
+// use IsValid to check whether a name is acceptable at all.
 func IsKnown(name string) bool {
 	switch name {
 	case Dev, Beta, Stable:
@@ -64,11 +66,26 @@ func IsKnown(name string) bool {
 	return false
 }
 
+// IsValid reports whether name is a non-empty string containing only
+// lowercase letters, digits, and hyphens. Both standard names (dev, beta,
+// stable) and custom names (e.g. "local", "nightly") are valid.
+func IsValid(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 // Normalize returns the canonical channel name for an input string. Empty
-// or unknown values fall back to DefaultChannel.
+// or invalid values fall back to DefaultChannel.
 func Normalize(name string) string {
 	name = strings.TrimSpace(strings.ToLower(name))
-	if !IsKnown(name) {
+	if !IsValid(name) {
 		return DefaultChannel
 	}
 	return name
@@ -112,8 +129,8 @@ func (m *Manifest) Validate() error {
 	if m == nil {
 		return fmt.Errorf("manifest is nil")
 	}
-	if !IsKnown(m.Channel) {
-		return fmt.Errorf("unknown channel %q", m.Channel)
+	if !IsValid(m.Channel) {
+		return fmt.Errorf("invalid channel name %q (use lowercase letters, digits, hyphens)", m.Channel)
 	}
 	if m.Version == "" {
 		return fmt.Errorf("manifest missing version")

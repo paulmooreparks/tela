@@ -51,7 +51,7 @@ func printChannelUsage() {
 
 Usage:
   tela channel                             Show the current channel and latest version on it
-  tela channel set <dev|beta|stable>       Switch the client's release channel
+  tela channel set <channel>               Switch the client's release channel (dev, beta, stable, or custom)
   tela channel set <ch> -manifest-base URL Override the upstream manifest URL prefix
   tela channel show [-channel <ch>]        Print the parsed channel manifest
   tela channel download <binary> [opts]    Download and verify a binary from the channel manifest
@@ -106,15 +106,15 @@ func showClientChannel() {
 func setClientChannel(args []string) {
 	fs := flag.NewFlagSet("channel set", flag.ExitOnError)
 	manifestBase := fs.String("manifest-base", "", "Override the upstream manifest URL prefix")
-	fs.Parse(args)
+	fs.Parse(permuteArgs(fs, args))
 
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev|beta|stable)")
 		os.Exit(1)
 	}
 	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
-	if !channel.IsKnown(name) {
-		fmt.Fprintf(os.Stderr, "Error: unknown channel %q (expected dev|beta|stable)\n", name)
+	if !channel.IsValid(name) {
+		fmt.Fprintf(os.Stderr, "Error: invalid channel name %q (use lowercase letters, digits, hyphens)\n", name)
 		os.Exit(1)
 	}
 
