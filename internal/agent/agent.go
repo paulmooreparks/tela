@@ -991,6 +991,9 @@ func Main() {
 		case "help", "-h", "--help":
 			printUsage()
 			os.Exit(0)
+		case "channel":
+			cmdAgentChannel(os.Args[2:])
+			return
 		case "login":
 			cmdLogin(os.Args[2:])
 			return

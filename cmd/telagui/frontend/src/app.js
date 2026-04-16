@@ -487,6 +487,15 @@ function loadAgentChannel(hubURL, machineID) {
     if (info.channel) sel.value = info.channel;
     status.textContent = formatChannelStatus(info);
     applySoftwareButton('agent-update-btn', 'agent-update-status', info);
+    // Cache per-agent update status so the sidebar can show TDL version glyphs.
+    // Only cache when we have a latestVersion to compare against.
+    if (info.latestVersion && info.currentVersion) {
+      agentStatusCache[machineID] = {
+        version: info.currentVersion,
+        status: info.updateAvailable ? 'outdated' : 'current'
+      };
+      agentsRenderSidebar();
+    }
     sel.onchange = function () {
       var newCh = sel.value;
       showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
@@ -523,6 +532,25 @@ function loadClientChannel() {
       });
     };
   });
+}
+
+// syncClientChannelSource re-applies the manifestBase for the client's current
+// channel after channel sources are saved. Editing a channel source URL in
+// Application Settings updates TV settings (channelSources) but leaves the
+// stored manifestBase in credentials.yaml stale. This call detects the mismatch
+// and writes the updated URL back to credentials.yaml.
+function syncClientChannelSource() {
+  goApp.GetClientChannel().then(function (info) {
+    if (!info || !info.channel) return;
+    var ch = info.channel;
+    if (ch === 'dev' || ch === 'beta' || ch === 'stable') return;
+    var newBase = findChannelManifestBase(ch);
+    if (!newBase || newBase === info.manifestBase) return;
+    goApp.SetClientChannel(ch, newBase).then(function () {
+      // Refresh the manifest URL hint in Client Settings if the tab is visible.
+      loadClientChannel();
+    });
+  }).catch(function () {});
 }
 
 function hubUpdate(hubURL, hubName) {
@@ -1236,11 +1264,6 @@ function refreshVersionBadges() {
   document.querySelectorAll('.version-badge').forEach(function (el) {
     var ver = el.getAttribute('data-ver');
     if (ver) el.innerHTML = formatVersionBadge(ver);
-  });
-  // Sidebar version labels: toggle outdated class.
-  document.querySelectorAll('.version-badge-sidebar').forEach(function (el) {
-    var ver = el.getAttribute('data-ver');
-    el.classList.toggle('version-outdated', !!(latestVersion && ver && ver !== latestVersion));
   });
   // Re-render the agent detail and hub settings so Management button labels update.
   if (document.getElementById('agent-management-card')) {
@@ -2738,6 +2761,11 @@ function stopConnectionPoll() {
 var agentsData = [];
 var agentsSelectedId = '';
 var agentsSelectedHub = '';
+// Per-agent update status cache. Populated when the agent detail is loaded and
+// loadAgentChannel() resolves. Keyed by machine ID; each entry records the
+// version that was current when the status was checked so it auto-invalidates
+// if the agent is updated between views.
+var agentStatusCache = {}; // { [id]: { version: string, status: 'current'|'outdated' } }
 
 function agentsRefresh() {
   goApp.GetConnectionState().then(function (state) {
@@ -2760,9 +2788,41 @@ function agentsRefresh() {
       if (found) agentsShowDetail(found);
       else document.getElementById('agents-detail').innerHTML = '<div class="agents-detail-empty">Select an agent to view details.</div>';
     }
+    prefetchAgentStatuses(agentsData);
   }).catch(function () {
     document.getElementById('agents-sidebar-list').innerHTML = '<p class="empty-hint" style="padding:16px;">Failed to load agents.</p>';
   });
+}
+
+// prefetchAgentStatuses fetches update status for every online agent in the
+// background after the agent list loads, so sidebar version badges populate
+// without requiring the user to click each agent. Agents are queried one at a
+// time to avoid flooding the hub; already-cached entries are skipped.
+function prefetchAgentStatuses(agents) {
+  var online = agents.filter(function (a) { return a.online && a.hub && a.id; });
+  var i = 0;
+  function next() {
+    if (i >= online.length) return;
+    var a = online[i++];
+    var ver = a.version || '';
+    var cached = agentStatusCache[a.id];
+    if (cached && cached.version === ver) { next(); return; }
+    goApp.GetAgentChannelInfo(a.hub, a.id).then(function (raw) {
+      var info = {};
+      try { info = JSON.parse(raw); } catch (e) {}
+      if (info && info.payload && typeof info.payload === 'object') info = info.payload;
+      if (info && info.ok === false && /unknown action/i.test(info.message || '')) info = {};
+      if (info.latestVersion && info.currentVersion) {
+        agentStatusCache[a.id] = {
+          version: info.currentVersion,
+          status: info.updateAvailable ? 'outdated' : 'current'
+        };
+        agentsRenderSidebar();
+      }
+    }).catch(function () {}).then(next);
+  }
+  // Brief delay so the initial render completes before the first fetch.
+  setTimeout(next, 300);
 }
 
 function agentsRenderSidebar() {
@@ -2775,11 +2835,15 @@ function agentsRenderSidebar() {
       ? ' <span class="chip" title="Registered on ' + (a.linkedAgentIds.length + 1) + ' hubs">' + (a.linkedAgentIds.length + 1) + ' hubs</span>'
       : '';
     var label = a.displayName || a.id;
+    var cached = agentStatusCache[a.id];
+    var verStatusClass = (cached && cached.version === ver)
+      ? (cached.status === 'current' ? ' status-current' : ' status-outdated')
+      : '';
     html += '<div class="agents-sidebar-item' + active + '" onclick="agentsSelect(\'' + escAttr(a.id) + '\')">'
       + '<span class="dot ' + dotClass + '"></span>'
       + '<div>'
       + '<div class="agents-sidebar-name">' + escHtml(label) + linkedBadge + '</div>'
-      + '<div class="agents-sidebar-version version-badge-sidebar' + (latestVersion && ver !== latestVersion ? ' version-outdated' : '') + '" data-ver="' + escAttr(ver) + '">' + escHtml(ver) + '</div>'
+      + '<div class="agents-sidebar-version' + verStatusClass + '">' + escHtml(ver) + '</div>'
       + '</div>'
       + '</div>';
   });
@@ -5381,14 +5445,60 @@ function refreshChannelSourcesUI(saved) {
   }
   var html = '<table class="channel-sources-table">';
   customs.forEach(function (src) {
-    html += '<tr>'
+    html += '<tr data-src-name="' + escAttr(src.name) + '">'
       + '<td class="channel-src-name">' + escHtml(src.name) + '</td>'
       + '<td class="channel-src-base">' + escHtml(src.manifestBase) + '</td>'
-      + '<td><button type="button" class="btn btn-sm btn-danger" onclick="removeChannelSource(' + JSON.stringify(src.name) + ')">Remove</button></td>'
+      + '<td class="channel-src-actions">'
+      + '<button type="button" class="btn btn-sm channel-src-edit-btn">Edit</button>'
+      + ' <button type="button" class="btn btn-sm btn-danger channel-src-remove-btn">Remove</button>'
+      + '</td>'
       + '</tr>';
   });
   html += '</table>';
   container.innerHTML = html;
+  // Attach handlers after render to avoid inline onclick quoting issues.
+  container.querySelectorAll('tr[data-src-name]').forEach(function (row) {
+    var name = row.getAttribute('data-src-name');
+    row.querySelector('.channel-src-edit-btn').onclick = function () { editChannelSource(name); };
+    row.querySelector('.channel-src-remove-btn').onclick = function () { removeChannelSource(name); };
+  });
+}
+
+function editChannelSource(oldName) {
+  var row = document.querySelector('#custom-channel-sources tr[data-src-name="' + oldName + '"]');
+  if (!row) return;
+  var customs = pendingCustomChannels !== null ? pendingCustomChannels
+    : channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; });
+  var src = customs.find(function (s) { return s.name === oldName; });
+  if (!src) return;
+  row.innerHTML = '<td><input type="text" class="tb-input channel-src-input-name" value="' + escAttr(src.name) + '"></td>'
+    + '<td><input type="text" class="tb-input channel-src-input-base" value="' + escAttr(src.manifestBase) + '"></td>'
+    + '<td class="channel-src-actions">'
+    + '<button type="button" class="btn btn-sm channel-src-save-btn">Save</button>'
+    + ' <button type="button" class="btn btn-sm channel-src-cancel-btn">Cancel</button>'
+    + '</td>';
+  row.querySelector('.channel-src-save-btn').onclick = function () { saveChannelSourceEdit(oldName, row); };
+  row.querySelector('.channel-src-cancel-btn').onclick = function () { refreshChannelSourcesUI([]); };
+}
+
+function saveChannelSourceEdit(oldName, row) {
+  var newName = row.querySelector('.channel-src-input-name').value.trim().toLowerCase();
+  var newBase = row.querySelector('.channel-src-input-base').value.trim();
+  if (!newName) { showError('Channel name is required.'); return; }
+  if (!/^[a-z0-9-]+$/.test(newName)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
+  if (newName !== oldName && ['dev', 'beta', 'stable'].indexOf(newName) !== -1) { showError('Cannot use a built-in channel name.'); return; }
+  if (!newBase) { showError('Channel URL is required.'); return; }
+  if (pendingCustomChannels === null) {
+    pendingCustomChannels = channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; }).slice();
+  }
+  if (newName !== oldName && pendingCustomChannels.some(function (s) { return s.name === newName; })) {
+    showError('A channel named "' + newName + '" already exists.'); return;
+  }
+  pendingCustomChannels = pendingCustomChannels.map(function (s) {
+    return s.name === oldName ? { name: newName, manifestBase: newBase } : s;
+  });
+  refreshChannelSourcesUI([]);
+  markSettingsDirty();
 }
 
 function addChannelSource() {
@@ -5481,8 +5591,12 @@ function applySettings() {
       updateSkippedVersion = '';
       checkForUpdate();
       refreshVersionDisplay();
-      // Reload channel sources so dropdowns reflect the saved list.
-      loadChannelSources(function () { populateChannelSelect('client-channel-select'); });
+      // Reload channel sources so dropdowns reflect the saved list, then sync
+      // credentials.yaml if a custom channel's URL changed.
+      loadChannelSources(function () {
+        populateChannelSelect('client-channel-select');
+        syncClientChannelSource();
+      });
     });
 }
 
@@ -5551,7 +5665,10 @@ function closeSettings() {
     updateSkippedVersion = '';
     checkForUpdate();
     refreshVersionDisplay();
-    loadChannelSources(function () { populateChannelSelect('client-channel-select'); });
+    loadChannelSources(function () {
+      populateChannelSelect('client-channel-select');
+      syncClientChannelSource();
+    });
     toggleSettingsOverlay();
   }).catch(function (err) {
     errEl.textContent = 'Save failed: ' + err;
@@ -5679,8 +5796,24 @@ function restartToUpdate(btn) {
     if (btn) { btn.disabled = false; btn.textContent = 'Update & Restart'; }
     refreshBinStatus();
   }).catch(function (err) {
-    tvLog('Update failed: ' + err);
+    var msg = String(err);
+    tvLog('Update failed: ' + msg);
     if (btn) { btn.disabled = false; btn.textContent = 'Update & Restart'; }
+    // Size or hash mismatch means the channel server is still serving the
+    // previous binary while the manifest already lists the new one. This
+    // commonly happens when a channel provider uses a file-sync service
+    // (e.g. OneDrive, Dropbox) that uploads the manifest before finishing
+    // the larger binary upload. Wait a minute or two and retry.
+    if (/size mismatch|hash mismatch|verify/i.test(msg)) {
+      showConfirmDialog(
+        'Update Verification Failed',
+        'The downloaded binary does not match the channel manifest.\n\n' +
+        'A CDN or proxy in front of the channel server may be serving a ' +
+        'cached copy of the previous binary. Purge the cache for the ' +
+        'channel files URL and try again.',
+        'OK'
+      );
+    }
   });
 }
 

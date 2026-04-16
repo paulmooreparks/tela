@@ -19,9 +19,23 @@ import (
 )
 
 func cmdSelfUpdate(args []string) {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
+		fmt.Fprintf(os.Stderr, `telad update -- self-update the telad binary
+
+Usage:
+  telad update [-config <path>] [-channel <ch>] [-dry-run]
+
+Options:
+  -config <path>    Path to telad.yaml (env: TELAD_CONFIG). Reads configured channel.
+  -channel <ch>     Override channel for this run. Does not modify the config file.
+  -dry-run          Show what would be downloaded without modifying the binary.
+`)
+		return
+	}
+
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
 	configPath := fs.String("config", envOrDefault("TELAD_CONFIG", ""), "Path to YAML config file (env: TELAD_CONFIG). Used to read the configured channel.")
-	chOverride := fs.String("channel", "", "Override channel for this run (dev|beta|stable). Does not modify the config file.")
+	chOverride := fs.String("channel", "", "Override channel for this run. Does not modify the config file.")
 	dryRun := fs.Bool("dry-run", false, "Show what would be downloaded without modifying the binary")
 	fs.Parse(args)
 
@@ -38,8 +52,8 @@ func cmdSelfUpdate(args []string) {
 	// Apply the channel override after loadConfig so it wins.
 	if *chOverride != "" {
 		ch := channel.Normalize(*chOverride)
-		if !channel.IsKnown(ch) {
-			fmt.Fprintf(os.Stderr, "Error: unknown channel %q (expected dev|beta|stable)\n", *chOverride)
+		if !channel.IsValid(ch) {
+			fmt.Fprintf(os.Stderr, "Error: invalid channel %q (use lowercase letters, digits, hyphens)\n", *chOverride)
 			os.Exit(1)
 		}
 		// Stash the override on the active config so agentChannel() picks it up.

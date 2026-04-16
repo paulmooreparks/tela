@@ -126,7 +126,16 @@ func setClientChannel(args []string) {
 	}
 	store.Update.Channel = name
 	if *manifestBase != "" {
-		store.Update.ManifestBase = *manifestBase
+		base := strings.TrimRight(*manifestBase, "/")
+		// If the user passed a full manifest URL (e.g. .../channels/local.json)
+		// instead of just the base directory, strip the filename component so
+		// ManifestURL doesn't double it.
+		if strings.HasSuffix(base, ".json") {
+			if i := strings.LastIndex(base, "/"); i >= 0 {
+				base = base[:i]
+			}
+		}
+		store.Update.ManifestBase = base
 	}
 	if err := store.Save(path); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: save credential store: %v\n", err)

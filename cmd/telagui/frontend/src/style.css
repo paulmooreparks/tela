@@ -1852,7 +1852,10 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .agents-sidebar-item .dot { margin-top: 0; }
 .agents-sidebar-name { font-size: 13px; }
 .agents-sidebar-version { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
-.agents-sidebar-version.version-outdated { color: var(--warn); }
+/* Two-class specificity beats the single-class .agents-sidebar-version rule above,
+   ensuring the TDL status color and glyph are not overridden by the muted default. */
+.agents-sidebar-version.status-current  { font-size: 10px; color: var(--accent); }
+.agents-sidebar-version.status-outdated { font-size: 10px; color: var(--warn); }
 .agents-sidebar-footer {
   padding: 8px 12px; border-top: 1px solid var(--border); flex-shrink: 0;
 }
@@ -1882,9 +1885,14 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .channel-sources-table tr:last-child td { border-bottom: none; }
 .channel-src-name { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
 .channel-src-base { color: var(--text-muted); word-break: break-all; }
+.channel-src-actions { white-space: nowrap; text-align: right; }
+.channel-src-actions .btn { font-size: 11px; padding: 2px 8px; }
 .channel-source-add-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .channel-src-input-name { width: 100px; }
 .channel-src-input-base { flex: 1; min-width: 180px; }
+/* Inputs inside the edit row fill their cells. */
+.channel-sources-table .channel-src-input-name { width: 100%; box-sizing: border-box; }
+.channel-sources-table .channel-src-input-base { width: 100%; min-width: 0; box-sizing: border-box; }
 .shares-table {
   width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px;
 }
