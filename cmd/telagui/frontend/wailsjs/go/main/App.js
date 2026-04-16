@@ -170,6 +170,10 @@ export function GetCLIPath() {
   return window['go']['main']['App']['GetCLIPath']();
 }
 
+export function GetChannelSources() {
+  return window['go']['main']['App']['GetChannelSources']();
+}
+
 export function GetClientChannel() {
   return window['go']['main']['App']['GetClientChannel']();
 }
@@ -474,20 +478,20 @@ export function ServiceStop() {
   return window['go']['main']['App']['ServiceStop']();
 }
 
-export function SetAgentChannel(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetAgentChannel'](arg1, arg2, arg3);
+export function SetAgentChannel(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetAgentChannel'](arg1, arg2, arg3, arg4);
 }
 
 export function SetAgentConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetAgentConfig'](arg1, arg2, arg3);
 }
 
-export function SetClientChannel(arg1) {
-  return window['go']['main']['App']['SetClientChannel'](arg1);
+export function SetClientChannel(arg1, arg2) {
+  return window['go']['main']['App']['SetClientChannel'](arg1, arg2);
 }
 
-export function SetHubChannel(arg1, arg2) {
-  return window['go']['main']['App']['SetHubChannel'](arg1, arg2);
+export function SetHubChannel(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetHubChannel'](arg1, arg2, arg3);
 }
 
 export function SetModalOpen(arg1) {

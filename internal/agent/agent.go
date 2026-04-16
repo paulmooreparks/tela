@@ -605,17 +605,22 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 
 	case "update":
 		var req struct {
-			Version string `json:"version"`
+			Version      string `json:"version"`
+			Channel      string `json:"channel"`
+			ManifestBase string `json:"manifestBase"`
 		}
 		if msg.Payload != nil {
 			json.Unmarshal(msg.Payload, &req)
 		}
 		ver := req.Version
-		lg.Printf("mgmt: update requested version=%q (requestId=%s)", ver, msg.RequestID)
+		lg.Printf("mgmt: update requested version=%q channel=%q manifestBase=%q (requestId=%s)", ver, req.Channel, req.ManifestBase, msg.RequestID)
 
-		// Resolve "latest" or empty version via GitHub API.
+		// Resolve "latest" or empty version. When channel/manifestBase overrides
+		// are supplied (e.g. from TelaVisor pointing at a self-hosted telachand),
+		// use those rather than the agent's own config so that TV and the agent
+		// consult the same manifest.
 		if ver == "" || ver == "latest" {
-			resolved, err := latestRelease()
+			resolved, err := latestReleaseFrom(req.Channel, req.ManifestBase)
 			if err != nil {
 				resp, _ := json.Marshal(controlMessage{
 					Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
@@ -643,7 +648,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		})
 		go func() {
 			time.Sleep(500 * time.Millisecond)
-			if err := downloadAndStageUpdate(lg, ver); err != nil {
+			if err := downloadAndStageUpdate(lg, ver, req.Channel, req.ManifestBase); err != nil {
 				lg.Printf("mgmt: update failed: %v", err)
 				return
 			}
@@ -682,10 +687,10 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 			json.Unmarshal(msg.Payload, &req)
 		}
 		req.Channel = strings.TrimSpace(strings.ToLower(req.Channel))
-		if req.Channel != "" && !channel.IsKnown(req.Channel) {
+		if req.Channel != "" && !channel.IsValid(req.Channel) {
 			resp, _ := json.Marshal(controlMessage{
 				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
-				Message: "unknown channel: " + req.Channel,
+				Message: "invalid channel name: " + req.Channel,
 			})
 			return resp
 		}
@@ -786,7 +791,22 @@ func agentChannel() (string, string) {
 
 // latestRelease returns the current version on telad's configured channel.
 func latestRelease() (string, error) {
-	ch, base := agentChannel()
+	return latestReleaseFrom("", "")
+}
+
+// latestReleaseFrom returns the current version on the given channel. When
+// ch or base are empty the agent's own configured values are used as
+// fallbacks. This allows the management API to resolve "latest" against a
+// caller-supplied manifest (e.g. a self-hosted telachand) instead of the
+// agent's own channel config.
+func latestReleaseFrom(ch, base string) (string, error) {
+	agentCh, agentBase := agentChannel()
+	if ch == "" {
+		ch = agentCh
+	}
+	if base == "" {
+		base = agentBase
+	}
 	m, err := agentChannelFetcher.GetURL(channel.ManifestURL(base, ch))
 	if err != nil {
 		return "", fmt.Errorf("fetch %s manifest: %w", ch, err)
@@ -794,10 +814,13 @@ func latestRelease() (string, error) {
 	return m.Version, nil
 }
 
-// downloadAndStageUpdate downloads the given version of telad from GitHub
-// releases and replaces the current binary. On Windows the running exe is
-// renamed to .old before the new binary is moved into place.
-func downloadAndStageUpdate(lg *log.Logger, ver string) error {
+// downloadAndStageUpdate downloads the given version of telad from the
+// configured channel and replaces the current binary. On Windows the running
+// exe is renamed to .old before the new binary is moved into place.
+// chOverride and baseOverride, when non-empty, replace the agent's own
+// channel config for this one update (e.g. when TV sends a custom telachand
+// address). The agent's persistent config is not changed.
+func downloadAndStageUpdate(lg *log.Logger, ver, chOverride, baseOverride string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("cannot find executable path: %w", err)
@@ -814,6 +837,12 @@ func downloadAndStageUpdate(lg *log.Logger, ver string) error {
 	binaryName := fmt.Sprintf("telad-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
 
 	ch, base := agentChannel()
+	if chOverride != "" {
+		ch = chOverride
+	}
+	if baseOverride != "" {
+		base = baseOverride
+	}
 	m, err := agentChannelFetcher.GetURL(channel.ManifestURL(base, ch))
 	if err != nil {
 		return fmt.Errorf("fetch %s manifest: %w", ch, err)

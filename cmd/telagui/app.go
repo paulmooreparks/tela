@@ -252,19 +252,26 @@ func (a *App) startup(ctx context.Context) {
 	}
 	profileMu.Unlock()
 
-	// Restore window position and size
+	// Check for updates
+	if settings.AutoCheckUpdates {
+		go a.checkForUpdates()
+	}
+
+}
+
+// domReady is called by Wails after the WebView is fully initialised and the
+// window is about to be shown. Restoring window geometry here (rather than in
+// startup) ensures the position sticks on multi-monitor setups: the WebView
+// initialisation sequence can re-centre the window after startup returns.
+func (a *App) domReady(ctx context.Context) {
+	settings := a.GetSettings()
 	if settings.WindowSaved {
 		if settings.WindowWidth > 0 && settings.WindowHeight > 0 {
 			wailsRuntime.WindowSetSize(ctx, settings.WindowWidth, settings.WindowHeight)
 		}
 		wailsRuntime.WindowSetPosition(ctx, settings.WindowX, settings.WindowY)
 	}
-
-	// Check for updates
-	if settings.AutoCheckUpdates {
-		go a.checkForUpdates()
-	}
-
+	wailsRuntime.WindowShow(ctx)
 }
 
 // checkForUpdates checks if any managed binary (telavisor or tela CLI) is
@@ -535,7 +542,6 @@ func (a *App) RestartToUpdate() error {
 	if err != nil {
 		return fmt.Errorf("fetch channel manifest: %w", err)
 	}
-	ver := m.Version
 
 	// Download everything before disconnecting. The manifest's downloadBase
 	// may point at a tunnel endpoint (e.g. localhost:9900 via owlsnest-channel)
@@ -547,16 +553,34 @@ func (a *App) RestartToUpdate() error {
 		}
 	}
 
-	// installTool writes the CLI binary to the bin path. Do this before
-	// disconnect for the same reason as above.
-	if _, err := a.installTool("tela", ver); err != nil {
-		log.Printf("[update] installTool tela failed: %v", err)
-		return fmt.Errorf("update tela: %w", err)
+	// Stage the tela CLI to a temp path before disconnecting. On Windows the
+	// running tela.exe is file-locked and cannot be replaced until the process
+	// exits. Staging now (while the tunnel is up and the manifest URL is
+	// reachable) lets us rename into place after disconnect.
+	stagedTela, err := a.stageBinary("tela", m)
+	if err != nil {
+		log.Printf("[update] stage tela failed: %v", err)
+		return fmt.Errorf("stage tela: %w", err)
 	}
 
-	// All downloads complete. Now disconnect and relaunch.
+	// All downloads staged. Now disconnect and wait for tela to exit.
 	a.Disconnect()
 	a.waitForProcessExit(5 * time.Second)
+
+	// tela.exe is now free; rename the staged copy into place.
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	destPath := filepath.Join(a.effectiveBinPath(), "tela"+ext)
+	os.Remove(destPath) // Windows requires explicit remove before rename
+	if err := os.Rename(stagedTela, destPath); err != nil {
+		os.Remove(stagedTela)
+		log.Printf("[update] install tela failed: %v", err)
+		return fmt.Errorf("install tela: %w", err)
+	}
+	os.Chmod(destPath, 0755)
+	log.Printf("[update] installed tela %s at %s", m.Version, destPath)
 
 	if isPackageManaged() {
 		// Package-managed: CLI updated, GUI must be updated via package manager.
@@ -583,6 +607,48 @@ func (a *App) RestartToUpdate() error {
 
 	os.Exit(0)
 	return nil // unreachable
+}
+
+// stageBinary downloads a named binary from the channel manifest to a staging
+// path (destPath + ".staged") for later atomic rename. This lets the download
+// happen while the tunnel is up, and the rename happen after the process exits
+// and releases the file lock (Windows does not allow replacing a running exe).
+func (a *App) stageBinary(name string, m *channelpkg.Manifest) (string, error) {
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	binaryName := fmt.Sprintf("%s-%s-%s%s", name, runtime.GOOS, runtime.GOARCH, ext)
+	entry, ok := m.Binaries[binaryName]
+	if !ok {
+		return "", fmt.Errorf("%s manifest %s has no binary named %s", m.Channel, m.Version, binaryName)
+	}
+	dlURL := m.BinaryURL(binaryName)
+
+	resp, err := http.Get(dlURL)
+	if err != nil {
+		return "", fmt.Errorf("download %s: %w", name, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("download %s failed: HTTP %d", name, resp.StatusCode)
+	}
+
+	installDir := a.effectiveBinPath()
+	os.MkdirAll(installDir, 0755)
+	stagedPath := filepath.Join(installDir, name+ext+".staged")
+	f, err := os.Create(stagedPath)
+	if err != nil {
+		return "", fmt.Errorf("create staging file: %w", err)
+	}
+	if err := channelpkg.VerifyReader(f, resp.Body, entry.SHA256, entry.Size); err != nil {
+		f.Close()
+		os.Remove(stagedPath)
+		return "", fmt.Errorf("verify %s: %w", name, err)
+	}
+	f.Close()
+	log.Printf("[update] staged %s %s at %s", name, m.Version, stagedPath)
+	return stagedPath, nil
 }
 
 // downloadSelfUpdate stages a new TelaVisor binary for the current platform
@@ -2732,9 +2798,14 @@ func (a *App) GetHubChannelInfo(hubName string) string {
 }
 
 // SetHubChannel changes the hub's release channel via PATCH /api/admin/update.
-func (a *App) SetHubChannel(hubName, channelName string) string {
-	payload := json.RawMessage(fmt.Sprintf(`{"channel":%q}`, channelName))
-	data, err := a.adminProxyCall(hubName, "PATCH", "update", payload)
+// manifestBase is optional; if non-empty it overrides the upstream manifest URL.
+func (a *App) SetHubChannel(hubName, channelName, manifestBase string) string {
+	body := map[string]string{"channel": channelName}
+	if manifestBase != "" {
+		body["manifestBase"] = manifestBase
+	}
+	raw, _ := json.Marshal(body)
+	data, err := a.adminProxyCall(hubName, "PATCH", "update", json.RawMessage(raw))
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2753,9 +2824,14 @@ func (a *App) GetAgentChannelInfo(hubName, machineID string) string {
 
 // SetAgentChannel sets a remote agent's release channel through the
 // hub-mediated management protocol.
-func (a *App) SetAgentChannel(hubName, machineID, channelName string) string {
-	payload := json.RawMessage(fmt.Sprintf(`{"channel":%q}`, channelName))
-	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/update-channel", payload)
+// manifestBase is optional; if non-empty it overrides the upstream manifest URL.
+func (a *App) SetAgentChannel(hubName, machineID, channelName, manifestBase string) string {
+	body := map[string]string{"channel": channelName}
+	if manifestBase != "" {
+		body["manifestBase"] = manifestBase
+	}
+	raw, _ := json.Marshal(body)
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/update-channel", json.RawMessage(raw))
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
@@ -2782,10 +2858,12 @@ func (a *App) GetClientChannel() map[string]string {
 }
 
 // SetClientChannel writes TelaVisor's own release channel preference.
-func (a *App) SetClientChannel(channelName string) string {
+// manifestBase is optional; if non-empty it overrides the upstream manifest URL.
+// Any channel name that passes channel.IsValid is accepted (not just the built-in three).
+func (a *App) SetClientChannel(channelName, manifestBase string) string {
 	ch := channelpkg.Normalize(channelName)
-	if !channelpkg.IsKnown(ch) {
-		return `{"error":"unknown channel: ` + channelName + `"}`
+	if !channelpkg.IsValid(ch) {
+		return `{"error":"invalid channel name: ` + channelName + `"}`
 	}
 	path := credstore.UserPath()
 	store, err := credstore.Load(path)
@@ -2793,10 +2871,31 @@ func (a *App) SetClientChannel(channelName string) string {
 		return `{"error":"load credential store: ` + err.Error() + `"}`
 	}
 	store.Update.Channel = ch
+	if manifestBase != "" {
+		store.Update.ManifestBase = manifestBase
+	} else if channelpkg.IsKnown(ch) {
+		// Switching back to a built-in channel clears any custom base.
+		store.Update.ManifestBase = ""
+	}
 	if err := store.Save(path); err != nil {
 		return `{"error":"save credential store: ` + err.Error() + `"}`
 	}
 	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(store.Update.ManifestBase, ch))
+}
+
+// GetChannelSources returns the full list of available release channels: the
+// three built-in channels (dev, beta, stable) followed by any custom channels
+// defined in TV settings. The result is a JSON array of {name, manifestBase}.
+func (a *App) GetChannelSources() string {
+	sources := []ChannelSource{
+		{Name: "dev", ManifestBase: ""},
+		{Name: "beta", ManifestBase: ""},
+		{Name: "stable", ManifestBase: ""},
+	}
+	s := a.GetSettings()
+	sources = append(sources, s.CustomChannels...)
+	data, _ := json.Marshal(sources)
+	return string(data)
 }
 
 // UpdateServiceAgent self-updates the locally installed telad service.
@@ -2884,11 +2983,38 @@ func (a *App) updateRunningServiceBinary(binaryName string) string {
 		if lookupErr != nil {
 			return fmt.Sprintf(`{"error":"telad is registered with %s but no enabled portal source knows that hub: %s"}`, jsonEscape(info.Hub), jsonEscape(lookupErr.Error()))
 		}
-		resp := a.UpdateAgent(hubName, info.Machines[0], "")
+		// Pass TV's own channel manifest coordinates so the agent fetches
+		// from the same source TV is using (e.g. a self-hosted telachand),
+		// not from whatever its own YAML config says.
+		m, err := a.clientChannelManifest()
+		if err != nil {
+			return fmt.Sprintf(`{"error":"fetch channel manifest: %s"}`, jsonEscape(err.Error()))
+		}
+		store, _ := credstore.Load(credstore.UserPath())
+		var manifestBase string
+		if store != nil {
+			manifestBase = store.Update.ManifestBase
+		}
+		updatePayload := map[string]string{
+			"version":      m.Version,
+			"channel":      m.Channel,
+			"manifestBase": manifestBase,
+		}
+		payloadBytes, _ := json.Marshal(updatePayload)
+		rawResp, proxyErr := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(info.Machines[0])+"/update", json.RawMessage(payloadBytes))
+		resp := string(rawResp)
+		if proxyErr != nil {
+			return fmt.Sprintf(`{"error":"hub admin API: %s"}`, jsonEscape(proxyErr.Error()))
+		}
 		var result map[string]any
 		_ = json.Unmarshal([]byte(resp), &result)
 		if errMsg, ok := result["error"].(string); ok && errMsg != "" {
 			return fmt.Sprintf(`{"error":"hub admin API: %s"}`, jsonEscape(errMsg))
+		}
+		// Detect "already running this version" -- agent responds ok:true
+		// but no update will happen, so don't poll.
+		if msg, _ := result["message"].(string); strings.HasPrefix(msg, "already running") {
+			return fmt.Sprintf(`{"ok":true,"version":%q,"path":%q}`, beforeVer, exePath)
 		}
 	case "telahubd":
 		// telahubd has no upstream hub to mediate through; we'd talk
@@ -3887,32 +4013,41 @@ func (a *App) DeleteProfile(name string) error {
 }
 
 // Settings holds user preferences persisted to disk.
+// ChannelSource is a named release channel with an optional manifest base URL.
+// The three built-in channels (dev, beta, stable) use the default upstream base.
+// Custom entries point at self-hosted telachand instances or other servers.
+type ChannelSource struct {
+	Name         string `yaml:"name" json:"name"`
+	ManifestBase string `yaml:"manifestBase" json:"manifestBase"`
+}
+
 type Settings struct {
-	AutoConnect             bool         `yaml:"autoConnect" json:"autoConnect"`
-	ReconnectOnDrop         bool         `yaml:"reconnectOnDrop" json:"reconnectOnDrop"`
-	MinimizeTo              string       `yaml:"minimizeTo" json:"minimizeTo"` // "taskbar" or "tray"
-	StartMinimized          bool         `yaml:"startMinimized" json:"startMinimized"`
-	MinimizeOnClose         bool         `yaml:"minimizeOnClose" json:"minimizeOnClose"`
-	AutoCheckUpdates        bool         `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
-	VerboseDefault          bool         `yaml:"verboseDefault" json:"verboseDefault"`
-	ConfirmDisconnect       bool         `yaml:"confirmDisconnect" json:"confirmDisconnect"`
-	SidebarWidth            int          `yaml:"sidebarWidth" json:"sidebarWidth"`
-	HubsSidebarWidth        int          `yaml:"hubsSidebarWidth" json:"hubsSidebarWidth"`
-	DefaultProfile          string       `yaml:"defaultProfile" json:"defaultProfile"`
-	BinPath                 string       `yaml:"binPath" json:"binPath"`
-	ConnectTooltipDismissed bool         `yaml:"connectTooltipDismissed" json:"connectTooltipDismissed"`
-	Theme                   string       `yaml:"theme" json:"theme"`
-	HideDotfiles            *bool        `yaml:"hideDotfiles,omitempty" json:"hideDotfiles"`
-	LogPanelHeight          int          `yaml:"logPanelHeight,omitempty" json:"logPanelHeight"`
-	LogPanelCollapsed       bool         `yaml:"logPanelCollapsed,omitempty" json:"logPanelCollapsed"`
-	LogMaxLines             int          `yaml:"logMaxLines,omitempty" json:"logMaxLines"`
-	WindowSaved             bool         `yaml:"windowSaved,omitempty" json:"windowSaved"`
-	WindowX                 int          `yaml:"windowX" json:"windowX"`
-	WindowY                 int          `yaml:"windowY" json:"windowY"`
-	WindowWidth             int          `yaml:"windowWidth" json:"windowWidth"`
-	WindowHeight            int          `yaml:"windowHeight" json:"windowHeight"`
-	OpenLogTabs             []LogTabInfo `yaml:"openLogTabs,omitempty" json:"openLogTabs"`
-	LastSelectedHub         string       `yaml:"lastSelectedHub,omitempty" json:"lastSelectedHub"`
+	AutoConnect             bool            `yaml:"autoConnect" json:"autoConnect"`
+	ReconnectOnDrop         bool            `yaml:"reconnectOnDrop" json:"reconnectOnDrop"`
+	MinimizeTo              string          `yaml:"minimizeTo" json:"minimizeTo"` // "taskbar" or "tray"
+	StartMinimized          bool            `yaml:"startMinimized" json:"startMinimized"`
+	MinimizeOnClose         bool            `yaml:"minimizeOnClose" json:"minimizeOnClose"`
+	AutoCheckUpdates        bool            `yaml:"autoCheckUpdates" json:"autoCheckUpdates"`
+	VerboseDefault          bool            `yaml:"verboseDefault" json:"verboseDefault"`
+	ConfirmDisconnect       bool            `yaml:"confirmDisconnect" json:"confirmDisconnect"`
+	SidebarWidth            int             `yaml:"sidebarWidth" json:"sidebarWidth"`
+	HubsSidebarWidth        int             `yaml:"hubsSidebarWidth" json:"hubsSidebarWidth"`
+	DefaultProfile          string          `yaml:"defaultProfile" json:"defaultProfile"`
+	BinPath                 string          `yaml:"binPath" json:"binPath"`
+	ConnectTooltipDismissed bool            `yaml:"connectTooltipDismissed" json:"connectTooltipDismissed"`
+	Theme                   string          `yaml:"theme" json:"theme"`
+	HideDotfiles            *bool           `yaml:"hideDotfiles,omitempty" json:"hideDotfiles"`
+	LogPanelHeight          int             `yaml:"logPanelHeight,omitempty" json:"logPanelHeight"`
+	LogPanelCollapsed       bool            `yaml:"logPanelCollapsed,omitempty" json:"logPanelCollapsed"`
+	LogMaxLines             int             `yaml:"logMaxLines,omitempty" json:"logMaxLines"`
+	WindowSaved             bool            `yaml:"windowSaved,omitempty" json:"windowSaved"`
+	WindowX                 int             `yaml:"windowX" json:"windowX"`
+	WindowY                 int             `yaml:"windowY" json:"windowY"`
+	WindowWidth             int             `yaml:"windowWidth" json:"windowWidth"`
+	WindowHeight            int             `yaml:"windowHeight" json:"windowHeight"`
+	OpenLogTabs             []LogTabInfo    `yaml:"openLogTabs,omitempty" json:"openLogTabs"`
+	LastSelectedHub         string          `yaml:"lastSelectedHub,omitempty" json:"lastSelectedHub"`
+	CustomChannels          []ChannelSource `yaml:"customChannels,omitempty" json:"customChannels"`
 }
 
 // LogTabInfo describes an open log tab to restore on startup.

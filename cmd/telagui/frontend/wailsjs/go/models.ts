@@ -82,6 +82,20 @@ export namespace main {
 	        this.serviceVersion = source["serviceVersion"];
 	    }
 	}
+	export class ChannelSource {
+	    name: string;
+	    manifestBase: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChannelSource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.manifestBase = source["manifestBase"];
+	    }
+	}
 	export class CommandLogEntry {
 	    time: string;
 	    method: string;
@@ -478,6 +492,7 @@ export namespace main {
 	    windowHeight: number;
 	    openLogTabs: LogTabInfo[];
 	    lastSelectedHub: string;
+	    customChannels: ChannelSource[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -510,6 +525,7 @@ export namespace main {
 	        this.windowHeight = source["windowHeight"];
 	        this.openLogTabs = this.convertValues(source["openLogTabs"], LogTabInfo);
 	        this.lastSelectedHub = source["lastSelectedHub"];
+	        this.customChannels = this.convertValues(source["customChannels"], ChannelSource);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

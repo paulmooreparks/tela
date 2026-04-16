@@ -321,16 +321,47 @@ function hubUpdateStatus(msg) {
 
 // ── Release channels ──────────────────────────────────────────────
 
+// channelSources is the authoritative list of release channels available in
+// every channel dropdown. It is populated at startup by loadChannelSources()
+// and contains built-in channels (dev, beta, stable) followed by any custom
+// channels the user has added in Application Settings.
+var channelSources = [
+  { name: 'dev', manifestBase: '' },
+  { name: 'beta', manifestBase: '' },
+  { name: 'stable', manifestBase: '' }
+];
+
+// findChannelManifestBase returns the manifestBase for the given channel name,
+// or '' if it is a built-in channel or not found.
+function findChannelManifestBase(name) {
+  for (var i = 0; i < channelSources.length; i++) {
+    if (channelSources[i].name === name) return channelSources[i].manifestBase || '';
+  }
+  return '';
+}
+
+// loadChannelSources fetches the channel list from the Go backend and updates
+// the channelSources global. Optionally calls onDone when complete.
+function loadChannelSources(onDone) {
+  goApp.GetChannelSources().then(function (raw) {
+    try {
+      var sources = JSON.parse(raw);
+      if (Array.isArray(sources) && sources.length > 0) channelSources = sources;
+    } catch (e) {}
+    if (onDone) onDone();
+  }).catch(function () { if (onDone) onDone(); });
+}
+
 // renderChannelSelect emits the HTML for a channel dropdown with the
 // given id. selected is the channel name to pre-select ('' leaves it on
 // dev so the UI is never blank before load completes).
+// Uses the channelSources global so custom channels appear automatically.
 function renderChannelSelect(id, selected) {
-  var channels = ['dev', 'beta', 'stable'];
   var sel = selected || 'dev';
   var html = '<select id="' + escAttr(id) + '" class="tb-select">';
-  for (var i = 0; i < channels.length; i++) {
-    var c = channels[i];
-    html += '<option value="' + c + '"' + (c === sel ? ' selected' : '') + '>' + c + '</option>';
+  for (var i = 0; i < channelSources.length; i++) {
+    var c = channelSources[i].name;
+    html += '<option value="' + escAttr(c) + '"' + (c === sel ? ' selected' : '') + '>' + escHtml(c) + '</option>';
   }
   html += '</select>';
   return html;
@@ -419,7 +450,7 @@ function loadHubChannel(hubURL) {
       showConfirmDialog('Switch Channel', 'Switch this hub to the ' + newCh + ' channel? New updates will follow the ' + newCh + ' release line.', 'Switch').then(function (yes) {
         if (!yes) { sel.value = info.channel || 'dev'; return; }
         status.textContent = 'switching to ' + newCh + '...';
-        goApp.SetHubChannel(hubURL, newCh).then(function (r) {
+        goApp.SetHubChannel(hubURL, newCh, findChannelManifestBase(newCh)).then(function (r) {
           var res = {};
           try { res = JSON.parse(r); } catch (e) { }
           if (res.error) { status.textContent = 'error: ' + res.error; return; }
@@ -461,7 +492,7 @@ function loadAgentChannel(hubURL, machineID) {
       showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
         if (!yes) { sel.value = info.channel || 'dev'; return; }
         status.textContent = 'switching to ' + newCh + '...';
-        goApp.SetAgentChannel(hubURL, machineID, newCh).then(function (r) {
+        goApp.SetAgentChannel(hubURL, machineID, newCh, findChannelManifestBase(newCh)).then(function (r) {
           var res = {};
           try { res = JSON.parse(r); } catch (e) { }
           if (res.error) { status.textContent = 'error: ' + res.error; return; }
@@ -484,7 +515,7 @@ function loadClientChannel() {
     status.textContent = info && info.manifestUrl ? info.manifestUrl : '';
     sel.onchange = function () {
       var newCh = sel.value;
-      goApp.SetClientChannel(newCh).then(function (r) {
+      goApp.SetClientChannel(newCh, findChannelManifestBase(newCh)).then(function (r) {
         var res = {};
         try { res = JSON.parse(r); } catch (e) { }
         if (res.error) { status.textContent = 'error: ' + res.error; return; }
@@ -1076,6 +1107,10 @@ goApp.GetSettings().then(function (s) {
 });
 
 // --- Startup ---
+// Load channel sources early so renderChannelSelect has custom channels
+// available before any channel dropdown is first rendered.
+loadChannelSources();
+
 tvLog('TelaVisor started');
 refreshVersionDisplay();
 refreshProfileList();
@@ -2857,20 +2892,37 @@ function agentsShowDetail(a) {
   }
   html += '</div>';
 
-  // File Share (editable when management supported)
-  var fs = a.capabilities && a.capabilities.fileShare;
-  html += '<div class="setting-card"><div class="setting-card-title">File Share</div>'
+  // File Shares
+  var capShares = (a.capabilities && a.capabilities.shares) || [];
+  html += '<div class="setting-card"><div class="setting-card-title">File Shares</div>'
     + '<div class="setting-card-desc">Sandboxed directory access through the encrypted tunnel.</div>';
-  if (fs && fs.enabled) {
-    html += '<div class="setting-check"><input type="checkbox" id="agent-fs-enabled" checked onchange="agentsMarkDirty()"> Enabled</div>'
-      + '<div class="setting-check"><input type="checkbox" id="agent-fs-writable"' + (fs.writable ? ' checked' : '') + ' onchange="agentsMarkDirty()"> Writable</div>'
-      + '<div class="setting-check"><input type="checkbox" id="agent-fs-allowDelete"' + (fs.allowDelete ? ' checked' : '') + ' onchange="agentsMarkDirty()"> Allow delete</div>'
-      + '<div class="setting-field"><div class="setting-label">Max file size</div>'
-      + '<input class="setting-input setting-input-short" type="text" id="agent-fs-maxFileSize" value="' + escAttr(fs.maxFileSize ? agentFormatBytes(fs.maxFileSize) : '') + '" onchange="agentsMarkDirty()"></div>'
-      + '<div class="setting-field"><div class="setting-label">Blocked extensions</div>'
-      + '<input class="setting-input" type="text" id="agent-fs-blocked" value="' + escAttr((fs.blockedExtensions || []).join(', ')) + '" onchange="agentsMarkDirty()"></div>';
+  if (canManage) {
+    // Editable table -- paths are loaded from config-get after render.
+    html += '<table class="shares-table"><thead><tr>'
+      + '<th>Name</th><th>Path</th><th>Writable</th><th>Allow delete</th><th></th>'
+      + '</tr></thead><tbody id="agent-shares-body">';
+    if (capShares.length === 0) {
+      html += '<tr id="agent-shares-empty"><td colspan="5" class="shares-empty">No shares configured.</td></tr>';
+    } else {
+      capShares.forEach(function (s) {
+        html += agentShareRowHTML(s.name, '', s.writable, s.allowDelete);
+      });
+    }
+    html += '</tbody></table>'
+      + '<button class="btn btn-sm" style="margin-top:6px" onclick="agentSharesAdd()">Add share</button>';
+  } else if (capShares.length > 0) {
+    // Read-only list from capabilities.
+    html += '<table class="kv-table">';
+    capShares.forEach(function (s) {
+      var flags = [];
+      if (s.writable) flags.push('writable');
+      if (s.allowDelete) flags.push('allow delete');
+      html += '<tr><td>' + escHtml(s.name) + '</td>'
+        + '<td class="tools-service-label">' + escHtml(flags.join(', ') || 'read-only') + '</td></tr>';
+    });
+    html += '</table>';
   } else {
-    html += '<div class="setting-check"><input type="checkbox" id="agent-fs-enabled" onchange="agentsMarkDirty()"> Enabled</div>';
+    html += '<div class="setting-card-desc" style="margin-top:4px">No shares configured.</div>';
   }
   html += '</div>';
 
@@ -2909,6 +2961,93 @@ function agentsShowDetail(a) {
 
   if (canManage && document.getElementById('agent-channel-select')) {
     loadAgentChannel(a.hub, a.id);
+  }
+  if (canManage && document.getElementById('agent-shares-body')) {
+    loadAgentSharePaths(a.hub, a.id);
+  }
+}
+
+// Returns the inner HTML for one editable share row.
+function agentShareRowHTML(name, path, writable, allowDelete) {
+  return '<tr class="agent-share-row">'
+    + '<td><input type="text" class="setting-input agent-share-name" value="' + escAttr(name) + '" placeholder="share-name" onchange="agentsMarkDirty()"></td>'
+    + '<td><input type="text" class="setting-input agent-share-path" value="' + escAttr(path) + '" placeholder="/path/on/agent" onchange="agentsMarkDirty()"></td>'
+    + '<td class="shares-check-cell"><input type="checkbox" class="agent-share-writable"' + (writable ? ' checked' : '') + ' onchange="agentsMarkDirty()"></td>'
+    + '<td class="shares-check-cell"><input type="checkbox" class="agent-share-allowDelete"' + (allowDelete ? ' checked' : '') + ' onchange="agentsMarkDirty()"></td>'
+    + '<td><button class="btn btn-sm btn-danger" onclick="agentShareRemove(this)">Remove</button></td>'
+    + '</tr>';
+}
+
+// Fetches the full agent config to populate the path column of the shares table.
+// Capabilities don't include path (it's an agent-local detail), so we need config-get.
+function loadAgentSharePaths(hub, machineId) {
+  goApp.GetAgentConfig(hub, machineId).then(function (resp) {
+    var data;
+    try { data = JSON.parse(resp); } catch (e) { return; }
+    if (!data.ok || !data.payload) return;
+    var machines = data.payload.machines || [];
+    var machine = machines.find(function (m) { return m.name === machineId; });
+    if (!machine) return;
+    var configShares = machine.shares || [];
+    if (configShares.length === 0) return;
+
+    var tbody = document.getElementById('agent-shares-body');
+    if (!tbody) return;
+
+    // Build a name->path map from the config.
+    var pathMap = {};
+    configShares.forEach(function (s) { if (s.name) pathMap[s.name] = s.path || ''; });
+
+    // Populate path inputs that were left empty during initial render.
+    tbody.querySelectorAll('.agent-share-row').forEach(function (row) {
+      var nameEl = row.querySelector('.agent-share-name');
+      var pathEl = row.querySelector('.agent-share-path');
+      if (nameEl && pathEl && pathEl.value === '' && pathMap[nameEl.value] !== undefined) {
+        pathEl.value = pathMap[nameEl.value];
+      }
+    });
+
+    // If config has shares not in capabilities (e.g. agent reconnecting),
+    // add any that are missing from the table.
+    var renderedNames = {};
+    tbody.querySelectorAll('.agent-share-name').forEach(function (el) { renderedNames[el.value] = true; });
+    var hadEmpty = !!document.getElementById('agent-shares-empty');
+    configShares.forEach(function (s) {
+      if (!s.name || renderedNames[s.name]) return;
+      if (hadEmpty) {
+        var empty = document.getElementById('agent-shares-empty');
+        if (empty) { empty.remove(); hadEmpty = false; }
+      }
+      var row = document.createElement('tr');
+      row.className = 'agent-share-row';
+      row.innerHTML = agentShareRowHTML(s.name, s.path || '', s.writable, s.allowDelete);
+      tbody.appendChild(row);
+    });
+  }).catch(function () {});
+}
+
+function agentSharesAdd() {
+  var tbody = document.getElementById('agent-shares-body');
+  if (!tbody) return;
+  var empty = document.getElementById('agent-shares-empty');
+  if (empty) empty.remove();
+  var row = document.createElement('tr');
+  row.className = 'agent-share-row';
+  row.innerHTML = agentShareRowHTML('', '', false, false);
+  tbody.appendChild(row);
+  agentsMarkDirty();
+}
+
+function agentShareRemove(btn) {
+  var row = btn.closest('tr');
+  if (row) row.remove();
+  agentsMarkDirty();
+  var tbody = document.getElementById('agent-shares-body');
+  if (tbody && !tbody.querySelector('.agent-share-row')) {
+    var empty = document.createElement('tr');
+    empty.id = 'agent-shares-empty';
+    empty.innerHTML = '<td colspan="5" class="shares-empty">No shares configured.</td>';
+    tbody.appendChild(empty);
   }
 }
 
@@ -2972,21 +3111,17 @@ function agentsSaveConfig() {
   el = document.getElementById('agent-location');
   if (el) fields.location = el.value.trim();
 
-  // File share fields
-  el = document.getElementById('agent-fs-enabled');
-  if (el) {
-    fields.fileShare = { enabled: el.checked };
-    var w = document.getElementById('agent-fs-writable');
-    var d = document.getElementById('agent-fs-allowDelete');
-    var m = document.getElementById('agent-fs-maxFileSize');
-    var b = document.getElementById('agent-fs-blocked');
-    if (w) fields.fileShare.writable = w.checked;
-    if (d) fields.fileShare.allowDelete = d.checked;
-    if (m && m.value.trim()) fields.fileShare.maxFileSize = m.value.trim();
-    if (b) {
-      var exts = b.value.trim();
-      fields.fileShare.blockedExtensions = exts ? exts.split(',').map(function (e) { return e.trim(); }).filter(Boolean) : [];
-    }
+  // File shares
+  var shareRows = document.querySelectorAll('.agent-share-row');
+  if (shareRows.length > 0) {
+    fields.shares = Array.prototype.map.call(shareRows, function (row) {
+      return {
+        name: row.querySelector('.agent-share-name').value.trim(),
+        path: row.querySelector('.agent-share-path').value.trim(),
+        writable: row.querySelector('.agent-share-writable').checked,
+        allowDelete: row.querySelector('.agent-share-allowDelete').checked
+      };
+    }).filter(function (s) { return s.name && s.path; });
   }
 
   var saveBtn = document.getElementById('agents-save-btn');
@@ -5201,9 +5336,92 @@ function refreshSettings() {
     var themeRadios = document.querySelectorAll('input[name="setting-theme"]');
     themeRadios.forEach(function (r) { r.checked = r.value === themeVal; });
     applyTelaTheme(themeVal);
+
+    refreshChannelSourcesUI(s.customChannels || []);
   });
 
-  loadClientChannel();
+  // Load channel sources first, then populate the client channel select with
+  // the full list (including any custom entries).
+  loadChannelSources(function () {
+    populateChannelSelect('client-channel-select');
+    loadClientChannel();
+  });
+}
+
+// populateChannelSelect rebuilds a channel <select> element's options from
+// the current channelSources global, preserving any currently-selected value.
+function populateChannelSelect(id) {
+  var sel = document.getElementById(id);
+  if (!sel) return;
+  var current = sel.value;
+  sel.innerHTML = '';
+  channelSources.forEach(function (src) {
+    var opt = document.createElement('option');
+    opt.value = src.name;
+    opt.textContent = src.name;
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
+}
+
+// pendingCustomChannels holds unsaved Add/Remove edits while the settings
+// dialog is open. null means no edits pending (saved state is authoritative).
+var pendingCustomChannels = null;
+
+// refreshChannelSourcesUI renders the custom channel sources list in the
+// Application Settings panel. Uses pendingCustomChannels when present so
+// the UI reflects in-progress edits that have not yet been applied.
+function refreshChannelSourcesUI(saved) {
+  var customs = pendingCustomChannels !== null ? pendingCustomChannels : (saved || []);
+  var container = document.getElementById('custom-channel-sources');
+  if (!container) return;
+  if (customs.length === 0) {
+    container.innerHTML = '<div class="channel-sources-empty">No custom channel sources.</div>';
+    return;
+  }
+  var html = '<table class="channel-sources-table">';
+  customs.forEach(function (src) {
+    html += '<tr>'
+      + '<td class="channel-src-name">' + escHtml(src.name) + '</td>'
+      + '<td class="channel-src-base">' + escHtml(src.manifestBase) + '</td>'
+      + '<td><button type="button" class="btn btn-sm btn-danger" onclick="removeChannelSource(' + JSON.stringify(src.name) + ')">Remove</button></td>'
+      + '</tr>';
+  });
+  html += '</table>';
+  container.innerHTML = html;
+}
+
+function addChannelSource() {
+  var nameEl = document.getElementById('new-channel-name');
+  var baseEl = document.getElementById('new-channel-base');
+  if (!nameEl || !baseEl) return;
+  var name = nameEl.value.trim().toLowerCase();
+  var base = baseEl.value.trim();
+  if (!name || !base) return;
+  // Validate name client-side (lowercase letters/digits/hyphens).
+  if (!/^[a-z0-9-]+$/.test(name)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
+  if (name === 'dev' || name === 'beta' || name === 'stable') { showError('Cannot add a built-in channel name.'); return; }
+  // Buffer the addition; do not persist until Apply.
+  if (pendingCustomChannels === null) {
+    pendingCustomChannels = channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; }).slice();
+  }
+  for (var i = 0; i < pendingCustomChannels.length; i++) {
+    if (pendingCustomChannels[i].name === name) { showError('Channel already exists.'); return; }
+  }
+  pendingCustomChannels.push({ name: name, manifestBase: base });
+  nameEl.value = '';
+  baseEl.value = '';
+  refreshChannelSourcesUI([]);
+  markSettingsDirty();
+}
+
+function removeChannelSource(name) {
+  if (pendingCustomChannels === null) {
+    pendingCustomChannels = channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; }).slice();
+  }
+  pendingCustomChannels = pendingCustomChannels.filter(function (s) { return s.name !== name; });
+  refreshChannelSourcesUI([]);
+  markSettingsDirty();
 }
 
 function gatherSettings() {
@@ -5238,6 +5456,11 @@ function gatherSettings() {
     s.binPath = val === def ? '' : val;
   }
 
+  // Include pending channel source edits when present.
+  if (pendingCustomChannels !== null) {
+    s.customChannels = pendingCustomChannels;
+  }
+
   return s;
 }
 
@@ -5250,6 +5473,7 @@ function applySettings() {
 
   return goApp.SaveSettings(JSON.stringify(s)).then(function () {
       settingsDirty = false;
+      pendingCustomChannels = null;
       setSettingsButtonsDisabled(true);
       if (s.logMaxLines) logMaxLines = s.logMaxLines;
       (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
@@ -5257,6 +5481,8 @@ function applySettings() {
       updateSkippedVersion = '';
       checkForUpdate();
       refreshVersionDisplay();
+      // Reload channel sources so dropdowns reflect the saved list.
+      loadChannelSources(function () { populateChannelSelect('client-channel-select'); });
     });
 }
 
@@ -5318,12 +5544,14 @@ function closeSettings() {
   errEl.textContent = '';
   goApp.SaveSettings(JSON.stringify(s)).then(function () {
     settingsDirty = false;
+    pendingCustomChannels = null;
     setSettingsButtonsDisabled(true);
     (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
     updateDismissedForSession = false;
     updateSkippedVersion = '';
     checkForUpdate();
     refreshVersionDisplay();
+    loadChannelSources(function () { populateChannelSelect('client-channel-select'); });
     toggleSettingsOverlay();
   }).catch(function (err) {
     errEl.textContent = 'Save failed: ' + err;
@@ -5344,6 +5572,7 @@ function cancelSettings() {
 }
 
 function discardAndClose() {
+  pendingCustomChannels = null;
   refreshSettings();
   settingsDirty = false;
   setSettingsButtonsDisabled(true);

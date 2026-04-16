@@ -73,7 +73,7 @@ func cmdSelfUpdate(args []string) {
 	}
 
 	lg := log.New(os.Stderr, "", 0)
-	if err := downloadAndStageUpdate(lg, m.Version); err != nil {
+	if err := downloadAndStageUpdate(lg, m.Version, "", ""); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: update failed: %v\n", err)
 		os.Exit(1)
 	}

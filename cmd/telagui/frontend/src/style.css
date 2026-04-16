@@ -1419,7 +1419,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   min-width: 180px;
 }
 .settings-check-now {
-  padding: 8px 16px 8px 46px;
+  padding: 8px 16px;
 }
 .settings-stacked-row {
   padding: 10px 16px;
@@ -1875,6 +1875,33 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .agent-fs-badge.rw { background: rgba(94,232,158,0.1); color: var(--accent); border: 1px solid rgba(94,232,158,0.2); }
 .agent-fs-badge.ro { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); }
+.channel-sources-list { margin-top: 6px; padding: 0 16px; }
+.channel-sources-empty { font-size: 12px; color: var(--text-muted); font-style: italic; padding: 4px 0; }
+.channel-sources-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.channel-sources-table td { padding: 3px 6px; border-bottom: 1px solid var(--surface-alt); vertical-align: middle; }
+.channel-sources-table tr:last-child td { border-bottom: none; }
+.channel-src-name { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+.channel-src-base { color: var(--text-muted); word-break: break-all; }
+.channel-source-add-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.channel-src-input-name { width: 100px; }
+.channel-src-input-base { flex: 1; min-width: 180px; }
+.shares-table {
+  width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px;
+}
+.shares-table th {
+  text-align: left; padding: 4px 8px; color: var(--text-muted); font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+.shares-table td {
+  padding: 4px 8px; border-bottom: 1px solid var(--surface-alt); vertical-align: middle;
+}
+.shares-table tr:last-child td { border-bottom: none; }
+.shares-table input[type="text"] {
+  background: var(--input-bg); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text); padding: 2px 6px; font-size: 12px; width: 100%;
+}
+.shares-check-cell { text-align: center; width: 72px; }
+.shares-empty { color: var(--text-muted); font-style: italic; padding: 8px 0; }
 .agent-update-row {
   display: flex; align-items: center; gap: 10px; padding: 12px 16px;
 }

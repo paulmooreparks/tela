@@ -928,9 +928,9 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		req.Channel = strings.TrimSpace(strings.ToLower(req.Channel))
-		if req.Channel != "" && !channel.IsKnown(req.Channel) {
+		if req.Channel != "" && !channel.IsValid(req.Channel) {
 			adminCorsHeaders(w, r)
-			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "unknown channel: " + req.Channel})
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid channel name: " + req.Channel})
 			return
 		}
 		globalCfgMu.Lock()

@@ -475,6 +475,19 @@
             </div>
           </div>
           <div class="settings-group">
+            <div class="settings-group-header">Channel sources</div>
+            <div class="settings-group-desc">Custom release channel sources for self-hosted telachand servers. These appear in all channel dropdowns alongside dev, beta, and stable.</div>
+            <div id="custom-channel-sources" class="channel-sources-list"></div>
+            <div class="settings-stacked-row" style="margin-top:8px;">
+              <div class="settings-stacked-label">Add source</div>
+              <div class="channel-source-add-row">
+                <input type="text" id="new-channel-name" class="tb-input channel-src-input-name" placeholder="name (e.g. local)">
+                <input type="text" id="new-channel-base" class="tb-input channel-src-input-base" placeholder="http://localhost:9900/">
+                <button type="button" class="btn btn-sm" onclick="addChannelSource()">Add</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
             <div class="settings-group-header">Logging</div>
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-verboseDefault" title="Verbose by default" onchange="markSettingsDirty()"></div><div class="settings-label">Verbose by default</div></div>
             <div class="settings-stacked-row">

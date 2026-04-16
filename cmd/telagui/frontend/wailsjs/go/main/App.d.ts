@@ -86,6 +86,8 @@ export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
 
 export function GetCLIPath():Promise<string>;
 
+export function GetChannelSources():Promise<string>;
+
 export function GetClientChannel():Promise<Record<string, string>>;
 
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
@@ -238,13 +240,13 @@ export function ServiceStart():Promise<string>;
 
 export function ServiceStop():Promise<string>;
 
-export function SetAgentChannel(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function SetAgentChannel(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function SetAgentConfig(arg1:string,arg2:string,arg3:string):Promise<string>;
 
-export function SetClientChannel(arg1:string):Promise<string>;
+export function SetClientChannel(arg1:string,arg2:string):Promise<string>;
 
-export function SetHubChannel(arg1:string,arg2:string):Promise<string>;
+export function SetHubChannel(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function SetModalOpen(arg1:boolean):Promise<void>;
 
