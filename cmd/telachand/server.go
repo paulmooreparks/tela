@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/paulmooreparks/tela/internal/channel"
@@ -20,44 +21,51 @@ func runServer(cfg Config, stop <-chan struct{}) {
 
 	mux := http.NewServeMux()
 
-	// Serve channel manifests: GET /{channel}.json
-	for _, ch := range []string{channel.Dev, channel.Beta, channel.Stable} {
-		ch := ch
-		mux.HandleFunc("/"+ch+".json", func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodGet && r.Method != http.MethodHead {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-			path := filepath.Join(cfg.Data, ch+".json")
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				http.NotFound(w, r)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			http.ServeFile(w, r, path)
-		})
-	}
-
 	// Serve binary files: GET /files/{name}
 	// http.FileServer sets Content-Type and handles Range requests.
 	mux.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir(filesDir))))
 
-	// Health/status endpoint.
+	// Catch-all: serves channel manifests (/{channel}.json) and the health/status endpoint (/).
+	// Using a single handler avoids maintaining a list of known channel names; any valid channel
+	// name (including custom ones like "local") is served automatically.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
+		path := r.URL.Path
+
+		if path == "/" {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{
+				"service": "telachand",
+				"version": version,
+				"data":    cfg.Data,
+			})
 			return
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
+
+		// /{channel}.json
+		name := path[1:] // strip leading /
+		if strings.HasSuffix(name, ".json") {
+			chName := strings.TrimSuffix(name, ".json")
+			if channel.IsValid(chName) {
+				if r.Method != http.MethodGet && r.Method != http.MethodHead {
+					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+					return
+				}
+				filePath := filepath.Join(cfg.Data, name)
+				if _, err := os.Stat(filePath); os.IsNotExist(err) {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				http.ServeFile(w, r, filePath)
+				return
+			}
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"service": "telachand",
-			"version": version,
-			"data":    cfg.Data,
-		})
+
+		http.NotFound(w, r)
 	})
 
 	srv := &http.Server{
