@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -269,6 +270,7 @@ type controlMessage struct {
 	Host                  string              `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
 	SessionID             string              `json:"sessionId,omitempty"`
 	SessionIdx            int                 `json:"sessionIdx,omitempty"`
+	AgentRelayID          uint32              `json:"agentRelayId,omitempty"` // mux: relay frame session_id
 	Capabilities          *capabilities       `json:"capabilities,omitempty"`
 	DefaultUpdate         *updateConfig       `json:"defaultUpdate,omitempty"` // hub-pushed update defaults
 
@@ -1924,9 +1926,50 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		ws.Close()
 	}()
 
+	// safeWriteJSON and sendBinaryFn serialize all writes to the shared
+	// controlWS. Gorilla requires that no two goroutines call WriteMessage
+	// concurrently; session workers use sendBinaryFn for WireGuard frames.
+	var wsMu sync.Mutex
+	safeWriteJSON := func(v any) error {
+		data, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		wsMu.Lock()
+		defer wsMu.Unlock()
+		return ws.WriteMessage(websocket.TextMessage, data)
+	}
+	sendBinaryFn := func(data []byte) error {
+		wsMu.Lock()
+		defer wsMu.Unlock()
+		return ws.WriteMessage(websocket.BinaryMessage, data)
+	}
+
+	// Mux session demux maps. The main read loop dispatches binary frames
+	// and session-scoped text messages to the correct session goroutine.
+	var muxMu sync.Mutex
+	pendingChs := make(map[string]chan controlMessage) // hub sessionId -> "session-start" receiver
+	ctrlChs := make(map[string]chan controlMessage)    // hub sessionId -> session control messages
+	recvChs := make(map[uint32]chan []byte)            // relay frame session_id -> WG datagram channel
+
+	registerSession := func(sessionID string, relayID uint32, pendingCh, ctrlCh chan controlMessage, recvCh chan []byte) {
+		muxMu.Lock()
+		pendingChs[sessionID] = pendingCh
+		ctrlChs[sessionID] = ctrlCh
+		recvChs[relayID] = recvCh
+		muxMu.Unlock()
+	}
+	unregisterSession := func(sessionID string, relayID uint32) {
+		muxMu.Lock()
+		delete(pendingChs, sessionID)
+		delete(ctrlChs, sessionID)
+		delete(recvChs, relayID)
+		muxMu.Unlock()
+	}
+
 	// Register with hub (include ports/services + metadata for the registry)
 	lg.Printf("connected, registering as: %s (agentId %s)", reg.MachineName, reg.AgentID)
-	regMsg := controlMessage{
+	if err := safeWriteJSON(controlMessage{
 		Type:                  "register",
 		MachineName:           reg.MachineName,
 		AgentID:               reg.AgentID,
@@ -1942,24 +1985,76 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 		Ports:                 reg.Ports,
 		Services:              reg.Services,
 		Capabilities:          buildCapabilities(reg.Shares),
-	}
-	if err := ws.WriteJSON(&regMsg); err != nil {
+	}); err != nil {
 		lg.Printf("register failed: %v", err)
 		return agentDisconnected
 	}
 
-	// Read control messages on the control WS
+	// Read control messages on the controlWS. Binary frames are demuxed to
+	// the correct session's recvCh; session-scoped text messages are
+	// dispatched to the session's ctrlCh or pendingCh.
 	result := agentDisconnected
 	for {
-		_, raw, err := ws.ReadMessage()
+		msgType, raw, err := ws.ReadMessage()
 		if err != nil {
 			lg.Printf("hub read error: %v", err)
 			return result
 		}
 
+		// Binary: WireGuard DATA frame -> demux by relay session_id.
+		if msgType == websocket.BinaryMessage {
+			_, flags, relayID, payload, ok := relay.ParseHeader(raw)
+			if !ok || flags != relay.FlagData {
+				continue // drop malformed or CONTROL frames
+			}
+			muxMu.Lock()
+			ch := recvChs[relayID]
+			muxMu.Unlock()
+			if ch != nil {
+				pkt := make([]byte, len(payload))
+				copy(pkt, payload)
+				select {
+				case ch <- pkt:
+				default:
+					lg.Printf("mux recv buffer full for relay_id=0x%08x, dropping %dB", relayID, len(pkt))
+				}
+			}
+			continue
+		}
+
 		var msg controlMessage
 		if err := json.Unmarshal(raw, &msg); err != nil {
 			continue
+		}
+
+		// Text messages scoped to a session (session-start, session-end,
+		// udp-offer, peer-endpoint) are dispatched to the session goroutine.
+		if msg.SessionID != "" {
+			switch msg.Type {
+			case "session-start":
+				muxMu.Lock()
+				ch := pendingChs[msg.SessionID]
+				muxMu.Unlock()
+				if ch != nil {
+					select {
+					case ch <- msg:
+					default:
+					}
+				}
+				continue
+			case "session-end", "udp-offer", "peer-endpoint":
+				muxMu.Lock()
+				ch := ctrlChs[msg.SessionID]
+				muxMu.Unlock()
+				if ch != nil {
+					select {
+					case ch <- msg:
+					default:
+						lg.Printf("ctrl channel full for session %s, dropping %q", msg.SessionID[:8], msg.Type)
+					}
+				}
+				continue
+			}
 		}
 
 		switch msg.Type {
@@ -1998,12 +2093,19 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 			sessionWg.Add(1)
 			go func() {
 				defer sessionWg.Done()
-				runSessionWorker(sessionCtx, lg, hubURL, reg, targetHost, sessionID, sessionIdx, wgPubKey)
+				runSessionWorker(sessionCtx, lg, hubURL, reg, targetHost,
+					sessionID, sessionIdx, wgPubKey,
+					safeWriteJSON, sendBinaryFn,
+					registerSession, unregisterSession)
 			}()
 
 		case "mgmt-request":
 			resp := handleMgmtRequest(lg, &msg)
-			if err := ws.WriteMessage(websocket.TextMessage, resp); err != nil {
+			if err := func() error {
+				wsMu.Lock()
+				defer wsMu.Unlock()
+				return ws.WriteMessage(websocket.TextMessage, resp)
+			}(); err != nil {
 				lg.Printf("mgmt-response write failed: %v", err)
 			}
 			// If config changed, re-register with the hub to push updated metadata
@@ -2013,10 +2115,9 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 				cfg := activeConfig
 				activeConfigMu.RUnlock()
 				if cfg != nil {
-					// Find the machine config and send updated registration
 					for _, m := range cfg.Machines {
 						if m.Name == reg.MachineName {
-							regMsg := controlMessage{
+							if err := safeWriteJSON(controlMessage{
 								Type:         "register",
 								MachineName:  m.Name,
 								AgentID:      reg.AgentID,
@@ -2031,8 +2132,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 								Ports:        reg.Ports,
 								Services:     reg.Services,
 								Capabilities: buildCapabilities(reg.Shares),
-							}
-							if err := ws.WriteJSON(&regMsg); err != nil {
+							}); err != nil {
 								lg.Printf("re-register failed: %v", err)
 							} else {
 								lg.Printf("re-registered with updated metadata")
@@ -2046,74 +2146,99 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	}
 }
 
-// runSessionWorker opens a dedicated WebSocket for one client session.
-// The ctx is cancelled when the parent agent connection returns, which
-// signals this worker to tear down promptly.
-func runSessionWorker(ctx context.Context, lg *log.Logger, hubURL string, reg registration, targetHost string, sessionID string, sessionIdx int, helperPubKey string) {
-	lg.Printf("[session %s] dialing hub for session WS", sessionID[:8])
+// runSessionWorker handles one client session over the shared controlWS
+// (multiplexed mode). It generates a relay session_id, registers demux
+// channels, sends session-join to the hub, waits for session-start, and
+// then runs the WireGuard session inside handleSessionMux.
+func runSessionWorker(
+	ctx context.Context,
+	lg *log.Logger,
+	hubURL string,
+	reg registration,
+	targetHost string,
+	sessionID string,
+	sessionIdx int,
+	helperPubKey string,
+	safeWriteJSON func(any) error,
+	sendBinaryFn func([]byte) error,
+	registerSession func(sessionID string, relayID uint32, pendingCh, ctrlCh chan controlMessage, recvCh chan []byte),
+	unregisterSession func(sessionID string, relayID uint32),
+) {
+	// Generate a random relay session_id for this session's WireGuard frames.
+	var sidBytes [4]byte
+	rand.Read(sidBytes[:]) //nolint:errcheck
+	relayID := binary.BigEndian.Uint32(sidBytes[:])
 
-	ws, _, err := hubDialer.Dial(hubURL, nil)
-	if err != nil {
-		lg.Printf("[session %s] dial failed: %v", sessionID[:8], err)
+	recvCh := make(chan []byte, 256)
+	ctrlCh := make(chan controlMessage, 16)
+	pendingCh := make(chan controlMessage, 1)
+
+	registerSession(sessionID, relayID, pendingCh, ctrlCh, recvCh)
+	defer unregisterSession(sessionID, relayID)
+
+	// Send session-join on the controlWS with our relay session_id.
+	if err := safeWriteJSON(controlMessage{
+		Type:         "session-join",
+		MachineID:    reg.MachineName,
+		SessionID:    sessionID,
+		AgentRelayID: relayID,
+	}); err != nil {
+		lg.Printf("[session %s] session-join failed: %v", sessionID[:8], err)
 		return
 	}
-	defer ws.Close()
-	stopKeepalive := startWSKeepalive(ws)
-	defer stopKeepalive()
 
-	// Close the session WebSocket when the parent agent context is
-	// cancelled (reconnect or shutdown), unblocking any pending reads.
-	go func() {
-		<-ctx.Done()
-		ws.Close()
-	}()
-
-	// Send session-join to associate this WS with the session
-	joinMsg := controlMessage{
-		Type:      "session-join",
-		MachineID: reg.MachineName,
-		SessionID: sessionID,
-	}
-	if err := ws.WriteJSON(&joinMsg); err != nil {
-		lg.Printf("[session %s] session-join send failed: %v", sessionID[:8], err)
-		return
-	}
-
-	// Wait for session-start from hub (confirms pairing)
-	_, raw, err := ws.ReadMessage()
-	if err != nil {
-		lg.Printf("[session %s] waiting for session-start: %v", sessionID[:8], err)
-		return
-	}
-	var msg controlMessage
-	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "session-start" {
-		lg.Printf("[session %s] unexpected message (wanted session-start): %s", sessionID[:8], string(raw))
+	// Wait for session-start from hub (confirms pairing), or context cancel.
+	var startMsg controlMessage
+	select {
+	case startMsg = <-pendingCh:
+		if startMsg.Type != "session-start" {
+			lg.Printf("[session %s] unexpected pending message: %s", sessionID[:8], startMsg.Type)
+			return
+		}
+	case <-ctx.Done():
 		return
 	}
 
 	// Per-session IP addressing: 10.77.{idx}.1 / 10.77.{idx}.2
-	// sessionIdx is already 1-based (from hub: len(entry.Sessions) after insert)
 	subnet := sessionIdx
 	if subnet < 1 {
 		subnet = 1
 	}
 	if subnet > 254 {
 		lg.Printf("[session %s] rejected -- session index %d exceeds 254-session limit", sessionID[:8], sessionIdx)
-		ws.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "session limit exceeded"))
-		ws.Close()
 		return
 	}
 	sessionAgentIP := fmt.Sprintf("10.77.%d.1", subnet)
 	sessionHelperIP := fmt.Sprintf("10.77.%d.2", subnet)
 
 	lg.Printf("[session %s] starting -- agent=%s helper=%s", sessionID[:8], sessionAgentIP, sessionHelperIP)
-	handleSession(lg, ws, hubURL, helperPubKey, targetHost, reg.Ports, reg.Shares, reg.Gateway, sessionAgentIP, sessionHelperIP)
+	handleSessionMux(ctx, lg, relayID, sendBinaryFn, recvCh, ctrlCh, safeWriteJSON,
+		hubURL, sessionID, helperPubKey, targetHost,
+		sessionAgentIP, sessionHelperIP, reg.Ports, reg.Shares, reg.Gateway)
 	lg.Printf("[session %s] ended", sessionID[:8])
 }
 
-func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, targetHost string, ports []uint16, shares []parsedFileShareConfig, gwCfg *gatewayConfig, sessionAgentIP, sessionHelperIP string) {
-	// Generate ephemeral WireGuard keypair
+// handleSessionMux runs a WireGuard session over the shared controlWS
+// (multiplexed mode). Binary WireGuard frames arrive pre-demuxed on recvCh;
+// session-scoped control messages (session-end, udp-offer, peer-endpoint)
+// arrive on ctrlCh. safeWriteJSON sends JSON text messages to the hub on
+// the shared controlWS, with the sessionId included so the hub routes them
+// to the correct client.
+func handleSessionMux(
+	ctx context.Context,
+	lg *log.Logger,
+	relayID uint32,
+	sendBinaryFn func([]byte) error,
+	recvCh chan []byte,
+	ctrlCh <-chan controlMessage,
+	safeWriteJSON func(any) error,
+	hubURL, sessionID, helperPubKeyHex, targetHost string,
+	sessionAgentIP, sessionHelperIP string,
+	ports []uint16,
+	shares []parsedFileShareConfig,
+	gwCfg *gatewayConfig,
+) {
+	// Generate ephemeral WireGuard keypair.
 	privKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		lg.Printf("keygen failed: %v", err)
@@ -2122,18 +2247,24 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	privKeyHex := hex.EncodeToString(privKey.Bytes())
 	pubKeyHex := hex.EncodeToString(privKey.PublicKey().Bytes())
 
-	// Send our public key and port list back to helper (via hub relay)
-	keyMsg := controlMessage{Type: "wg-pubkey", WGPubKey: pubKeyHex, Ports: ports, Capabilities: buildCapabilities(shares)}
-	if err := ws.WriteJSON(&keyMsg); err != nil {
+	// Send our WG public key to the hub; it routes it to the client.
+	// sessionId tells the hub which client connection to deliver to.
+	if err := safeWriteJSON(controlMessage{
+		Type:         "wg-pubkey",
+		WGPubKey:     pubKeyHex,
+		Ports:        ports,
+		Capabilities: buildCapabilities(shares),
+		SessionID:    sessionID,
+	}); err != nil {
 		lg.Printf("failed to send pubkey: %v", err)
 		return
 	}
 	lg.Printf("sent agent pubkey: %s...", pubKeyHex[:8])
 
-	// Create netstack TUN (pure userspace -- no admin needed)
+	// Create netstack TUN (pure userspace -- no admin needed).
 	tunDev, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{netip.MustParseAddr(sessionAgentIP)},
-		nil, // no DNS
+		nil,
 		tunnelMTU,
 	)
 	if err != nil {
@@ -2141,10 +2272,11 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 		return
 	}
 
-	// Create wsBind -- WireGuard datagrams go through the WebSocket
-	bind := wsbind.New(ws, 256)
+	// Create mux bind -- sends frames via the shared controlWS; receives
+	// frames via recvCh, which the main loop pre-fills by session_id.
+	bind := wsbind.NewMux(relayID, sendBinaryFn, recvCh)
 
-	// Create WireGuard device
+	// Create WireGuard device.
 	wgVerbose := silentLogger{}.Printf
 	if verbose {
 		wgVerbose = lg.Printf
@@ -2155,13 +2287,9 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 	}
 	dev := device.NewDevice(tunDev, bind, logger)
 
-	// Configure WireGuard via UAPI/IPC
-	ipcConf := fmt.Sprintf(`private_key=%s
-public_key=%s
-endpoint=ws:0
-allowed_ip=%s/32
-persistent_keepalive_interval=25
-`, privKeyHex, helperPubKeyHex, sessionHelperIP)
+	// Configure WireGuard via UAPI/IPC.
+	ipcConf := fmt.Sprintf("private_key=%s\npublic_key=%s\nendpoint=ws:0\nallowed_ip=%s/32\npersistent_keepalive_interval=25\n",
+		privKeyHex, helperPubKeyHex, sessionHelperIP)
 
 	if err := dev.IpcSet(ipcConf); err != nil {
 		lg.Printf("WireGuard IPC config failed: %v", err)
@@ -2176,26 +2304,7 @@ persistent_keepalive_interval=25
 	}
 	lg.Printf("WireGuard tunnel up -- agent=%s helper=%s", sessionAgentIP, sessionHelperIP)
 
-	// Start in-band session keepalive (end-to-end, distinct from WS ping/pong).
-	keepaliveRespCh, stopKeepalive := bind.StartSessionKeepalive(func() {
-		lg.Printf("session keepalive timeout -- tearing down")
-		ws.Close()
-	})
-	defer stopKeepalive()
-
-	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
-	sessionEnded := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		wsReader(lg, ws, bind, hubURL, sessionEnded, keepaliveRespCh)
-	}()
-
-	// Send periodic data-frame keepalive to prevent proxy idle timeouts
-	stopDataKeepalive := bind.StartDataKeepalive(30 * time.Second)
-	defer stopDataKeepalive()
-
-	// Listen on each port inside netstack
+	// Listen on each port inside netstack.
 	var listeners []net.Listener
 	for _, port := range ports {
 		listenAddr := netip.AddrPortFrom(netip.MustParseAddr(sessionAgentIP), port)
@@ -2205,92 +2314,40 @@ persistent_keepalive_interval=25
 			continue
 		}
 		listeners = append(listeners, listener)
-		lg.Printf("forwarding %s → %s:%d", listenAddr, targetHost, port)
+		lg.Printf("forwarding %s -> %s:%d", listenAddr, targetHost, port)
 
-		// Accept connections from helper through the WireGuard tunnel
 		go func(l net.Listener, p uint16) {
 			for {
 				nsConn, err := l.Accept()
 				if err != nil {
-					return // listener closed
+					return
 				}
-				logVerbose(lg, "tunnel→%s:%d from %s", targetHost, p, nsConn.RemoteAddr())
+				logVerbose(lg, "tunnel->%s:%d from %s", targetHost, p, nsConn.RemoteAddr())
 				go proxyToTarget(lg, nsConn, targetHost, int(p))
 			}
 		}(listener, port)
 	}
 
-	// Start file share listener if configured
 	cleanupFileShare := startFileShareListener(lg, tnet, sessionAgentIP, shares)
-
-	// Start gateway if configured
 	cleanupGateway := startGatewayListener(lg, tnet, sessionAgentIP, gwCfg, targetHost)
 
-	// Wait for session to end (either session-end message or WS error)
-	<-done
-
-	lg.Println("session ended -- tearing down WireGuard")
-	cleanupGateway()
-	cleanupFileShare()
-	for _, l := range listeners {
-		l.Close()
-	}
-	dev.Close()
-}
-
-// wsReader reads from the WebSocket and dispatches:
-//   - Binary messages → wsBind.RecvCh (WireGuard datagrams)
-//   - Text messages → parsed for control commands (udp-offer, peer-endpoint), else logged
-func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL string, sessionEnded chan struct{}, keepaliveRespCh chan<- struct{}) {
+	// Wait for session-end from the hub, or context cancellation.
+loop:
 	for {
-		msgType, data, err := ws.ReadMessage()
-		if err != nil {
-			lg.Printf("ws read error: %v", err)
-			return
-		}
-		if msgType == websocket.BinaryMessage {
-			_, flags, _, payload, ok := relay.ParseHeader(data)
+		select {
+		case msg, ok := <-ctrlCh:
 			if !ok {
-				lg.Printf("relay frame: bad header (got %dB)", len(data))
-				continue
-			}
-			if flags == relay.FlagControl {
-				if len(payload) > 0 {
-					switch payload[0] {
-					case relay.ControlKeepaliveReq:
-						bind.SendControlFrame([]byte{relay.ControlKeepaliveResp})
-					case relay.ControlKeepaliveResp:
-						select {
-						case keepaliveRespCh <- struct{}{}:
-						default:
-						}
-					}
-					// Unknown control types ignored per spec.
-				}
-				continue
-			}
-			// Copy payload so it is not aliased to the websocket read buffer.
-			pkt := make([]byte, len(payload))
-			copy(pkt, payload)
-			select {
-			case bind.RecvCh <- pkt:
-			default:
-				lg.Printf("wsBind recv buffer full, dropping %dB", len(pkt))
-			}
-		} else {
-			var msg controlMessage
-			if err := json.Unmarshal(data, &msg); err != nil {
-				logVerbose(lg, "text message during session: %s", string(data))
-				continue
+				break loop
 			}
 			switch msg.Type {
+			case "session-end":
+				lg.Println("client disconnected -- ending session")
+				break loop
 			case "udp-offer":
 				if !bind.UDPActive() {
 					lg.Printf("received UDP relay offer (port %d)", msg.Port)
 					tryUDPUpgrade(lg, bind, hubURL, msg.Token, msg.Port, msg.Host)
-					if bind.UDPActive() {
-						go tryDirectUpgrade(lg, bind, hubURL)
-					}
+					// Direct upgrade skipped in mux mode (SendText is no-op).
 				}
 			case "peer-endpoint":
 				if bind.UDPActive() && !bind.DirectActive() {
@@ -2301,15 +2358,19 @@ func wsReader(lg *log.Logger, ws *websocket.Conn, bind *wsbind.Bind, hubURL stri
 						}
 					}()
 				}
-			case "session-end":
-				lg.Println("client disconnected -- ending session")
-				close(sessionEnded)
-				return
-			default:
-				logVerbose(lg, "text message during session: %s", string(data))
 			}
+		case <-ctx.Done():
+			break loop
 		}
 	}
+
+	lg.Println("session ended -- tearing down WireGuard")
+	cleanupGateway()
+	cleanupFileShare()
+	for _, l := range listeners {
+		l.Close()
+	}
+	dev.Close()
 }
 
 // tryUDPUpgrade attempts to switch from WebSocket to UDP relay transport.
