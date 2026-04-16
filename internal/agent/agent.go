@@ -669,7 +669,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		}
 		if latest, err := latestRelease(); err == nil {
 			out["latestVersion"] = latest
-			out["updateAvailable"] = latest != version && version != "dev"
+			out["updateAvailable"] = channel.IsNewer(latest, version)
 		} else {
 			out["error"] = err.Error()
 		}

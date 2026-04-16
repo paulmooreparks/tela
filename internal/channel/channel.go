@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -276,6 +277,61 @@ func (f *Fetcher) fetch(url string) (*Manifest, error) {
 		return nil, fmt.Errorf("validate %s: %w", url, err)
 	}
 	return &m, nil
+}
+
+// CompareVersions compares two Tela version strings of the form
+// vX.Y.Z[-pre.N] and returns -1, 0, or 1. A "dev" version is treated as
+// less than any real release so that dev builds do not falsely report
+// themselves as up-to-date relative to a channel tag.
+func CompareVersions(a, b string) int {
+	norm := func(s string) []int {
+		s = strings.TrimPrefix(strings.TrimPrefix(s, "v"), "V")
+		parts := strings.FieldsFunc(s, func(r rune) bool {
+			return r == '.' || r == '-'
+		})
+		nums := make([]int, len(parts))
+		for i, p := range parts {
+			if n, err := strconv.Atoi(p); err == nil {
+				nums[i] = n
+			} else {
+				// Non-numeric segment (e.g. "dev", "local", "beta"): map to
+				// a small negative value so pre-release sorts below numeric.
+				nums[i] = -1
+			}
+		}
+		return nums
+	}
+	pa, pb := norm(a), norm(b)
+	length := len(pa)
+	if len(pb) > length {
+		length = len(pb)
+	}
+	for i := 0; i < length; i++ {
+		var x, y int
+		if i < len(pa) {
+			x = pa[i]
+		}
+		if i < len(pb) {
+			y = pb[i]
+		}
+		if x < y {
+			return -1
+		}
+		if x > y {
+			return 1
+		}
+	}
+	return 0
+}
+
+// IsNewer reports whether candidate is strictly newer than current.
+// Returns false when either string is "dev" (development builds are
+// not version-comparable).
+func IsNewer(candidate, current string) bool {
+	if candidate == "dev" || current == "dev" {
+		return false
+	}
+	return CompareVersions(candidate, current) > 0
 }
 
 // VerifyReader streams r through a SHA-256 hash and into w, returning an

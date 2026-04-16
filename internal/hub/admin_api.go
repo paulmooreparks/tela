@@ -907,7 +907,7 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		if latest, err := hubLatestRelease(); err == nil {
 			out["latestVersion"] = latest
-			out["updateAvailable"] = latest != version && version != "dev"
+			out["updateAvailable"] = channel.IsNewer(latest, version)
 		} else {
 			out["error"] = err.Error()
 		}

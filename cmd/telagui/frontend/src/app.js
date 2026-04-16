@@ -1234,6 +1234,34 @@ var latestVersion = '';
 // Format a version with an up-to-date or outdated indicator.
 // Uses a span with class="version-badge" and data-ver so we can
 // refresh all badges when latestVersion arrives asynchronously.
+// compareVersions returns -1, 0, or 1 for a < b, a === b, a > b.
+// Handles Tela version tags of the form vX.Y.Z[-pre.N] by splitting on
+// non-numeric separators and comparing each numeric component in order.
+function compareVersions(a, b) {
+  var norm = function (s) {
+    return String(s || '').replace(/^v/i, '').split(/[.\-]/).map(function (p) {
+      var n = parseInt(p, 10);
+      return isNaN(n) ? p : n;
+    });
+  };
+  var pa = norm(a), pb = norm(b);
+  var len = Math.max(pa.length, pb.length);
+  for (var i = 0; i < len; i++) {
+    var x = pa[i] === undefined ? 0 : pa[i];
+    var y = pb[i] === undefined ? 0 : pb[i];
+    // Numeric parts compare numerically; string parts compare lexicographically.
+    if (typeof x === 'number' && typeof y === 'number') {
+      if (x < y) return -1;
+      if (x > y) return 1;
+    } else {
+      var xs = String(x), ys = String(y);
+      if (xs < ys) return -1;
+      if (xs > ys) return 1;
+    }
+  }
+  return 0;
+}
+
 function versionBadge(ver) {
   if (!ver) return '<span class="version-badge" data-ver="">unknown</span>';
   return '<span class="version-badge" data-ver="' + escAttr(ver) + '">' + formatVersionBadge(ver) + '</span>';
@@ -1243,9 +1271,15 @@ function formatVersionBadge(ver) {
   if (!latestVersion) {
     return escHtml(ver) + ' <span class="tools-service-label">(checking...)</span>';
   }
-  if (ver === latestVersion) {
+  var cmp = compareVersions(ver, latestVersion);
+  if (cmp === 0) {
     return '<span class="status status-current">' + escHtml(ver) + '</span>'
       + ' <span class="tools-service-label">(latest: ' + escHtml(latestVersion) + ')</span>';
+  }
+  if (cmp > 0) {
+    // Installed version is ahead of the channel (e.g. local dev build).
+    return '<span class="status status-current">' + escHtml(ver) + '</span>'
+      + ' <span class="tools-service-label">(channel: ' + escHtml(latestVersion) + ')</span>';
   }
   return '<span class="status status-outdated">' + escHtml(ver) + '</span>'
     + ' <a href="#" onclick="event.preventDefault();scrollToManagement();" class="tools-service-label" style="text-decoration:underline;cursor:pointer;">update available: ' + escHtml(latestVersion) + '</a>';

@@ -470,9 +470,8 @@ func (a *App) GetToolVersions() ToolVersions {
 	}
 
 	if tv.Latest != "" {
-		// Don't flag dev builds as behind -- there's nothing to update to
-		tv.GUIBehind = tv.GUI != tv.Latest && tv.GUI != "dev" && tv.GUI != ""
-		tv.CLIBehind = tv.CLI != tv.Latest && tv.CLI != "not installed"
+		tv.GUIBehind = channelpkg.IsNewer(tv.Latest, tv.GUI)
+		tv.CLIBehind = tv.CLI != "not installed" && channelpkg.IsNewer(tv.Latest, tv.CLI)
 	}
 
 	return tv
