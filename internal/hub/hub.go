@@ -1246,8 +1246,8 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	recordEvent(machineName, "agent-register", fmt.Sprintf("ports=%v", ports))
 
 	type registeredReply struct {
-		Type          string       `json:"type"`
-		MachineID     string       `json:"machineId"`
+		Type          string        `json:"type"`
+		MachineID     string        `json:"machineId"`
 		DefaultUpdate *updateConfig `json:"defaultUpdate,omitempty"`
 	}
 	replyMsg := registeredReply{Type: "registered", MachineID: machineName}

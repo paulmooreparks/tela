@@ -44,8 +44,8 @@ func TestNormalize(t *testing.T) {
 		{"  Beta  ", "beta"},
 		{"STABLE", "stable"},
 		{"", DefaultChannel},
-		{"garbage", "garbage"},   // valid custom name -- preserved
-		{"nightly", "nightly"},   // valid custom name -- preserved
+		{"garbage", "garbage"},          // valid custom name -- preserved
+		{"nightly", "nightly"},          // valid custom name -- preserved
 		{"My Channel!", DefaultChannel}, // invalid -- falls back
 	}
 	for _, c := range cases {
