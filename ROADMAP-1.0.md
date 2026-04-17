@@ -4,7 +4,9 @@ This is the living document tracking what is required to ship Tela 1.0. It is no
 
 The premise: once we ship 1.0, we will maintain backward compatibility religiously. That means any cruft, any half-finished surface, any unversioned protocol field becomes a permanent maintenance burden. The goal of this document is to make sure that what gets locked in at 1.0 is what we actually want to live with.
 
-**Status as of 2026-04-07:** Roughly **0.6 — 0.7** of a 1.0 release. The hard architectural work is mostly done. The testable, shippable, signable, supportable infrastructure around it is mostly not done.
+**Status as of 2026-04-17:** Roughly **0.6 — 0.7** of a 1.0 release. The hard architectural work is mostly done. The testable, shippable, signable, supportable infrastructure around it is mostly not done.
+
+Granular work is tracked in GitHub Issues under [milestone `1.0`](https://github.com/paulmooreparks/tela/milestone/2). This document holds the narrative and design rationale; the milestone holds state. When a task ships, its issue closes; keep this doc for the "why" around each track, not the "what's left."
 
 ---
 
@@ -33,67 +35,78 @@ The premise: once we ship 1.0, we will maintain backward compatibility religious
 These are non-negotiable. A 1.0 without them would be embarrassing or actively unsafe.
 
 ### Tests
-- [ ] Set up a test infrastructure that can spin up a hub in-process, register an agent, connect a client, push bytes through, and tear down cleanly
-- [ ] Auth store unit tests: `canRegister`, `canConnect`, `canViewMachine`, `canManage` edge cases, including wildcard ACL behavior
-- [ ] Admin API endpoint tests: token CRUD, access PUT/DELETE, agent management proxy, hub log retrieval, hub update flow
-- [ ] Ring buffer tests: wrap-around, snapshot ordering, concurrent writes
+
+Tela has solid architecture but almost no automated test coverage. The security-critical paths (auth store, admin API, wsbind transport, WG reconnect) need tests before 1.0 locks the access model and wire protocol.
+
+Already done:
 - [x] `permuteArgs` flag reordering tests (`cmd/tela/admin_test.go`, 16 sub-tests)
 - [x] `internal/channel` tests: manifest parsing/validation, URL helpers, Fetcher cache + stale-on-failure, VerifyReader (94.4% coverage)
 - [x] `internal/credstore` tests: round-trip, normalization, permission bits, edge cases (62.7% coverage)
-- [ ] Portal registration and sync token flow tests
-- [ ] WireGuard handshake-on-reconnect end-to-end test
-- [ ] wsbind transport test (WS, UDP relay, direct UDP)
-- [ ] Coverage gate: at least the security-critical paths must be tested before 1.0. Aim for meaningful coverage of `internal/auth`, `internal/wsbind`, and the admin API surface.
 
-### Release engineering
-- [x] GitHub Actions workflow that builds Linux/macOS/Windows binaries for amd64 and arm64 on tag push (`release.yml`)
-- [x] Reproducible builds (pinned Go version, `-trimpath`, deterministic ldflags)
-- [x] Checksum file (`SHA256SUMS.txt`) generated and published per release
-- [x] Release notes generated from commit messages (`generate_release_notes: true`)
-- [x] Versioned binary naming convention enforced (`{tool}-{goos}-{goarch}{ext}`) so the existing self-update code keeps working
-- [x] CI workflow runs build, vet, test, gofmt, and `go mod tidy` checks on every push and PR (`ci.yml`)
-- [x] Cross-compile sanity check across all 6 target triples on every push
-- [x] Tag schedule and semver discipline established. Three release channels (dev / beta / stable) with documented promotion model. See [RELEASE-PROCESS.md](RELEASE-PROCESS.md).
-- [x] Channel manifests (`dev.json`, `beta.json`, `stable.json`) hosted on a rolling `channels` GitHub Release. Every binary follows its configured channel via `internal/channel` and verifies SHA-256 against the manifest before installing.
-- [x] Promotion workflow (`promote.yml`) wired to `release.yml` via `workflow_call` so promoted tags actually build (the GITHUB_TOKEN tag-push restriction is sidestepped).
-- [x] Tag race fix: a `compute-version` job at the top of `release.yml` reserves the dev counter atomically against the GitHub API, eliminating the silent force-overwrite class of bug.
-- [x] Self-update CLI on every binary: `tela update`, `telad update`, `telahubd update`. All accept `-channel <name>` (any valid channel name) and `-dry-run`. Each binary also has a matching `channel` subcommand (`tela channel`, `telad channel`, `telahubd channel`) for show/set/show-manifest without going through `update`.
-- [x] Self-update API on telahubd: `GET /api/admin/update` (status), `PATCH /api/admin/update` (set channel), `POST /api/admin/update` (trigger). Same shape mirrored on the agent management proxy via `update-status` and `update-channel` mgmt actions.
-- [x] Channel selectors in TelaVisor (Hub Settings, Agent Settings, Application Settings) and Awan Saya (hub and fleet management cards).
+Open issues:
+- [#6](https://github.com/paulmooreparks/tela/issues/6) — Test harness: in-process hub + agent + client end-to-end
+- [#7](https://github.com/paulmooreparks/tela/issues/7) — Auth store unit tests
+- [#8](https://github.com/paulmooreparks/tela/issues/8) — Admin API endpoint tests
+- [#9](https://github.com/paulmooreparks/tela/issues/9) — Ring buffer history tests
+- [#10](https://github.com/paulmooreparks/tela/issues/10) — Portal registration and sync-token flow tests
+- [#11](https://github.com/paulmooreparks/tela/issues/11) — WireGuard handshake-on-reconnect end-to-end test
+- [#12](https://github.com/paulmooreparks/tela/issues/12) — wsbind transport test (WS, UDP relay, direct UDP)
+- [#13](https://github.com/paulmooreparks/tela/issues/13) — Coverage gate (release criterion; tracks the others)
+
+### Release engineering — **complete**
+
+All release-engineering blockers shipped. Summary of what landed:
+
+- GitHub Actions workflow building Linux/macOS/Windows binaries for amd64 and arm64 on tag push (`release.yml`), with reproducible builds (pinned Go version, `-trimpath`, deterministic ldflags), checksum files, and release notes generated from commit messages
+- CI workflow runs build, vet, test, gofmt, and `go mod tidy` checks on every push and PR (`ci.yml`); cross-compile sanity check across all 6 target triples
+- Three release channels (dev / beta / stable) with manifest-based self-update, documented promotion model (`RELEASE-PROCESS.md`), and atomic tag-reservation via the GitHub API
+- Promotion workflow (`promote.yml`) wired to `release.yml` via `workflow_call`
+- Self-update CLI on every binary with `channel` and `update` subcommands accepting any valid channel name (including custom channels)
+- Self-update API on telahubd with matching agent management proxy
+- Channel selectors in TelaVisor and Awan Saya
 
 ### Code signing
-- [ ] Authenticode certificate for Windows binaries (telavisor.exe, telad.exe, tela.exe, telahubd.exe)
-- [ ] Apple Developer ID for macOS binaries, plus notarization for the TelaVisor app bundle
-- [ ] Document the signing process so it can be reproduced from a clean machine
-- [ ] CI integration so signing happens automatically on tag push
+
+Windows SmartScreen flags unsigned binaries with a full-screen warning; macOS Gatekeeper blocks unsigned binaries entirely. For 1.0 we sign both platforms.
+
+Open issues:
+- [#14](https://github.com/paulmooreparks/tela/issues/14) — Authenticode certificate for Windows binaries
+- [#15](https://github.com/paulmooreparks/tela/issues/15) — Apple Developer ID + notarization for macOS binaries
+- [#16](https://github.com/paulmooreparks/tela/issues/16) — Document the signing process reproducibly
+- [#17](https://github.com/paulmooreparks/tela/issues/17) — CI integration for tag-push releases
 
 ### Protocol freeze
-- [ ] Add a `protocolVersion` field to the initial control message (`register` and `connect`)
-- [ ] Document the v1 wire format in `DESIGN.md` as the frozen specification
-- [ ] Hub rejects connections with an unknown major version with a clear error message
-- [ ] Old client / new hub negotiation: client gets a structured error, not a silent disconnect
-- [ ] Backward-compat policy documented: minor/patch versions must remain wire-compatible after 1.0
-- [ ] **Channel multiplexing decision baked into v1.** Either ship the 12-byte channel-ID frame header from DESIGN.md §6.3 in v1 (one WebSocket per machine, multiplexed channels for sessions and control), or document explicitly that v1 is single-channel and multiplexing is deferred to a `protocolVersion = 2` upgrade path. This is wire format. It cannot be revisited after 1.0 without a major version bump, so it has to be decided before the freeze.
-- [ ] **Public Go API surface decision.** Either promote a stable subset out of `internal/` into a public package (candidates: a subset of `internal/channel`, `internal/credstore`, and the wire protocol types), or document explicitly that there is no stable Go API at 1.0 and embedders must use the wire protocol. Whichever path you choose, write it down. The default of "everything is `internal/`" is itself a permanent decision once 1.0 ships.
+
+The wire protocol is currently unversioned and the Go package surface has not been deliberated. Once 1.0 ships, both get locked in for the entire 1.x line. Two forcing-function decisions have to land before protocol freeze, not after.
+
+**Channel multiplexing: decision made — single-channel in v1.** The mux experiment on `main` (commits efeafac → 14a731f) was reverted after dogfood issues. V1 ships single-channel; multiplexing is deferred to a hypothetical v2 if ever. Writeup tracked as an issue.
+
+**Public Go API surface: decision made — Option B, everything stays `internal/`.** The 1.x compat promise covers CLI flags, config YAML, wire protocol, REST API, and channel manifest schema. It does NOT cover Go `internal/` packages. Documentation writeup tracked as an issue.
+
+Open issues:
+- [#18](https://github.com/paulmooreparks/tela/issues/18) — Add `protocolVersion` field to register and connect control messages (forcing function, priority:high)
+- [#19](https://github.com/paulmooreparks/tela/issues/19) — Document v1 wire format as the frozen specification (forcing function, priority:high)
+- [#20](https://github.com/paulmooreparks/tela/issues/20) — Document backward-compatibility policy for 1.x
+- [#21](https://github.com/paulmooreparks/tela/issues/21) — Document channel multiplexing as non-goal for v1
+- [#22](https://github.com/paulmooreparks/tela/issues/22) — Document the "no public Go API at 1.0" decision
 
 ### Cert pinning
-- [ ] Optional cert pinning in the credential store and `hubs.yaml` (pin the hub's TLS leaf or root SHA256)
-- [ ] First-connect TOFU (trust on first use) with a visible fingerprint shown to the user
-- [ ] Cert change detection on subsequent connects, with explicit user confirmation required to accept
-- [ ] CLI flag and `tela remote add` flow that supports specifying a pin at the time of remote registration
-- [ ] TelaVisor surfaces the pinned fingerprint in the hub settings view
+
+Today `tela` and TelaVisor trust whatever TLS certificate the hub presents. Pinning closes the MITM class of attack by tying a remote entry to a specific certificate fingerprint, with TOFU on first connect and explicit confirmation on change.
+
+Tracked as a single bundled issue with full scope: [#23](https://github.com/paulmooreparks/tela/issues/23).
 
 ### Session tokens
-- [ ] Replace static shared-secret tokens with structured tokens that carry: identity, role, issued-at, expires-at, optional scope
-- [ ] Centralized revocation: hub maintains a revocation list, checked on every authenticated request
-- [ ] Token rotation flow that does not require a hub config edit
-- [ ] Backward-compat: existing static tokens migrate cleanly to the new format on first hub start
+
+Shared-secret tokens today carry no identity claim, no expiry, no scope, and can only be revoked by editing YAML and restarting. For 1.0: structured tokens (identity, role, iat, exp, scope), centralized revocation checked per request, rotation without config edits, and clean migration from the existing format.
+
+Tracked as a single bundled issue: [#24](https://github.com/paulmooreparks/tela/issues/24).
 
 ### Audit log retention
-- [ ] Concrete retention story for the hub history ring buffer: documented default size, documented behavior on overflow, documented behavior across restarts
-- [ ] Optional on-disk persistence so events survive a hub restart, with a configuration knob to enable it
-- [ ] Optional log-shipping hook (webhook, syslog, or file with rotation) so operators can ship the audit stream to external aggregators
-- [ ] Document what is in the audit log and what is not, so a compliance reviewer can answer the retention question without reading source
+
+The hub's event history is an in-memory ring buffer with undocumented retention, no persistence across restart, and no way to ship events to an external aggregator. For 1.0: documented retention story, optional on-disk persistence, pluggable log-shipping, and a compliance-reviewer-friendly writeup of what is and is not in the log.
+
+Tracked as a single bundled issue: [#25](https://github.com/paulmooreparks/tela/issues/25).
 
 ---
 
@@ -111,19 +124,22 @@ For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 p
 - If post-1.0 work on mesh is ever picked up: sketch what it would take (routing table, multi-hop key exchange, NAT traversal beyond the current STUN cascade) and what `protocolVersion` would carry it.
 
 ### Hub federation
-- [ ] Decision: deferred to 1.x, or non-goal forever.
+
+Tracked: [#49](https://github.com/paulmooreparks/tela/issues/49) — decision pending (deferred to 1.x, or non-goal forever).
 - Today, identity is hub-scoped. A user with a token on hub A has no relationship to hub B unless they hold a separate token there. The portal layer (Awan Saya) papers over this for end users but does not fix it at the protocol level.
 - If deferred: define what federation means at the protocol level (cross-hub trust, identity assertion format, revocation propagation) and what it would do to the access model.
 - If non-goal: document that federation is the portal's job, not the hub's, and that operators who need it should run a portal.
 
 ### Single sign-on (SSO/OIDC/SAML)
-- [ ] Decision: deferred to 1.x, or non-goal forever.
+
+Tracked: [#50](https://github.com/paulmooreparks/tela/issues/50) — decision pending (deferred to 1.x, or non-goal forever).
 - The hub today uses bearer tokens issued by an admin. There is no integration with external identity providers (OpenID Connect, Security Assertion Markup Language, Lightweight Directory Access Protocol). The team-cloud and fleet tiers in the introduction lean on this; a real organization will not provision users by hand.
 - If deferred: pick one identity protocol to support first (OIDC is the obvious candidate), and document the contract (which claims map to which roles, how revocation works, how the hub validates tokens).
 - If non-goal: document that SSO is the portal's job and the hub will only ever speak its own token format, and explain why.
 
 ### Kernel TUN mode (exit node, full IP routing)
-- [ ] Decision: deferred to post-1.0.
+
+Tracked: [#51](https://github.com/paulmooreparks/tela/issues/51) — decision leaning "deferred post-1.0 with a sketched plan"; formal writeup still owed.
 - Tela currently runs WireGuard entirely in userspace via gVisor netstack. This is the property that eliminates the need for admin rights, kernel drivers, and TUN devices. It also limits Tela to TCP-only tunneling with no OS-level network interface.
 - An optional kernel TUN mode would use wireguard-go's `tun.CreateTUN()` instead of `netstack.CreateNetTUN()`. The wireguard-go library already ships both constructors. The result: a real network interface, full IP routing (UDP, ICMP, multicast), exit-node support (route all system traffic through a remote machine), and kernel-speed packet processing. The cost: one-time admin/root elevation to create the TUN device.
 - **The two-mode model.** Userspace mode (default, no admin, TCP only) and kernel mode (opt-in, elevation required, full IP). Same hub, same agent protocol, same access model, same management tools. A fleet could mix both modes. A user could run userspace on a locked-down corporate laptop and kernel mode on a home machine.
@@ -133,13 +149,15 @@ For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 p
 - If deferred past 1.x: document explicitly that Tela is TCP-only by design and that the userspace tradeoff is intentional, with a pointer to this roadmap item for the kernel-mode plan.
 
 ### Multi-tenant hub
-- [ ] Decision: deferred to 1.x, or non-goal forever.
+
+Tracked: [#52](https://github.com/paulmooreparks/tela/issues/52) — decision pending (deferred to 1.x, or non-goal forever).
 - Today the answer to "I have multiple teams" is "run multiple hubs." This is fine at small scale and starts to bite at the fleet tier. A multi-tenant hub would let one process serve multiple isolated organizations with separate identity, ACL, and history surfaces.
 - If deferred: define what isolation means (config, storage, audit log, admin API) and how operators would migrate from "one hub per team" to "tenants on a shared hub."
 - If non-goal: document that the project's recommended scaling pattern is hub-per-tenant, and that the portal layer is what stitches them together for end users.
 
 ### Portal architecture: one protocol, many hosts
-- [ ] Decision needed before any portal-related work resumes.
+
+Tracked: [#53](https://github.com/paulmooreparks/tela/issues/53) (priority:high) — decision pending; first deliverable if pursued is the portal protocol spec ([#47](https://github.com/paulmooreparks/tela/issues/47)).
 - **The question.** Today the portal exists as one thing: Awan Saya, a Node.js + PostgreSQL web app. There is no portal protocol spec, no Go portal package, and no way for TelaVisor to "be" a portal for personal use. A natural-feeling user request is "let TelaVisor host the portal so I have one-stop shopping that scales from solo to enterprise without two implementations." The naive answer (embed Awan Saya in TelaVisor) is wrong. The right answer requires extracting a portal protocol and a portal service from Awan Saya first.
 - **The shape.** Three layers stacked, currently bundled in Awan Saya:
   1. **Directory protocol.** `/.well-known/tela`, `/api/hubs`, the sync-token registration flow. This is the portal contract -- a small wire format that any portal must speak.
@@ -168,18 +186,11 @@ For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 p
 
 ### Relay gateway (hub-to-hub transit)
 
+Tracked: [#26](https://github.com/paulmooreparks/tela/issues/26) (priority:high) — wire-format forcing function via the TTL hop count field.
+
 The generalization of Tela's existing gateway primitive to the relay layer. A hub forwards opaque WireGuard ciphertext on behalf of a client whose target agent is registered with a *different* hub. The WireGuard handshake remains end to end between the original client and the destination agent. The bridging hub is blind to the payload, the same way the destination hub is blind to the payload today. This is the missing rung of the gateway ladder Tela already implements at every other layer of the stack: path gateway (Layer 7), bridge gateway (Layer 4 inbound), upstream gateway (Layer 4 outbound), single-hop relay gateway (Layer 3, today's hub), multi-hop relay gateway (Layer 3, *this item*).
 
 Why this is a 1.0 deliverable rather than post-1.0 work: the architectural shape is forced now. Once the v1 wire format ships without any hop-count or routing-aware field, the relay gateway becomes harder to add later without a v2 wire bump. Forcing the design through now keeps the protocol freeze honest. The feature also unlocks the multi-customer managed-service-provider, air-gap traversal, geographic-distribution, and acquisition-merger scenarios that the introduction's *fleet* tier implicitly promises but that no other feature in the fabric actually delivers. It is the strongest single answer to "how does Tela scale beyond one hub" the project has.
-
-What it requires:
-
-- [ ] **Hub binary outbound mode.** `telahubd` learns to act as a client of another `telahubd`, dialing out and authenticating with a token, the same way `tela` does today. No new wire protocol; reuse the existing client-relay handshake.
-- [ ] **Directory schema "reachable through" field.** A hub directory entry can carry an optional pointer naming the hub that actually hosts a given machine. Clients use this for resolution; bridging hubs use it to know where to forward sessions. Backward-compatible with directories that omit the field.
-- [ ] **Session hop count (TTL).** A small field in the relay session header so that a hub receiving a session at TTL=0 refuses to bridge it. Loop prevention without a routing protocol. Must land in v1 of the wire format, not added later.
-- [ ] **Authorization model: bridging hub holds a token on the destination hub.** No new permission category. The token has the existing `connect` scope for the relevant machines. The destination hub authorizes the bridging hub the same way it authorizes any client today.
-- [ ] **Audit log entries on both sides.** The bridging hub logs *I forwarded a session for client C to hub Y.* The destination hub logs the session under the bridging hub's identity, the same way it logs any client session. Both are queryable through the existing audit endpoints. No cross-hub join required.
-- [ ] **Documentation: a chapter (or chapter section) that teaches the gateway primitive as a family**, with the relay gateway as the new instance. Repurposes the existing path-based gateway documentation as one rung instead of the only one.
 
 What it explicitly does not include:
 
@@ -188,102 +199,58 @@ What it explicitly does not include:
 - **Mesh agent-to-agent routing.** The data path is still client to hub (to hub) to agent. See the **Routed mesh networking** scope decision above for why mesh is not in scope and why the relay gateway is not the same thing.
 
 ### In-browser fallback
-- [ ] Browser-based RDP/SSH client for cases where the user can't run binaries
-- [ ] Or: explicitly remove this from the design and document the decision
+
+Tracked: [#28](https://github.com/paulmooreparks/tela/issues/28) (priority:low) — decide ship-or-remove. Suggested default: document removal.
 
 ### Structured logging
-- [ ] Replace `log.Printf("[component] msg")` with `log/slog`
-- [ ] `telelog` becomes a `slog.Handler` instead of an `io.Writer`
-- [ ] Component, level, and structured fields are queryable by log aggregators
+
+Tracked: [#29](https://github.com/paulmooreparks/tela/issues/29) — migrate from `log.Printf` to `log/slog`, with `telelog` becoming a `slog.Handler`.
 
 ### Operational fixes
-- [ ] Graceful HTTP shutdown: replace `server.Close()` with `server.Shutdown(ctx)` plus a configurable drain timeout
-- [ ] Rate limiting on the admin API: token bucket per identity per endpoint
-- [ ] Hot reload for non-auth config changes (port, UDP host, log level, gateway routes) — or document the restart requirement explicitly
+
+- [#30](https://github.com/paulmooreparks/tela/issues/30) — Graceful HTTP shutdown (`server.Shutdown(ctx)` with drain timeout)
+- [#31](https://github.com/paulmooreparks/tela/issues/31) — Rate limiting on the admin API (token bucket per identity per endpoint)
+- [#32](https://github.com/paulmooreparks/tela/issues/32) — Hot reload for non-auth config, or documented restart requirement
 
 ### Per-service access control
 
+Tracked: [#27](https://github.com/paulmooreparks/tela/issues/27) (priority:high) — access-model schema-freeze forcing function.
+
 Today the `connect` permission is all-or-nothing at the machine level. If alice has `connect` on `barn`, she sees every port the agent exposes -- SSH, RDP, Jellyfin, a local admin panel, everything. There is no way to say "alice can reach Jellyfin but not SSH." The workaround (register the same physical machine under multiple names with different port sets) works but is ugly and fragile.
 
-This needs to be fixed before 1.0 because the access model is getting frozen. Adding service-scoped grants after 1.0 is an API and config schema change that has to be backward compatible -- much harder than doing it now.
-
-**What the model needs:**
-
-The `connect` permission gains an optional service filter. No filter means all services (current behavior, backward compatible). A non-empty filter means the hub shows the connecting client only the named services -- they are invisible for the session, not just blocked.
-
-Config shape:
-
-```yaml
-auth:
-  machines:
-    barn:
-      connectTokens:
-        - token: abc123...          # no filter -- sees all services (backward compat)
-        - token: def456...
-          services: [Jellyfin]      # sees only services named "Jellyfin" on this machine
-```
-
-CLI:
-
-```bash
-# Grant connect to all services (current behavior, unchanged)
-tela admin access grant alice barn connect
-
-# Grant connect to specific services only
-tela admin access grant alice barn connect --services Jellyfin,Plex
-```
-
-**What needs to change:**
-
-- [ ] Config schema: `connectTokens` entries gain an optional `services` field (list of service names). Entries without it behave exactly as today.
-- [ ] Auth store: `canConnect` gains awareness of the service filter; the hub filters the service list returned to the client at session setup time.
-- [ ] Admin API: `PUT /api/admin/access/{id}/machines/{m}` accepts an optional `services` list alongside the permissions list.
-- [ ] `tela admin access grant` gets a `--services` flag.
-- [ ] Auth store tests cover the service filter cases (empty filter, exact match, name mismatch).
-- [ ] The access view (`GET /api/admin/access`, `tela admin access`) shows service filters next to each connect grant.
-
-**Design constraints:**
-
-- Filtering is by service name (the `name:` field in the `telad` config), not by raw port number. Names are stable and meaningful; ports can change if the agent is reconfigured.
-- The filter is enforced at session setup on the hub, not by the agent. The agent never learns which services a particular client is allowed to see.
-- An agent that exposes a service with no name gets an auto-generated name (e.g., `port-22`). Unnamed services can be filtered by that generated name.
-- The `manage` and `register` permissions are unaffected. Service filtering applies only to `connect`.
+This needs to be fixed before 1.0 because the access model is getting frozen. Adding service-scoped grants after 1.0 is an API and config schema change that has to be backward compatible -- much harder than doing it now. The model adds an optional `services:` filter to `connect` grants; no filter means all services (backward compatible), a filter restricts the client to the named services at session setup time. Filtering is by service name, not port; enforced on the hub, not the agent. Design detail and scope in the issue.
 
 ### Agent identity
-- [ ] Each agent generates an Ed25519 keypair on first start and stores it locally
-- [ ] Hub stores the agent's public key on first registration (TOFU)
-- [ ] Agents sign registration messages; hub verifies signatures before granting register permission
-- [ ] Document the rotation flow for stolen-key recovery
+
+Tracked: [#33](https://github.com/paulmooreparks/tela/issues/33) — each agent generates an Ed25519 keypair on first start; hub TOFU's the public key on first registration and verifies signed registration messages thereafter. Continuity even if the bootstrap token leaks.
 
 ### Metrics
-- [ ] Hub `/metrics` endpoint (Prometheus format, or at minimum a JSON stats endpoint)
-- [ ] Track: active sessions, bytes relayed, handshake failures, reconnect rates, transport tier (WS / UDP relay / direct), admin API call counts
-- [ ] Document the metrics so operators can build dashboards
+
+Tracked: [#34](https://github.com/paulmooreparks/tela/issues/34) — hub `/metrics` endpoint (Prometheus format by default, JSON alternative via `Accept` header) covering active sessions, bytes relayed, handshake failures, reconnect rates, transport-tier distribution, and admin API call counts.
 
 ---
 
 ## Polish (needed but not blockers)
 
 ### Cross-platform validation
-- [ ] TelaVisor exercised on macOS (Wails native build) and Linux (GTK/webkit2gtk) for at least an afternoon each, with rough edges captured and fixed
-- [ ] CLI tools tested on FreeBSD if we want BSD as a tier-1 target
+
+Tracked: [#35](https://github.com/paulmooreparks/tela/issues/35) — TelaVisor on macOS and Linux (afternoon each), plus BSD decision.
 
 ### TelaVisor UX
-- [ ] Hub Update button gets a confirmation dialog with explicit "all sessions will drop" warning
-- [ ] Pair code flow gets a TelaVisor-side QR code generator
-- [ ] Retake `telavisor-update.png` (currently shows v0.3.71 era)
+
+Tracked: [#36](https://github.com/paulmooreparks/tela/issues/36) — update-button confirm dialog, QR code for pair flow, retake outdated screenshot.
 
 ### Awan Saya UX
-- [ ] Mobile UX pass: the stacked hub-picker + sub-nav dropdowns are functional but cramped. Consider consolidating or using a different interaction model on phones.
-- [ ] Demo banner could be more visually distinct from production data
+
+Tracked: [#37](https://github.com/paulmooreparks/tela/issues/37) — mobile UX pass, demo banner distinctiveness.
 
 ### CLI polish
-- [ ] Help text consistency pass (some commands are verbose, others terse, tone varies)
-- [ ] Standard `-v` / `--verbose` flag across all binaries
-- [ ] Standard exit-code conventions documented and enforced
+
+Tracked: [#38](https://github.com/paulmooreparks/tela/issues/38) — help text consistency, standard `-v`/`--verbose`, documented exit codes. Note: help-flag harmonization (`-h`, `-?`, `-help`, `--help` at every subcommand) already landed in commit 4e78fef.
 
 ### Per-service post-connect hooks
-- [ ] Decision item, not a commitment. Captured here so the schema design can reserve the `hooks:` namespace under each service in the profile YAML even if the feature doesn't ship for 1.0.
+
+Tracked: [#39](https://github.com/paulmooreparks/tela/issues/39) (priority:low) — decision item, not a commitment. Captured here so the schema design can reserve the `hooks:` namespace under each service in the profile YAML even if the feature does not ship for 1.0.
 - **The idea.** Each service entry in a connection profile gets an optional `hooks:` list. Each hook specifies a `when` (`connected` / `disconnected` / `error`), a `run` mode (`once-per-session` / `once-per-process` / `on-every-connect`), an optional `detach: true` for long-running processes, an optional `timeout`, and a `command:` array. When the listener for the service comes up (or goes down, or errors), tela runs the configured commands. Use cases: auto-launch a terminal/RDP/database client against the new local listener, run a health check against the tunneled service to confirm end-to-end reachability, send a desktop notification, kick off provisioning scripts.
 - **Why it might be worth doing.** The thing every user does *after* a successful connection is a manual ritual: open a terminal and run `ssh localhost -p 10022`, fire up `mstsc /v:localhost:13389`, point a database GUI at `localhost:15432`. Profiles already capture the connection shape but stop at "the listener is up." A post-connect hook closes the loop. The architectural fit is clean: profiles already drive `tela connect`, the reconnect loop already knows when a session transitions to "connected", and the schema change is one new field on the existing service block.
 - **Why it might not be worth doing.** Everything in the previous paragraph can be solved by scripting outside tela today: write a wrapper shell script, run `tela connect -profile ... &`, wait for the listener (poll, or sleep), then run your post-connect commands. The feature buys ergonomics, not capability. The cost is non-trivial because executing arbitrary user-supplied commands is a category of feature with sharp edges (see below).
@@ -297,30 +264,37 @@ tela admin access grant alice barn connect --services Jellyfin,Plex
 - **Decision.** Not committed for 1.0. If it ships at all it ships as a polish feature after the bigger blockers, with all three guardrails in the same commit. If it does not ship, document explicitly that scripting around `tela connect` is the recommended pattern. Either way, reserve the `hooks:` namespace in the profile schema design now so the field is available without a schema migration later.
 
 ### Installers
-- [ ] Windows MSI or NSIS installer for TelaVisor (Program Files, Start Menu entry, optional service install, URL handler)
-- [ ] macOS .dmg or .pkg with notarization
-- [ ] Linux .deb, .rpm, .AppImage
-- [ ] Package manager distribution: Homebrew (macOS), Chocolatey (Windows), winget (Windows), apt (Debian/Ubuntu)
+
+Tracked: [#40](https://github.com/paulmooreparks/tela/issues/40) — refined Windows installer, notarized macOS `.dmg`/`.pkg`, Linux `.AppImage` (alongside the already-built `.deb`/`.rpm`), and package-manager distribution via Homebrew, Chocolatey, winget, and apt.
 
 ---
 
 ## Documentation gaps
 
 ### User-facing docs
-- [ ] **Troubleshooting guide**: "tela won't connect, what now?" — checking outbound connectivity, hub status endpoint, credential store, firewalls, hub log, agent log. The doc users need most after their first failure.
-- [ ] **Security model document**: "Tela's threat model is X, Tela protects against Y, Tela does NOT protect against Z." Essential for a security tool. Users need to know what they're getting and what they're not.
-- [ ] **Deployment hardening guide**: how to deploy a hub safely on the public internet. TLS certs, log shipping, backup, monitoring, what to do if compromised.
-- [ ] **Upgrade and migration guide**: per-release "what's new / what to watch out for" doc
-- [ ] **Fleet operations playbook**: the operational practices that distinguish "I have Tela installed" from "I run Tela for a team." Token rotation at scale, agent onboarding workflows, hub log shipping, channel promotion playbooks, hub-down recovery, agent fleet upgrade strategy. Mostly draws on existing docs (release process, access model, troubleshooting) but has to be written down as one coherent narrative or the fleet tier of the introduction is aspirational, not real.
+
+- [#41](https://github.com/paulmooreparks/tela/issues/41) — **Troubleshooting guide**: "tela won't connect, what now?" The doc users need most after their first failure.
+- [#42](https://github.com/paulmooreparks/tela/issues/42) — **Security model document**: threat model, what Tela protects against, what it does not. Essential for a security tool.
+- [#43](https://github.com/paulmooreparks/tela/issues/43) — **Deployment hardening guide**: safely deploying a hub on the public internet.
+- [#44](https://github.com/paulmooreparks/tela/issues/44) — **Upgrade and migration guide**: per-release "what's new / what to watch out for" doc.
+- [#45](https://github.com/paulmooreparks/tela/issues/45) — **Fleet operations playbook**: the operational practices that distinguish "I have Tela installed" from "I run Tela for a team."
 
 ### Process docs
-- [ ] CHANGELOG.md with semver discipline (kept up to date per release)
-- [ ] CONTRIBUTING.md (how to build, how to test, how to submit a PR, code style)
-- [ ] SECURITY.md (responsible disclosure policy, supported versions, contact email or PGP key)
+
+Already done:
+- [x] CHANGELOG.md with semver discipline (kept up to date per release)
+- [x] CONTRIBUTING.md (how to build, how to test, how to submit a PR)
+
+Open:
+- [#46](https://github.com/paulmooreparks/tela/issues/46) — SECURITY.md (responsible disclosure policy, supported versions, contact)
+
+Also added since this roadmap was first written:
+- [x] DEVELOPMENT.md — internal development workflow, branching model, custom-channel dogfooding recipe, label taxonomy, local-tag conventions (see commit history)
 
 ### Third-party integration
-- [ ] **Writing a portal**: contract spec for `/.well-known/tela`, `/api/hubs`, the optional admin proxy patterns, so someone could build a competing or specialized portal without reading Awan Saya source
-- [ ] **Embedding Tela**: how to use the internal packages (or a stable subset) from another Go program
+
+- [#47](https://github.com/paulmooreparks/tela/issues/47) — **Writing a portal**: contract spec for `/.well-known/tela`, `/api/hubs`, admin proxy patterns, so someone could build a competing or specialized portal without reading Awan Saya source.
+- [#48](https://github.com/paulmooreparks/tela/issues/48) — **Embedding Tela**: per the Go API decision (#22, Option B), this issue will document explicitly that there is no stable Go embedding story at 1.0; embedders use the CLI, wire protocol, or fork.
 
 ---
 
@@ -345,8 +319,11 @@ This is the order I would do things in if I were running the project, biased tow
 
 ## How to use this document
 
-- This is a checklist. Tick items as they ship.
-- Add new items as they are discovered. Do not delete items that turn out to be wrong — strike them through and explain why.
-- Each blocker section should be empty (no unchecked boxes) before tagging 1.0.0.
-- The "Important" and "Polish" sections can carry items past 1.0 if they are not security-critical.
-- When all blockers are checked, raise the tag, write the release notes, and start treating backward compatibility as sacred.
+This roadmap holds the narrative and design rationale. [Milestone `1.0`](https://github.com/paulmooreparks/tela/milestone/2) holds the state.
+
+- When a section describes work, each piece that ships through a PR gets a GitHub Issue. State lives there (open/closed, assignees, PR linkage), not in this doc.
+- When a section describes a decision, the decision writeup happens in an issue, and the prose here captures the reasoning. If the decision changes, update the prose; the old reasoning is preserved via git history.
+- Add new narrative sections as the scope evolves. Do not delete rationale that turns out to be wrong — strike it through and explain why.
+- The `1.0` milestone should be empty (no open issues) before tagging `v1.0.0`.
+- The "Important" and "Polish" sections can carry issues past 1.0 if they are not security-critical; move their milestone to `1.1` or `2.0` rather than closing without completing.
+- When all blockers are closed, raise the tag, write the release notes, and start treating backward compatibility as sacred.
