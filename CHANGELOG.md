@@ -11,6 +11,8 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-04-17
+
 ### Added
 - `tela channel` subcommand: `tela channel` shows the current channel and latest version, `tela channel set <name>` changes the channel, `tela channel show -channel <name>` inspects any channel's manifest.
 - Custom channel sources in TelaVisor Application Settings: add, edit, and remove manifest base URLs for self-hosted channels alongside the built-in GitHub channels.
