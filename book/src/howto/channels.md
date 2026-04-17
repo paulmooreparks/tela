@@ -90,21 +90,41 @@ You can also change it from TelaVisor's Application Settings → Updates → Rel
 
 ### A hub
 
+From any workstation with an owner/admin token:
+
 ```bash
 tela admin hub channel set beta -hub <hub-name>
 ```
 
 PATCHes `/api/admin/update` on the hub. The hub persists `update.channel` to its YAML config. The change takes effect on the next self-update; the currently running binary is not affected.
 
+Directly on the hub machine, you can do the same without an admin token:
+
+```bash
+sudo telahubd channel set beta
+```
+
+This writes `update.channel` in the hub's YAML config (the platform-standard path is the default, so you rarely need `-config`). Restart the hub service for background update checks to pick up the new channel. Run `telahubd channel -h` for the full subcommand list, including `telahubd channel show` which prints the full parsed manifest.
+
 You can also change it from TelaVisor's Hub Settings → Management → Release channel dropdown, or from the equivalent dropdown in Awan Saya's hub management card.
 
 ### An agent
+
+From any workstation with permissions:
 
 ```bash
 tela admin agent channel -hub <hub-name> -machine <machine-id> set beta
 ```
 
 The hub forwards the `update-channel` mgmt action to the agent, which persists `update.channel` to its `telad.yaml`. Same UI in TelaVisor's Agent Settings.
+
+Directly on the agent machine:
+
+```bash
+sudo telad channel set beta -config /etc/tela/telad.yaml
+```
+
+Or set `TELAD_CONFIG` in the environment and drop the flag. Run `telad channel -h` for the full subcommand list, including `telad channel show` which prints the full parsed manifest.
 
 ## Updating
 
@@ -118,7 +138,7 @@ telad update                          # update the on-disk telad binary
 telahubd update                       # update the on-disk telahubd binary
 ```
 
-All three accept `-channel <name>` (one-shot override) and `-dry-run` (show what would happen without modifying the binary). For `telad` and `telahubd`, the `-config <path>` flag selects which YAML config file's channel to honor.
+All three accept `-channel <name>` (one-shot override, accepts any valid channel name including custom ones), `-dry-run` (show what would happen without modifying the binary), and `-h` / `-?` / `-help` / `--help` (print usage). For `telad` and `telahubd`, the `-config <path>` flag selects which YAML config file's channel to honor.
 
 The download is verified against the channel manifest's SHA-256 before being written. On Windows the running `.exe` is renamed to `.exe.old` before the new binary is moved into place; the `.old` file is removed in the background. On Unix the rename is atomic.
 

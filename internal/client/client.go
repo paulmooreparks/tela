@@ -186,7 +186,7 @@ func Main() {
 		handleServiceCommand()
 	case "version", "--version":
 		fmt.Printf("tela %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
-	case "help", "-h", "--help":
+	case "help", "-h", "-?", "-help", "--help":
 		printUsage()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", os.Args[1])
@@ -216,8 +216,9 @@ Commands:
   admin     Remote hub administration: access (RBAC), tokens, portals, pairing
             codes, hub lifecycle, and per-agent management. Run
             'tela admin help' for the full subcommand list.
-  channel   Show, set, inspect, or download from the release channel (dev|beta|stable).
-            Run 'tela channel help' for details. 'tela channel download <binary>'
+  channel   Show, set, inspect, or download from the release channel
+            (dev, beta, stable, or a custom channel name). Run
+            'tela channel -h' for details. 'tela channel download <binary>'
             fetches and SHA-256-verifies a binary from the configured channel.
   dns       Local name resolution: 'tela dns hosts' prints hosts file entries
             for all machines in a profile.

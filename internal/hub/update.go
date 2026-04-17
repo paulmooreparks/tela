@@ -15,14 +15,42 @@ import (
 	"os"
 
 	"github.com/paulmooreparks/tela/internal/channel"
+	"github.com/paulmooreparks/tela/internal/cliflag"
 )
+
+func printUpdateUsage() {
+	fmt.Fprint(os.Stderr, `telahubd update -- self-update the telahubd binary
+
+Usage:
+  telahubd update [-config <path>] [-channel <ch>] [-dry-run]
+
+Options:
+  -config <path>    Path to telahubd YAML config file. Reads configured channel.
+  -channel <ch>     Override channel for this run. Does not modify the config file.
+  -dry-run          Show what would be downloaded without modifying the binary.
+  -h, -?, -help     Show this help.
+
+The channel preference is stored in telahubd.yaml under "update.channel"
+(set with "telahubd channel set <ch>").
+`)
+}
 
 func cmdSelfUpdate(args []string) {
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
 	configPath := fs.String("config", "", "Path to telahubd YAML config file. Used to read the configured channel.")
-	chOverride := fs.String("channel", "", "Override channel for this run (dev|beta|stable). Does not modify the config file.")
+	chOverride := fs.String("channel", "", "Override channel for this run. Does not modify the config file.")
 	dryRun := fs.Bool("dry-run", false, "Show what would be downloaded without modifying the binary")
 	fs.Parse(args)
+
+	if wantHelp() {
+		printUpdateUsage()
+		return
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "Error: unexpected argument %q. Use -h for help.\n", fs.Arg(0))
+		os.Exit(1)
+	}
 
 	// Load the config so hubChannel() returns the configured channel.
 	if *configPath != "" {
@@ -38,8 +66,8 @@ func cmdSelfUpdate(args []string) {
 
 	if *chOverride != "" {
 		ch := channel.Normalize(*chOverride)
-		if !channel.IsKnown(ch) {
-			fmt.Fprintf(os.Stderr, "Error: unknown channel %q (expected dev|beta|stable)\n", *chOverride)
+		if !channel.IsValid(ch) {
+			fmt.Fprintf(os.Stderr, "Error: invalid channel %q (use lowercase letters, digits, hyphens)\n", *chOverride)
 			os.Exit(1)
 		}
 		globalCfgMu.Lock()

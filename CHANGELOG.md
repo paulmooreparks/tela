@@ -11,11 +11,18 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Added
+- `telahubd channel` subcommand, bringing the hub into parity with `tela channel` and `telad channel`. Shows the current channel and latest version, switches the channel (`telahubd channel set <name>`), prints the full parsed manifest (`telahubd channel show`). The `-config` flag defaults to the platform-standard config path (`/etc/tela/telahubd.yaml` or `%ProgramData%\Tela\telahubd.yaml`).
+- `telad channel show [-channel <ch>]` prints the full parsed manifest for the agent, mirroring the client and hub.
+
 ### Fixed
 - Foreground `telahubd` now reads the platform-standard config file (`/etc/tela/telahubd.yaml` on Linux/macOS, `%ProgramData%\Tela\telahubd.yaml` on Windows) when `-config` is not given and no `./data/telahubd.yaml` is present. Previously, running `sudo telahubd user bootstrap` followed by `sudo telahubd` would auto-generate a second owner token because foreground mode never looked at the system config path.
 - `telahubd service install` refuses to overwrite a system config file that already has tokens (e.g. one written by `telahubd user bootstrap`), instead of silently destroying them. Operators who want to reconfigure should edit the file and restart the service.
+- `tela update help` and `telahubd update help` no longer silently run the update. Any stray positional argument on an `update` command now errors with "use -h for help".
+- `tela update -channel <custom>` and `telahubd update -channel <custom>` accept custom channel names (matching the validator used by `channel set`). Previously they rejected anything outside dev|beta|stable even though the rest of the channel tooling has supported custom channels.
 
 ### Changed
+- Help flags are now consistent across all three binaries: `-h`, `-?`, `-help`, and `--help` trigger help at every command and subcommand level (e.g. `tela channel set -h`). The bare `help` keyword still works at the top level (`tela help`, `telad help`, `telahubd help`) but no longer runs commands by accident when passed as a positional argument.
 - `telahubd service install -www` now defaults to empty (serve the embedded hub console). The previous default of `./www` wrote a confusing absolute path into the generated config. Operators who want to serve custom static files pass `-www /path/to/dir` explicitly.
 - Book: rewrote the hub install walkthrough with a proxy-first deployment-model table, corrected ordering (`service install` before `user bootstrap`), and added an Apache httpd section alongside Caddy, nginx, and Cloudflare Tunnel.
 

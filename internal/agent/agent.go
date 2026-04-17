@@ -988,7 +988,7 @@ func Main() {
 		case "version", "--version":
 			fmt.Printf("telad %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 			os.Exit(0)
-		case "help", "-h", "--help":
+		case "help", "-h", "-?", "-help", "--help":
 			printUsage()
 			os.Exit(0)
 		case "channel":

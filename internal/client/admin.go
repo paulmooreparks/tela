@@ -90,7 +90,7 @@ Agent:
   tela admin agent restart -machine <id>           Request a graceful restart
   tela admin agent update -machine <id> [-version vX.Y.Z]  Download a new release and restart
   tela admin agent channel -machine <id>           Show the agent's release channel and current/latest versions
-  tela admin agent channel -machine <id> set <ch>  Switch the agent to dev|beta|stable
+  tela admin agent channel -machine <id> set <ch>  Switch the agent's channel (dev, beta, stable, or custom)
 
 Hub:
   tela admin hub status                            Show the hub's release channel and current/latest versions
@@ -98,7 +98,7 @@ Hub:
   tela admin hub restart                           Request a graceful hub restart
   tela admin hub update [-version vX.Y.Z]          Download a new hub release and restart
   tela admin hub channel                           Show the hub's release channel
-  tela admin hub channel set <dev|beta|stable>     Switch the hub's release channel
+  tela admin hub channel set <ch>                  Switch the hub's channel (dev, beta, stable, or custom)
 
 Tokens:
   tela admin tokens list                           List all token identities
@@ -751,7 +751,7 @@ Usage:
 // hub-mediated agent management protocol.
 //
 //	tela admin agent channel -machine <id>
-//	tela admin agent channel -machine <id> set <dev|beta|stable>
+//	tela admin agent channel -machine <id> set <channel>
 func cmdAdminAgentChannel(args []string) {
 	fs := flag.NewFlagSet("admin agent channel", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL")
@@ -789,7 +789,7 @@ func cmdAdminAgentChannel(args []string) {
 		os.Exit(1)
 	}
 	if len(rest) < 2 {
-		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev|beta|stable)")
+		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev, beta, stable, or a custom channel)")
 		os.Exit(1)
 	}
 	payload := map[string]string{"channel": rest[1]}
@@ -851,7 +851,7 @@ Usage:
   tela admin hub restart  -hub <url> -token <tok>
   tela admin hub update   -hub <url> -token <tok> [-version vX.Y.Z]
   tela admin hub channel  -hub <url> -token <tok>
-  tela admin hub channel  -hub <url> -token <tok> set <dev|beta|stable>
+  tela admin hub channel  -hub <url> -token <tok> set <channel>    # dev, beta, stable, or custom
 `)
 		os.Exit(1)
 	}
@@ -998,7 +998,7 @@ func cmdAdminHubChannel(args []string) {
 		os.Exit(1)
 	}
 	if len(rest) < 2 {
-		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev|beta|stable)")
+		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev, beta, stable, or a custom channel)")
 		os.Exit(1)
 	}
 	payload := map[string]string{"channel": rest[1]}

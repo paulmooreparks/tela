@@ -525,8 +525,9 @@ and `tela update`.
 ```bash
 telahubd update                                          # update from the configured channel
 telahubd update -config /etc/tela/telahubd.yaml          # explicit config path
-telahubd update -channel beta                            # one-shot channel override
+telahubd update -channel beta                            # one-shot channel override (accepts any valid channel name)
 telahubd update -dry-run                                 # show what would happen, don't touch disk
+telahubd update -h | -? | -help | --help                 # print help
 ```
 
 The new binary is downloaded to a sibling tmp file, SHA-256-verified against
@@ -537,7 +538,7 @@ To configure the channel persistently, set `update.channel` in `telahubd.yaml`:
 
 ```yaml
 update:
-  channel: dev    # or beta, stable
+  channel: dev    # or beta, stable, or a custom channel name
 ```
 
 The hub also exposes a channel-aware admin API:
@@ -547,6 +548,28 @@ The hub also exposes a channel-aware admin API:
 | `/api/admin/update` | GET | Returns `{channel, manifestUrl, currentVersion, latestVersion, updateAvailable}` |
 | `/api/admin/update` | PATCH | Set the channel: `{"channel":"beta"}` |
 | `/api/admin/update` | POST | Trigger an update to the channel HEAD |
+
+### Channel management (CLI)
+
+`telahubd channel` shows, sets, or inspects the hub's release channel
+locally without going through the admin API. Mirrors `tela channel` on the
+client and `telad channel` on the agent. The `-config` flag defaults to
+the platform-standard path (`/etc/tela/telahubd.yaml` on Linux/macOS,
+`%ProgramData%\Tela\telahubd.yaml` on Windows) so operators rarely need to
+pass it explicitly.
+
+```bash
+telahubd channel                                         # show the current channel and latest version
+telahubd channel set <channel>                           # switch the hub's release channel (dev, beta, stable, or custom)
+telahubd channel set <ch> -manifest-base <url>           # override the upstream manifest URL prefix
+telahubd channel show [-channel <ch>]                    # pretty-print the parsed channel manifest
+telahubd channel -h | -? | -help | --help                # print help (works after any subcommand too)
+```
+
+Set operations write `update.channel` (and `update.manifestBase` if given)
+into the hub's YAML config. Restart the hub service for background update
+checks to pick up the new channel; the CLI `telahubd update` honors the
+change immediately.
 
 See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
 
@@ -928,8 +951,9 @@ a shell where setting up admin tokens would be overkill.
 ```bash
 telad update                                             # update from the configured channel
 telad update -config /etc/tela/telad.yaml                # explicit config path
-telad update -channel beta                               # one-shot channel override
+telad update -channel beta                               # one-shot channel override (accepts any valid channel name)
 telad update -dry-run                                    # show what would happen, don't touch disk
+telad update -h | -? | -help | --help                    # print help
 ```
 
 The new binary is downloaded to a sibling tmp file in the running binary's
@@ -942,8 +966,26 @@ To configure the channel persistently, set `update.channel` in `telad.yaml`:
 
 ```yaml
 update:
-  channel: dev    # or beta, stable
+  channel: dev    # or beta, stable, or a custom channel name
 ```
+
+### Channel management (CLI)
+
+`telad channel` is the agent-side counterpart to `tela channel` and
+`telahubd channel`. It reads or writes the agent's configured channel
+without going through the hub admin API.
+
+```bash
+telad channel [-config <path>]                           # show the current channel and latest version
+telad channel set <channel> [-config <path>]             # switch the agent's release channel
+telad channel set <ch> -manifest-base <url>              # override the upstream manifest URL prefix
+telad channel show [-channel <ch>] [-config <path>]      # pretty-print the parsed channel manifest
+telad channel -h | -? | -help | --help                   # print help (works after any subcommand too)
+```
+
+Set operations write `update.channel` (and `update.manifestBase` if given)
+into the agent's YAML config. `-config` accepts `TELAD_CONFIG` from the
+environment as a fallback.
 
 See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
 
@@ -1122,7 +1164,7 @@ tela admin agent logs -machine <id> [-n 100]             # retrieve recent log l
 tela admin agent restart -machine <id>                   # request a graceful restart
 tela admin agent update -machine <id> [-version vX.Y.Z]  # download a new release and restart
 tela admin agent channel -machine <id>                   # show the agent's release channel
-tela admin agent channel -machine <id> set <ch>          # switch agent to dev|beta|stable
+tela admin agent channel -machine <id> set <ch>          # switch agent to dev, beta, stable, or a custom channel name
 ```
 
 **Hub** (lifecycle management of the hub itself):
@@ -1133,7 +1175,7 @@ tela admin hub logs [-n 100]                             # retrieve recent hub l
 tela admin hub restart                                   # request a graceful hub restart
 tela admin hub update [-version vX.Y.Z]                  # download a new release and restart
 tela admin hub channel                                   # show the hub's release channel
-tela admin hub channel set <dev|beta|stable>             # switch the hub's release channel
+tela admin hub channel set <channel>                     # switch the hub's release channel (dev, beta, stable, or a custom channel name)
 ```
 
 Token resolution for admin commands: `-token` flag, then `TELA_OWNER_TOKEN` env
@@ -1160,10 +1202,11 @@ Windows) and is independent of the channels configured on hubs and agents.
 
 ```bash
 tela channel                                             # show the current channel and latest version
-tela channel set <dev|beta|stable>                       # switch the client's release channel
+tela channel set <channel>                               # switch the client's release channel (dev, beta, stable, or a custom name)
 tela channel set <ch> -manifest-base <url>               # override the upstream manifest URL prefix
 tela channel show [-channel <ch>]                        # pretty-print the parsed channel manifest
 tela channel download <binary> [-channel <ch>] [-o path] [-force]
+tela channel -h | -? | -help | --help                    # print help (works after any subcommand too)
 ```
 
 `tela channel download` resolves the named binary against the channel manifest,
@@ -1189,8 +1232,9 @@ one-command self-update story.
 
 ```bash
 tela update                                              # update from the configured channel
-tela update -channel <name>                              # one-shot channel override
+tela update -channel <name>                              # one-shot channel override (accepts any valid channel name)
 tela update -dry-run                                     # show what would happen, don't touch disk
+tela update -h | -? | -help | --help                     # print help
 ```
 
 The download is verified against the channel manifest's SHA-256 before being
@@ -1859,7 +1903,7 @@ telachand service start | stop | restart | status | uninstall [--user]
 telachand service run [--user]                         # invoked by the service manager
 
 # Self-update
-telachand update [-channel dev|beta|stable] [-dry-run] [-config telachand.yaml]
+telachand update [-channel <name>] [-dry-run] [-config telachand.yaml]   # any valid channel name (dev, beta, stable, or custom)
 
 # Version
 telachand version
@@ -1892,6 +1936,12 @@ telahubd portal sync
 # OS service management
 telahubd service install -config telahubd.yaml
 telahubd service start | stop | restart | uninstall
+
+# Release channel management
+telahubd channel                            # show current channel and latest version
+telahubd channel set <channel>              # switch channel (dev, beta, stable, or custom)
+telahubd channel show [-channel <ch>]       # pretty-print the channel manifest
+telahubd update [-channel <ch>] [-dry-run]  # self-update from the channel manifest
 ```
 
 ### telad commands
@@ -1907,6 +1957,12 @@ telad -hub wss://hub.example.com -machine web01 -ports "22:SSH,3389:RDP" -token 
 telad service install -config telad.yaml
 telad service install -hub <hub> -machine <id> -ports <specs>
 telad service start | stop | restart | status | uninstall
+
+# Release channel management
+telad channel                               # show current channel and latest version
+telad channel set <channel> [-config <p>]   # switch channel (dev, beta, stable, or custom)
+telad channel show [-channel <ch>]          # pretty-print the channel manifest
+telad update [-channel <ch>] [-dry-run]     # self-update from the channel manifest
 ```
 
 ### tela commands
@@ -1973,8 +2029,16 @@ tela mount -port <port>                 # custom WebDAV port
 tela service install -config <profile.yaml>
 tela service start | stop | restart | status | uninstall
 
-# Version
+# Release channel management
+tela channel                                # show current channel and latest version
+tela channel set <channel>                  # switch channel (dev, beta, stable, or custom)
+tela channel show [-channel <ch>]           # pretty-print the channel manifest
+tela channel download <binary> [-channel <ch>] [-o <path>] [-force]
+tela update [-channel <ch>] [-dry-run]      # self-update from the channel manifest
+
+# Version and help
 tela version
+tela help                                   # top-level help (also -h, -?, -help, --help)
 ```
 
 ### Token roles at a glance

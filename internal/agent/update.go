@@ -16,11 +16,11 @@ import (
 	"os"
 
 	"github.com/paulmooreparks/tela/internal/channel"
+	"github.com/paulmooreparks/tela/internal/cliflag"
 )
 
-func cmdSelfUpdate(args []string) {
-	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprintf(os.Stderr, `telad update -- self-update the telad binary
+func printUpdateUsage() {
+	fmt.Fprint(os.Stderr, `telad update -- self-update the telad binary
 
 Usage:
   telad update [-config <path>] [-channel <ch>] [-dry-run]
@@ -29,15 +29,26 @@ Options:
   -config <path>    Path to telad.yaml (env: TELAD_CONFIG). Reads configured channel.
   -channel <ch>     Override channel for this run. Does not modify the config file.
   -dry-run          Show what would be downloaded without modifying the binary.
+  -h, -?, -help     Show this help.
 `)
-		return
-	}
+}
 
+func cmdSelfUpdate(args []string) {
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
 	configPath := fs.String("config", envOrDefault("TELAD_CONFIG", ""), "Path to YAML config file (env: TELAD_CONFIG). Used to read the configured channel.")
 	chOverride := fs.String("channel", "", "Override channel for this run. Does not modify the config file.")
 	dryRun := fs.Bool("dry-run", false, "Show what would be downloaded without modifying the binary")
 	fs.Parse(args)
+
+	if wantHelp() {
+		printUpdateUsage()
+		return
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "Error: unexpected argument %q. Use -h for help.\n", fs.Arg(0))
+		os.Exit(1)
+	}
 
 	// Load the config (if any) so we honor the configured channel.
 	if *configPath != "" {

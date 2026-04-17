@@ -57,7 +57,7 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 - [x] Channel manifests (`dev.json`, `beta.json`, `stable.json`) hosted on a rolling `channels` GitHub Release. Every binary follows its configured channel via `internal/channel` and verifies SHA-256 against the manifest before installing.
 - [x] Promotion workflow (`promote.yml`) wired to `release.yml` via `workflow_call` so promoted tags actually build (the GITHUB_TOKEN tag-push restriction is sidestepped).
 - [x] Tag race fix: a `compute-version` job at the top of `release.yml` reserves the dev counter atomically against the GitHub API, eliminating the silent force-overwrite class of bug.
-- [x] Self-update CLI on every binary: `tela update`, `telad update`, `telahubd update`. All accept `-channel` and `-dry-run`.
+- [x] Self-update CLI on every binary: `tela update`, `telad update`, `telahubd update`. All accept `-channel <name>` (any valid channel name) and `-dry-run`. Each binary also has a matching `channel` subcommand (`tela channel`, `telad channel`, `telahubd channel`) for show/set/show-manifest without going through `update`.
 - [x] Self-update API on telahubd: `GET /api/admin/update` (status), `PATCH /api/admin/update` (set channel), `POST /api/admin/update` (trigger). Same shape mirrored on the agent management proxy via `update-status` and `update-channel` mgmt actions.
 - [x] Channel selectors in TelaVisor (Hub Settings, Agent Settings, Application Settings) and Awan Saya (hub and fleet management cards).
 

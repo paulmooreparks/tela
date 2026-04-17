@@ -19,7 +19,7 @@ import (
 func cmdSelfUpdate(args []string) {
 	fs := flag.NewFlagSet("telachand update", flag.ExitOnError)
 	configPath := fs.String("config", envOrDefault("TELACHAND_CONFIG", ""), "Config file path (env: TELACHAND_CONFIG)")
-	chOverride := fs.String("channel", "", "Override channel for this run (dev|beta|stable)")
+	chOverride := fs.String("channel", "", "Override channel for this run. Accepts any valid channel name (dev, beta, stable, or custom).")
 	dryRun := fs.Bool("dry-run", false, "Show what would happen without modifying the binary")
 	fs.Parse(args)
 

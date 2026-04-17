@@ -1104,14 +1104,17 @@ The settings are organized into sections.
   for new versions at startup against the configured release channel.
 - **Release channel.** A dropdown that selects which release channel
   TelaVisor and the `tela` CLI follow for self-update: `dev`, `beta`,
-  or `stable`. The preference is stored in the user credential store
-  (`~/.tela/credentials.yaml` on Unix, `%APPDATA%\tela\credentials.yaml`
-  on Windows) and shared with the `tela` CLI; running `tela channel
-  set <name>` from a shell and changing this dropdown are equivalent.
-  Hubs and agents have their own release channels, configured
-  separately in their YAML files or through the *Release channel*
-  controls in [Hub Settings](#hub-settings) and the agent
-  [Management](#management-and-danger-zone) card.
+  `stable`, or any custom channel you have configured. The preference
+  is stored in the user credential store (`~/.tela/credentials.yaml`
+  on Unix, `%APPDATA%\tela\credentials.yaml` on Windows) and shared
+  with the `tela` CLI; running `tela channel set <name>` from a shell
+  and changing this dropdown are equivalent. Hubs and agents have
+  their own release channels, configured separately in their YAML
+  files, through the *Release channel* controls in
+  [Hub Settings](#hub-settings) and the agent
+  [Management](#management-and-danger-zone) card, or from a shell via
+  `telahubd channel set <name>` and `telad channel set <name>`
+  directly on those machines.
 
 ![Application Settings, scrolled](../screens/telavisor-app-settings2.png)
 

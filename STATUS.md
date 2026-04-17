@@ -80,7 +80,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §7.3 | Concurrency Model (libuv) | ⬜ | N/A. Go runtime, not libuv |
 | §7.4 | Configuration (`telad.yaml`) | ✅ | YAML config file with `-config` flag. Multi-machine, per-machine token override, rich metadata fields. System path: `%ProgramData%\Tela\telad.yaml` / `/etc/tela/telad.yaml` |
 | §7.5 | Logging | 🔶 | Console logging with `[telad]` prefix; no structured/rotated logs |
-| §7.6 | Updates | ✅ | Channel-based self-update via `internal/channel`. CLI: `telad update`. Mgmt actions: `update`, `update-status`, `update-channel`. Verifies SHA-256 against the channel manifest before swapping. See [RELEASE-PROCESS.md](RELEASE-PROCESS.md). |
+| §7.6 | Updates | ✅ | Channel-based self-update via `internal/channel`. CLI: `telad channel` (show/set/show-manifest) and `telad update` (self-update). Mgmt actions: `update`, `update-status`, `update-channel`. Verifies SHA-256 against the channel manifest before swapping. See [RELEASE-PROCESS.md](RELEASE-PROCESS.md). |
 
 ---
 
@@ -94,7 +94,7 @@ These sections are design guidance; "implementation" means the codebase reflects
 | §8.4 | REST API | 🔶 | Hub `/status` ✅, `/api/history` ✅, `/api/admin/*` ✅ (token/ACL management); no `/api/v1/*` endpoints |
 | §8.5 | Multiplexing | ⬜ | No channel multiplexing |
 | §8.6 | Logging & Observability | 🔶 | Console logging; no structured logs or metrics |
-| §8.7 | Updates | ✅ | Channel-based self-update via `internal/channel`. CLI: `telahubd update`. Admin API: `GET /api/admin/update` (status), `PATCH /api/admin/update` (set channel), `POST /api/admin/update` (trigger). Verifies SHA-256 before swapping. |
+| §8.7 | Updates | ✅ | Channel-based self-update via `internal/channel`. CLI: `telahubd channel` (show/set/show-manifest) and `telahubd update` (self-update). Admin API: `GET /api/admin/update` (status), `PATCH /api/admin/update` (set channel), `POST /api/admin/update` (trigger). Verifies SHA-256 before swapping. |
 
 ---
 
@@ -117,7 +117,7 @@ Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implem
 |---------|-------|--------|-------|
 | §10.1 | Responsibilities | ✅ | WS connect ✅, WG tunnel ✅, TCP bind ✅, bidirectional pipe ✅, TCP_NODELAY ✅, reconnect ✅, token auth ✅. No cert pinning, no session token, no channel lifecycle |
 | §10.2 | Non-Responsibilities | ✅ | Client stores nothing, needs no admin, doesn't install |
-| §10.3 | Distribution & Signing | 🔶 | Three release channels (dev/beta/stable) ✅ with channel manifests, SHA-256 verification, and `tela update` CLI. GitHub Releases for Windows/Linux/macOS amd64+arm64 ✅. NSIS Windows installer ✅. .deb/.rpm packages ✅. macOS .tar.gz ✅. No code signing yet (Authenticode for Windows, Developer ID for macOS) -- still on the 1.0 blocker list. |
+| §10.3 | Distribution & Signing | 🔶 | Three release channels (dev/beta/stable) ✅ with channel manifests, SHA-256 verification, and `tela channel` + `tela update` CLI (plus matching subcommands on telad and telahubd). Custom channel names are also supported for self-hosted channel daemons. GitHub Releases for Windows/Linux/macOS amd64+arm64 ✅. NSIS Windows installer ✅. .deb/.rpm packages ✅. macOS .tar.gz ✅. No code signing yet (Authenticode for Windows, Developer ID for macOS) -- still on the 1.0 blocker list. |
 | §10.4 | Data Path | ✅ | `client → tela → WireGuard → Hub → WireGuard → telad → service` working, with optional UDP relay |
 | §10.5 | Fallback Modes (in-browser) | ⬜ | No in-browser RDP/SSH client |
 

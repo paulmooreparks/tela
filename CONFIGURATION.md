@@ -128,10 +128,11 @@ hubs:
     identity: alice
 
 # Optional: which release channel the tela client (and TelaVisor) follows
-# for self-update. Hub and agent channels are configured separately in
-# their own YAML files.
+# for self-update. Accepts dev (default), beta, stable, or a custom channel
+# name. Hub and agent channels are configured separately in their own YAML
+# files.
 update:
-  channel: dev    # dev (default) | beta | stable
+  channel: dev
   # manifestBase: https://my-fork.example.com/channels/
 ```
 
@@ -270,9 +271,10 @@ hub: ws://localhost
 token: ""         # optional default token for all machines
 
 # Optional: which release channel telad's self-update follows.
+# Accepts dev (default), beta, stable, or a custom channel name.
 # See RELEASE-PROCESS.md for the channel model.
 update:
-  channel: dev    # dev (default) | beta | stable
+  channel: dev
   # manifestBase: https://my-fork.example.com/channels/   # optional override
 
 machines:
@@ -286,11 +288,13 @@ machines:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `channel` | string | `dev` | Release channel for self-update: `dev`, `beta`, or `stable`. |
+| `channel` | string | `dev` | Release channel for self-update: `dev`, `beta`, `stable`, or a custom channel name. |
 | `manifestBase` | string | upstream | Override the channel manifest URL prefix. Used when running a fork against a self-hosted release host. Default is `https://github.com/paulmooreparks/tela/releases/download/channels/`. |
 
-The configured channel is read by the `update` mgmt action, the `telad update`
-CLI subcommand, and TelaVisor's Agent Settings → Release channel dropdown.
+The configured channel is read by the `telad update` CLI subcommand, the
+`telad channel` CLI subcommand (show / set / show-manifest), the
+`update` and `update-channel` mgmt actions, and TelaVisor's Agent
+Settings → Release channel dropdown.
 
 **Machine fields:**
 
@@ -404,9 +408,10 @@ name: owlsnest
 wwwDir: ""           # omit to use the embedded console
 
 # Optional: which release channel telahubd's self-update follows.
+# Accepts dev (default), beta, stable, or a custom channel name.
 # See RELEASE-PROCESS.md for the channel model.
 update:
-  channel: dev    # dev (default) | beta | stable
+  channel: dev
   # manifestBase: https://my-fork.example.com/channels/
 
 auth:
@@ -584,7 +589,7 @@ publicURL: "http://192.168.1.10:9900"
 
 # Self-update channel for telachand itself.
 update:
-  channel: stable           # dev | beta | stable (default: stable)
+  channel: stable           # dev, beta, stable, or a custom channel name (default: stable)
   # base: https://...       # optional: fetch telachand updates from a different server
 ```
 
@@ -616,7 +621,7 @@ update:
   manifestBase: http://192.168.1.10:9900/
 ```
 
-For the `tela` client and TelaVisor, set `update.manifestBase` in `credentials.yaml`, or use `tela channel set stable --base http://192.168.1.10:9900/`.
+For the `tela` client and TelaVisor, set `update.manifestBase` in `credentials.yaml`, or use `tela channel set stable -manifest-base http://192.168.1.10:9900/`. The same flag is accepted by `telad channel set` and `telahubd channel set`.
 
 ## Awan Saya: `portal/config.json` (hub directory)
 

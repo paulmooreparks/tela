@@ -21,20 +21,47 @@ import (
 	"time"
 
 	"github.com/paulmooreparks/tela/internal/channel"
+	"github.com/paulmooreparks/tela/internal/cliflag"
+	"github.com/paulmooreparks/tela/internal/credstore"
 )
+
+func printUpdateUsage() {
+	fmt.Fprintf(os.Stderr, `tela update -- self-update the tela binary
+
+Usage:
+  tela update [-channel <ch>] [-dry-run]
+
+Options:
+  -channel <ch>     Override channel for this run. Does not modify the persistent preference.
+  -dry-run          Show what would be downloaded without modifying the binary.
+  -h, -?, -help     Show this help.
+
+The channel preference is stored in %s (set with "tela channel set <ch>").
+`, credstore.UserPath())
+}
 
 func cmdUpdate(args []string) {
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
-	chOverride := fs.String("channel", "", "Override channel for this run (dev|beta|stable). Does not modify the persistent preference.")
+	wantHelp := cliflag.Help(fs)
+	chOverride := fs.String("channel", "", "Override channel for this run. Does not modify the persistent preference.")
 	dryRun := fs.Bool("dry-run", false, "Show what would be downloaded without modifying the binary")
 	fs.Parse(args)
+
+	if wantHelp() {
+		printUpdateUsage()
+		return
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "Error: unexpected argument %q. Use -h for help.\n", fs.Arg(0))
+		os.Exit(1)
+	}
 
 	// Resolve channel: -channel override > stored preference > default.
 	ch, base := loadClientChannel()
 	if *chOverride != "" {
 		ch = channel.Normalize(*chOverride)
-		if !channel.IsKnown(ch) {
-			fmt.Fprintf(os.Stderr, "Error: unknown channel %q (expected dev|beta|stable)\n", *chOverride)
+		if !channel.IsValid(ch) {
+			fmt.Fprintf(os.Stderr, "Error: invalid channel %q (use lowercase letters, digits, hyphens)\n", *chOverride)
 			os.Exit(1)
 		}
 	}

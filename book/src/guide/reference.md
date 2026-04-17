@@ -131,7 +131,7 @@ tela admin agent logs -machine <id> [-n 100]
 tela admin agent restart -machine <id>
 tela admin agent update -machine <id> [-version <v>]
 tela admin agent channel -machine <id>
-tela admin agent channel -machine <id> set <dev|beta|stable>
+tela admin agent channel -machine <id> set <channel>    # dev, beta, stable, or a custom channel name
 ```
 
 **hub** -- lifecycle management of the hub itself
@@ -142,25 +142,27 @@ tela admin hub logs [-n 100]
 tela admin hub restart
 tela admin hub update [-version <v>]
 tela admin hub channel
-tela admin hub channel set <dev|beta|stable>
+tela admin hub channel set <channel>                    # dev, beta, stable, or a custom channel name
 ```
 
 ### `tela channel`
 
 ```bash
 tela channel                                          # show current channel and latest version
-tela channel set <dev|beta|stable>
+tela channel set <channel>                            # dev, beta, stable, or a custom channel name
 tela channel set <ch> -manifest-base <url>            # override manifest URL prefix
 tela channel show [-channel <ch>]                     # print the channel manifest
 tela channel download <binary> [-channel <ch>] [-o <path>] [-force]
+tela channel -h | -? | -help | --help                 # print help (works after any subcommand too)
 ```
 
 ### `tela update`
 
 ```bash
 tela update                              # update from the configured channel
-tela update -channel <dev|beta|stable>   # one-shot channel override
+tela update -channel <name>              # one-shot channel override (accepts any valid channel name)
 tela update -dry-run
+tela update -h | -? | -help | --help     # print help
 ```
 
 ### `tela files`
@@ -374,7 +376,7 @@ hub: wss://hub.example.com
 token: <default-token>
 
 update:
-  channel: dev     # dev | beta | stable
+  channel: dev     # dev, beta, stable, or a custom channel name
 
 machines:
   - name: web01
@@ -504,12 +506,27 @@ Config location when installed as a service:
 | Linux/macOS | `/etc/tela/telad.yaml` |
 | Windows | `%ProgramData%\Tela\telad.yaml` |
 
+### `telad channel`
+
+```bash
+telad channel [-config <path>]                           # show current channel and latest version
+telad channel set <channel> [-config <path>]             # switch agent channel (dev, beta, stable, or custom)
+telad channel set <ch> -manifest-base <url>              # override manifest URL prefix
+telad channel show [-channel <ch>] [-config <path>]      # print the channel manifest
+telad channel -h | -? | -help | --help                   # print help (works after any subcommand too)
+```
+
+Set operations write to `telad.yaml` under `update.channel` (and
+`update.manifestBase` if given). `-config` also reads from `TELAD_CONFIG`
+in the environment.
+
 ### `telad update`
 
 ```bash
 telad update                              # update from the configured channel
-telad update -channel <dev|beta|stable>   # one-shot channel override
+telad update -channel <name>              # one-shot channel override (accepts any valid channel name)
 telad update -dry-run                     # show what would happen
+telad update -h | -? | -help | --help     # print help
 ```
 
 ### Environment variables
@@ -579,7 +596,7 @@ name: myhub
 wwwDir: ""         # omit to use embedded console
 
 update:
-  channel: dev     # dev | beta | stable
+  channel: dev     # dev, beta, stable, or a custom channel name
 
 auth:
   tokens:
@@ -643,12 +660,29 @@ Changes take effect immediately. No hub restart required.
 | `telahubd service restart` | Restart the service |
 | `telahubd service uninstall` | Remove the service |
 
+### `telahubd channel`
+
+```bash
+telahubd channel [-config <path>]                        # show current channel and latest version
+telahubd channel set <channel> [-config <path>]          # switch hub channel (dev, beta, stable, or custom)
+telahubd channel set <ch> -manifest-base <url>           # override manifest URL prefix
+telahubd channel show [-channel <ch>] [-config <path>]   # print the channel manifest
+telahubd channel -h | -? | -help | --help                # print help (works after any subcommand too)
+```
+
+`-config` defaults to the platform-standard path
+(`/etc/tela/telahubd.yaml` on Linux/macOS, `%ProgramData%\Tela\telahubd.yaml`
+on Windows), so operators rarely need to pass it. Set operations write
+`update.channel` (and `update.manifestBase` if given) into the hub's YAML
+config.
+
 ### `telahubd update`
 
 ```bash
 telahubd update                              # update from the configured channel
-telahubd update -channel <dev|beta|stable>   # one-shot channel override
+telahubd update -channel <name>              # one-shot channel override (accepts any valid channel name)
 telahubd update -dry-run                     # show what would happen
+telahubd update -h | -? | -help | --help     # print help
 ```
 
 ### Firewall requirements

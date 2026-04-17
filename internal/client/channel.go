@@ -21,29 +21,34 @@ import (
 	"time"
 
 	"github.com/paulmooreparks/tela/internal/channel"
+	"github.com/paulmooreparks/tela/internal/cliflag"
 	"github.com/paulmooreparks/tela/internal/credstore"
 )
 
 func cmdChannel(args []string) {
-	if len(args) == 0 {
-		showClientChannel()
-		return
+	// Dispatch on the first positional arg. Keeping flag parsing in the
+	// per-subcommand handlers means `tela channel -h` and future flags
+	// work uniformly without a top-level fs.Parse that would reject
+	// anything not pre-registered.
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "set":
+			setClientChannel(args[1:])
+			return
+		case "show":
+			showChannelManifest(args[1:])
+			return
+		case "download":
+			downloadChannelBinary(args[1:])
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown channel command: %s\n\n", args[0])
+			printChannelUsage()
+			os.Exit(1)
+		}
 	}
-
-	switch args[0] {
-	case "set":
-		setClientChannel(args[1:])
-	case "show":
-		showChannelManifest(args[1:])
-	case "download":
-		downloadChannelBinary(args[1:])
-	case "help", "-h", "--help":
-		printChannelUsage()
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown channel command: %s\n\n", args[0])
-		printChannelUsage()
-		os.Exit(1)
-	}
+	// No subcommand. Help flags are consumed by showClientChannel.
+	showClientChannel(args)
 }
 
 func printChannelUsage() {
@@ -57,9 +62,12 @@ Usage:
   tela channel download <binary> [opts]    Download and verify a binary from the channel manifest
 
 Download options:
-  -channel <ch>      dev|beta|stable (default: client's configured channel)
+  -channel <ch>      Channel to download from (default: client's configured channel)
   -o <path>          Output path (default: ./<binary>)
   -force             Overwrite the output path if it exists
+
+Help:
+  -h, -?, -help      Show this help (works after any subcommand too, e.g. "tela channel set -h").
 
 Examples:
   tela channel download telad-linux-amd64
@@ -83,7 +91,16 @@ func loadClientChannel() (string, string) {
 	return channel.Normalize(store.Update.Channel), store.Update.ManifestBase
 }
 
-func showClientChannel() {
+func showClientChannel(args []string) {
+	fs := flag.NewFlagSet("tela channel", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	fs.Parse(permuteArgs(fs, args))
+
+	if wantHelp() {
+		printChannelUsage()
+		return
+	}
+
 	ch, base := loadClientChannel()
 	manifestURL := channel.ManifestURL(base, ch)
 	fmt.Printf("  channel:         %s\n", ch)
@@ -105,11 +122,17 @@ func showClientChannel() {
 
 func setClientChannel(args []string) {
 	fs := flag.NewFlagSet("channel set", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
 	manifestBase := fs.String("manifest-base", "", "Override the upstream manifest URL prefix")
 	fs.Parse(permuteArgs(fs, args))
 
+	if wantHelp() {
+		printChannelUsage()
+		return
+	}
+
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev|beta|stable)")
+		fmt.Fprintln(os.Stderr, "Error: 'set' requires a channel name (dev, beta, stable, or a custom channel)")
 		os.Exit(1)
 	}
 	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
@@ -159,8 +182,14 @@ func resolveChannel(override string) (string, string) {
 
 func showChannelManifest(args []string) {
 	fs := flag.NewFlagSet("channel show", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
 	chName := fs.String("channel", "", "Channel to show (default: client's configured channel)")
 	fs.Parse(permuteArgs(fs, args))
+
+	if wantHelp() {
+		printChannelUsage()
+		return
+	}
 
 	ch, base := resolveChannel(*chName)
 	fetcher := &channel.Fetcher{Base: base}
@@ -196,10 +225,16 @@ func showChannelManifest(args []string) {
 
 func downloadChannelBinary(args []string) {
 	fs := flag.NewFlagSet("channel download", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
 	chName := fs.String("channel", "", "Channel to download from (default: client's configured channel)")
 	out := fs.String("o", "", "Output path (default: ./<binary>)")
 	force := fs.Bool("force", false, "Overwrite the output path if it exists")
 	fs.Parse(permuteArgs(fs, args))
+
+	if wantHelp() {
+		printChannelUsage()
+		return
+	}
 
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "Error: 'download' requires a binary name (e.g. telad-linux-amd64)")

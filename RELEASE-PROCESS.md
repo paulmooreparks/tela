@@ -25,7 +25,7 @@ The defaults are:
 
 What changes at 1.0 is the *meaning* of `stable`, not its existence. Pre-1.0 a stable tag is "the build most ready for promotion, with no compatibility promise yet." Post-1.0 it carries the backward-compatibility guarantees described later in this document. Beta exists and is usable in both eras, with the same role: a candidate the maintainers want to put under more eyes before declaring it stable.
 
-Users can change channel through TelaVisor's Application Settings, through `tela channel set <name>`, or by editing the `update.channel` field in their hub or agent YAML config.
+Users can change channel through TelaVisor's Application Settings, via the `channel set` subcommand of any binary (`tela channel set <name>`, `telad channel set <name>`, `telahubd channel set <name>`), or by editing the `update.channel` field in their hub or agent YAML config.
 
 ---
 

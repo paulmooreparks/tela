@@ -301,8 +301,13 @@ for the tela client and TelaVisor it's in `~/.tela/credentials.yaml` under
 
 Self-update is exposed three ways on every binary so users can pick their
 preferred ergonomics:
-1. CLI: `tela update`, `telad update`, `telahubd update`. All accept
-   `-channel <name>` and `-dry-run`.
+1. CLI: each binary has a `channel` subcommand (`tela channel`,
+   `telad channel`, `telahubd channel`) for show/set/manifest-dump and an
+   `update` subcommand (`tela update`, `telad update`, `telahubd update`)
+   for self-update. `update` accepts `-channel <name>` (one-shot override,
+   any valid channel name) and `-dry-run`. All three binaries share the
+   same help-flag set: `-h`, `-?`, `-help`, `--help` at every subcommand
+   level, plus bare `help` at the top level.
 2. API: `GET /api/admin/update` (status), `PATCH /api/admin/update` (set
    channel), `POST /api/admin/update` (trigger update) on telahubd.
    Same shape on the agent management proxy via the `update-status` and

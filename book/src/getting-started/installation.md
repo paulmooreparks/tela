@@ -102,9 +102,14 @@ To switch channels:
 
 ```bash
 tela channel set beta              # client (and TelaVisor)
-sudo telahubd update -channel beta # hub one-shot, doesn't persist
-# or to persist, edit telahubd.yaml under update.channel
+sudo telad channel set beta        # agent (writes to telad.yaml)
+sudo telahubd channel set beta     # hub (writes to telahubd.yaml)
 ```
+
+For a one-shot override that does not persist, pass `-channel <name>` to
+the `update` subcommand: `sudo telahubd update -channel beta`. Any valid
+channel name works (dev, beta, stable, or a custom channel you have
+configured).
 
 For the full picture see the [Self-update and release channels](../howto/channels.md)
 how-to.
