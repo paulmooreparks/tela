@@ -22,7 +22,7 @@ A native file transfer channel removes all of those prerequisites. If `telad` is
 
 ## Why a dedicated port, not a new message type
 
-The existing transport carries WireGuard datagrams. Multiplexing file transfer into the same stream would require framing changes across the entire protocol. A TCP connection on a fixed port inside the tunnel avoids this entirely and inherits congestion control, flow control, and ordering from TCP for free.
+The relay transport between agent and hub carries WireGuard datagrams opaquely. Adding file operations as a new message type would mean teaching the transport to carry a second protocol alongside WireGuard traffic, with its own framing, flow control, and ordering. A TCP connection on a fixed port inside the WireGuard tunnel avoids all of that and inherits congestion control, flow control, and ordering from TCP for free.
 
 This is the same pattern used for service forwarding: the client dials a TCP port on the agent's tunnel IP. File sharing uses port 17377, which `telad` handles directly rather than forwarding to a local service.
 
