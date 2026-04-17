@@ -11,6 +11,19 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Added
+- `tela channel` subcommand: `tela channel` shows the current channel and latest version, `tela channel set <name>` changes the channel, `tela channel show -channel <name>` inspects any channel's manifest.
+- Custom channel sources in TelaVisor Application Settings: add, edit, and remove manifest base URLs for self-hosted channels alongside the built-in GitHub channels.
+- Hub-pushed update defaults: hubs can set a default `update.channel` and `update.manifestBase` that agents inherit on registration when they have no explicit channel configured.
+- TDL sidebar version badges in TelaVisor: green checkmark when current, amber up-arrow when an update is available.
+- Agent file shares card in TelaVisor Infrastructure mode: view configured file shares per agent.
+
+### Fixed
+- Version comparison for update-available checks: agents and hubs ahead of the channel (e.g. local dev builds on a stale manifest) no longer incorrectly show as outdated. Uses proper semantic version comparison instead of string inequality.
+- UDP relay health check: idle sessions no longer fall back to WebSocket after 60 seconds of inactivity. Fallback now only triggers when the session is actively sending via UDP but receiving nothing back, keeping idle sessions on the faster UDP path.
+- TelaVisor window position restore on startup.
+- `telachand` now serves any valid custom channel name, not just dev/beta/stable.
+
 ## [0.10] - 2026-04-15
 
 The "multi-share and loopback" release. Named file shares, reliable port
