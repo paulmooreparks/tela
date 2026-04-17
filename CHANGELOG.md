@@ -11,6 +11,14 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Fixed
+- Foreground `telahubd` now reads the platform-standard config file (`/etc/tela/telahubd.yaml` on Linux/macOS, `%ProgramData%\Tela\telahubd.yaml` on Windows) when `-config` is not given and no `./data/telahubd.yaml` is present. Previously, running `sudo telahubd user bootstrap` followed by `sudo telahubd` would auto-generate a second owner token because foreground mode never looked at the system config path.
+- `telahubd service install` refuses to overwrite a system config file that already has tokens (e.g. one written by `telahubd user bootstrap`), instead of silently destroying them. Operators who want to reconfigure should edit the file and restart the service.
+
+### Changed
+- `telahubd service install -www` now defaults to empty (serve the embedded hub console). The previous default of `./www` wrote a confusing absolute path into the generated config. Operators who want to serve custom static files pass `-www /path/to/dir` explicitly.
+- Book: rewrote the hub install walkthrough with a proxy-first deployment-model table, corrected ordering (`service install` before `user bootstrap`), and added an Apache httpd section alongside Caddy, nginx, and Cloudflare Tunnel.
+
 ## [0.10.1] - 2026-04-17
 
 ### Added

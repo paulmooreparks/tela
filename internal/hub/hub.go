@@ -8,7 +8,7 @@
 // Configuration (in order of precedence, highest first):
 //   1. Environment variables  (TELAHUBD_PORT, TELAHUBD_UDP_PORT, TELAHUBD_NAME, TELAHUBD_WWW_DIR)
 //   2. YAML config file       (-config telahubd.yaml)
-//   3. Built-in defaults      (port 80, udpPort 41820, wwwDir ./www)
+//   3. Built-in defaults      (port 80, udpPort 41820, embedded hub console)
 //
 // When running as an OS service the binary reads its config from the
 // system-wide location (e.g. /etc/tela/telahubd.yaml or
@@ -2006,6 +2006,20 @@ func Main() {
 				log.Printf("[hub] loaded persisted config from %s", defaultDataConfig)
 			}
 		}
+		// Fall back to the platform-standard system config path (e.g.
+		// /etc/tela/telahubd.yaml on Linux/macOS, %ProgramData%\Tela\telahubd.yaml
+		// on Windows) so that `telahubd` run in the foreground picks up the
+		// config written by `telahubd user bootstrap`.
+		if cfg == nil {
+			systemCfg := service.BinaryConfigPath("telahubd")
+			if _, err := os.Stat(systemCfg); err == nil {
+				cfg, _ = loadHubConfig(systemCfg)
+				if cfg != nil {
+					*configPath = systemCfg
+					log.Printf("[hub] loaded config from %s", systemCfg)
+				}
+			}
+		}
 	}
 
 	// Apply config (file values, then env overrides)
@@ -2390,7 +2404,7 @@ func hubServiceInstall() {
 	name := fs.String("name", "", "Hub display name")
 	port := fs.Int("port", 80, "HTTP+WS listen port")
 	udpPortFlag := fs.Int("udp-port", 41820, "UDP relay port")
-	www := fs.String("www", "./www", "Static file directory")
+	www := fs.String("www", "", "Static file directory (default: use embedded hub console)")
 	fs.Parse(os.Args[3:])
 
 	destPath := service.BinaryConfigPath("telahubd")
@@ -2407,13 +2421,33 @@ func hubServiceInstall() {
 			os.Exit(1)
 		}
 	} else {
+		// Refuse to overwrite an existing config that already has tokens --
+		// e.g. one written by `telahubd user bootstrap`. Silent overwrite would
+		// destroy the operator's owner token without warning.
+		if existing, err := loadHubConfig(destPath); err == nil && existing != nil && len(existing.Auth.Tokens) > 0 {
+			fmt.Fprintf(os.Stderr, "error: %s already exists with %d token(s) configured.\n", destPath, len(existing.Auth.Tokens))
+			fmt.Fprintln(os.Stderr, "Refusing to overwrite.")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "To register the service against the existing config (keeping its tokens), run:")
+			fmt.Fprintf(os.Stderr, "    telahubd service install -config %s\n", destPath)
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "To change the port or other settings, edit the file directly before running")
+			fmt.Fprintln(os.Stderr, "the command above.")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "To discard the existing config and regenerate from scratch (all tokens will")
+			fmt.Fprintf(os.Stderr, "be lost), delete the file first: rm %s\n", destPath)
+			os.Exit(1)
+		}
 		// Generate a YAML config from flags
-		wwwAbs, _ := filepath.Abs(*www)
+		wwwPath := ""
+		if *www != "" {
+			wwwPath, _ = filepath.Abs(*www)
+		}
 		cfg := hubConfig{
 			Port:    *port,
 			UDPPort: *udpPortFlag,
 			Name:    *name,
-			WWWDir:  wwwAbs,
+			WWWDir:  wwwPath,
 		}
 		if err := writeHubConfig(destPath, &cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "error writing config: %v\n", err)
@@ -3303,7 +3337,6 @@ func loadOrCreateHubConfig(path string) (*hubConfig, error) {
 			return &hubConfig{
 				Port:    80,
 				UDPPort: 41820,
-				WWWDir:  "./www",
 			}, nil
 		}
 		return nil, err

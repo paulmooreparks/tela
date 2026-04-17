@@ -75,6 +75,17 @@ curl -fLO https://github.com/paulmooreparks/tela/releases/download/v0.8.0-dev.8/
 sha256sum -c SHA256SUMS.txt --ignore-missing
 ```
 
+## Next steps after downloading
+
+Downloading the binary is the first step, not the last. What to do next depends on which binary you installed:
+
+| Binary | Next step |
+|--------|-----------|
+| `telahubd` | Follow [Run a hub on the public internet](../howto/hub.md). The walkthrough covers picking a deployment model (Caddy, nginx, Apache, Cloudflare Tunnel, or direct), installing the OS service, bootstrapping the owner token, and configuring the reverse proxy. |
+| `telad` | Follow [Run an agent](../howto/telad.md) to register a machine with a hub. |
+| `tela` client | Follow [First connection](./first-connection.md) to pair with a hub and open your first tunnel. |
+| TelaVisor | Launch the app after install; it walks you through pairing on first run. |
+
 ## After bootstrapping
 
 Every Tela binary has a `update` subcommand that follows the configured

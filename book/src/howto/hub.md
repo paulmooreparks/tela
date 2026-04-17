@@ -8,13 +8,13 @@ Every agent and every client in your Tela deployment points at this hub. They co
 
 By the end of this chapter you will have:
 
-- `telahubd` running as a managed OS service, listening on port 443 through a Caddy reverse proxy
-- A Let's Encrypt TLS certificate provisioned automatically
+- `telahubd` running as a managed OS service
+- A reverse proxy of your choice terminating TLS on port 443 (or a direct deployment without a proxy)
 - An owner token secured and ready to use for administration
 - Optionally, a UDP relay port open for faster tunnels
 - Optionally, the hub registered with a portal directory so clients can find it by name
 
-The hub's public URL will be `wss://hub.example.com`. Agents use that URL in their `telad.yaml`. Clients use it in their connection profiles. Nothing else needs to change when you add new machines -- they all find the hub the same way.
+The hub's public URL will be `wss://hub.example.com`. Agents use that URL in their `telad.yaml`. Clients use it in their connection profiles. Nothing else needs to change when you add new machines, they all find the hub the same way.
 
 This chapter takes you from "I ran through the [First connection](../getting-started/first-connection.md) walkthrough" to a production-grade deployment with TLS, authentication, and a service manager.
 
@@ -26,88 +26,142 @@ This chapter takes you from "I ran through the [First connection](../getting-sta
 
 Pre-built binaries for Windows, Linux, and macOS are available on the [GitHub Releases](https://github.com/paulmooreparks/tela/releases) page.
 
-#### Linux (amd64)
+The install flow has five steps. Do them in this order. The service install step writes a clean config file; the bootstrap step adds the owner token to that file; the service-start step reads the populated config. Running them out of order either duplicates tokens or leaves you starting the hub against a blank config.
+
+#### Step 1. Pick a deployment model
+
+| Model | `telahubd` port | Public port | TLS | Notes |
+|-------|-----------------|-------------|-----|-------|
+| **Caddy reverse proxy (recommended)** | 8080 | 443 | Automatic via Let's Encrypt | One-line Caddyfile. Simplest production setup. |
+| **nginx + certbot** | 8080 | 443 | Let's Encrypt via certbot | Common on existing web servers. |
+| **Apache httpd + certbot** | 8080 | 443 | Let's Encrypt via certbot | Needs `mod_proxy`, `mod_proxy_http`, `mod_proxy_wstunnel`, and certbot. |
+| **Cloudflare Tunnel** | 80 | 443 (Cloudflare edge) | Terminated at Cloudflare | No inbound ports required. UDP relay unavailable. |
+| **Direct (dev / private networks only)** | 80 | 80 | None | Tokens travel in plaintext over `ws://`. Do not use for production. |
+
+`telahubd` binds its port on all interfaces, so for any of the proxy models above you must block external access to that port at the firewall. Only the reverse proxy should be able to reach it, over localhost. Proxy setup details live in [Publish with TLS](#publish-with-tls-recommended) further down. Decide the port now because `service install` in step 3 writes that port into the config.
+
+#### Step 2. Download the binary
+
+Replace `amd64` with `arm64` for ARM hardware (Raspberry Pi, AWS Graviton, Apple Silicon). On macOS Apple Silicon use `darwin-arm64`; on Intel Macs use `darwin-amd64`.
+
+**Linux:**
 
 ```bash
-# Download
 curl -Lo telahubd https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-linux-amd64
 chmod +x telahubd
 sudo mv telahubd /usr/local/bin/
-
-# Bootstrap auth (creates /etc/tela/telahubd.yaml with an owner token)
-sudo telahubd user bootstrap
-# → SAVE THE PRINTED TOKEN -- it will not be shown again.
-# You will use it to register agents (telad.yaml: token: <token>)
-# and to run admin commands (tela admin ... -token <token>).
-
-# Start the hub
-sudo telahubd
 ```
 
-For ARM64 (Raspberry Pi, AWS Graviton, etc.), replace `amd64` with `arm64` in the download URL.
-
-To run as a systemd service instead of in the foreground:
+**macOS:**
 
 ```bash
-# Install the service (creates /etc/systemd/system/telahubd.service)
-sudo telahubd service install -name myhub -port 80
-
-# Start it
-sudo telahubd service start
-
-# Check logs
-journalctl -u telahubd -f
-```
-
-#### macOS (Apple Silicon)
-
-```bash
-# Download
 curl -Lo telahubd https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-darwin-arm64
 chmod +x telahubd
 sudo mv telahubd /usr/local/bin/
-
-# Bootstrap auth (creates /etc/tela/telahubd.yaml with an owner token)
-sudo telahubd user bootstrap
-# → SAVE THE PRINTED TOKEN -- it will not be shown again.
-# You will use it to register agents (telad.yaml: token: <token>)
-# and to run admin commands (tela admin ... -token <token>).
-
-# Start the hub
-telahubd
 ```
 
-For Intel Macs, replace `arm64` with `amd64` in the download URL.
+**Windows (elevated PowerShell):**
 
-To run as a launchd service:
+```powershell
+New-Item -ItemType Directory -Force "C:\Program Files\Tela" | Out-Null
+Invoke-WebRequest -Uri https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-windows-amd64.exe `
+  -OutFile "C:\Program Files\Tela\telahubd.exe"
+```
+
+Add `C:\Program Files\Tela` to the system `PATH` so later commands resolve the binary. The service install step below records the absolute path in the Windows service definition regardless, so `PATH` is only needed for interactive use.
+
+#### Step 3. Install the OS service
+
+This writes a fresh YAML config to the platform-standard location and registers the service with the OS. No tokens are written yet.
+
+| Platform | Config file written |
+|----------|--------------------|
+| Linux, macOS | `/etc/tela/telahubd.yaml` |
+| Windows | `%ProgramData%\Tela\telahubd.yaml` |
+
+Use the port you picked in step 1 (`8080` if you are putting a proxy in front, `80` for direct or Cloudflare Tunnel). If you omit `-name`, you can set a display name later by editing the config.
+
+**Linux / macOS:**
 
 ```bash
-sudo telahubd service install -name myhub -port 80
-sudo telahubd service start
+sudo telahubd service install -name myhub -port 8080
 ```
 
-#### Windows (amd64)
+**Windows (elevated):**
 
 ```powershell
-# Download (PowerShell)
-Invoke-WebRequest -Uri https://github.com/paulmooreparks/tela/releases/latest/download/telahubd-windows-amd64.exe -OutFile telahubd.exe
+.\telahubd.exe service install -name myhub -port 8080
+```
 
-# Bootstrap auth (creates %ProgramData%\Tela\telahubd.yaml with an owner token)
+If the file at the path above already exists with tokens (for example, because you ran `user bootstrap` first), `service install` refuses to overwrite it. The error message tells you to re-run with an explicit `-config` flag pointing at the existing file:
+
+```bash
+sudo telahubd service install -config /etc/tela/telahubd.yaml
+```
+
+That keeps the existing tokens and just registers the OS service. If you took this path, skip step 4 (the tokens are already there) and continue to step 5. To change the port or hub name after the fact, stop the service, edit the YAML file directly, and start it again.
+
+#### Step 4. Bootstrap the owner token
+
+This adds an `owner` identity to the config file from step 3 and prints the token once. Save it immediately. You use this token to register agents, run `tela admin`, and sign into TelaVisor as an administrator.
+
+**Linux / macOS:**
+
+```bash
+sudo telahubd user bootstrap
+```
+
+**Windows (elevated):**
+
+```powershell
 .\telahubd.exe user bootstrap
-# → SAVE THE PRINTED TOKEN -- it will not be shown again.
-# You will use it to register agents (telad.yaml: token: <token>)
-# and to run admin commands (tela admin ... -token <token>).
-
-# Start the hub
-.\telahubd.exe
 ```
 
-To install as a Windows service (run from an elevated/Administrator prompt):
+The token will not be shown again. Store it in a password manager. For day-to-day agent and client connections, create lower-privilege tokens with `tela admin tokens add` (see [Authentication](#authentication) below).
+
+#### Step 5. Start the service
+
+**Linux / macOS:**
+
+```bash
+sudo telahubd service start
+
+# Follow logs
+sudo journalctl -u telahubd -f        # systemd (Linux)
+sudo tail -f /var/log/telahubd.log    # launchd (macOS)
+```
+
+**Windows (elevated):**
 
 ```powershell
-.\telahubd.exe service install -name myhub -port 80
 .\telahubd.exe service start
+Get-Content "C:\ProgramData\Tela\telahubd.log" -Tail 20 -Wait
 ```
+
+Verify the hub is listening locally:
+
+```bash
+curl http://localhost:8080/api/status   # (or port 80 for direct/Cloudflare deployments)
+```
+
+You should see a JSON response with `hub`, `version`, and connection counts. If you picked a proxy model, continue to [Publish with TLS](#publish-with-tls-recommended) to configure it. If you picked direct, the hub is already reachable on port 80 and you can skip ahead to [Register with a hub directory](#register-with-a-hub-directory).
+
+### Running in the foreground (dev only)
+
+For local testing, you can skip the service install and run `telahubd` directly from a terminal. It looks for a config in this order:
+
+1. The `-config` path passed on the command line, if any.
+2. `./data/telahubd.yaml` relative to the current working directory.
+3. The platform-standard path (`/etc/tela/telahubd.yaml` on Linux/macOS, `%ProgramData%\Tela\telahubd.yaml` on Windows).
+
+If none of those exist, `telahubd` generates a fresh owner token, writes `./data/telahubd.yaml` relative to the current working directory, and prints the token to stdout.
+
+```bash
+sudo telahubd              # uses /etc/tela/telahubd.yaml if it exists
+telahubd -config my.yaml   # explicit config path
+```
+
+Do not start the service and run `telahubd` in the foreground at the same time. Both try to bind the same listening port, and the second one will fail.
 
 ### Build from source
 
@@ -116,6 +170,8 @@ go build -o telahubd ./cmd/telahubd
 ```
 
 ### Environment variables
+
+Environment variables override the YAML config file at runtime, useful for container deployments or quick experiments without editing `/etc/tela/telahubd.yaml`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -129,56 +185,25 @@ go build -o telahubd ./cmd/telahubd
 | `TELAHUBD_PORTAL_TOKEN` | *(empty)* | Portal admin token for auto-registration |
 | `TELAHUBD_PUBLIC_URL` | *(empty)* | This hub's own public URL, used when registering with a portal |
 
-### Run locally
-
 ```bash
-# Minimal - listens on :80 (HTTP+WS) and :41820 (UDP)
-telahubd
-
-# With a display name
-TELAHUBD_NAME=myhub telahubd
-
-# Custom ports
 TELAHUBD_PORT=9090 TELAHUBD_UDP_PORT=9091 telahubd
-
-# Behind Cloudflare/proxy -- advertise real IP for UDP relay
-TELAHUBD_UDP_HOST=myhost.example.com telahubd
-```
-
-### Verify
-
-```bash
-# Check hub status
-curl http://localhost/api/status
-
-# Check session history
-curl http://localhost/api/history
-
-# Check version
-telahubd version
+TELAHUBD_UDP_HOST=myhost.example.com telahubd    # advertise real IP for UDP
 ```
 
 ## Authentication
 
-On first startup, the hub auto-generates an **owner token** and prints it to stdout (secure by default). Save this token. It will not be displayed again.
-
-The owner token is the highest-privilege credential on the hub. An identity with the owner role can add and remove all other identities, change permissions, restart the hub, and perform every administrative operation. Treat it like a root password: store it in a password manager or secrets vault, do not paste it into scripts or shell history, and do not distribute it to agents or end users. Create dedicated lower-privilege tokens for agents and users instead.
+The owner token generated by `telahubd user bootstrap` in step 4 of the install flow is the highest-privilege credential on the hub. An identity with the owner role can add and remove all other identities, change permissions, restart the hub, and perform every administrative operation. Treat it like a root password: store it in a password manager or secrets vault, do not paste it into scripts or shell history, and do not distribute it to agents or end users.
 
 In normal operation, the owner token is used only from a trusted administrator workstation to run `tela admin` commands. Day-to-day agent connections and user connections use tokens you create with `tela admin tokens add`, which carry the `user` role and are scoped to specific machines via the access control list.
 
 If you need an open hub (no authentication), remove all tokens from the config file and restart. The hub will log a warning when running in open mode.
 
-### Bare-metal / direct deployment
+### Alternatives to `user bootstrap`
 
-If running `telahubd` directly, use `user bootstrap` to generate the first owner token:
+The `user bootstrap` step is one way to install the owner token. Two alternatives:
 
-```bash
-sudo telahubd user bootstrap
-```
-
-This creates `/etc/tela/telahubd.yaml` (or `%ProgramData%\Tela\telahubd.yaml` on Windows) with an `owner` identity (wildcard machine ACL) and a `console-viewer` identity (used by the built-in hub console and portal status proxying). See the [Install (bare-metal)](#install-bare-metal) section above for the full walkthrough.
-
-Alternatively, set `TELA_OWNER_TOKEN` as an environment variable before starting, or create a config file manually (see [Appendix B: Configuration file reference](../guide/configuration.md)).
+- **Hand-author the YAML file.** See [Appendix B: Configuration file reference](../guide/configuration.md) for the shape. Useful when the token is managed by a secrets provisioning tool.
+- **`TELA_OWNER_TOKEN` env var (foreground only).** When the variable is set and the config has no tokens, `telahubd` writes it into the config on first startup. The env var is only visible to the running process, so this works for `telahubd` launched directly in a shell (or a container with the variable set at runtime). Services launched by systemd, launchd, or Windows SCM do not inherit shell environment variables, so the env-var path does not apply to `service start`; use `user bootstrap` there.
 
 ### Managing tokens remotely with `tela admin`
 
@@ -332,26 +357,13 @@ The recommended approach is **Caddy** as a reverse proxy. It handles TLS certifi
    myhub.example.com  →  203.0.113.42
    ```
 2. **Ports 80 and 443** open inbound (see [firewall section](#open-firewall-ports-cloud-vms) above).
-3. telahubd running on a local port (e.g., 8080) that Caddy will proxy to.
+3. `telahubd` running on a local port (`8080` if you followed step 3 of the install flow above) that the proxy will forward to. Verify:
+   ```bash
+   curl http://localhost:8080/api/status
+   ```
+   If you installed with `-port 80` instead, stop the service, edit `/etc/tela/telahubd.yaml` to change `port: 8080`, and start it again.
 
-### Step 1: Move telahubd to a local port
-
-Since Caddy needs ports 80 and 443, move telahubd to a non-privileged port that only Caddy can reach:
-
-```bash
-# Edit the hub config
-sudo vi /etc/tela/telahubd.yaml
-# Change: port: 8080
-
-# Restart the service
-sudo telahubd service stop
-sudo telahubd service start
-
-# Verify it's listening locally
-curl http://localhost:8080/api/status
-```
-
-### Step 2: Install Caddy
+### Step 1: Install Caddy
 
 **Debian / Ubuntu:**
 
@@ -379,7 +391,7 @@ sudo dnf install caddy
 brew install caddy
 ```
 
-### Step 3: Configure Caddy
+### Step 2: Configure Caddy
 
 ```bash
 sudo tee /etc/caddy/Caddyfile << 'EOF'
@@ -397,14 +409,14 @@ That's the entire config. Caddy automatically:
 - Redirects HTTP to HTTPS
 - Proxies WebSocket upgrade headers
 
-### Step 4: Start Caddy
+### Step 3: Start Caddy
 
 ```bash
 sudo systemctl enable caddy
 sudo systemctl restart caddy
 ```
 
-### Step 5: Verify
+### Step 4: Verify
 
 ```bash
 # From any machine on the Internet
@@ -418,29 +430,9 @@ tela connect -hub wss://myhub.example.com -machine barn -token <your-token>
 telad -hub wss://myhub.example.com -machine barn -ports 22,3389 -token <agent-token>
 ```
 
-### Alternative: Cloudflare Tunnel (zero inbound ports)
-
-If you don't want to expose any inbound ports, Cloudflare Tunnel makes an outbound connection to Cloudflare's edge, which terminates TLS and proxies traffic back to your hub.
-
-```bash
-# Install cloudflared
-# See https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
-
-# Create a tunnel and configure ingress (~/.cloudflared/config.yml):
-tunnel: <tunnel-id>
-ingress:
-  - hostname: myhub.example.com
-    service: http://localhost:80
-  - service: http_status:404
-
-# Route DNS and run
-cloudflared tunnel route dns my-hub myhub.example.com
-cloudflared tunnel run my-hub
-```
-
-With Cloudflare Tunnel, telahubd can stay on port 80 (default) since Caddy isn't needed. Note that Cloudflare Tunnel is TCP-only, so the UDP relay (port 41820) won't work through it, and sessions will use WebSocket transport instead.
-
 ### Alternative: nginx + certbot
+
+Use this if you already run nginx on the server. Replace step 1 (Install Caddy) onwards with:
 
 ```bash
 sudo apt install nginx certbot python3-certbot-nginx
@@ -467,6 +459,65 @@ sudo nginx -t && sudo systemctl reload nginx
 # Obtain TLS certificate (adds HTTPS config automatically)
 sudo certbot --nginx -d myhub.example.com
 ```
+
+The `proxy_set_header Upgrade` and `Connection "upgrade"` lines are required; without them the WebSocket upgrade fails silently and agents cannot connect.
+
+### Alternative: Apache httpd + certbot
+
+Use this if you already run Apache on the server. You need three modules enabled: `proxy`, `proxy_http`, and `proxy_wstunnel` (the last one carries WebSocket traffic, which `proxy_http` alone cannot).
+
+```bash
+sudo apt install apache2 certbot python3-certbot-apache
+sudo a2enmod proxy proxy_http proxy_wstunnel rewrite ssl
+
+sudo tee /etc/apache2/sites-available/tela-hub.conf << 'EOF'
+<VirtualHost *:80>
+    ServerName myhub.example.com
+
+    ProxyPreserveHost On
+
+    # WebSocket upgrade: forward /ws* and Upgrade-bearing requests to wstunnel.
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/?(.*) "ws://127.0.0.1:8080/$1" [P,L]
+
+    # Plain HTTP traffic (REST API, console static files).
+    ProxyPass        / http://127.0.0.1:8080/
+    ProxyPassReverse / http://127.0.0.1:8080/
+</VirtualHost>
+EOF
+
+sudo a2ensite tela-hub
+sudo apache2ctl configtest && sudo systemctl reload apache2
+
+# Obtain TLS certificate (adds HTTPS VirtualHost automatically)
+sudo certbot --apache -d myhub.example.com
+```
+
+On RHEL / Fedora, replace `a2enmod`/`a2ensite` with editing `/etc/httpd/conf.modules.d/` and `/etc/httpd/conf.d/`, and use `systemctl reload httpd`.
+
+### Alternative: Cloudflare Tunnel (zero inbound ports)
+
+If you do not want to expose any inbound ports, Cloudflare Tunnel makes an outbound connection to Cloudflare's edge, which terminates TLS and proxies traffic back to your hub. With Cloudflare Tunnel `telahubd` can stay on port 80 (the direct-deployment default from step 3 of the install flow), so skip the port-8080 change above.
+
+```bash
+# Install cloudflared
+# See https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+# Create a tunnel and configure ingress (~/.cloudflared/config.yml):
+tunnel: <tunnel-id>
+ingress:
+  - hostname: myhub.example.com
+    service: http://localhost:80
+  - service: http_status:404
+
+# Route DNS and run
+cloudflared tunnel route dns my-hub myhub.example.com
+cloudflared tunnel run my-hub
+```
+
+Cloudflare Tunnel is TCP-only, so the UDP relay (port 41820) cannot pass through it and sessions will use WebSocket transport instead.
 
 ## Register with a hub directory
 
