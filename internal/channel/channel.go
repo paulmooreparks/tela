@@ -39,6 +39,41 @@ const DefaultChannel = Dev
 // override this via configuration.
 const DefaultManifestBase = "https://github.com/paulmooreparks/tela/releases/download/channels/"
 
+// DefaultBases is the baked-in map of built-in channel names to their
+// upstream base URLs. Custom channel names have no entry here and must be
+// supplied by configuration (update.sources).
+//
+// The sources data model (see DESIGN-channel-sources.md) treats this as
+// the fallback consulted when a channel name is not in the host's own
+// sources map. Config stays sparse: fresh installs have no sources entry
+// at all and still work for dev/beta/stable because the lookup falls
+// through to this map.
+//
+// Operators who want to override a built-in (e.g. point stable at an
+// internal mirror) add an entry to update.sources; the resolver prefers
+// that over the baked-in default.
+var DefaultBases = map[string]string{
+	Dev:    DefaultManifestBase,
+	Beta:   DefaultManifestBase,
+	Stable: DefaultManifestBase,
+}
+
+// ResolveBase returns the base URL to use for the named channel given the
+// host's own sources map. The lookup order is:
+//  1. sources[name] if present and non-empty
+//  2. DefaultBases[name] if name is a built-in
+//  3. empty string (caller should treat as "unknown channel")
+//
+// Sources entries with empty-string values are treated the same as "not
+// present": they signal "use the baked-in default if one exists" and
+// otherwise fall through to step 2 or 3.
+func ResolveBase(name string, sources map[string]string) string {
+	if v, ok := sources[name]; ok && v != "" {
+		return v
+	}
+	return DefaultBases[name]
+}
+
 // BinaryEntry describes one binary listed in a channel manifest.
 type BinaryEntry struct {
 	SHA256 string `json:"sha256"`

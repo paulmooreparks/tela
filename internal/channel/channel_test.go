@@ -37,6 +37,45 @@ func TestIsKnown(t *testing.T) {
 	}
 }
 
+func TestResolveBase(t *testing.T) {
+	cases := []struct {
+		name    string
+		channel string
+		sources map[string]string
+		want    string
+	}{
+		{"built-in with no sources map", Dev, nil, DefaultManifestBase},
+		{"built-in with empty sources map", Beta, map[string]string{}, DefaultManifestBase},
+		{"built-in with empty string in sources", Stable, map[string]string{"stable": ""}, DefaultManifestBase},
+		{"built-in overridden by sources", Stable, map[string]string{"stable": "https://mirror.example.com/"}, "https://mirror.example.com/"},
+		{"custom channel with sources entry", "internal", map[string]string{"internal": "https://internal.example.com/"}, "https://internal.example.com/"},
+		{"custom channel missing from sources returns empty", "internal", nil, ""},
+		{"custom channel with empty sources value returns empty", "internal", map[string]string{"internal": ""}, ""},
+		{"unrelated sources entries don't match", Dev, map[string]string{"internal": "https://internal.example.com/"}, DefaultManifestBase},
+		{"multiple overrides only the matching one wins", Stable, map[string]string{"dev": "https://d/", "stable": "https://s/", "beta": "https://b/"}, "https://s/"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ResolveBase(c.channel, c.sources)
+			if got != c.want {
+				t.Errorf("ResolveBase(%q, %v) = %q, want %q", c.channel, c.sources, got, c.want)
+			}
+		})
+	}
+}
+
+func TestDefaultBases_ContainsAllBuiltins(t *testing.T) {
+	for _, name := range []string{Dev, Beta, Stable} {
+		if _, ok := DefaultBases[name]; !ok {
+			t.Errorf("DefaultBases is missing built-in channel %q", name)
+		}
+	}
+	// Spot-check: custom names don't accidentally leak in.
+	if _, ok := DefaultBases["internal"]; ok {
+		t.Error("DefaultBases should not contain custom channel names")
+	}
+}
+
 func TestNormalize(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"dev", "dev"},
