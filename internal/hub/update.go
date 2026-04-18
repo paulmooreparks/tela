@@ -64,6 +64,20 @@ func cmdSelfUpdate(args []string) {
 		globalCfgMu.Unlock()
 	}
 
+	// If no saved channel preference, infer from the binary's own version.
+	// Stash on globalCfg so hubChannel() returns the inferred value.
+	// Persists nothing to disk.
+	globalCfgMu.Lock()
+	if (globalCfg == nil || globalCfg.Update.Channel == "") && *chOverride == "" {
+		if inferred := channel.InferFromVersion(version); inferred != "" {
+			if globalCfg == nil {
+				globalCfg = &hubConfig{}
+			}
+			globalCfg.Update.Channel = inferred
+		}
+	}
+	globalCfgMu.Unlock()
+
 	if *chOverride != "" {
 		ch := channel.Normalize(*chOverride)
 		if !channel.IsValid(ch) {
@@ -79,6 +93,10 @@ func cmdSelfUpdate(args []string) {
 	}
 
 	ch, base := hubChannel()
+	if base == "" {
+		fmt.Fprintf(os.Stderr, "Error: channel %q has no source URL; run 'telahubd channel sources set %s <url>' or switch to a built-in channel.\n", ch, ch)
+		os.Exit(1)
+	}
 	m, err := hubChannelFetcher.GetURL(channel.ManifestURL(base, ch))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: fetch %s manifest: %v\n", ch, err)
@@ -92,6 +110,13 @@ func cmdSelfUpdate(args []string) {
 	if m.Version == version && version != "dev" {
 		fmt.Println("Already up to date.")
 		return
+	}
+
+	// Downgrade refusal: the channel's HEAD is older than what's running.
+	if version != "dev" && !channel.IsNewer(m.Version, version) {
+		fmt.Fprintf(os.Stderr, "Error: latest version on %s is %s, older than currently running %s.\n", ch, m.Version, version)
+		fmt.Fprintln(os.Stderr, "telahubd update refuses cross-channel downgrades. To install an older release, download it from the release host by hand.")
+		os.Exit(1)
 	}
 
 	if *dryRun {

@@ -36,7 +36,15 @@ Options:
   -dry-run          Show what would be downloaded without modifying the binary.
   -h, -?, -help     Show this help.
 
-The channel preference is stored in %s (set with "tela channel set <ch>").
+tela update follows the configured channel. If the channel's latest version is older
+than the running binary (by semver), the command refuses rather than silently downgrade
+across channels. To install an older release deliberately, download it by hand from
+the release host.
+
+The channel preference is stored in %s (set with "tela channel set <ch>"). If no
+preference is set, the channel is inferred from the running binary's version string
+(dev/beta/stable/custom) so a freshly-downloaded binary follows its own channel out
+of the box.
 `, credstore.UserPath())
 }
 
@@ -56,14 +64,36 @@ func cmdUpdate(args []string) {
 		os.Exit(1)
 	}
 
-	// Resolve channel: -channel override > stored preference > default.
+	// Resolve channel: -channel override > stored preference > inferred from
+	// binary version > hard default.
 	ch, base := loadClientChannel()
+	store, _ := credstore.Load(credstore.UserPath())
+	if store == nil || store.Update.Channel == "" {
+		// No stored preference: try to infer from this binary's own version.
+		if inferred := channel.InferFromVersion(version); inferred != "" {
+			ch = inferred
+			var sources map[string]string
+			if store != nil {
+				sources = store.Update.Sources
+			}
+			base = channel.ResolveBase(ch, sources)
+		}
+	}
 	if *chOverride != "" {
 		ch = channel.Normalize(*chOverride)
 		if !channel.IsValid(ch) {
 			fmt.Fprintf(os.Stderr, "Error: invalid channel %q (use lowercase letters, digits, hyphens)\n", *chOverride)
 			os.Exit(1)
 		}
+		var sources map[string]string
+		if store != nil {
+			sources = store.Update.Sources
+		}
+		base = channel.ResolveBase(ch, sources)
+	}
+	if base == "" {
+		fmt.Fprintf(os.Stderr, "Error: channel %q has no source URL; run 'tela channel sources set %s <url>' or switch to a built-in channel.\n", ch, ch)
+		os.Exit(1)
 	}
 
 	fetcher := &channel.Fetcher{Base: base}
@@ -91,6 +121,15 @@ func cmdUpdate(args []string) {
 	if m.Version == version && version != "dev" {
 		fmt.Println("Already up to date.")
 		return
+	}
+
+	// Downgrade refusal: refuse to move backward by semver. The comparison
+	// only fires when current is non-"dev" (our build-time sentinel for
+	// unreleased local builds, which have no meaningful semver position).
+	if version != "dev" && !channel.IsNewer(m.Version, version) {
+		fmt.Fprintf(os.Stderr, "Error: latest version on %s is %s, older than currently running %s.\n", ch, m.Version, version)
+		fmt.Fprintln(os.Stderr, "tela update refuses cross-channel downgrades. To install an older release, download it from the release host by hand.")
+		os.Exit(1)
 	}
 
 	if *dryRun {
