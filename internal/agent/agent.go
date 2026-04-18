@@ -623,6 +623,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 			json.Unmarshal(msg.Payload, &req)
 		}
 		ver := req.Version
+		explicitVersion := req.Version != "" && req.Version != "latest"
 		lg.Printf("mgmt: update requested version=%q channel=%q manifestBase=%q (requestId=%s)", ver, req.Channel, req.ManifestBase, msg.RequestID)
 
 		// Resolve "latest" or empty version. When channel/manifestBase overrides
@@ -646,6 +647,17 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 			resp, _ := json.Marshal(controlMessage{
 				Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
 				Message: "already running " + ver,
+			})
+			return resp
+		}
+
+		// Downgrade refusal on the channel-HEAD path: mirror the rule from
+		// 'telad update' and the hub's admin endpoint. An explicit version
+		// in the request bypasses the gate because intent was declared.
+		if !explicitVersion && version != "dev" && !channel.IsNewer(ver, version) {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: fmt.Sprintf("latest version on channel is %s, older than currently running %s; specify an explicit version to downgrade", ver, version),
 			})
 			return resp
 		}
