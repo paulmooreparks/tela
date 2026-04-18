@@ -74,6 +74,84 @@ func ResolveBase(name string, sources map[string]string) string {
 	return DefaultBases[name]
 }
 
+// InferFromVersion returns the channel a binary logically belongs to given
+// its own version string. The version shape dictates the channel:
+//
+//	vX.Y.0-dev.N            → "dev"
+//	vX.Y.0-beta.N           → "beta"
+//	vX.Y.Z (no prerelease)  → "stable"
+//	vX.Y.0-{name}.N         → "{name}"  (custom channels)
+//
+// Inputs that do not parse as a semver-shaped version (empty, "dev" bare,
+// malformed) return the empty string; callers treat that as "no inference
+// possible" and fall back to whatever default they'd use otherwise.
+//
+// This is the default-channel source for a freshly-downloaded binary that
+// has no saved channel preference yet. It solves the "beta binary updated
+// itself off the dev channel because dev was the compile-time default" bug
+// by deriving the default from what the binary actually is, not from a
+// compile-time constant.
+func InferFromVersion(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	// Strip leading 'v' if present; semver allows both.
+	if v[0] == 'v' || v[0] == 'V' {
+		v = v[1:]
+	}
+	// Strip build metadata ("+..." suffix) before anything else; it never
+	// affects the channel.
+	if plusIdx := strings.IndexByte(v, '+'); plusIdx >= 0 {
+		v = v[:plusIdx]
+	}
+	// Everything before the first '-' is the MAJOR.MINOR.PATCH core.
+	// Everything after is the prerelease identifier.
+	dashIdx := strings.IndexByte(v, '-')
+	if dashIdx < 0 {
+		// No prerelease suffix: this is a stable version like 0.10.1.
+		// Validate the core loosely; if it doesn't look like X.Y.Z we
+		// can't infer anything.
+		if !looksLikeSemverCore(v) {
+			return ""
+		}
+		return Stable
+	}
+	core := v[:dashIdx]
+	prerelease := v[dashIdx+1:]
+	if !looksLikeSemverCore(core) {
+		return ""
+	}
+	// The prerelease is dot-separated identifiers. The first identifier is
+	// the channel name; subsequent identifiers are the counter. Example:
+	// "beta.1" → channel "beta"; "local.32" → channel "local".
+	firstIdent := prerelease
+	if dotIdx := strings.IndexByte(prerelease, '.'); dotIdx >= 0 {
+		firstIdent = prerelease[:dotIdx]
+	}
+	firstIdent = strings.ToLower(firstIdent)
+	if !IsValid(firstIdent) {
+		return ""
+	}
+	return firstIdent
+}
+
+// looksLikeSemverCore returns true when s is a plausible MAJOR.MINOR.PATCH
+// string. Very loose; we don't enforce full semver validity here because
+// the goal is to extract a channel hint, not validate the version itself.
+func looksLikeSemverCore(s string) bool {
+	// Must contain at least two dots (X.Y.Z) and only digits/dots.
+	if strings.Count(s, ".") < 2 {
+		return false
+	}
+	for _, r := range s {
+		if r != '.' && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
 // MigrateManifestBase applies the pre-0.12 update.manifestBase → update.sources
 // migration in place. If manifestBase is empty, the function is a no-op.
 // Otherwise:

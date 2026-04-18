@@ -64,6 +64,56 @@ func TestResolveBase(t *testing.T) {
 	}
 }
 
+func TestInferFromVersion(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		// Dev channel.
+		{"v0.11.0-dev.11", "dev"},
+		{"0.11.0-dev.1", "dev"},
+		{"V0.11.0-DEV.1", "dev"},
+
+		// Beta channel.
+		{"v0.11.0-beta.1", "beta"},
+		{"v0.11.0-beta.42", "beta"},
+
+		// Stable channel (no prerelease suffix).
+		{"v0.11.0", "stable"},
+		{"v1.2.3", "stable"},
+		{"0.11.0", "stable"},
+
+		// Custom channels.
+		{"v0.11.0-local.32", "local"},
+		{"v0.11.0-experiment.3", "experiment"},
+		{"v0.11.0-nightly.5", "nightly"},
+		{"v0.11.0-feature-mux.1", "feature-mux"},
+
+		// Build metadata is stripped before inference.
+		{"v0.11.0-beta.1+build42", "beta"},
+		{"v0.11.0-local.32+abc123", "local"},
+		{"v0.11.0+build42", "stable"},
+
+		// Whitespace tolerance.
+		{"  v0.11.0-beta.1  ", "beta"},
+
+		// Bad inputs: caller falls back to its own default.
+		{"", ""},
+		{"dev", ""},   // not a semver shape
+		{"v0.11", ""}, // too few parts
+		{"not a version", ""},
+		{"v0.11.0-!invalid!.1", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			got := InferFromVersion(c.in)
+			if got != c.want {
+				t.Errorf("InferFromVersion(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestMigrateManifestBase(t *testing.T) {
 	t.Run("no-op when manifestBase empty", func(t *testing.T) {
 		mb := ""
