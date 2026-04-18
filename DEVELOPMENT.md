@@ -175,3 +175,16 @@ Three situations where the rules above are not enough:
 1. **Anything on the wire-protocol surface.** Even a one-line change to the channel manifest schema, a WebSocket message type, or the relay framing: branch, PR, custom channel dogfood on at least one real hub-agent-client triple before merging.
 2. **Anything that touches auth or token handling.** Same reason: silent security regressions are the worst kind.
 3. **Anything that changes a YAML config file's shape.** Operators notice these. Branch + PR + update CHANGELOG + update [CONFIGURATION.md](CONFIGURATION.md) in the same commit.
+
+## API-first: the discipline side
+
+The architectural rule (`CLAUDE.md > API-first, CLI-second, UI-last`) has a matching discipline. The rule says every feature ships as a typed daemon API first, with the CLI and UI layered over. The discipline:
+
+- When adding a TelaVisor feature, start by asking "what API call produces this data?" or "what API call writes this change?" If the answer is "there isn't one and I can scrape the CLI's output," stop. File an issue for the API gap against the relevant daemon (`component:telahubd`, `component:telad`, or `component:protocol`). Wait for the API to land, then build the TelaVisor feature against it.
+- Same rule when adding a `tela admin` command against a remote hub or agent: if you cannot implement it through the admin HTTP API or the agent mgmt-action surface, file an API-gap issue first.
+- CLI-only parsing of CLI output is also forbidden. If `tela admin access` needs to know what the hub knows, it calls a hub endpoint. Not another CLI wrapped in `exec.Command`.
+- Reading a daemon's log files to discover state is never the answer. If something is worth knowing, it is worth an endpoint.
+
+This rule exists because the alternative — TelaVisor or `tela` commands scraping tool output — has failed in every project that has tried it. Output formats shift, CLIs become load-bearing APIs by accident, and every cross-tool interaction becomes fragile. The rule is strict on purpose. When in doubt, propose the API endpoint first and ask.
+
+**When in doubt, file an issue labeled `type:feature` + the relevant `component:*` and call out the API gap in the body.** This also forces the daemon's API surface to stay first-class, which is what makes the `tela` CLI viable as the fleet-management tool it is becoming.
