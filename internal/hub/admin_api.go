@@ -978,6 +978,8 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	ver := req.Version
 
+	explicitVersion := req.Version != "" && req.Version != "latest"
+
 	if ver == "" || ver == "latest" {
 		resolved, err := hubLatestRelease()
 		if err != nil {
@@ -991,6 +993,18 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 	if ver == version && version != "dev" {
 		adminCorsHeaders(w, r)
 		writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"ok": true, "message": "already running " + ver})
+		return
+	}
+
+	// Downgrade refusal on the channel-HEAD path: if the caller didn't pin a
+	// specific version and the channel's HEAD is older than what's running,
+	// refuse rather than silently downgrade. An explicit version in the
+	// request bypasses this gate (operator declared intent).
+	if !explicitVersion && version != "dev" && !channel.IsNewer(ver, version) {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusConflict, map[string]string{
+			"error": fmt.Sprintf("latest version on channel is %s, older than currently running %s; specify an explicit version to downgrade", ver, version),
+		})
 		return
 	}
 
