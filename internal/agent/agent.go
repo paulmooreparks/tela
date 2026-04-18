@@ -302,10 +302,20 @@ type configFile struct {
 }
 
 // updateConfig controls which release channel telad follows for self-update.
-// See RELEASE-PROCESS.md for the channel model.
+// See RELEASE-PROCESS.md for the channel model and
+// DESIGN-channel-sources.md for the sources data model.
 type updateConfig struct {
-	Channel      string `yaml:"channel,omitempty" json:"channel,omitempty"`           // "dev", "beta", "stable" (empty = dev)
-	ManifestBase string `yaml:"manifestBase,omitempty" json:"manifestBase,omitempty"` // override upstream manifest URL prefix
+	// Channel is the currently selected channel name. Resolution happens
+	// via channel.ResolveBase(Channel, Sources).
+	Channel string `yaml:"channel,omitempty" json:"channel,omitempty"`
+
+	// Sources maps channel names to base URLs. See the hub's updateConfig
+	// doc for the resolution rules; same shape on both sides.
+	Sources map[string]string `yaml:"sources,omitempty" json:"sources,omitempty"`
+
+	// ManifestBase is a pre-0.12 field kept only to hand old configs to
+	// channel.MigrateManifestBase on load. Removed before the 0.12 beta tag.
+	ManifestBase string `yaml:"manifestBase,omitempty" json:"manifestBase,omitempty"`
 }
 
 // machineConfig describes one machine to register with the hub.
@@ -779,14 +789,18 @@ func restartSelf(lg *log.Logger) {
 var agentChannelFetcher = &channel.Fetcher{}
 
 // agentChannel returns the configured channel name (defaulting to dev) and
-// the manifest base override (empty for the default upstream).
+// the resolved base URL. The base is looked up via channel.ResolveBase
+// against this agent's sources map, falling back to channel.DefaultBases
+// for built-in channel names.
 func agentChannel() (string, string) {
 	activeConfigMu.RLock()
 	defer activeConfigMu.RUnlock()
 	if activeConfig == nil {
-		return channel.DefaultChannel, ""
+		name := channel.DefaultChannel
+		return name, channel.ResolveBase(name, nil)
 	}
-	return channel.Normalize(activeConfig.Update.Channel), activeConfig.Update.ManifestBase
+	name := channel.Normalize(activeConfig.Update.Channel)
+	return name, channel.ResolveBase(name, activeConfig.Update.Sources)
 }
 
 // latestRelease returns the current version on telad's configured channel.
@@ -1577,6 +1591,14 @@ func loadConfig(path string) (*configFile, error) {
 	var cfg configFile
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
+	// Removed before the 0.12 beta tag together with the ManifestBase field.
+	if channel.MigrateManifestBase(cfg.Update.Channel, &cfg.Update.ManifestBase, &cfg.Update.Sources) {
+		log.Printf("[agent] migrated legacy update.manifestBase in %s; rewriting", path)
+		if data, err := yaml.Marshal(&cfg); err == nil {
+			_ = os.WriteFile(path, data, 0600)
+		}
 	}
 	if cfg.Hub == "" {
 		return nil, fmt.Errorf("%s: 'hub' is required", path)

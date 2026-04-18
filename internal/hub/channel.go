@@ -168,7 +168,10 @@ func setHubChannel(args []string) {
 				base = base[:i]
 			}
 		}
-		cfg.Update.ManifestBase = base
+		if cfg.Update.Sources == nil {
+			cfg.Update.Sources = map[string]string{}
+		}
+		cfg.Update.Sources[name] = base
 	}
 
 	if err := writeHubConfig(path, cfg); err != nil {
@@ -176,8 +179,9 @@ func setHubChannel(args []string) {
 		os.Exit(1)
 	}
 
+	resolved := channel.ResolveBase(name, cfg.Update.Sources)
 	fmt.Printf("Hub channel set to %s\n", name)
-	fmt.Printf("  manifest: %s\n", channel.ManifestURL(cfg.Update.ManifestBase, name))
+	fmt.Printf("  manifest: %s\n", channel.ManifestURL(resolved, name))
 	fmt.Printf("  config:   %s\n", path)
 	fmt.Println("  Restart the hub (telahubd service restart) to pick up the new channel for background operations.")
 }

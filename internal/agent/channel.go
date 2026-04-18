@@ -152,7 +152,10 @@ func setAgentChannel(args []string) {
 				base = base[:i]
 			}
 		}
-		cfg.Update.ManifestBase = base
+		if cfg.Update.Sources == nil {
+			cfg.Update.Sources = map[string]string{}
+		}
+		cfg.Update.Sources[name] = base
 	}
 
 	data, err := yaml.Marshal(cfg)
@@ -165,8 +168,9 @@ func setAgentChannel(args []string) {
 		os.Exit(1)
 	}
 
+	resolved := channel.ResolveBase(name, cfg.Update.Sources)
 	fmt.Printf("Agent channel set to %s\n", name)
-	fmt.Printf("  manifest: %s\n", channel.ManifestURL(cfg.Update.ManifestBase, name))
+	fmt.Printf("  manifest: %s\n", channel.ManifestURL(resolved, name))
 	fmt.Printf("  config:   %s\n", *configPath)
 }
 

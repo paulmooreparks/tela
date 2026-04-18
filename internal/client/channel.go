@@ -81,14 +81,18 @@ Hub and agent channels are managed separately via:
 `, credstore.UserPath())
 }
 
-// loadClientChannel returns the configured channel name and optional
-// manifest base override from the user credential store.
+// loadClientChannel returns the configured channel name and the resolved
+// base URL from the user credential store. The base is looked up via
+// channel.ResolveBase against the credstore's sources map, falling back
+// to channel.DefaultBases for built-in channel names.
 func loadClientChannel() (string, string) {
 	store, err := credstore.Load(credstore.UserPath())
 	if err != nil || store == nil {
-		return channel.DefaultChannel, ""
+		name := channel.DefaultChannel
+		return name, channel.ResolveBase(name, nil)
 	}
-	return channel.Normalize(store.Update.Channel), store.Update.ManifestBase
+	name := channel.Normalize(store.Update.Channel)
+	return name, channel.ResolveBase(name, store.Update.Sources)
 }
 
 func showClientChannel(args []string) {
@@ -158,15 +162,19 @@ func setClientChannel(args []string) {
 				base = base[:i]
 			}
 		}
-		store.Update.ManifestBase = base
+		if store.Update.Sources == nil {
+			store.Update.Sources = map[string]string{}
+		}
+		store.Update.Sources[name] = base
 	}
 	if err := store.Save(path); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: save credential store: %v\n", err)
 		os.Exit(1)
 	}
 
+	resolved := channel.ResolveBase(name, store.Update.Sources)
 	fmt.Printf("Client channel set to %s\n", name)
-	fmt.Printf("  manifest: %s\n", channel.ManifestURL(store.Update.ManifestBase, name))
+	fmt.Printf("  manifest: %s\n", channel.ManifestURL(resolved, name))
 }
 
 // resolveChannel returns the channel name (with command-line override) and

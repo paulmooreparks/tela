@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/service"
 )
 
@@ -30,8 +31,19 @@ type Store struct {
 // UpdateConfig stores the client's release channel preference. The tela
 // client itself uses this to decide which channel manifest to consult.
 // Hub and agent channels are stored separately in their own YAML configs.
+// See DESIGN-channel-sources.md for the sources data model.
 type UpdateConfig struct {
-	Channel      string `yaml:"channel,omitempty"`
+	// Channel is the currently selected channel name. Resolution happens
+	// via channel.ResolveBase(Channel, Sources).
+	Channel string `yaml:"channel,omitempty"`
+
+	// Sources maps channel names to base URLs. Same shape as hubConfig
+	// and agent configFile; shared across the three on this host via
+	// TelaVisor's sources-editing UI.
+	Sources map[string]string `yaml:"sources,omitempty"`
+
+	// ManifestBase is a pre-0.12 field kept only to hand old configs to
+	// channel.MigrateManifestBase on load. Removed before the 0.12 beta tag.
 	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
@@ -78,6 +90,12 @@ func Load(path string) (*Store, error) {
 
 	if store.Hubs == nil {
 		store.Hubs = make(map[string]Credential)
+	}
+
+	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
+	// Removed before the 0.12 beta tag together with the ManifestBase field.
+	if channel.MigrateManifestBase(store.Update.Channel, &store.Update.ManifestBase, &store.Update.Sources) {
+		_ = store.Save(path)
 	}
 
 	return &store, nil

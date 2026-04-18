@@ -62,6 +62,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/console"
+	"github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/relay"
 	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/telelog"
@@ -216,15 +217,26 @@ type hubConfig struct {
 }
 
 // updateConfig controls which release channel this binary follows for
-// self-update. See RELEASE-PROCESS.md for the channel model and
+// self-update. See RELEASE-PROCESS.md for the channel model,
+// DESIGN-channel-sources.md for the sources data model, and
 // internal/channel for the manifest fetcher.
 type updateConfig struct {
-	// Channel is "dev", "beta", or "stable". Empty means dev (the only
-	// channel that exists pre-1.0).
+	// Channel is the currently selected channel name. Resolution happens
+	// via channel.ResolveBase(Channel, Sources).
 	Channel string `yaml:"channel,omitempty"`
-	// ManifestBase overrides the upstream manifest URL prefix. Operators
-	// running a fork point this at their own release host. Empty means
-	// use channel.DefaultManifestBase.
+
+	// Sources maps channel names to base URLs. Entries override the
+	// baked-in defaults in channel.DefaultBases; entries for custom
+	// channel names enable those channels on this host. An empty-string
+	// value is treated the same as an absent key.
+	Sources map[string]string `yaml:"sources,omitempty"`
+
+	// ManifestBase is a pre-0.12 field kept on the struct so the YAML
+	// parser can pick up old configs and hand them to
+	// channel.MigrateManifestBase. On load this gets moved into Sources
+	// (for custom channels) or discarded (for built-ins) and cleared,
+	// so subsequent writes omit it. The field and migration helper are
+	// removed before the 0.12 beta tag.
 	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
@@ -237,6 +249,14 @@ func loadHubConfig(path string) (*hubConfig, error) {
 	var cfg hubConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
+	// Removed before the 0.12 beta tag together with the ManifestBase field.
+	if channel.MigrateManifestBase(cfg.Update.Channel, &cfg.Update.ManifestBase, &cfg.Update.Sources) {
+		log.Printf("[hub] migrated legacy update.manifestBase in %s; rewriting", path)
+		if err := writeHubConfig(path, &cfg); err != nil {
+			log.Printf("[hub] warning: could not persist migrated config to %s: %v", path, err)
+		}
 	}
 	return &cfg, nil
 }

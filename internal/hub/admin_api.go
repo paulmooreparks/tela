@@ -65,14 +65,18 @@ import (
 var hubChannelFetcher = &channel.Fetcher{}
 
 // hubChannel returns the configured channel name (defaulting to dev) and
-// the manifest base override (empty for the default upstream).
+// the resolved base URL. The base is looked up via channel.ResolveBase
+// against this hub's sources map, falling back to channel.DefaultBases
+// for built-in channel names.
 func hubChannel() (string, string) {
 	globalCfgMu.RLock()
 	defer globalCfgMu.RUnlock()
 	if globalCfg == nil {
-		return channel.Normalize(""), ""
+		name := channel.Normalize("")
+		return name, channel.ResolveBase(name, nil)
 	}
-	return channel.Normalize(globalCfg.Update.Channel), globalCfg.Update.ManifestBase
+	name := channel.Normalize(globalCfg.Update.Channel)
+	return name, channel.ResolveBase(name, globalCfg.Update.Sources)
 }
 
 // requireOwnerOrAdmin checks the Authorization header and returns the
