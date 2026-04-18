@@ -204,6 +204,14 @@ backward compatibility will be maintained religiously. The reason this
 matters now is that any cruft left in the tree at 1.0 becomes a permanent
 maintenance burden. Cut it before it gets locked in.
 
+### API-first, CLI-second, UI-last
+
+All Tela behavior is implemented as daemon APIs. CLI tools (`tela`, `telad`, `telahubd`) are shells over those APIs. TelaVisor is a UI shell over the CLI's APIs and the hub/agent HTTP APIs. TelaVisor contains no business logic of its own. It never parses CLI output, never reads log files, never scrapes process state. If a TelaVisor feature requires it to look at tool output instead of calling an API, that is a bug in the API surface, not a license to scrape. Raise the gap as an issue, extend the API, then consume it from TelaVisor.
+
+The same rule applies to `tela`'s admin commands against remote hubs and agents: those commands invoke typed admin APIs on the hub and typed mgmt actions on the agent, not output-parsing against a remote CLI. If an admin CLI flow cannot be implemented against existing APIs, extend the APIs first.
+
+This rule shapes everything downstream. It is what lets the `tela` CLI and TelaVisor be peers over the same control surface rather than one of them hoarding behavior the other cannot reach.
+
 ### Secure by default (OpenBSD philosophy)
 Systems ship locked down. Operators must take deliberate action to open them up.
 - Hubs auto-generate an owner token on first start (never run open by default)
