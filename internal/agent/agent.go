@@ -757,6 +757,124 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		})
 		return resp
 
+	case "channel-sources-list":
+		activeConfigMu.RLock()
+		out := map[string]string{}
+		if activeConfig != nil {
+			for k, v := range activeConfig.Update.Sources {
+				out[k] = v
+			}
+		}
+		activeConfigMu.RUnlock()
+		payload, _ := json.Marshal(map[string]interface{}{"sources": out})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
+	case "channel-sources-set":
+		var req struct {
+			Name string `json:"name"`
+			Base string `json:"base"`
+		}
+		if msg.Payload != nil {
+			json.Unmarshal(msg.Payload, &req)
+		}
+		req.Name = strings.TrimSpace(strings.ToLower(req.Name))
+		if !channel.IsValid(req.Name) {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "invalid channel name: " + req.Name,
+			})
+			return resp
+		}
+		base := strings.TrimRight(strings.TrimSpace(req.Base), "/")
+		if strings.HasSuffix(base, ".json") {
+			if i := strings.LastIndex(base, "/"); i >= 0 {
+				base = base[:i]
+			}
+		}
+		activeConfigMu.Lock()
+		cfg := activeConfig
+		cfgPath := activeConfigPath
+		activeConfigMu.Unlock()
+		if cfg == nil || cfgPath == "" {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no config file to update",
+			})
+			return resp
+		}
+		if cfg.Update.Sources == nil {
+			cfg.Update.Sources = map[string]string{}
+		}
+		cfg.Update.Sources[req.Name] = base
+		data, err := yaml.Marshal(cfg)
+		if err == nil {
+			err = os.WriteFile(cfgPath, data, 0600)
+		}
+		if err != nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "write config: " + err.Error(),
+			})
+			return resp
+		}
+		lg.Printf("mgmt: sources[%s] = %s (requestId=%s)", req.Name, base, msg.RequestID)
+		payload, _ := json.Marshal(map[string]interface{}{"ok": true, "name": req.Name, "base": base})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
+	case "channel-sources-remove":
+		var req struct {
+			Name string `json:"name"`
+		}
+		if msg.Payload != nil {
+			json.Unmarshal(msg.Payload, &req)
+		}
+		req.Name = strings.TrimSpace(strings.ToLower(req.Name))
+		activeConfigMu.Lock()
+		cfg := activeConfig
+		cfgPath := activeConfigPath
+		activeConfigMu.Unlock()
+		if cfg == nil || cfgPath == "" {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no config file to update",
+			})
+			return resp
+		}
+		if _, exists := cfg.Update.Sources[req.Name]; !exists {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no source entry for channel " + req.Name,
+			})
+			return resp
+		}
+		delete(cfg.Update.Sources, req.Name)
+		data, err := yaml.Marshal(cfg)
+		if err == nil {
+			err = os.WriteFile(cfgPath, data, 0600)
+		}
+		if err != nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "write config: " + err.Error(),
+			})
+			return resp
+		}
+		lg.Printf("mgmt: sources[%s] removed (requestId=%s)", req.Name, msg.RequestID)
+		payload, _ := json.Marshal(map[string]interface{}{"ok": true, "name": req.Name})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
 	default:
 		resp, _ := json.Marshal(controlMessage{
 			Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
