@@ -123,12 +123,14 @@ func cmdUpdate(args []string) {
 		return
 	}
 
-	// Downgrade refusal: refuse to move backward by semver. The comparison
-	// only fires when current is non-"dev" (our build-time sentinel for
-	// unreleased local builds, which have no meaningful semver position).
-	if version != "dev" && !channel.IsNewer(m.Version, version) {
+	// Downgrade refusal: refuse to move backward by semver WITHIN a
+	// channel. Only fires when current is non-"dev" (our build-time
+	// sentinel for unreleased local builds) and the move stays on the
+	// same channel. Channel switches are explicit operator intent and
+	// semver ordering across release lines is meaningless anyway.
+	if version != "dev" && !channel.IsCrossChannel(version, m.Channel) && !channel.IsNewer(m.Version, version) {
 		fmt.Fprintf(os.Stderr, "Error: latest version on %s is %s, older than currently running %s.\n", ch, m.Version, version)
-		fmt.Fprintln(os.Stderr, "tela update refuses cross-channel downgrades. To install an older release, download it from the release host by hand.")
+		fmt.Fprintln(os.Stderr, "tela update refuses same-channel downgrades. To install an older release, download it from the release host by hand.")
 		os.Exit(1)
 	}
 

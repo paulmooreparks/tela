@@ -113,9 +113,12 @@ func cmdSelfUpdate(args []string) {
 	}
 
 	// Downgrade refusal: the channel's HEAD is older than what's running.
-	if version != "dev" && !channel.IsNewer(m.Version, version) {
+	// Skipped when crossing channels -- semver across parallel prerelease
+	// lines (local.N vs dev.N) isn't a meaningful ordering, and switching
+	// channels is an explicit declaration to follow the new HEAD.
+	if version != "dev" && !channel.IsCrossChannel(version, m.Channel) && !channel.IsNewer(m.Version, version) {
 		fmt.Fprintf(os.Stderr, "Error: latest version on %s is %s, older than currently running %s.\n", ch, m.Version, version)
-		fmt.Fprintln(os.Stderr, "telahubd update refuses cross-channel downgrades. To install an older release, download it from the release host by hand.")
+		fmt.Fprintln(os.Stderr, "telahubd update refuses same-channel downgrades. To install an older release, download it from the release host by hand.")
 		os.Exit(1)
 	}
 

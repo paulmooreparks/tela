@@ -110,9 +110,13 @@ func cmdSelfUpdate(args []string) {
 	}
 
 	// Downgrade refusal: the channel's HEAD is older than what's running.
-	if version != "dev" && !channel.IsNewer(m.Version, version) {
+	// Skipped when we are crossing channels -- switching release lines is
+	// an explicit declaration of intent to follow the new channel's HEAD,
+	// and semver ordering across parallel prerelease lineages (e.g. local.N
+	// vs dev.N) is meaningless anyway.
+	if version != "dev" && !channel.IsCrossChannel(version, m.Channel) && !channel.IsNewer(m.Version, version) {
 		fmt.Fprintf(os.Stderr, "Error: latest version on %s is %s, older than currently running %s.\n", ch, m.Version, version)
-		fmt.Fprintln(os.Stderr, "telad update refuses cross-channel downgrades. To install an older release, download it from the release host by hand.")
+		fmt.Fprintln(os.Stderr, "telad update refuses same-channel downgrades. To install an older release, download it from the release host by hand.")
 		os.Exit(1)
 	}
 

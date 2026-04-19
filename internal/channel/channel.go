@@ -484,6 +484,50 @@ func IsNewer(candidate, current string) bool {
 	return CompareVersions(candidate, current) > 0
 }
 
+// IsCrossChannel reports whether a binary whose version string is
+// currentVersion would cross release channels by moving to a manifest
+// on targetChannel. Uses InferFromVersion to recover the channel name
+// the binary was built on.
+//
+// Cross-channel transitions make semver ordering meaningless (a
+// -local.51 and a -dev.11 tag share a base version but are on parallel
+// prerelease lines that aren't actually comparable), so callers should
+// treat them as "always move to HEAD of the new channel, regardless of
+// ordering" rather than applying a same-channel downgrade-refusal rule.
+//
+// Empty or "dev" inputs return false: "dev" is not a real version and
+// there is no channel to infer from.
+func IsCrossChannel(currentVersion, targetChannel string) bool {
+	if currentVersion == "" || currentVersion == "dev" || targetChannel == "" {
+		return false
+	}
+	return InferFromVersion(currentVersion) != Normalize(targetChannel)
+}
+
+// ShouldOfferUpdate returns true when a user should be offered an
+// update from currentVersion to targetVersion on targetChannel.
+//
+// Same-channel updates only trigger on a strict semver increase
+// (via IsNewer). Cross-channel updates trigger on any difference,
+// because switching channels is an explicit declaration of intent to
+// follow the new channel's HEAD -- staying on an arbitrary higher-
+// sorting version from the old channel would be wrong.
+//
+// "dev" current versions always offer an update when the target is
+// non-empty; empty targets never offer one.
+func ShouldOfferUpdate(currentVersion, targetChannel, targetVersion string) bool {
+	if targetVersion == "" {
+		return false
+	}
+	if currentVersion == "" || currentVersion == "dev" {
+		return true
+	}
+	if IsCrossChannel(currentVersion, targetChannel) {
+		return currentVersion != targetVersion
+	}
+	return IsNewer(targetVersion, currentVersion)
+}
+
 // VerifyReader streams r through a SHA-256 hash and into w, returning an
 // error if the hash does not match expected (lowercase hex). The compare
 // happens after the full body is read so callers can use io.Copy with a

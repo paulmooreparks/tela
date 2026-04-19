@@ -550,6 +550,69 @@ func TestFetcher_TruncatesGiantBody(t *testing.T) {
 	}
 }
 
+// ── Cross-channel helpers ──────────────────────────────────────────
+
+func TestIsCrossChannel(t *testing.T) {
+	cases := []struct {
+		name      string
+		current   string
+		target    string
+		wantCross bool
+	}{
+		{"same channel local", "v0.11.0-local.51", "local", false},
+		{"same channel dev", "v0.11.0-dev.11", "dev", false},
+		{"stable to stable", "v0.11.0", "stable", false},
+		{"local to dev", "v0.11.0-local.51", "dev", true},
+		{"dev to beta", "v0.11.0-dev.11", "beta", true},
+		{"local to stable", "v0.11.0-local.51", "stable", true},
+		{"stable to dev", "v0.11.0", "dev", true},
+		{"empty current", "", "dev", false},
+		{"dev sentinel", "dev", "dev", false},
+		{"empty target", "v0.11.0-local.51", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := IsCrossChannel(tc.current, tc.target)
+			if got != tc.wantCross {
+				t.Errorf("IsCrossChannel(%q,%q) = %v, want %v",
+					tc.current, tc.target, got, tc.wantCross)
+			}
+		})
+	}
+}
+
+func TestShouldOfferUpdate(t *testing.T) {
+	cases := []struct {
+		name    string
+		current string
+		channel string
+		latest  string
+		want    bool
+	}{
+		// Same channel, IsNewer rules apply.
+		{"same channel newer", "v0.11.0-local.50", "local", "v0.11.0-local.51", true},
+		{"same channel equal", "v0.11.0-local.51", "local", "v0.11.0-local.51", false},
+		{"same channel older", "v0.11.0-local.51", "local", "v0.11.0-local.50", false},
+		// Cross channel: any difference triggers an update offer, even
+		// when semver puts the current binary "ahead" of the new HEAD.
+		{"cross channel: local ahead of dev by semver", "v0.11.0-local.51", "dev", "v0.11.0-dev.11", true},
+		{"cross channel: dev ahead of local by semver", "v0.11.0-dev.99", "local", "v0.11.0-local.1", true},
+		{"cross channel equal version (degenerate)", "v0.11.0-local.51", "dev", "v0.11.0-local.51", false},
+		// Edge cases.
+		{"dev sentinel always updates if target present", "dev", "dev", "v0.11.0-dev.11", true},
+		{"empty target never offers", "v0.11.0-local.51", "local", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ShouldOfferUpdate(tc.current, tc.channel, tc.latest)
+			if got != tc.want {
+				t.Errorf("ShouldOfferUpdate(%q,%q,%q) = %v, want %v",
+					tc.current, tc.channel, tc.latest, got, tc.want)
+			}
+		})
+	}
+}
+
 // ── Misc sanity ─────────────────────────────────────────────────────
 
 func TestErrorWrapping(t *testing.T) {

@@ -652,10 +652,16 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 			return resp
 		}
 
-		// Downgrade refusal on the channel-HEAD path: mirror the rule from
-		// 'telad update' and the hub's admin endpoint. An explicit version
-		// in the request bypasses the gate because intent was declared.
-		if !explicitVersion && version != "dev" && !channel.IsNewer(ver, version) {
+		// Downgrade refusal on the channel-HEAD path. Only applies when
+		// we are staying on the same release channel; switching channels
+		// is an explicit declaration of intent to follow the new HEAD
+		// regardless of how the semver sort orders the two lineages.
+		// An explicit version in the request also bypasses the gate.
+		targetCh := req.Channel
+		if targetCh == "" {
+			targetCh, _ = agentChannel()
+		}
+		if !explicitVersion && version != "dev" && !channel.IsCrossChannel(version, targetCh) && !channel.IsNewer(ver, version) {
 			resp, _ := json.Marshal(controlMessage{
 				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
 				Message: fmt.Sprintf("latest version on channel is %s, older than currently running %s; specify an explicit version to downgrade", ver, version),
@@ -690,7 +696,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		}
 		if latest, err := latestRelease(); err == nil {
 			out["latestVersion"] = latest
-			out["updateAvailable"] = channel.IsNewer(latest, version)
+			out["updateAvailable"] = channel.ShouldOfferUpdate(version, ch, latest)
 		} else {
 			out["error"] = err.Error()
 		}
