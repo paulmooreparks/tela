@@ -82,6 +82,8 @@ export function GetAgentList():Promise<Array<main.AgentInfo>>;
 
 export function GetAgentLogs(arg1:string,arg2:string,arg3:number):Promise<string>;
 
+export function GetAgentSources(arg1:string,arg2:string):Promise<string>;
+
 export function GetBinStatus():Promise<Array<main.BinaryInfo>>;
 
 export function GetCLIPath():Promise<string>;
@@ -208,6 +210,8 @@ export function RefreshBinStatus():Promise<Array<main.BinaryInfo>>;
 
 export function ReleaseLocalPort(arg1:number):Promise<void>;
 
+export function RemoveAgentSource(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function RemoveClientSource(arg1:string):Promise<string>;
 
 export function RemoveCredential(arg1:string):Promise<void>;
@@ -251,6 +255,8 @@ export function ServiceStop():Promise<string>;
 export function SetAgentChannel(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function SetAgentConfig(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SetAgentSource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function SetClientChannel(arg1:string,arg2:string):Promise<string>;
 

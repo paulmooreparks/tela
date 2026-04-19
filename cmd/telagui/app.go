@@ -2879,6 +2879,114 @@ func (a *App) RemoveHubSource(hubName, name string) string {
 	return string(data)
 }
 
+// GetAgentSources lists a remote agent's custom channel sources through
+// the hub-mediated management protocol (channel-sources-list mgmt action).
+// Returns a JSON array of {name, manifestBase}, excluding built-in channels.
+func (a *App) GetAgentSources(hubName, machineID string) string {
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/channel-sources-list", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	var env struct {
+		OK      *bool           `json:"ok"`
+		Message string          `json:"message"`
+		Error   string          `json:"error"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		return `{"error":"parse response: ` + err.Error() + `"}`
+	}
+	if env.Error != "" {
+		return `{"error":"` + env.Error + `"}`
+	}
+	if env.OK != nil && !*env.OK {
+		msg := env.Message
+		if msg == "" {
+			msg = "agent rejected request"
+		}
+		return `{"error":"` + msg + `"}`
+	}
+	var inner struct {
+		Sources map[string]string `json:"sources"`
+	}
+	if len(env.Payload) > 0 {
+		_ = json.Unmarshal(env.Payload, &inner)
+	}
+	out := []ChannelSource{}
+	for name, base := range inner.Sources {
+		if channelpkg.IsKnown(name) {
+			continue
+		}
+		out = append(out, ChannelSource{Name: name, ManifestBase: base})
+	}
+	raw, _ := json.Marshal(out)
+	return string(raw)
+}
+
+// SetAgentSource adds or updates a custom channel source on the agent
+// via the channel-sources-set mgmt action.
+func (a *App) SetAgentSource(hubName, machineID, name, manifestBase string) string {
+	name = channelpkg.Normalize(name)
+	if !channelpkg.IsValid(name) {
+		return `{"error":"invalid channel name"}`
+	}
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot override built-in channel"}`
+	}
+	if strings.TrimSpace(manifestBase) == "" {
+		return `{"error":"manifestBase is required"}`
+	}
+	body, _ := json.Marshal(map[string]string{"name": name, "base": manifestBase})
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/channel-sources-set", body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return unwrapMgmtResponse(data)
+}
+
+// RemoveAgentSource removes a custom channel source from the agent via
+// the channel-sources-remove mgmt action.
+func (a *App) RemoveAgentSource(hubName, machineID, name string) string {
+	name = channelpkg.Normalize(name)
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot remove built-in channel"}`
+	}
+	body, _ := json.Marshal(map[string]string{"name": name})
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/channel-sources-remove", body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return unwrapMgmtResponse(data)
+}
+
+// unwrapMgmtResponse turns an agent mgmt-response envelope into a flat
+// {ok:true, ...payload} or {error:"..."} JSON string for the frontend.
+func unwrapMgmtResponse(data []byte) string {
+	var env struct {
+		OK      *bool           `json:"ok"`
+		Message string          `json:"message"`
+		Error   string          `json:"error"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		return `{"error":"parse response: ` + err.Error() + `"}`
+	}
+	if env.Error != "" {
+		return `{"error":"` + env.Error + `"}`
+	}
+	if env.OK != nil && !*env.OK {
+		msg := env.Message
+		if msg == "" {
+			msg = "agent rejected request"
+		}
+		return `{"error":"` + msg + `"}`
+	}
+	if len(env.Payload) > 0 {
+		return string(env.Payload)
+	}
+	return `{"ok":true}`
+}
+
 // GetAgentChannelInfo reads a remote agent's channel status through the
 // hub-mediated management protocol.
 func (a *App) GetAgentChannelInfo(hubName, machineID string) string {

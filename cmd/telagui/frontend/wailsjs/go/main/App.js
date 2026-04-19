@@ -162,6 +162,10 @@ export function GetAgentLogs(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetAgentLogs'](arg1, arg2, arg3);
 }
 
+export function GetAgentSources(arg1, arg2) {
+  return window['go']['main']['App']['GetAgentSources'](arg1, arg2);
+}
+
 export function GetBinStatus() {
   return window['go']['main']['App']['GetBinStatus']();
 }
@@ -414,6 +418,10 @@ export function ReleaseLocalPort(arg1) {
   return window['go']['main']['App']['ReleaseLocalPort'](arg1);
 }
 
+export function RemoveAgentSource(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RemoveAgentSource'](arg1, arg2, arg3);
+}
+
 export function RemoveClientSource(arg1) {
   return window['go']['main']['App']['RemoveClientSource'](arg1);
 }
@@ -500,6 +508,10 @@ export function SetAgentChannel(arg1, arg2, arg3, arg4) {
 
 export function SetAgentConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetAgentConfig'](arg1, arg2, arg3);
+}
+
+export function SetAgentSource(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetAgentSource'](arg1, arg2, arg3, arg4);
 }
 
 export function SetClientChannel(arg1, arg2) {
