@@ -426,6 +426,23 @@ function applySoftwareButton(btnId, statusId, info, fallbackVer) {
   }
 }
 
+// refreshHubManagement re-fetches the hub's channel status (which drives
+// the Release channel dropdown, Software button label, and version hints)
+// and its Channel Sources list. Wired to the Refresh button in the hub's
+// Management header.
+function refreshHubManagement(hubURL) {
+  loadHubChannel(hubURL);
+  loadHubChannelSources(hubURL);
+}
+
+// refreshAgentManagement does the same for a remote agent, re-running the
+// update-status and channel-sources-list mgmt actions so a just-updated
+// agent reflects its new version and sources without a manual reload.
+function refreshAgentManagement(hubURL, machineID) {
+  loadAgentChannel(hubURL, machineID);
+  loadAgentChannelSources(hubURL, machineID);
+}
+
 function loadHubChannel(hubURL) {
   var sel = document.getElementById('hub-channel-select');
   var status = document.getElementById('hub-channel-status');
@@ -3108,7 +3125,10 @@ function agentsShowDetail(a) {
   html += '</div>';
 
   // Management
-  html += '<div class="setting-card" id="agent-management-card"><div class="setting-card-title">Management</div>'
+  html += '<div class="setting-card" id="agent-management-card">'
+    + '<div class="setting-card-title-row"><div class="setting-card-title">Management</div>'
+    + '<button type="button" class="btn btn-sm tools-action-btn" onclick="refreshAgentManagement(\'' + ehub + '\',\'' + eid + '\')" title="Refresh channel status">&#x21BB; Refresh</button>'
+    + '</div>'
     + '<div class="setting-card-desc">Remote agent lifecycle controls.</div>'
     + '<table class="kv-table">';
   if (canManage) {
@@ -4689,7 +4709,11 @@ function renderHubSettings(pane) {
       // Software button starts disabled with a neutral label. loadHubChannel
       // overwrites it with the channel-aware truth from the hub's
       // GET /api/admin/update response.
-      html += '<div class="settings-group" id="hub-management-card"><div class="settings-group-header">Management</div>';
+      html += '<div class="settings-group" id="hub-management-card">'
+        + '<div class="settings-group-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+        + '<span>Management</span>'
+        + '<button type="button" class="btn btn-sm tools-action-btn" onclick="refreshHubManagement(\'' + escAttr(hub) + '\')" title="Refresh channel status">&#x21BB; Refresh</button>'
+        + '</div>';
       html += '<div class="settings-row"><div class="settings-label">Log output</div>'
         + '<div class="settings-value"><button class="btn btn-sm" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Release channel</div>'
