@@ -204,16 +204,38 @@ type portalEntry struct {
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	HubID   string                 `yaml:"hubId,omitempty"`   // Stable hub identity UUID (v4); generated on first start
-	Port    int                    `yaml:"port"`              // HTTP+WS listen port (default 80)
-	UDPPort int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
-	UDPHost string                 `yaml:"udpHost,omitempty"` // public IP/hostname for UDP relay (when behind proxy)
-	Name    string                 `yaml:"name"`              // Display name for this hub
-	WWWDir  string                 `yaml:"wwwDir"`            // Static file directory (default ./www)
-	Auth    authConfig             `yaml:"auth,omitempty"`    // Token-based access control
-	Portals map[string]portalEntry `yaml:"portals,omitempty"` // Registered portals
-	Update  updateConfig           `yaml:"update,omitempty"`  // Self-update channel selection
-	Bridges []bridgeConfig         `yaml:"bridges,omitempty"` // Hub-to-hub transit bridges
+	HubID    string                 `yaml:"hubId,omitempty"`    // Stable hub identity UUID (v4); generated on first start
+	Port     int                    `yaml:"port"`               // HTTP+WS listen port (default 80)
+	UDPPort  int                    `yaml:"udpPort"`            // UDP relay port (default 41820)
+	UDPHost  string                 `yaml:"udpHost,omitempty"`  // public IP/hostname for UDP relay (when behind proxy)
+	Name     string                 `yaml:"name"`               // Display name for this hub
+	WWWDir   string                 `yaml:"wwwDir"`             // Static file directory (default ./www)
+	Auth     authConfig             `yaml:"auth,omitempty"`     // Token-based access control
+	Portals  map[string]portalEntry `yaml:"portals,omitempty"`  // Registered portals
+	Update   updateConfig           `yaml:"update,omitempty"`   // Self-update channel selection
+	Bridges  []bridgeConfig         `yaml:"bridges,omitempty"`  // Hub-to-hub transit bridges
+	Channels channelsConfig         `yaml:"channels,omitempty"` // Self-hosted release channel server (replaces telachand)
+}
+
+// channelsConfig enables the hub to serve release channel manifests and
+// binary downloads under /channels/. It replaces the standalone telachand
+// daemon so a single host can run both hub and channel server. Disabled by
+// default; opt in by setting enabled: true and a Data directory.
+type channelsConfig struct {
+	// Enabled turns the channel server on. When false, no /channels/
+	// routes are mounted and the rest of this struct is ignored.
+	Enabled bool `yaml:"enabled,omitempty"`
+
+	// Data is the directory holding channel manifests and the files/
+	// subdirectory of binary downloads. Default: <hub data dir>/channels.
+	Data string `yaml:"data,omitempty"`
+
+	// PublicURL is the externally reachable base URL for the channel
+	// server, e.g. "https://hub.example.net/channels". Embedded in
+	// generated manifests as the downloadBase prefix. Required for
+	// `telahubd channels publish` unless -base-url is supplied on the
+	// command line.
+	PublicURL string `yaml:"publicURL,omitempty"`
 }
 
 // updateConfig controls which release channel this binary follows for
@@ -236,7 +258,7 @@ type updateConfig struct {
 	// channel.MigrateManifestBase. On load this gets moved into Sources
 	// (for custom channels) or discarded (for built-ins) and cleared,
 	// so subsequent writes omit it. The field and migration helper are
-	// removed before the 0.12 beta tag.
+	// scheduled for removal in 0.13, tracked in GH issue #59.
 	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
@@ -2283,6 +2305,26 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 	mux.HandleFunc("/api/admin/update/sources", handleAdminUpdateSources)
 	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)
+
+	// Self-hosted release channel server (replaces telachand). When the
+	// channels feature is disabled in config we register nothing under
+	// /channels/ at all so requests to that path fall through to the
+	// catch-all handler below and return whatever it normally would.
+	globalCfgMu.RLock()
+	channelsEnabled := globalCfg.Channels.Enabled
+	channelsData := globalCfg.Channels.Data
+	globalCfgMu.RUnlock()
+	if channelsEnabled {
+		if channelsData == "" {
+			log.Printf("[hub] channels.enabled is true but channels.data is unset; channel routes not mounted")
+		} else if err := os.MkdirAll(filepath.Join(channelsData, "files"), 0755); err != nil {
+			log.Printf("[hub] channels.data %s: %v; channel routes not mounted", channelsData, err)
+		} else {
+			mux.HandleFunc("/channels/", handleChannels)
+			mux.HandleFunc("/channels", handleChannels)
+			log.Printf("[hub] serving release channels from %s under /channels/", channelsData)
+		}
+	}
 
 	// WebSocket upgrade on root path too (agents/clients connect to /)
 	// Static files are served for non-upgrade HTTP requests.

@@ -43,7 +43,8 @@ type UpdateConfig struct {
 	Sources map[string]string `yaml:"sources,omitempty"`
 
 	// ManifestBase is a pre-0.12 field kept only to hand old configs to
-	// channel.MigrateManifestBase on load. Removed before the 0.12 beta tag.
+	// channel.MigrateManifestBase on load. Scheduled for removal in 0.13,
+	// tracked in GH issue #59.
 	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 

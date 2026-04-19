@@ -170,8 +170,9 @@ func looksLikeSemverCore(s string) bool {
 // Returns true when the function made any change, suitable for a one-time
 // log notice at the call site.
 //
-// This helper will be removed before the 0.12 beta tag, together with the
+// This helper is scheduled for removal in 0.13 together with the
 // ManifestBase fields on the three config structs that still carry it.
+// See GitHub issue #59 for the deletion checklist.
 func MigrateManifestBase(channelName string, manifestBase *string, sources *map[string]string) bool {
 	if manifestBase == nil || *manifestBase == "" {
 		return false
