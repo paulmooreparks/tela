@@ -972,6 +972,8 @@ func printChannelStatus(label string, result map[string]any) {
 		state := "up to date"
 		if avail {
 			state = "update available"
+		} else if latest != cur && cur != "dev" {
+			state = "ahead of channel HEAD"
 		}
 		fmt.Printf("  latest version:  %s  (%s)\n", latest, state)
 	} else if errMsg != "" {

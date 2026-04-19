@@ -286,15 +286,19 @@ func (a *App) domReady(ctx context.Context) {
 // auto-download. The user clicks "Restart to Update" to trigger the update.
 // Exception: if tela CLI is not installed at all, it is downloaded immediately.
 func (a *App) checkForUpdates() {
-	latest, err := a.latestRelease()
+	m, err := a.clientChannelManifest()
 	if err != nil {
 		return // offline
 	}
+	latest := m.Version
 
 	needsUpdate := false
 
-	// Check telavisor version
-	if version != latest {
+	// Check telavisor version. ShouldOfferUpdate enforces the
+	// cross-channel rule: if the configured channel's HEAD is on a
+	// different release line than the current binary, any difference
+	// is treated as an update offer, not "I'm newer, ignore."
+	if channelpkg.ShouldOfferUpdate(version, m.Channel, latest) {
 		needsUpdate = true
 	}
 
@@ -309,12 +313,12 @@ func (a *App) checkForUpdates() {
 		// tela not installed -- download it now (first run)
 		a.installTool("tela", latest)
 	} else {
-		// tela exists -- check version
+		// tela exists -- check version against the same channel HEAD.
 		cmd := exec.Command(localPath, "version")
 		hideConsoleWindow(cmd)
 		out, _ := cmd.CombinedOutput()
 		parts := strings.Fields(strings.TrimSpace(string(out)))
-		if len(parts) >= 2 && parts[1] != latest {
+		if len(parts) >= 2 && channelpkg.ShouldOfferUpdate(parts[1], m.Channel, latest) {
 			needsUpdate = true
 		}
 	}
@@ -464,21 +468,26 @@ func (a *App) GetToolVersions() ToolVersions {
 		tv.CLI = "not installed"
 	}
 
-	// Get latest from cache
+	// Resolve the latest version on the configured channel. Use the
+	// manifest (not just the version string) so the cross-channel decision
+	// in ShouldOfferUpdate has the channel field it needs; raw IsNewer
+	// would give wrong answers when the binary is from a different
+	// release line than the channel currently selected (e.g. local.51
+	// while configured channel is dev).
+	var latestChannel string
 	a.mu.Lock()
 	tv.Latest = a.updateVersion
 	a.mu.Unlock()
-
-	if tv.Latest == "" {
-		// Try fetching (may already be cached from checkForUpdates)
-		if latest, err := a.latestRelease(); err == nil {
-			tv.Latest = latest
-		}
+	if m, err := a.clientChannelManifest(); err == nil {
+		tv.Latest = m.Version
+		latestChannel = m.Channel
 	}
 
 	if tv.Latest != "" {
-		tv.GUIBehind = channelpkg.IsNewer(tv.Latest, tv.GUI)
-		tv.CLIBehind = tv.CLI != "not installed" && channelpkg.IsNewer(tv.Latest, tv.CLI)
+		tv.GUIBehind = channelpkg.ShouldOfferUpdate(tv.GUI, latestChannel, tv.Latest)
+		if tv.CLI != "not installed" {
+			tv.CLIBehind = channelpkg.ShouldOfferUpdate(tv.CLI, latestChannel, tv.Latest)
+		}
 	}
 
 	return tv

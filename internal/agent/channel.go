@@ -271,8 +271,10 @@ func showAgentChannel(args []string) {
 		return
 	}
 	state := "up to date"
-	if m.Version != version && version != "dev" {
+	if channel.ShouldOfferUpdate(version, m.Channel, m.Version) {
 		state = "update available"
+	} else if m.Version != version && version != "dev" {
+		state = "ahead of channel HEAD"
 	}
 	fmt.Printf("  latest version:  %s  (%s)\n", m.Version, state)
 }

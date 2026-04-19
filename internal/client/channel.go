@@ -273,8 +273,13 @@ func showClientChannel(args []string) {
 		return
 	}
 	state := "up to date"
-	if m.Version != version && version != "dev" {
+	if channel.ShouldOfferUpdate(version, m.Channel, m.Version) {
 		state = "update available"
+	} else if m.Version != version && version != "dev" {
+		// Same channel, current binary is ahead of HEAD (e.g. a local
+		// dev build sitting on top of an older published tag). Not an
+		// update offer, but also not strictly equal, so call it out.
+		state = "ahead of channel HEAD"
 	}
 	fmt.Printf("  latest version:  %s  (%s)\n", m.Version, state)
 }
