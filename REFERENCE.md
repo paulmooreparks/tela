@@ -548,6 +548,17 @@ The hub also exposes a channel-aware admin API:
 | `/api/admin/update` | GET | Returns `{channel, manifestUrl, currentVersion, latestVersion, updateAvailable}` |
 | `/api/admin/update` | PATCH | Set the channel: `{"channel":"beta"}` |
 | `/api/admin/update` | POST | Trigger an update to the channel HEAD |
+| `/api/admin/update/sources` | GET | List the hub's custom channel sources: `{"sources":{"local":"https://..."}}` |
+| `/api/admin/update/sources/{name}` | PUT | Set a source: `{"base":"https://..."}` |
+| `/api/admin/update/sources/{name}` | DELETE | Remove a source |
+
+When `channels.enabled` is true in the hub config, these publish
+endpoints are also available (owner/admin auth required):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/admin/channels/files/{name}` | PUT | Upload a binary (request body = file bytes) into `channels.data/files/{name}`. 500 MiB max. |
+| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}` (baseUrl optional; defaults to `channels.publicURL`). Returns the manifest. |
 
 ### Channel management (CLI)
 

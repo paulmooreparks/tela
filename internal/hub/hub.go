@@ -2307,6 +2307,8 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 	mux.HandleFunc("/api/admin/update", handleAdminUpdate)
 	mux.HandleFunc("/api/admin/update/sources/", handleAdminUpdateSources) // /api/admin/update/sources/{name}
 	mux.HandleFunc("/api/admin/update/sources", handleAdminUpdateSources)
+	mux.HandleFunc("/api/admin/channels/files/", handleAdminChannelsFiles) // PUT /api/admin/channels/files/{name}
+	mux.HandleFunc("/api/admin/channels/publish", handleAdminChannelsPublish)
 	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)
 

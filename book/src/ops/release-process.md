@@ -284,6 +284,23 @@ The manifest is live immediately. The hub does not need to restart.
 Each channel has its own manifest; you can maintain all three
 (or any named custom channels) simultaneously.
 
+### Publishing from a separate build machine
+
+The CLI `telahubd channels publish` runs on the same host as the hub
+and reads `channels.data` from the hub's config file. When your build
+pipeline lives elsewhere, use the HTTPS admin API instead:
+
+- `PUT /api/admin/channels/files/{binary}` uploads a file into
+  `channels.data/files/`. Request body is the file bytes. Owner or
+  admin token required. 500 MiB max per file.
+- `POST /api/admin/channels/publish` with
+  `{"channel":"...","tag":"..."}` hashes everything under `files/` and
+  writes the manifest. Returns the manifest JSON for verification.
+
+Upload each binary, then call `/publish` once. No SSH, tunnel, or
+file-share mount is needed. `.vscode/publish-dev.ps1` in the tela
+repo is a reference PowerShell implementation.
+
 ### Point binaries at the self-hosted channel
 
 Each binary has a `channel sources` subcommand that writes into its

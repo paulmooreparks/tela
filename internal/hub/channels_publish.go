@@ -1,9 +1,14 @@
-// channels_publish.go -- "telahubd channels publish" CLI subcommand.
+// channels_publish.go -- channel manifest publish logic.
 //
-// Scans the files/ subdirectory of channels.data, computes SHA-256 and
-// size for each binary, and writes a channel manifest JSON to
-// {data}/{channel}.json. Identical wire format to the GitHub-hosted
-// channel manifests and to what telachand publish produced.
+// Two call sites share the core work:
+//
+//   - `telahubd channels publish` CLI subcommand (cmdChannelsPublish).
+//   - POST /api/admin/channels/publish admin endpoint
+//     (handleAdminChannelsPublish, channels_admin.go).
+//
+// Both scan {channels.data}/files/, hash every binary with SHA-256, and
+// write a channel manifest to {channels.data}/{channel}.json. Wire format
+// matches the GitHub-hosted channel manifests byte-for-byte.
 
 package hub
 
@@ -57,8 +62,8 @@ Run 'telahubd channels <subcommand> -h' for subcommand-specific help.
 }
 
 // cmdChannelsPublish implements `telahubd channels publish`. It loads the
-// hub's config to find channels.data and channels.publicURL, scans
-// {data}/files/, hashes every file, and writes {data}/{channel}.json.
+// hub's config to find channels.data and channels.publicURL, then calls
+// publishChannelManifest to do the actual scan + hash + write.
 func cmdChannelsPublish(args []string) {
 	fs := flag.NewFlagSet("telahubd channels publish", flag.ExitOnError)
 	channelName := fs.String("channel", "dev", "Channel to publish (dev, beta, stable, or any custom name)")
@@ -100,9 +105,6 @@ func cmdChannelsPublish(args []string) {
 		os.Exit(1)
 	}
 
-	// Resolve the download base URL. Manifests embed this as the URL
-	// prefix that clients append a binary file name to in order to fetch
-	// it. We always point it at this hub's /channels/files/ path.
 	publicBase := *baseURL
 	if publicBase == "" {
 		publicBase = cfg.Channels.PublicURL
@@ -113,11 +115,39 @@ func cmdChannelsPublish(args []string) {
 	}
 	downloadBase := strings.TrimRight(publicBase, "/") + "/files/"
 
+	m, manifestPath, err := publishChannelManifest(dataDir, *channelName, *tag, downloadBase, func(name, sha string, size int64) {
+		fmt.Printf("  %-44s  %s...  %d bytes\n", name, sha[:16], size)
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\npublished %s channel manifest\n", *channelName)
+	fmt.Printf("  tag:      %s\n", m.Tag)
+	fmt.Printf("  binaries: %d\n", len(m.Binaries))
+	fmt.Printf("  base:     %s\n", m.DownloadBase)
+	fmt.Printf("  manifest: %s\n", manifestPath)
+}
+
+// publishChannelManifest is the reusable core of the publish flow. It
+// scans {dataDir}/files/ for binaries, hashes each one, assembles a
+// channel.Manifest, and writes it to {dataDir}/{channelName}.json.
+// Returns the manifest, the on-disk path of the written manifest, and
+// any error encountered.
+//
+// progress, when non-nil, is invoked once per file after hashing so the
+// CLI caller can stream per-file output; the admin API handler passes
+// nil since it only cares about the final manifest.
+//
+// Callers are responsible for validating channelName and tag, and for
+// resolving downloadBase against config or an override. Validation of
+// the final manifest is done here via channel.Manifest.Validate.
+func publishChannelManifest(dataDir, channelName, tag, downloadBase string, progress func(name, sha string, size int64)) (*channel.Manifest, string, error) {
 	filesDir := filepath.Join(dataDir, "files")
 	entries, err := os.ReadDir(filesDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: read files dir %s: %v\n", filesDir, err)
-		os.Exit(1)
+		return nil, "", fmt.Errorf("read files dir %s: %w", filesDir, err)
 	}
 
 	binaries := make(map[string]channel.BinaryEntry)
@@ -129,53 +159,44 @@ func cmdChannelsPublish(args []string) {
 		path := filepath.Join(filesDir, name)
 		sha, size, err := hashChannelFile(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: hash %s: %v\n", name, err)
-			os.Exit(1)
+			return nil, "", fmt.Errorf("hash %s: %w", name, err)
 		}
 		binaries[name] = channel.BinaryEntry{SHA256: sha, Size: size}
-		fmt.Printf("  %-44s  %s...  %d bytes\n", name, sha[:16], size)
+		if progress != nil {
+			progress(name, sha, size)
+		}
 	}
 
 	if len(binaries) == 0 {
-		fmt.Fprintf(os.Stderr, "error: no files found in %s\n", filesDir)
-		os.Exit(1)
+		return nil, "", fmt.Errorf("no files found in %s", filesDir)
 	}
 
-	m := channel.Manifest{
-		Channel:      *channelName,
-		Version:      *tag,
-		Tag:          *tag,
+	m := &channel.Manifest{
+		Channel:      channelName,
+		Version:      tag,
+		Tag:          tag,
 		PublishedAt:  time.Now().UTC(),
 		DownloadBase: downloadBase,
 		Binaries:     binaries,
 	}
 	if err := m.Validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: manifest validation failed: %v\n", err)
-		os.Exit(1)
+		return nil, "", fmt.Errorf("manifest validation: %w", err)
 	}
 
 	out, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: marshal manifest: %v\n", err)
-		os.Exit(1)
+		return nil, "", fmt.Errorf("marshal manifest: %w", err)
 	}
 	out = append(out, '\n')
 
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "error: create data dir: %v\n", err)
-		os.Exit(1)
+		return nil, "", fmt.Errorf("create data dir: %w", err)
 	}
-	manifestPath := filepath.Join(dataDir, *channelName+".json")
+	manifestPath := filepath.Join(dataDir, channelName+".json")
 	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "error: write manifest: %v\n", err)
-		os.Exit(1)
+		return nil, "", fmt.Errorf("write manifest: %w", err)
 	}
-
-	fmt.Printf("\npublished %s channel manifest\n", *channelName)
-	fmt.Printf("  tag:      %s\n", m.Tag)
-	fmt.Printf("  binaries: %d\n", len(m.Binaries))
-	fmt.Printf("  base:     %s\n", m.DownloadBase)
-	fmt.Printf("  manifest: %s\n", manifestPath)
+	return m, manifestPath, nil
 }
 
 // hashChannelFile computes the SHA-256 and byte size of the file at path.

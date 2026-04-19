@@ -609,6 +609,19 @@ Endpoints are public (no auth, CORS wildcard) by design — release
 manifests are world-readable. Do not put anything in `channels.data`
 you would not want served.
 
+**Publishing remotely** (owner/admin auth required):
+
+| Path | Method | Purpose |
+|------|--------|---------|
+| `/api/admin/channels/files/{name}` | PUT | Upload a binary (request body = file bytes). Writes atomically to `channels.data/files/{name}`. 500 MiB max. |
+| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}`. `baseUrl` is optional and defaults to `channels.publicURL`. |
+
+A build pipeline running on a separate host PUTs each binary to the
+upload endpoint, then POSTs to `/publish` to regenerate the manifest.
+No SSH, tunnel, or file-share mount is needed — the hub's admin auth
+is the only credential. See `.vscode/publish-dev.ps1` in the tela
+repo for a reference implementation.
+
 **Pointing tela, telad, or telahubd at a self-hosted channel server:**
 
 Set `update.sources[<channel>]` in each binary's config (or in
