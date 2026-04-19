@@ -445,23 +445,28 @@ function loadHubChannel(hubURL) {
     // Repopulate from the hub's own sources (built-ins + hub's update.sources)
     // before applying the current channel selection. The hub is the authority
     // on what channels it can resolve; we never substitute the client's list.
+    // GetHubSources may return {"error":"..."} on pre-channel-sources hubs;
+    // treat that as an empty list and let the fallback below synthesize an
+    // entry for whatever channel the hub reports as active.
     goApp.GetHubSources(hubURL).then(function (raw2) {
-      var customs = [];
-      try { customs = JSON.parse(raw2) || []; } catch (e) {}
+      var parsed = null;
+      try { parsed = JSON.parse(raw2); } catch (e) {}
+      var customs = Array.isArray(parsed) ? parsed : [];
       sel.innerHTML = '';
       ['dev', 'beta', 'stable'].forEach(function (n) {
         var opt = document.createElement('option');
         opt.value = n; opt.textContent = n;
         sel.appendChild(opt);
       });
-      (customs || []).forEach(function (src) {
+      customs.forEach(function (src) {
         var opt = document.createElement('option');
         opt.value = src.name; opt.textContent = src.name;
         sel.appendChild(opt);
       });
       if (info.channel) {
         // Honor whatever the hub reports, even if it's not in the dropdown
-        // (e.g. a custom channel removed via the CLI but still active).
+        // (e.g. a custom channel removed via the CLI but still active, or a
+        // pre-channel-sources hub where the sources endpoint 404s).
         var found = Array.prototype.some.call(sel.options, function (o) { return o.value === info.channel; });
         if (!found) {
           var opt = document.createElement('option');
@@ -520,11 +525,11 @@ function loadAgentChannel(hubURL, machineID) {
     // authority on what channels it can resolve; hub-only suggestions are
     // shown but require an explicit push before the agent will accept them.
     Promise.all([
-      goApp.GetAgentSources(hubURL, machineID).then(function (r) { try { return JSON.parse(r) || []; } catch (e) { return []; } }),
-      goApp.GetHubSources(hubURL).then(function (r) { try { return JSON.parse(r) || []; } catch (e) { return []; } })
+      goApp.GetAgentSources(hubURL, machineID).then(function (r) { try { return JSON.parse(r); } catch (e) { return null; } }),
+      goApp.GetHubSources(hubURL).then(function (r) { try { return JSON.parse(r); } catch (e) { return null; } })
     ]).then(function (results) {
-      var agentSrcs = (results[0] && !results[0].error) ? results[0] : [];
-      var hubSrcs = (results[1] && !results[1].error) ? results[1] : [];
+      var agentSrcs = Array.isArray(results[0]) ? results[0] : [];
+      var hubSrcs = Array.isArray(results[1]) ? results[1] : [];
       var agentNames = {};
       agentSrcs.forEach(function (s) { agentNames[s.name] = true; });
       sel.innerHTML = '';
@@ -5696,12 +5701,16 @@ function loadHubChannelSources(hub) {
   var container = document.getElementById('hub-channel-sources-list');
   if (!container) return;
   goApp.GetHubSources(hub).then(function (raw) {
-    var customs = [];
-    try { customs = JSON.parse(raw) || []; } catch (e) {}
-    if (customs && customs.error) {
-      container.innerHTML = '<div class="channel-sources-empty">Error: ' + escHtml(customs.error) + '</div>';
+    var parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) {}
+    // Pre-channel-sources hub returns {"error":"..."} (the route 404s).
+    // Hide the whole card rather than show a broken form.
+    if (parsed && !Array.isArray(parsed) && parsed.error) {
+      var card = document.getElementById('hub-channel-sources-card');
+      if (card) card.style.display = 'none';
       return;
     }
+    var customs = Array.isArray(parsed) ? parsed : [];
     if (customs.length === 0) {
       container.innerHTML = '<div class="channel-sources-empty">No custom channel sources.</div>';
       return;
@@ -5829,12 +5838,16 @@ function loadAgentChannelSources(hub, machineID) {
   var container = document.getElementById('agent-channel-sources-list');
   if (!container) return;
   goApp.GetAgentSources(hub, machineID).then(function (raw) {
-    var customs = [];
-    try { customs = JSON.parse(raw) || []; } catch (e) {}
-    if (customs && customs.error) {
-      container.innerHTML = '<div class="channel-sources-empty">Error: ' + escHtml(customs.error) + '</div>';
+    var parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) {}
+    // Pre-channel-sources agent returns {"error":"unknown action ..."}.
+    // Hide the whole card rather than show a broken form.
+    if (parsed && !Array.isArray(parsed) && parsed.error) {
+      var card = document.getElementById('agent-channel-sources-card');
+      if (card) card.style.display = 'none';
       return;
     }
+    var customs = Array.isArray(parsed) ? parsed : [];
     if (customs.length === 0) {
       container.innerHTML = '<div class="channel-sources-empty">No custom channel sources.</div>';
       return;
