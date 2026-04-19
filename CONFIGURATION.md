@@ -410,6 +410,12 @@ udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
 name: owlsnest
 wwwDir: ""           # omit to use the embedded console
 
+# Optional: how long graceful shutdown waits for in-flight requests to
+# finish after SIGTERM (or a context cancel from a test harness). A
+# second signal during the drain forces immediate exit. Accepts any
+# Go duration literal: "30s", "2m", "500ms".
+shutdownTimeout: 30s
+
 # Optional: which release channel telahubd's self-update follows.
 # Accepts dev (default), beta, stable, or a custom channel name.
 # See RELEASE-PROCESS.md for the channel model.

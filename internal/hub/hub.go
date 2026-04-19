@@ -204,17 +204,18 @@ type portalEntry struct {
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	HubID    string                 `yaml:"hubId,omitempty"`    // Stable hub identity UUID (v4); generated on first start
-	Port     int                    `yaml:"port"`               // HTTP+WS listen port (default 80)
-	UDPPort  int                    `yaml:"udpPort"`            // UDP relay port (default 41820)
-	UDPHost  string                 `yaml:"udpHost,omitempty"`  // public IP/hostname for UDP relay (when behind proxy)
-	Name     string                 `yaml:"name"`               // Display name for this hub
-	WWWDir   string                 `yaml:"wwwDir"`             // Static file directory (default ./www)
-	Auth     authConfig             `yaml:"auth,omitempty"`     // Token-based access control
-	Portals  map[string]portalEntry `yaml:"portals,omitempty"`  // Registered portals
-	Update   updateConfig           `yaml:"update,omitempty"`   // Self-update channel selection
-	Bridges  []bridgeConfig         `yaml:"bridges,omitempty"`  // Hub-to-hub transit bridges
-	Channels channelsConfig         `yaml:"channels,omitempty"` // Self-hosted release channel server (replaces telachand)
+	HubID           string                 `yaml:"hubId,omitempty"`           // Stable hub identity UUID (v4); generated on first start
+	Port            int                    `yaml:"port"`                      // HTTP+WS listen port (default 80)
+	UDPPort         int                    `yaml:"udpPort"`                   // UDP relay port (default 41820)
+	UDPHost         string                 `yaml:"udpHost,omitempty"`         // public IP/hostname for UDP relay (when behind proxy)
+	Name            string                 `yaml:"name"`                      // Display name for this hub
+	WWWDir          string                 `yaml:"wwwDir"`                    // Static file directory (default ./www)
+	ShutdownTimeout time.Duration          `yaml:"shutdownTimeout,omitempty"` // Graceful-drain timeout on SIGTERM/context-cancel (default 30s)
+	Auth            authConfig             `yaml:"auth,omitempty"`            // Token-based access control
+	Portals         map[string]portalEntry `yaml:"portals,omitempty"`         // Registered portals
+	Update          updateConfig           `yaml:"update,omitempty"`          // Self-update channel selection
+	Bridges         []bridgeConfig         `yaml:"bridges,omitempty"`         // Hub-to-hub transit bridges
+	Channels        channelsConfig         `yaml:"channels,omitempty"`        // Self-hosted release channel server (replaces telachand)
 }
 
 // channelsConfig enables the hub to serve release channel manifests and
@@ -350,6 +351,13 @@ func envStr(key, def string) string {
 var udpPort atomic.Int32
 
 func init() { udpPort.Store(41820) }
+
+// inFlightRequests counts HTTP requests currently being served. It is
+// incremented on handler entry and decremented on handler exit by the
+// wrapper installed in Run(). Graceful shutdown reads the value at
+// drain-start and drain-complete so operators can see how many
+// connections were still attached when the hub went down.
+var inFlightRequests atomic.Int64
 
 var (
 	httpPort       = 80
@@ -2130,14 +2138,20 @@ func Main() {
 	}
 
 	// Interactive mode: run until SIGINT/SIGTERM cancels the context.
+	// First signal triggers a graceful drain via context cancel. A second
+	// signal while the drain is in progress (typically Ctrl+C a second
+	// time) short-circuits the drain and exits immediately.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		sigCh := make(chan os.Signal, 1)
+		sigCh := make(chan os.Signal, 2)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-sigCh
-		log.Printf("[hub] received %v, shutting down", sig)
+		log.Printf("[hub] received %v, starting graceful shutdown (signal again to force immediate exit)", sig)
 		cancel()
+		sig = <-sigCh
+		log.Printf("[hub] received %v during drain, forcing immediate exit", sig)
+		os.Exit(1)
 	}()
 
 	if err := Run(ctx, "", nil); err != nil {
@@ -2354,8 +2368,19 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 		addrCh <- listener.Addr().String()
 	}
 
+	// Wrap the mux with an in-flight request counter so graceful shutdown
+	// can log how many requests are still being drained. WebSocket upgrades
+	// count for the life of the connection; this is intentional since the
+	// operator typically wants to see "how many agents are still attached"
+	// during a drain, not just REST calls.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		inFlightRequests.Add(1)
+		defer inFlightRequests.Add(-1)
+		mux.ServeHTTP(w, r)
+	})
+
 	server := &http.Server{
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -2387,13 +2412,29 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 		}
 	}()
 
-	// Cancel the server when ctx fires.
+	// Graceful shutdown: when ctx fires, give in-flight requests up to
+	// shutdownTimeout to finish before the listener closes. Reads the
+	// timeout from config at shutdown time (not start-up) so an operator
+	// who edits the config while the hub is running gets the new value
+	// on the next restart without any extra handling.
 	go func() {
 		<-ctx.Done()
-		log.Println("[hub] context cancelled, shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		globalCfgMu.RLock()
+		timeout := globalCfg.ShutdownTimeout
+		globalCfgMu.RUnlock()
+		if timeout <= 0 {
+			timeout = 30 * time.Second
+		}
+		inFlight := inFlightRequests.Load()
+		log.Printf("[hub] starting graceful drain: %d in-flight requests, timeout %v", inFlight, timeout)
+		start := time.Now()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[hub] graceful drain did not complete within %v (%d still in flight): %v", timeout, inFlightRequests.Load(), err)
+		} else {
+			log.Printf("[hub] graceful drain complete in %v", time.Since(start).Round(time.Millisecond))
+		}
 	}()
 
 	log.Printf("[hub] telahubd %s listening on http+ws://%s", version, listener.Addr())
