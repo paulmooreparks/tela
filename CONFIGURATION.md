@@ -133,7 +133,8 @@ hubs:
 # files.
 update:
   channel: dev
-  # manifestBase: https://my-fork.example.com/channels/
+  # sources:                                   # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
 ```
 
 Notes:
@@ -275,7 +276,8 @@ token: ""         # optional default token for all machines
 # See RELEASE-PROCESS.md for the channel model.
 update:
   channel: dev
-  # manifestBase: https://my-fork.example.com/channels/   # optional override
+  # sources:                                                # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
 
 machines:
   - name: barn
@@ -289,7 +291,8 @@ machines:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `channel` | string | `dev` | Release channel for self-update: `dev`, `beta`, `stable`, or a custom channel name. |
-| `manifestBase` | string | upstream | Override the channel manifest URL prefix. Used when running a fork against a self-hosted release host. Default is `https://github.com/paulmooreparks/tela/releases/download/channels/`. |
+| `sources` | map[name]url | (none) | Per-channel manifest base URL overrides. Built-in channels (`dev`, `beta`, `stable`) fall back to the baked-in GitHub releases URL when absent. Custom channel names require an entry here (or in the `channel sources` CLI) to resolve. |
+| `manifestBase` | string | (none) | **Deprecated.** Pre-0.12 scalar override. On load, automatically migrated into `sources[channel]` for custom channels, or discarded for built-ins. Kept for one release cycle to preserve existing operator configs; scheduled for removal in 0.13 ([tela#59](https://github.com/paulmooreparks/tela/issues/59)). Do not use in new configs. |
 
 The configured channel is read by the `telad update` CLI subcommand, the
 `telad channel` CLI subcommand (show / set / show-manifest), the

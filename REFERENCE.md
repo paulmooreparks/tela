@@ -566,10 +566,10 @@ telahubd channel show [-channel <ch>]                    # pretty-print the pars
 telahubd channel -h | -? | -help | --help                # print help (works after any subcommand too)
 ```
 
-Set operations write `update.channel` (and `update.manifestBase` if given)
-into the hub's YAML config. Restart the hub service for background update
-checks to pick up the new channel; the CLI `telahubd update` honors the
-change immediately.
+Set operations write `update.channel` (and `update.sources[<channel>]` if
+a manifest base is given) into the hub's YAML config. Restart the hub
+service for background update checks to pick up the new channel; the CLI
+`telahubd update` honors the change immediately.
 
 See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
 
@@ -983,9 +983,9 @@ telad channel show [-channel <ch>] [-config <path>]      # pretty-print the pars
 telad channel -h | -? | -help | --help                   # print help (works after any subcommand too)
 ```
 
-Set operations write `update.channel` (and `update.manifestBase` if given)
-into the agent's YAML config. `-config` accepts `TELAD_CONFIG` from the
-environment as a fallback.
+Set operations write `update.channel` (and `update.sources[<channel>]` if
+a manifest base is given) into the agent's YAML config. `-config` accepts
+`TELAD_CONFIG` from the environment as a fallback.
 
 See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
 

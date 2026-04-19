@@ -325,7 +325,7 @@ Edge case: a `local.N`-suffixed binary compared against a `dev.N`-suffixed lates
 
 ## 10. Migration and rollout
 
-- Pre-1.0, no compat shim. The `manifestBase` field migration code described in 3.4 runs once per host and is deleted before the `0.12` beta tag.
+- Pre-1.0, minimal compat surface. The `manifestBase` struct field and the `MigrateManifestBase` helper described in 3.4 ship in 0.12 so existing persisted configs upgrade automatically on first load. Both are scheduled for deletion in 0.13 (tracked in [tela#59](https://github.com/paulmooreparks/tela/issues/59)), one stable release cycle after 0.12, so any config that has been opened at least once by a 0.12 binary is already rewritten in the new shape before the field disappears.
 - Every binary in the 0.12 release carries identical migration logic. Hub binaries, agent binaries, and client credstore loading all recognize the old shape and rewrite.
 - CHANGELOG under `[Unreleased]` lists every user-visible change: new config field name, retired binary, new CLI subcommand, downgrade refusal.
 - REFERENCE.md gains the new CLI surface. CONFIGURATION.md updates the update-block schema.
