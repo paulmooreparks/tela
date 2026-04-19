@@ -300,12 +300,18 @@ pipeline lives elsewhere, use the HTTPS admin API instead:
 Upload each binary, then call `/publish` once. No SSH, tunnel, or
 file-share mount is needed on the build host.
 
-A reference PowerShell implementation lives at
-`scripts/publish-channel.ps1` in the tela repo. It cross-compiles
-tela/telad/telahubd for Linux and Windows amd64, bundles TelaVisor via
-`wails build`, and runs the upload + publish round-trip against any
-hub with channels hosting enabled. Configuration comes from
-`scripts/publish.env` (gitignored):
+Reference implementations live under `scripts/` in the tela repo.
+Pick the one for your host OS:
+
+- `scripts/publish-channel.ps1` -- PowerShell 5.1+ / PowerShell 7, for Windows
+- `scripts/publish-channel.sh` -- bash 4+, for Linux and macOS
+
+Both do the same job: cross-compile tela/telad/telahubd for Linux and
+Windows amd64, bundle TelaVisor via `wails build` (Windows binary on
+PowerShell, host-platform binary on bash), and run the upload + publish
+round-trip against any hub with channels hosting enabled.
+
+Configuration comes from `scripts/publish.env` (gitignored):
 
 ```
 TELA_PUBLISH_HUB_URL=https://hub.example.net
