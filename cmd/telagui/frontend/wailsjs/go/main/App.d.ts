@@ -114,6 +114,8 @@ export function GetHubInfo(arg1:string):Promise<string>;
 
 export function GetHubLogs(arg1:string,arg2:number):Promise<string>;
 
+export function GetHubSources(arg1:string):Promise<string>;
+
 export function GetHubStatus(arg1:string):Promise<main.HubStatus>;
 
 export function GetKnownHubs():Promise<Array<main.KnownHub>>;
@@ -212,6 +214,8 @@ export function RemoveCredential(arg1:string):Promise<void>;
 
 export function RemoveHub(arg1:string):Promise<void>;
 
+export function RemoveHubSource(arg1:string,arg2:string):Promise<string>;
+
 export function RemoveRemote(arg1:string):Promise<void>;
 
 export function RenameProfile(arg1:string,arg2:string):Promise<void>;
@@ -253,6 +257,8 @@ export function SetClientChannel(arg1:string,arg2:string):Promise<string>;
 export function SetClientSource(arg1:string,arg2:string):Promise<string>;
 
 export function SetHubChannel(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SetHubSource(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function SetModalOpen(arg1:boolean):Promise<void>;
 

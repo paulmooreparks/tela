@@ -226,6 +226,10 @@ export function GetHubLogs(arg1, arg2) {
   return window['go']['main']['App']['GetHubLogs'](arg1, arg2);
 }
 
+export function GetHubSources(arg1) {
+  return window['go']['main']['App']['GetHubSources'](arg1);
+}
+
 export function GetHubStatus(arg1) {
   return window['go']['main']['App']['GetHubStatus'](arg1);
 }
@@ -422,6 +426,10 @@ export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
 }
 
+export function RemoveHubSource(arg1, arg2) {
+  return window['go']['main']['App']['RemoveHubSource'](arg1, arg2);
+}
+
 export function RemoveRemote(arg1) {
   return window['go']['main']['App']['RemoveRemote'](arg1);
 }
@@ -504,6 +512,10 @@ export function SetClientSource(arg1, arg2) {
 
 export function SetHubChannel(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetHubChannel'](arg1, arg2, arg3);
+}
+
+export function SetHubSource(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetHubSource'](arg1, arg2, arg3);
 }
 
 export function SetModalOpen(arg1) {

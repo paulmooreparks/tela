@@ -2818,6 +2818,67 @@ func (a *App) SetHubChannel(hubName, channelName, manifestBase string) string {
 	return string(data)
 }
 
+// GetHubSources lists the hub's custom channel sources via the admin API.
+// Returns a JSON array of {name, manifestBase}, excluding built-in channels.
+func (a *App) GetHubSources(hubName string) string {
+	data, err := a.adminProxyCall(hubName, "GET", "update/sources", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	var resp struct {
+		Sources map[string]string `json:"sources"`
+		Error   string            `json:"error"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return `{"error":"parse response: ` + err.Error() + `"}`
+	}
+	if resp.Error != "" {
+		return `{"error":"` + resp.Error + `"}`
+	}
+	out := []ChannelSource{}
+	for name, base := range resp.Sources {
+		if channelpkg.IsKnown(name) {
+			continue
+		}
+		out = append(out, ChannelSource{Name: name, ManifestBase: base})
+	}
+	raw, _ := json.Marshal(out)
+	return string(raw)
+}
+
+// SetHubSource adds or updates a custom channel source on the hub.
+func (a *App) SetHubSource(hubName, name, manifestBase string) string {
+	name = channelpkg.Normalize(name)
+	if !channelpkg.IsValid(name) {
+		return `{"error":"invalid channel name"}`
+	}
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot override built-in channel"}`
+	}
+	if strings.TrimSpace(manifestBase) == "" {
+		return `{"error":"manifestBase is required"}`
+	}
+	body, _ := json.Marshal(map[string]string{"base": manifestBase})
+	data, err := a.adminProxyCall(hubName, "PUT", "update/sources/"+url.PathEscape(name), body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// RemoveHubSource removes a custom channel source from the hub.
+func (a *App) RemoveHubSource(hubName, name string) string {
+	name = channelpkg.Normalize(name)
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot remove built-in channel"}`
+	}
+	data, err := a.adminProxyCall(hubName, "DELETE", "update/sources/"+url.PathEscape(name), nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
 // GetAgentChannelInfo reads a remote agent's channel status through the
 // hub-mediated management protocol.
 func (a *App) GetAgentChannelInfo(hubName, machineID string) string {
