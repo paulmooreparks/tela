@@ -1952,6 +1952,7 @@ Commands:
   user      Manage auth tokens (add, remove, grant, revoke, rotate)
   portal    Manage portal registrations (add, remove, list, sync)
   channel   Show or set the hub's release channel (dev, beta, stable, custom)
+  channels  Manage a self-hosted release channel server (publish manifests)
   update    Self-update the telahubd binary from the configured release channel
   version   Print version and exit
   help      Show this help (also -h, -?, -help, --help)
@@ -2002,6 +2003,9 @@ func Main() {
 			return
 		case "channel":
 			cmdHubChannel(os.Args[2:])
+			return
+		case "channels":
+			cmdChannels(os.Args[2:])
 			return
 		case "update":
 			cmdSelfUpdate(os.Args[2:])
