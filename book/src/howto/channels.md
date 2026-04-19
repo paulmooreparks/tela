@@ -245,6 +245,6 @@ The hub or agent is running a binary from before the channel system was added. U
 
 ## Related
 
-- [Release process](../ops/release-process.md) -- the channel model, promotion, and running a self-hosted channel server with `telachand`
-- [Appendix A: CLI reference](../guide/reference.md) -- full CLI reference for `tela channel`, `tela update`, `telad update`, `telahubd update`, `telachand publish`, `tela admin hub channel`, `tela admin agent channel`
-- [Appendix B: Configuration file reference](../guide/configuration.md) -- the `update.channel` and `update.manifestBase` fields in `telad.yaml`, `telahubd.yaml`, `credentials.yaml`, and `telachand.yaml`
+- [Release process](../ops/release-process.md) -- the channel model, promotion, and running a self-hosted channel server on telahubd
+- [Appendix A: CLI reference](../guide/reference.md) -- full CLI reference for `tela channel`, `tela update`, `telad update`, `telahubd update`, `telahubd channels publish`, `tela admin hub channel`, `tela admin agent channel`
+- [Appendix B: Configuration file reference](../guide/configuration.md) -- the `update.channel`, `update.sources`, and `channels:` fields in `telad.yaml`, `telahubd.yaml`, and `credentials.yaml`
