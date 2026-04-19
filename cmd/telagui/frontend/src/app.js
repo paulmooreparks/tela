@@ -377,7 +377,16 @@ function formatChannelStatus(info) {
   var latest = info.latestVersion || '';
   if (!latest) return 'currently ' + cur;
   if (info.updateAvailable) return 'currently ' + cur + ' (latest ' + latest + ')';
-  return cur + ' (latest)';
+  // updateAvailable=false has two cases:
+  //   1. cur === latest: genuinely up to date.
+  //   2. cur != latest: this binary is from a different release line
+  //      (e.g. local.51 on a dev channel where dev's HEAD is dev.11),
+  //      so the semver comparison says no update is needed but the
+  //      versions are not actually equal. Showing only "cur (latest)"
+  //      hides the channel HEAD and confuses the operator. Make it
+  //      explicit when current != latest.
+  if (cur === latest) return cur + ' (latest)';
+  return 'currently ' + cur + ' (channel HEAD ' + latest + ')';
 }
 
 // preChannelMarker is the placeholder we leave on the channel row when a
@@ -419,10 +428,18 @@ function applySoftwareButton(btnId, statusId, info, fallbackVer) {
     btn.textContent = 'Update to ' + latest;
     btn.disabled = false;
     statusEl.textContent = 'currently running ' + cur;
-  } else {
+  } else if (cur === latest) {
     btn.textContent = 'Up to date';
     btn.disabled = true;
     statusEl.textContent = cur + ' (latest)';
+  } else {
+    // Different release line: cur is "newer" than channel HEAD by semver
+    // (e.g. local.51 vs dev.11), so no upgrade is offered, but the two
+    // are not equal. Surface the channel HEAD so the operator can see
+    // what's actually on the channel they switched to.
+    btn.textContent = 'Up to date';
+    btn.disabled = true;
+    statusEl.textContent = 'currently ' + cur + ' (channel HEAD ' + latest + ')';
   }
 }
 
