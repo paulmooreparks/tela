@@ -298,8 +298,80 @@ pipeline lives elsewhere, use the HTTPS admin API instead:
   writes the manifest. Returns the manifest JSON for verification.
 
 Upload each binary, then call `/publish` once. No SSH, tunnel, or
-file-share mount is needed. `.vscode/publish-dev.ps1` in the tela
-repo is a reference PowerShell implementation.
+file-share mount is needed on the build host.
+
+A reference PowerShell implementation lives at
+`scripts/publish-channel.ps1` in the tela repo. It cross-compiles
+tela/telad/telahubd for Linux and Windows amd64, bundles TelaVisor via
+`wails build`, and runs the upload + publish round-trip against any
+hub with channels hosting enabled. Configuration comes from
+`scripts/publish.env` (gitignored):
+
+```
+TELA_PUBLISH_HUB_URL=https://hub.example.net
+TELA_PUBLISH_TOKEN=<owner-or-admin-token>
+```
+
+Get the owner token with `telahubd user show-owner` on the hub (or
+`docker exec <container> telahubd user show-owner -config
+/app/data/telahubd.yaml` on a Dockerised hub). See
+`scripts/publish.env.example` for all supported keys.
+
+#### Bootstrapping a self-hosted channel pipeline
+
+The HTTPS remote-publish endpoints shipped in Tela 0.12. A brand new
+self-hosted hub starts out with whichever telahubd binary the Docker
+image was built against; if that predates 0.12, it has no
+`/api/admin/channels/*` routes and `publish-channel.ps1` will 404.
+
+There is therefore a one-time chicken-and-egg for any hub that is
+itself the only place you have published to: you cannot upload the
+new telahubd binary through its own admin API until it already has
+the admin API. The workaround is a single manual hop:
+
+1. Build locally with `publish-channel.ps1` -- the build step succeeds
+   even when the upload step fails, so your `dist/` directory ends up
+   with a fresh Tela 0.12+ binary set.
+2. Get those binaries onto the hub by any out-of-band means you
+   currently use: copy into an existing OneDrive/S3/nginx host that
+   the hub's `CHANNEL_MANIFEST_URL` build arg points at, `docker cp`
+   into the hub container, a temporary file mount, etc.
+3. Rebuild the hub image so it picks up the new binaries:
+   `docker compose build <hub-service> && docker compose up -d <hub-service>`.
+4. Verify the admin endpoint now exists. A POST without auth should
+   return 401, not 404:
+   ```
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+     https://hub.example.net/api/admin/channels/publish
+   ```
+5. Populate `scripts/publish.env` and run `publish-channel.ps1`
+   again. From this point on every subsequent publish goes straight
+   through the HTTPS admin API.
+
+The specific out-of-band hop in step 2 is unique to each operator's
+pre-0.12 topology. Once the hub has 0.12+ telahubd, the pipeline is
+self-sufficient and the workaround is never needed again.
+
+#### Common pitfalls
+
+- **Version string vs. code version.** The binary's `main.version`
+  string is set by ldflags at build time; it does not imply the code
+  in that binary has any specific feature. If `publish-channel.ps1`
+  404s against a hub whose banner reports a version tag that should
+  have the admin API, you are probably running a binary whose
+  `dist/` copy was built from an older commit. Re-run
+  `publish-channel.ps1` to force a fresh build from the current tip
+  and bootstrap through step 2 once more.
+- **Token mismatch.** `publish.env` holds a token per hub; if you
+  have multiple hubs, you need one `publish.env` per deployment or a
+  way to select between them. The simplest approach is one script
+  working copy per hub.
+- **Counter drift.** The per-channel build counter lives in
+  `scripts/{channel}-build-counter` and increments on every run,
+  including failed runs. A failed publish still bumps the counter;
+  subsequent successful publishes pick up from there. This is
+  intentional -- version tags should never collide even across
+  failed attempts.
 
 ### Point binaries at the self-hosted channel
 
