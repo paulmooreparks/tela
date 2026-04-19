@@ -37,6 +37,9 @@ func cmdHubChannel(args []string) {
 		case "show":
 			showHubChannelManifest(args[1:])
 			return
+		case "sources":
+			hubChannelSources(args[1:])
+			return
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown channel command: %s\n\n", args[0])
 			printHubChannelUsage()
@@ -47,14 +50,161 @@ func cmdHubChannel(args []string) {
 	showHubChannel(args)
 }
 
+// hubChannelSources dispatches `telahubd channel sources [list|set|remove]`.
+func hubChannelSources(args []string) {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "list":
+			listHubSources(args[1:])
+			return
+		case "set":
+			setHubSource(args[1:])
+			return
+		case "remove":
+			removeHubSource(args[1:])
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown sources command: %s\n\n", args[0])
+			printHubChannelUsage()
+			os.Exit(1)
+		}
+	}
+	listHubSources(args)
+}
+
+// listHubSources prints every channel name the hub knows about with the
+// resolved base URL and origin (built-in default / override / custom).
+func listHubSources(args []string) {
+	fs := flag.NewFlagSet("telahubd channel sources", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	configPath := fs.String("config", "", "Path to telahubd.yaml (default: platform-standard path)")
+	fs.Parse(hubPermuteArgs(fs, args))
+	if wantHelp() {
+		printHubChannelUsage()
+		return
+	}
+	cfg, _, err := loadHubChannelConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load config: %v\n", err)
+		os.Exit(1)
+	}
+	sources := cfg.Update.Sources
+	seen := map[string]bool{}
+	fmt.Printf("%-15s  %s\n", "CHANNEL", "BASE URL")
+	for _, name := range []string{channel.Dev, channel.Beta, channel.Stable} {
+		base := channel.ResolveBase(name, sources)
+		suffix := "  (built-in default)"
+		if v, ok := sources[name]; ok && v != "" {
+			suffix = "  (override)"
+			_ = v
+		}
+		fmt.Printf("%-15s  %s%s\n", name, base, suffix)
+		seen[name] = true
+	}
+	var customNames []string
+	for name := range sources {
+		if !seen[name] {
+			customNames = append(customNames, name)
+		}
+	}
+	for i := 1; i < len(customNames); i++ {
+		for j := i; j > 0 && customNames[j-1] > customNames[j]; j-- {
+			customNames[j-1], customNames[j] = customNames[j], customNames[j-1]
+		}
+	}
+	for _, name := range customNames {
+		fmt.Printf("%-15s  %s  (custom)\n", name, sources[name])
+	}
+}
+
+// setHubSource writes a per-channel base URL into the hub's YAML.
+func setHubSource(args []string) {
+	fs := flag.NewFlagSet("telahubd channel sources set", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	configPath := fs.String("config", "", "Path to telahubd.yaml (default: platform-standard path)")
+	fs.Parse(hubPermuteArgs(fs, args))
+	if wantHelp() {
+		printHubChannelUsage()
+		return
+	}
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Error: 'sources set' requires <name> <url>")
+		os.Exit(1)
+	}
+	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
+	if !channel.IsValid(name) {
+		fmt.Fprintf(os.Stderr, "Error: invalid channel name %q (use lowercase letters, digits, hyphens)\n", name)
+		os.Exit(1)
+	}
+	base := strings.TrimRight(strings.TrimSpace(fs.Arg(1)), "/")
+	if strings.HasSuffix(base, ".json") {
+		if i := strings.LastIndex(base, "/"); i >= 0 {
+			base = base[:i]
+		}
+	}
+	cfg, path, err := loadHubChannelConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load config %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	if cfg.Update.Sources == nil {
+		cfg.Update.Sources = map[string]string{}
+	}
+	cfg.Update.Sources[name] = base
+	if err := writeHubConfig(path, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: write config %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Set source for channel %s: %s\n", name, base)
+	fmt.Printf("  config: %s\n", path)
+}
+
+// removeHubSource removes a per-channel base URL from the hub's YAML.
+func removeHubSource(args []string) {
+	fs := flag.NewFlagSet("telahubd channel sources remove", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	configPath := fs.String("config", "", "Path to telahubd.yaml (default: platform-standard path)")
+	fs.Parse(hubPermuteArgs(fs, args))
+	if wantHelp() {
+		printHubChannelUsage()
+		return
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Error: 'sources remove' requires <name>")
+		os.Exit(1)
+	}
+	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
+	cfg, path, err := loadHubChannelConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load config %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	if _, exists := cfg.Update.Sources[name]; !exists {
+		fmt.Fprintf(os.Stderr, "Error: no source entry for channel %q\n", name)
+		os.Exit(1)
+	}
+	if name == channel.Normalize(cfg.Update.Channel) && !channel.IsKnown(name) {
+		fmt.Fprintf(os.Stderr, "Note: %q is the currently selected channel and has no baked-in default; updates will fail until you set a source for it or switch channels.\n", name)
+	}
+	delete(cfg.Update.Sources, name)
+	if err := writeHubConfig(path, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: write config %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Removed source for channel %s\n", name)
+}
+
 func printHubChannelUsage() {
 	fmt.Fprintf(os.Stderr, `telahubd channel -- hub release channel
 
 Usage:
-  telahubd channel [-config <path>]                 Show the current channel and latest version
-  telahubd channel set <channel> [-config <path>]   Switch the hub's release channel
-  telahubd channel set <ch> -manifest-base URL      Override the upstream manifest URL prefix
-  telahubd channel show [-channel <ch>]             Print the full parsed channel manifest
+  telahubd channel [-config <path>]                            Show the current channel and latest version
+  telahubd channel set <channel> [-config <path>]              Switch the hub's release channel
+  telahubd channel set <ch> -manifest-base URL                 Override the upstream manifest URL prefix
+  telahubd channel show [-channel <ch>]                        Print the full parsed channel manifest
+  telahubd channel sources [list] [-config <path>]             List known channel sources
+  telahubd channel sources set <name> <url> [-config <path>]   Add or override a per-channel base URL
+  telahubd channel sources remove <name> [-config <path>]      Remove a per-channel base URL
 
 Options:
   -config <path>      Path to telahubd.yaml. Defaults to %s.
