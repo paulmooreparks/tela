@@ -442,7 +442,35 @@ function loadHubChannel(hubURL) {
       applySoftwareButton('hub-update-btn', 'hub-update-status', info);
       return;
     }
-    if (info.channel) sel.value = info.channel;
+    // Repopulate from the hub's own sources (built-ins + hub's update.sources)
+    // before applying the current channel selection. The hub is the authority
+    // on what channels it can resolve; we never substitute the client's list.
+    goApp.GetHubSources(hubURL).then(function (raw2) {
+      var customs = [];
+      try { customs = JSON.parse(raw2) || []; } catch (e) {}
+      sel.innerHTML = '';
+      ['dev', 'beta', 'stable'].forEach(function (n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      (customs || []).forEach(function (src) {
+        var opt = document.createElement('option');
+        opt.value = src.name; opt.textContent = src.name;
+        sel.appendChild(opt);
+      });
+      if (info.channel) {
+        // Honor whatever the hub reports, even if it's not in the dropdown
+        // (e.g. a custom channel removed via the CLI but still active).
+        var found = Array.prototype.some.call(sel.options, function (o) { return o.value === info.channel; });
+        if (!found) {
+          var opt = document.createElement('option');
+          opt.value = info.channel; opt.textContent = info.channel + ' (active, not in sources)';
+          sel.appendChild(opt);
+        }
+        sel.value = info.channel;
+      }
+    });
     status.textContent = formatChannelStatus(info);
     applySoftwareButton('hub-update-btn', 'hub-update-status', info);
     sel.onchange = function () {
@@ -450,7 +478,10 @@ function loadHubChannel(hubURL) {
       showConfirmDialog('Switch Channel', 'Switch this hub to the ' + newCh + ' channel? New updates will follow the ' + newCh + ' release line.', 'Switch').then(function (yes) {
         if (!yes) { sel.value = info.channel || 'dev'; return; }
         status.textContent = 'switching to ' + newCh + '...';
-        goApp.SetHubChannel(hubURL, newCh, findChannelManifestBase(newCh)).then(function (r) {
+        // No manifestBase override -- the hub resolves from its own
+        // update.sources map for custom channels and from baked-in
+        // DefaultBases for dev/beta/stable.
+        goApp.SetHubChannel(hubURL, newCh, '').then(function (r) {
           var res = {};
           try { res = JSON.parse(r); } catch (e) { }
           if (res.error) { status.textContent = 'error: ' + res.error; return; }
@@ -484,7 +515,50 @@ function loadAgentChannel(hubURL, machineID) {
       applySoftwareButton('agent-update-btn', 'agent-update-status', info);
       return;
     }
-    if (info.channel) sel.value = info.channel;
+    // Repopulate the dropdown from the union of: built-ins, the agent's own
+    // sources, and the hub's sources marked as suggestions. The agent is the
+    // authority on what channels it can resolve; hub-only suggestions are
+    // shown but require an explicit push before the agent will accept them.
+    Promise.all([
+      goApp.GetAgentSources(hubURL, machineID).then(function (r) { try { return JSON.parse(r) || []; } catch (e) { return []; } }),
+      goApp.GetHubSources(hubURL).then(function (r) { try { return JSON.parse(r) || []; } catch (e) { return []; } })
+    ]).then(function (results) {
+      var agentSrcs = (results[0] && !results[0].error) ? results[0] : [];
+      var hubSrcs = (results[1] && !results[1].error) ? results[1] : [];
+      var agentNames = {};
+      agentSrcs.forEach(function (s) { agentNames[s.name] = true; });
+      sel.innerHTML = '';
+      ['dev', 'beta', 'stable'].forEach(function (n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      agentSrcs.forEach(function (src) {
+        var opt = document.createElement('option');
+        opt.value = src.name; opt.textContent = src.name;
+        opt.setAttribute('data-base', src.manifestBase || '');
+        sel.appendChild(opt);
+      });
+      hubSrcs.forEach(function (src) {
+        if (agentNames[src.name]) return;
+        var opt = document.createElement('option');
+        opt.value = src.name;
+        opt.textContent = src.name + ' (suggest from hub)';
+        opt.setAttribute('data-base', src.manifestBase || '');
+        opt.setAttribute('data-from-hub', '1');
+        sel.appendChild(opt);
+      });
+      if (info.channel) {
+        var found = Array.prototype.some.call(sel.options, function (o) { return o.value === info.channel; });
+        if (!found) {
+          var opt = document.createElement('option');
+          opt.value = info.channel;
+          opt.textContent = info.channel + ' (active, not in sources)';
+          sel.appendChild(opt);
+        }
+        sel.value = info.channel;
+      }
+    });
     status.textContent = formatChannelStatus(info);
     applySoftwareButton('agent-update-btn', 'agent-update-status', info);
     // Cache per-agent update status so the sidebar can show TDL version glyphs.
@@ -498,15 +572,38 @@ function loadAgentChannel(hubURL, machineID) {
     }
     sel.onchange = function () {
       var newCh = sel.value;
-      showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
-        if (!yes) { sel.value = info.channel || 'dev'; return; }
+      var opt = sel.options[sel.selectedIndex];
+      var fromHub = opt && opt.getAttribute('data-from-hub') === '1';
+      var hubBase = opt ? (opt.getAttribute('data-base') || '') : '';
+      var doSwitch = function () {
         status.textContent = 'switching to ' + newCh + '...';
-        goApp.SetAgentChannel(hubURL, machineID, newCh, findChannelManifestBase(newCh)).then(function (r) {
+        goApp.SetAgentChannel(hubURL, machineID, newCh, '').then(function (r) {
           var res = {};
           try { res = JSON.parse(r); } catch (e) { }
           if (res.error) { status.textContent = 'error: ' + res.error; return; }
           loadAgentChannel(hubURL, machineID);
         });
+      };
+      if (fromHub) {
+        // Suggestion picked: push the source to the agent first, then switch.
+        showConfirmDialog('Push Source to Agent',
+          'The "' + newCh + '" channel exists on this hub but not on agent ' + machineID + '. Push the source to the agent and switch?',
+          'Push and switch'
+        ).then(function (yes) {
+          if (!yes) { sel.value = info.channel || 'dev'; return; }
+          status.textContent = 'pushing source...';
+          goApp.SetAgentSource(hubURL, machineID, newCh, hubBase).then(function (r) {
+            var res = {};
+            try { res = JSON.parse(r); } catch (e) { }
+            if (res.error) { status.textContent = 'error: ' + res.error; sel.value = info.channel || 'dev'; return; }
+            doSwitch();
+          });
+        });
+        return;
+      }
+      showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
+        if (!yes) { sel.value = info.channel || 'dev'; return; }
+        doSwitch();
       });
     };
   }).catch(function () {
