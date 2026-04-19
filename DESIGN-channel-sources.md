@@ -286,14 +286,15 @@ channels:
   publicURL: https://hub.example.net/channels
 ```
 
-When `channels.enabled` is true and `channels.data` names a directory, telahubd mounts two route families on its existing HTTP mux:
+When `channels.enabled` is true and `channels.data` names a directory, telahubd mounts the following under `/channels/` on its existing HTTP mux:
 
 - `GET /channels/{name}.json` serves `{data}/{name}.json` verbatim with `Content-Type: application/json`.
-- `GET /channels/files/{binary}` serves `{data}/files/{binary}` with the standard Go file-server `Content-Type` detection.
+- `GET /channels/files/{channel}/{binary}` serves `{data}/files/{channel}/{binary}` with Go's file-server `Content-Type` detection.
+- `GET /channels/files/` and `GET /channels/files/{channel}/` return HTML directory listings courtesy of `http.FileServer`, so an operator can browse the published tree in any browser.
 
-Access control: `/channels/` routes are public read (no auth, wildcard CORS) by design — release manifests are meant to be fetched by unauthenticated update clients. Operators who need to restrict can front the hub with a reverse proxy.
+Per-channel subdirectories under `files/` mean two channels can hold binaries with the same filename (e.g. `telad-linux-amd64`) without colliding. Earlier in the 0.12 branch a flat `files/` layout was tried; the collision hazard and the lack of a browsable per-channel listing motivated the switch.
 
-Directory layout matches what `telachand` served, so an existing telachand data directory can be moved under `channels.data` unchanged.
+Access control: `/channels/` routes are public read (no auth, wildcard CORS) by design — release manifests and binaries are meant to be fetched by unauthenticated update clients. Operators who need to restrict can front the hub with a reverse proxy.
 
 ### 8.3 `telahubd channels publish` subcommand
 
@@ -301,7 +302,7 @@ Directory layout matches what `telachand` served, so an existing telachand data 
 telahubd channels publish -channel <name> -tag <tag> [-base-url <url>] [-config <path>]
 ```
 
-Scans `{channels.data}/files/` for binaries, computes SHA-256 and size for each, and writes `{channels.data}/{channel}.json`. `downloadBase` in the generated manifest is `{publicURL}/files/` unless `-base-url` overrides it.
+Scans `{channels.data}/files/{channel}/` for binaries, computes SHA-256 and size for each, and writes `{channels.data}/{channel}.json`. `downloadBase` in the generated manifest is `{publicURL}/files/{channel}/` unless `-base-url` overrides it.
 
 Same wire format as GitHub-hosted manifests and as the old `telachand publish` output — no parser changes required on the client side.
 

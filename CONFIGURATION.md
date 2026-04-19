@@ -420,7 +420,8 @@ update:
 
 # Optional: turn this hub into a self-hosted release channel server.
 # When enabled, telahubd mounts /channels/{name}.json and
-# /channels/files/{binary} from the directory below. Replaces the
+# /channels/files/{channel}/{binary} from the directory below. Each
+# channel has its own subdirectory under files/. Replaces the
 # standalone telachand daemon. See "Self-hosted release channel server"
 # below for the full description.
 channels:
@@ -586,7 +587,7 @@ manifests and binary downloads under `/channels/`.
 ```yaml
 channels:
   enabled: true
-  data: /var/lib/telahubd/channels    # holds {channel}.json and files/{binary}
+  data: /var/lib/telahubd/channels    # holds {channel}.json and files/{channel}/{binary}
   publicURL: https://hub.example.net/channels
 ```
 
