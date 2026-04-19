@@ -90,6 +90,8 @@ export function GetChannelSources():Promise<string>;
 
 export function GetClientChannel():Promise<Record<string, string>>;
 
+export function GetClientSources():Promise<string>;
+
 export function GetCommandLog():Promise<Array<main.CommandLogEntry>>;
 
 export function GetConnectionState():Promise<main.ConnectionState>;
@@ -204,6 +206,8 @@ export function RefreshBinStatus():Promise<Array<main.BinaryInfo>>;
 
 export function ReleaseLocalPort(arg1:number):Promise<void>;
 
+export function RemoveClientSource(arg1:string):Promise<string>;
+
 export function RemoveCredential(arg1:string):Promise<void>;
 
 export function RemoveHub(arg1:string):Promise<void>;
@@ -245,6 +249,8 @@ export function SetAgentChannel(arg1:string,arg2:string,arg3:string,arg4:string)
 export function SetAgentConfig(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function SetClientChannel(arg1:string,arg2:string):Promise<string>;
+
+export function SetClientSource(arg1:string,arg2:string):Promise<string>;
 
 export function SetHubChannel(arg1:string,arg2:string,arg3:string):Promise<string>;
 

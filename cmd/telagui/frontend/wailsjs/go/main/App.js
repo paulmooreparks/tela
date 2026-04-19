@@ -178,6 +178,10 @@ export function GetClientChannel() {
   return window['go']['main']['App']['GetClientChannel']();
 }
 
+export function GetClientSources() {
+  return window['go']['main']['App']['GetClientSources']();
+}
+
 export function GetCommandLog() {
   return window['go']['main']['App']['GetCommandLog']();
 }
@@ -406,6 +410,10 @@ export function ReleaseLocalPort(arg1) {
   return window['go']['main']['App']['ReleaseLocalPort'](arg1);
 }
 
+export function RemoveClientSource(arg1) {
+  return window['go']['main']['App']['RemoveClientSource'](arg1);
+}
+
 export function RemoveCredential(arg1) {
   return window['go']['main']['App']['RemoveCredential'](arg1);
 }
@@ -488,6 +496,10 @@ export function SetAgentConfig(arg1, arg2, arg3) {
 
 export function SetClientChannel(arg1, arg2) {
   return window['go']['main']['App']['SetClientChannel'](arg1, arg2);
+}
+
+export function SetClientSource(arg1, arg2) {
+  return window['go']['main']['App']['SetClientSource'](arg1, arg2);
 }
 
 export function SetHubChannel(arg1, arg2, arg3) {

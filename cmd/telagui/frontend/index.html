@@ -227,6 +227,17 @@
         </div>
 
         <div class="setting-card">
+          <div class="setting-card-title">Channel Sources</div>
+          <p class="setting-card-desc">Custom release channels available in every channel dropdown (Hub Settings, Agent Settings, TelaVisor self-update). Built-in channels (dev, beta, stable) are always present.</p>
+          <div id="custom-channel-sources" class="channel-sources-list"></div>
+          <div class="channel-source-add-row" style="margin-top:8px;">
+            <input type="text" id="new-channel-name" class="tb-input channel-src-input-name" placeholder="name (e.g. local)">
+            <input type="text" id="new-channel-base" class="tb-input channel-src-input-base" placeholder="http://localhost:9900/">
+            <button type="button" class="btn btn-sm" onclick="addChannelSource()">Add</button>
+          </div>
+        </div>
+
+        <div class="setting-card">
           <div class="setting-card-title">System Service</div>
           <p class="setting-card-desc">Run the default profile as an always-on background service that starts with the OS. Requires administrator privileges.</p>
           <div class="service-status-row">Status: <strong id="cs-service-status">checking...</strong></div>
@@ -472,19 +483,6 @@
                 <option value="stable">stable</option>
               </select>
               <div id="client-channel-status" class="tools-service-label" style="margin-top:4px;"></div>
-            </div>
-          </div>
-          <div class="settings-group">
-            <div class="settings-group-header">Channel sources</div>
-            <div class="settings-group-desc">Custom release channel sources for self-hosted telachand servers. These appear in all channel dropdowns alongside dev, beta, and stable.</div>
-            <div id="custom-channel-sources" class="channel-sources-list"></div>
-            <div class="settings-stacked-row" style="margin-top:8px;">
-              <div class="settings-stacked-label">Add source</div>
-              <div class="channel-source-add-row">
-                <input type="text" id="new-channel-name" class="tb-input channel-src-input-name" placeholder="name (e.g. local)">
-                <input type="text" id="new-channel-base" class="tb-input channel-src-input-base" placeholder="http://localhost:9900/">
-                <button type="button" class="btn btn-sm" onclick="addChannelSource()">Add</button>
-              </div>
             </div>
           </div>
           <div class="settings-group">

@@ -230,6 +230,13 @@ func (a *App) startup(ctx context.Context) {
 	// Set up system tray icon
 	a.setupTray()
 
+	// One-shot migration of legacy settings.CustomChannels into the
+	// credential store's Update.Sources map. After 0.12 the credential
+	// store is the single source of truth for client channel sources;
+	// the settings.yaml field is read once here and then cleared so
+	// omitempty drops it on the next save.
+	a.migrateCustomChannelsToCredstore()
+
 	// Apply startup settings
 	settings := a.GetSettings()
 
@@ -2888,19 +2895,138 @@ func (a *App) SetClientChannel(channelName, manifestBase string) string {
 	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(resolved, ch))
 }
 
-// GetChannelSources returns the full list of available release channels: the
-// three built-in channels (dev, beta, stable) followed by any custom channels
-// defined in TV settings. The result is a JSON array of {name, manifestBase}.
+// migrateCustomChannelsToCredstore copies any pre-0.12 custom channels
+// stored in settings.yaml (CustomChannels) into the credential store's
+// Update.Sources map, then clears the legacy field so it disappears on the
+// next settings save. Existing credstore entries win on conflict.
+func (a *App) migrateCustomChannelsToCredstore() {
+	s := a.GetSettings()
+	if len(s.CustomChannels) == 0 {
+		return
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		return
+	}
+	if store.Update.Sources == nil {
+		store.Update.Sources = map[string]string{}
+	}
+	for _, c := range s.CustomChannels {
+		name := channelpkg.Normalize(c.Name)
+		if name == "" || channelpkg.IsKnown(name) {
+			continue
+		}
+		if _, exists := store.Update.Sources[name]; exists {
+			continue
+		}
+		if strings.TrimSpace(c.ManifestBase) == "" {
+			continue
+		}
+		store.Update.Sources[name] = c.ManifestBase
+	}
+	if err := store.Save(path); err != nil {
+		log.Printf("[telavisor] migrate custom channels: save credstore: %v", err)
+		return
+	}
+	s.CustomChannels = nil
+	data, err := yaml.Marshal(&s)
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(settingsPath(), data, 0600); err != nil {
+		log.Printf("[telavisor] migrate custom channels: clear settings field: %v", err)
+	}
+}
+
+// GetChannelSources returns the full list of release channels available to
+// dropdowns: the three built-in channels (dev, beta, stable) followed by any
+// custom channels stored in the credential store. The result is a JSON array
+// of {name, manifestBase}. Built-in entries always carry an empty
+// manifestBase so the resolver falls through to channelpkg.DefaultBases.
 func (a *App) GetChannelSources() string {
 	sources := []ChannelSource{
 		{Name: "dev", ManifestBase: ""},
 		{Name: "beta", ManifestBase: ""},
 		{Name: "stable", ManifestBase: ""},
 	}
-	s := a.GetSettings()
-	sources = append(sources, s.CustomChannels...)
+	store, err := credstore.Load(credstore.UserPath())
+	if err == nil && store != nil {
+		for name, base := range store.Update.Sources {
+			if channelpkg.IsKnown(name) {
+				continue
+			}
+			sources = append(sources, ChannelSource{Name: name, ManifestBase: base})
+		}
+	}
 	data, _ := json.Marshal(sources)
 	return string(data)
+}
+
+// GetClientSources returns just the custom channel sources from the
+// credential store (excluding built-ins). Used by the Client Settings card.
+func (a *App) GetClientSources() string {
+	out := []ChannelSource{}
+	store, err := credstore.Load(credstore.UserPath())
+	if err == nil && store != nil {
+		for name, base := range store.Update.Sources {
+			if channelpkg.IsKnown(name) {
+				continue
+			}
+			out = append(out, ChannelSource{Name: name, ManifestBase: base})
+		}
+	}
+	data, _ := json.Marshal(out)
+	return string(data)
+}
+
+// SetClientSource adds or updates a custom channel source in the credential
+// store. Built-in channel names (dev, beta, stable) are rejected.
+func (a *App) SetClientSource(name, manifestBase string) string {
+	name = channelpkg.Normalize(name)
+	if !channelpkg.IsValid(name) {
+		return `{"error":"invalid channel name"}`
+	}
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot override built-in channel"}`
+	}
+	if strings.TrimSpace(manifestBase) == "" {
+		return `{"error":"manifestBase is required"}`
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		return `{"error":"load credential store: ` + err.Error() + `"}`
+	}
+	if store.Update.Sources == nil {
+		store.Update.Sources = map[string]string{}
+	}
+	store.Update.Sources[name] = manifestBase
+	if err := store.Save(path); err != nil {
+		return `{"error":"save credential store: ` + err.Error() + `"}`
+	}
+	return `{"ok":true}`
+}
+
+// RemoveClientSource removes a custom channel source from the credential
+// store. Built-in channel names cannot be removed.
+func (a *App) RemoveClientSource(name string) string {
+	name = channelpkg.Normalize(name)
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot remove built-in channel"}`
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		return `{"error":"load credential store: ` + err.Error() + `"}`
+	}
+	if store.Update.Sources != nil {
+		delete(store.Update.Sources, name)
+	}
+	if err := store.Save(path); err != nil {
+		return `{"error":"save credential store: ` + err.Error() + `"}`
+	}
+	return `{"ok":true}`
 }
 
 // UpdateServiceAgent self-updates the locally installed telad service.
