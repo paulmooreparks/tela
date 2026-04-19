@@ -557,8 +557,8 @@ endpoints are also available (owner/admin auth required):
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/admin/channels/files/{name}` | PUT | Upload a binary (request body = file bytes) into `channels.data/files/{name}`. 500 MiB max. |
-| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}` (baseUrl optional; defaults to `channels.publicURL`). Returns the manifest. |
+| `/api/admin/channels/files/{channel}/{name}` | PUT | Upload a binary (request body = file bytes) into `channels.data/files/{channel}/{name}`. 500 MiB max. |
+| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/{channel}/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}` (baseUrl optional; defaults to `channels.publicURL/files/{channel}/`). Returns the manifest. |
 
 ### Channel management (CLI)
 

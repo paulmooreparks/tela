@@ -3,18 +3,24 @@
 // Replaces the standalone telachand daemon. When channels.enabled is true
 // in the hub config, the hub serves:
 //
-//	GET /channels/{name}.json     -- manifest for channel {name}
-//	GET /channels/files/{binary}  -- binary download
+//	GET /channels/                       -- health JSON
+//	GET /channels/{name}.json            -- manifest for channel {name}
+//	GET /channels/files/                 -- browsable index of all channels
+//	GET /channels/files/{channel}/       -- browsable file index for one channel
+//	GET /channels/files/{channel}/{bin}  -- binary download
 //
-// The on-disk layout under channels.data matches what telachand used:
+// The on-disk layout under channels.data is:
 //
-//	{data}/{name}.json    -- manifest written by `telahubd channels publish`
-//	{data}/files/{binary} -- binary drops produced by the build pipeline
+//	{data}/{name}.json             -- manifest written by `telahubd channels publish`
+//	{data}/files/{channel}/{bin}   -- binary drops for that channel
 //
-// Manifest endpoints have no auth: they are public download URLs by design.
-// The rest of telahubd is unaffected; admin endpoints, status, the WS upgrade
-// path, and static file serving all keep their existing CORS and auth
-// behaviour.
+// Every channel gets its own subdirectory under files/ so two channels can
+// hold different binaries under the same filename without colliding.
+//
+// Manifest, binary, and listing endpoints all have no auth: they are public
+// download URLs by design. The rest of telahubd is unaffected; admin
+// endpoints, status, the WS upgrade path, and static file serving all keep
+// their existing CORS and auth behaviour.
 
 package hub
 
@@ -28,19 +34,12 @@ import (
 	"github.com/paulmooreparks/tela/internal/channel"
 )
 
-// handleChannels routes a request below /channels/ to either the manifest
-// handler or the file handler. It is registered once in Run() when
-// cfg.Channels.Enabled is true.
+// handleChannels routes a request below /channels/ to the manifest handler,
+// the health handler, or the file server. It is registered once in Run()
+// when cfg.Channels.Enabled is true.
 //
-// Path forms recognised:
-//
-//	/channels/                 -> health JSON
-//	/channels/{name}.json      -> manifest
-//	/channels/files/{binary}   -> binary file
-//
-// Anything else under /channels/ returns 404. Methods other than GET/HEAD
-// return 405 with a CORS-safe response so cross-origin update fetchers can
-// surface the error to the user.
+// Methods other than GET/HEAD/OPTIONS return 405 with a CORS-safe response
+// so cross-origin update fetchers can surface the error to the user.
 func handleChannels(w http.ResponseWriter, r *http.Request) {
 	channelsCorsHeaders(w, r)
 	if r.Method == http.MethodOptions {
@@ -72,9 +71,13 @@ func handleChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// /channels/files/{binary}
-	if strings.HasPrefix(rest, "files/") {
-		serveChannelFile(w, r, dataDir, strings.TrimPrefix(rest, "files/"))
+	// /channels/files/... is handled by a filesystem-backed file server.
+	// http.FileServer covers directory listings, Range requests, ETag, and
+	// rejects path traversal when used with http.Dir. We wrap it so we can
+	// set a long cache-control header on binary downloads (not directory
+	// listings).
+	if rest == "files" || strings.HasPrefix(rest, "files/") {
+		serveChannelFiles(w, r, dataDir)
 		return
 	}
 
@@ -105,24 +108,27 @@ func serveChannelManifest(w http.ResponseWriter, r *http.Request, dataDir, name 
 	http.ServeFile(w, r, path)
 }
 
-// serveChannelFile streams a binary from {dataDir}/files/{name}. Path traversal
-// (../) is rejected; only flat file names within files/ are served.
-func serveChannelFile(w http.ResponseWriter, r *http.Request, dataDir, name string) {
-	if name == "" || strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
-		http.NotFound(w, r)
-		return
+// serveChannelFiles handles /channels/files/... by delegating to
+// http.FileServer rooted at {data}/files/. The FileServer handles directory
+// listings (for /channels/files/ and /channels/files/{channel}/) and file
+// serving (for /channels/files/{channel}/{binary}) uniformly; http.Dir
+// rejects path traversal attempts. We set a long immutable cache header on
+// the file-download case only, so directory listings always reflect the
+// current contents.
+func serveChannelFiles(w http.ResponseWriter, r *http.Request, dataDir string) {
+	filesDir := filepath.Join(dataDir, "files")
+	// Determine whether the request will resolve to a file or a directory.
+	// http.FileServer sets its own Content-Type and handles the stat; we
+	// just peek at the filesystem first so we can decide on the
+	// Cache-Control header. When the path does not exist, FileServer
+	// returns 404 -- let it do that.
+	rel := strings.TrimPrefix(r.URL.Path, "/channels/files/")
+	rel = strings.TrimPrefix(rel, "/") // handle exact "/channels/files"
+	local := filepath.Join(filesDir, filepath.FromSlash(rel))
+	if st, err := os.Stat(local); err == nil && !st.IsDir() {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
-	path := filepath.Join(dataDir, "files", name)
-	st, err := os.Stat(path)
-	if err != nil || st.IsDir() {
-		http.NotFound(w, r)
-		return
-	}
-	// Long-cache binary downloads. Manifests are small JSON and are
-	// re-fetched on every update check, so they get no cache header and
-	// pick up Last-Modified from http.ServeFile.
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	http.ServeFile(w, r, path)
+	http.StripPrefix("/channels/files/", http.FileServer(http.Dir(filesDir))).ServeHTTP(w, r)
 }
 
 // channelsCorsHeaders permits any origin to GET manifest and binary files.

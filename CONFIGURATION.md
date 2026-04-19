@@ -603,7 +603,12 @@ channels:
 | Path | Served content |
 |------|----------------|
 | `GET /channels/{channel}.json` | Manifest file written by `telahubd channels publish` |
-| `GET /channels/files/{binary}` | Binary file under `{data}/files/` |
+| `GET /channels/files/` | Directory listing of all channels that have any binaries uploaded |
+| `GET /channels/files/{channel}/` | Directory listing of binaries for that channel |
+| `GET /channels/files/{channel}/{binary}` | Binary file under `{data}/files/{channel}/` |
+
+Each channel has its own subdirectory under `files/`, so two channels
+can hold different binaries under the same filename without collision.
 
 Endpoints are public (no auth, CORS wildcard) by design — release
 manifests are world-readable. Do not put anything in `channels.data`
@@ -613,8 +618,8 @@ you would not want served.
 
 | Path | Method | Purpose |
 |------|--------|---------|
-| `/api/admin/channels/files/{name}` | PUT | Upload a binary (request body = file bytes). Writes atomically to `channels.data/files/{name}`. 500 MiB max. |
-| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}`. `baseUrl` is optional and defaults to `channels.publicURL`. |
+| `/api/admin/channels/files/{channel}/{name}` | PUT | Upload a binary (request body = file bytes). Writes atomically to `channels.data/files/{channel}/{name}`. 500 MiB max. |
+| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/{channel}/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}`. `baseUrl` is optional and defaults to `channels.publicURL/files/{channel}/`. |
 
 A build pipeline running on a separate host PUTs each binary to the
 upload endpoint, then POSTs to `/publish` to regenerate the manifest.

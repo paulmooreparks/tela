@@ -190,7 +190,7 @@ fi
 
 # ── Upload to the hub ──────────────────────────────────────────────
 echo
-echo "==> Uploading binaries to $HUB_URL/api/admin/channels/files/"
+echo "==> Uploading binaries to $HUB_URL/api/admin/channels/files/$CHANNEL/"
 
 all_files=(
     tela-linux-amd64
@@ -215,7 +215,7 @@ for f in "${all_files[@]}"; do
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/octet-stream" \
         --data-binary "@$src" \
-        "$HUB_URL/api/admin/channels/files/$f" >/dev/null
+        "$HUB_URL/api/admin/channels/files/$CHANNEL/$f" >/dev/null
 done
 
 # ── Trigger manifest publish ───────────────────────────────────────

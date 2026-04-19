@@ -169,7 +169,7 @@ if (-not $TOKEN) {
 }
 
 Write-Host ""
-Write-Host "==> Uploading binaries to $HUB_URL/api/admin/channels/files/" -ForegroundColor Cyan
+Write-Host "==> Uploading binaries to $HUB_URL/api/admin/channels/files/$CHANNEL/" -ForegroundColor Cyan
 
 $allFiles = @(
     "tela-linux-amd64",
@@ -187,7 +187,7 @@ foreach ($f in $allFiles) {
     $src = "$DIST\$f"
     if (-not (Test-Path $src)) { throw "Missing build output: $src" }
     Write-Host ("    {0,-44}  {1} bytes" -f $f, (Get-Item $src).Length)
-    $url = "$HUB_URL/api/admin/channels/files/$f"
+    $url = "$HUB_URL/api/admin/channels/files/$CHANNEL/$f"
     try {
         Invoke-WebRequest -Uri $url -Method Put -InFile $src -Headers $headers -ContentType 'application/octet-stream' -UseBasicParsing | Out-Null
     } catch {

@@ -113,7 +113,7 @@ func cmdChannelsPublish(args []string) {
 		fmt.Fprintln(os.Stderr, "error: set channels.publicURL in the config or pass -base-url")
 		os.Exit(1)
 	}
-	downloadBase := strings.TrimRight(publicBase, "/") + "/files/"
+	downloadBase := strings.TrimRight(publicBase, "/") + "/files/" + *channelName + "/"
 
 	m, manifestPath, err := publishChannelManifest(dataDir, *channelName, *tag, downloadBase, func(name, sha string, size int64) {
 		fmt.Printf("  %-44s  %s...  %d bytes\n", name, sha[:16], size)
@@ -144,7 +144,7 @@ func cmdChannelsPublish(args []string) {
 // resolving downloadBase against config or an override. Validation of
 // the final manifest is done here via channel.Manifest.Validate.
 func publishChannelManifest(dataDir, channelName, tag, downloadBase string, progress func(name, sha string, size int64)) (*channel.Manifest, string, error) {
-	filesDir := filepath.Join(dataDir, "files")
+	filesDir := filepath.Join(dataDir, "files", channelName)
 	entries, err := os.ReadDir(filesDir)
 	if err != nil {
 		return nil, "", fmt.Errorf("read files dir %s: %w", filesDir, err)

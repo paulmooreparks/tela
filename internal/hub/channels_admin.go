@@ -38,10 +38,12 @@ const maxChannelFileSize = 500 * 1024 * 1024
 // artifacts use (letters, digits, dots, dashes, underscores).
 var channelFileNameOK = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
-// handleAdminChannelsFiles serves PUT /api/admin/channels/files/{name}.
-// Streams the request body into {channels.data}/files/{name}.tmp, fsyncs,
-// and renames into place so a reader racing with an upload either sees
-// the previous byte-complete file or the new one, never a partial.
+// handleAdminChannelsFiles serves PUT /api/admin/channels/files/{channel}/{name}.
+// Streams the request body into {channels.data}/files/{channel}/{name}.tmp,
+// fsyncs, and renames into place so a reader racing with an upload either
+// sees the previous byte-complete file or the new one, never a partial.
+// Every channel has its own file subdirectory so two channels can hold
+// binaries with the same name (e.g. telad-linux-amd64) without collision.
 func handleAdminChannelsFiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		adminCorsHeaders(w, r)
@@ -57,8 +59,21 @@ func handleAdminChannelsFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := strings.TrimPrefix(r.URL.Path, "/api/admin/channels/files/")
-	if name == "" || !channelFileNameOK.MatchString(name) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/admin/channels/files/")
+	slash := strings.IndexRune(rest, '/')
+	if slash <= 0 || slash == len(rest)-1 {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "expected /api/admin/channels/files/{channel}/{name}"})
+		return
+	}
+	channelName := rest[:slash]
+	name := rest[slash+1:]
+	if !channel.IsValid(channelName) {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid channel name"})
+		return
+	}
+	if !channelFileNameOK.MatchString(name) {
 		adminCorsHeaders(w, r)
 		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid file name"})
 		return
@@ -79,7 +94,7 @@ func handleAdminChannelsFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filesDir := filepath.Join(dataDir, "files")
+	filesDir := filepath.Join(dataDir, "files", channelName)
 	if err := os.MkdirAll(filesDir, 0755); err != nil {
 		adminCorsHeaders(w, r)
 		writeAdminJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "create files dir: " + err.Error()})
@@ -134,13 +149,14 @@ func handleAdminChannelsFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[hub] channels upload: %s (%d bytes)", name, n)
+	log.Printf("[hub] channels upload: %s/%s (%d bytes)", channelName, name, n)
 	adminCorsHeaders(w, r)
 	writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{
-		"ok":   true,
-		"name": name,
-		"size": n,
-		"path": dstPath,
+		"ok":      true,
+		"channel": channelName,
+		"name":    name,
+		"size":    n,
+		"path":    dstPath,
 	})
 }
 
@@ -209,7 +225,7 @@ func handleAdminChannelsPublish(w http.ResponseWriter, r *http.Request) {
 		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "channels.publicURL is not configured and no baseUrl override was supplied"})
 		return
 	}
-	downloadBase := strings.TrimRight(publicBase, "/") + "/files/"
+	downloadBase := strings.TrimRight(publicBase, "/") + "/files/" + req.Channel + "/"
 
 	m, manifestPath, err := publishChannelManifest(dataDir, req.Channel, req.Tag, downloadBase, nil)
 	if err != nil {

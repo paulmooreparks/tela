@@ -230,8 +230,13 @@ channels:
 Restart the hub. The new routes are:
 
 - `GET /channels/{name}.json` -- channel manifest
-- `GET /channels/files/{binary}` -- binary download
+- `GET /channels/files/` -- directory listing of all channels
+- `GET /channels/files/{channel}/` -- directory listing of one channel
+- `GET /channels/files/{channel}/{binary}` -- binary download
 - `GET /channels/` -- health/status JSON
+
+Each channel has its own subdirectory under `files/` so parallel
+publishes to different channels do not overwrite each other.
 
 The endpoints are public (no auth, wildcard CORS) by design. Release
 manifests are world-readable. Do not place anything in `channels.data`
@@ -239,24 +244,26 @@ that you would not want served.
 
 ### Populate the files directory
 
-Drop binaries into `{data}/files/` using the same naming convention as GitHub release assets:
+Drop binaries into `{data}/files/{channel}/` using the same naming convention as GitHub release assets:
 
 ```
 {data}/files/
-  tela-linux-amd64
-  tela-linux-arm64
-  tela-windows-amd64.exe
-  telad-linux-amd64
-  telad-linux-arm64
-  telad-windows-amd64.exe
-  telahubd-linux-amd64
-  telahubd-linux-arm64
-  telahubd-windows-amd64.exe
-  telavisor-windows-amd64.exe
+  dev/
+    tela-linux-amd64
+    tela-windows-amd64.exe
+    telad-linux-amd64
+    ...
+  beta/
+    tela-linux-amd64
+    ...
+  local/
+    tela-linux-amd64
+    ...
 ```
 
-Only include the binaries you want to distribute. The manifest lists
-whatever is present; clients look up their own platform entry.
+Only include the binaries you want to distribute on each channel. The
+manifest lists whatever is present in that channel's directory;
+clients look up their own platform entry.
 
 ### Publish a manifest
 
