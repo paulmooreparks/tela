@@ -628,9 +628,9 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		lg.Printf("mgmt: update requested version=%q channel=%q manifestBase=%q (requestId=%s)", ver, req.Channel, req.ManifestBase, msg.RequestID)
 
 		// Resolve "latest" or empty version. When channel/manifestBase overrides
-		// are supplied (e.g. from TelaVisor pointing at a self-hosted telachand),
-		// use those rather than the agent's own config so that TV and the agent
-		// consult the same manifest.
+		// are supplied (e.g. from TelaVisor pointing at a self-hosted channel
+		// server), use those rather than the agent's own config so that TV and
+		// the agent consult the same manifest.
 		if ver == "" || ver == "latest" {
 			resolved, err := latestReleaseFrom(req.Channel, req.ManifestBase)
 			if err != nil {
@@ -942,8 +942,8 @@ func latestRelease() (string, error) {
 // latestReleaseFrom returns the current version on the given channel. When
 // ch or base are empty the agent's own configured values are used as
 // fallbacks. This allows the management API to resolve "latest" against a
-// caller-supplied manifest (e.g. a self-hosted telachand) instead of the
-// agent's own channel config.
+// caller-supplied manifest (e.g. a self-hosted channel server) instead of
+// the agent's own channel config.
 func latestReleaseFrom(ch, base string) (string, error) {
 	agentCh, agentBase := agentChannel()
 	if ch == "" {
@@ -963,8 +963,8 @@ func latestReleaseFrom(ch, base string) (string, error) {
 // configured channel and replaces the current binary. On Windows the running
 // exe is renamed to .old before the new binary is moved into place.
 // chOverride and baseOverride, when non-empty, replace the agent's own
-// channel config for this one update (e.g. when TV sends a custom telachand
-// address). The agent's persistent config is not changed.
+// channel config for this one update (e.g. when TV sends a custom channel
+// server address). The agent's persistent config is not changed.
 func downloadAndStageUpdate(lg *log.Logger, ver, chOverride, baseOverride string) error {
 	exe, err := os.Executable()
 	if err != nil {

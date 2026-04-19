@@ -274,16 +274,6 @@ jobs:
             -o dist/telahubd-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
             ./cmd/telahubd
 
-      - name: Build telachand
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-        run: |
-          go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
-            -o dist/telachand-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
-            ./cmd/telachand
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -501,7 +491,7 @@ jobs:
           # Per-release manifest (legacy slim shape, kept for existing consumers)
           echo "{\"version\":\"${VERSION}\",\"binaries\":{" > release.json
           first=true
-          for f in tela-* telad-* telahubd-* telachand-* telavisor-*; do
+          for f in tela-* telad-* telahubd-* telavisor-*; do
             [ -e "$f" ] || continue
             hash=$(sha256sum "$f" | cut -d' ' -f1)
             size=$(stat -c%s "$f")
@@ -526,7 +516,7 @@ jobs:
             echo "  \"downloadBase\": \"${DOWNLOAD_BASE}\","
             echo "  \"binaries\": {"
             first=true
-            for f in tela-* telad-* telahubd-* telachand-* telavisor-*; do
+            for f in tela-* telad-* telahubd-* telavisor-*; do
               [ -e "$f" ] || continue
               hash=$(sha256sum "$f" | cut -d' ' -f1)
               size=$(stat -c%s "$f")

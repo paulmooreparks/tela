@@ -3284,8 +3284,8 @@ func (a *App) updateRunningServiceBinary(binaryName string) string {
 			return fmt.Sprintf(`{"error":"telad is registered with %s but no enabled portal source knows that hub: %s"}`, jsonEscape(info.Hub), jsonEscape(lookupErr.Error()))
 		}
 		// Pass TV's own channel manifest coordinates so the agent fetches
-		// from the same source TV is using (e.g. a self-hosted telachand),
-		// not from whatever its own YAML config says.
+		// from the same source TV is using (e.g. a self-hosted channel
+		// server), not from whatever its own YAML config says.
 		m, err := a.clientChannelManifest()
 		if err != nil {
 			return fmt.Sprintf(`{"error":"fetch channel manifest: %s"}`, jsonEscape(err.Error()))
@@ -4320,7 +4320,9 @@ func (a *App) DeleteProfile(name string) error {
 // Settings holds user preferences persisted to disk.
 // ChannelSource is a named release channel with an optional manifest base URL.
 // The three built-in channels (dev, beta, stable) use the default upstream base.
-// Custom entries point at self-hosted telachand instances or other servers.
+// Custom entries point at self-hosted channel servers (telahubd with
+// channels.enabled=true, or any other HTTP server that serves the same
+// manifest and binary layout).
 type ChannelSource struct {
 	Name         string `yaml:"name" json:"name"`
 	ManifestBase string `yaml:"manifestBase" json:"manifestBase"`
