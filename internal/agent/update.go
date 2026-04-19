@@ -60,6 +60,20 @@ func cmdSelfUpdate(args []string) {
 		setActiveConfig(cfg, *configPath)
 	}
 
+	// If there's no saved channel preference, infer from the binary's own
+	// version string. Stash that on the active config so agentChannel()
+	// returns the inferred value. Persists nothing to disk.
+	activeConfigMu.Lock()
+	if (activeConfig == nil || activeConfig.Update.Channel == "") && *chOverride == "" {
+		if inferred := channel.InferFromVersion(version); inferred != "" {
+			if activeConfig == nil {
+				activeConfig = &configFile{}
+			}
+			activeConfig.Update.Channel = inferred
+		}
+	}
+	activeConfigMu.Unlock()
+
 	// Apply the channel override after loadConfig so it wins.
 	if *chOverride != "" {
 		ch := channel.Normalize(*chOverride)
@@ -67,7 +81,6 @@ func cmdSelfUpdate(args []string) {
 			fmt.Fprintf(os.Stderr, "Error: invalid channel %q (use lowercase letters, digits, hyphens)\n", *chOverride)
 			os.Exit(1)
 		}
-		// Stash the override on the active config so agentChannel() picks it up.
 		activeConfigMu.Lock()
 		if activeConfig == nil {
 			activeConfig = &configFile{}
@@ -77,6 +90,10 @@ func cmdSelfUpdate(args []string) {
 	}
 
 	ch, base := agentChannel()
+	if base == "" {
+		fmt.Fprintf(os.Stderr, "Error: channel %q has no source URL; run 'telad channel sources set %s <url>' or switch to a built-in channel.\n", ch, ch)
+		os.Exit(1)
+	}
 	m, err := agentChannelFetcher.GetURL(channel.ManifestURL(base, ch))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: fetch %s manifest: %v\n", ch, err)
@@ -90,6 +107,17 @@ func cmdSelfUpdate(args []string) {
 	if m.Version == version && version != "dev" {
 		fmt.Println("Already up to date.")
 		return
+	}
+
+	// Downgrade refusal: the channel's HEAD is older than what's running.
+	// Skipped when we are crossing channels -- switching release lines is
+	// an explicit declaration of intent to follow the new channel's HEAD,
+	// and semver ordering across parallel prerelease lineages (e.g. local.N
+	// vs dev.N) is meaningless anyway.
+	if version != "dev" && !channel.IsCrossChannel(version, m.Channel) && !channel.IsNewer(m.Version, version) {
+		fmt.Fprintf(os.Stderr, "Error: latest version on %s is %s, older than currently running %s.\n", ch, m.Version, version)
+		fmt.Fprintln(os.Stderr, "telad update refuses same-channel downgrades. To install an older release, download it from the release host by hand.")
+		os.Exit(1)
 	}
 
 	if *dryRun {

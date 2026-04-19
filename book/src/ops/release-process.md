@@ -188,9 +188,19 @@ git push origin hotfix/v0.4.x v0.4.1
 
 The tag push triggers a stable release build for `v0.4.1`. Then merge the cherry-picked commit forward into `main` so it is not lost.
 
-## Self-hosted channels with telachand
+## Self-hosted channels on telahubd
 
-The `telachand` binary (Tela Channel Daemon) is a drop-in replacement for the GitHub release host. It serves the same manifest format and file paths over plain HTTP. Tela clients point `update.manifestBase` at it and thereafter treat it identically to the GitHub channel.
+Any `telahubd` hub can serve release channel manifests and binary
+downloads in-process. Enable the `channels:` block in `telahubd.yaml`
+and the hub will mount public `/channels/` routes alongside the rest
+of its HTTP surface. The wire format matches the GitHub-hosted
+channels exactly, so clients pointed at a self-hosted channel with
+`update.sources[<name>]` fetch and verify manifests through the same
+code path as they use for the public channel.
+
+Prior to 0.12 this was a separate binary named `telachand`. The
+standalone daemon has been retired; the channel-hosting code now
+lives inside telahubd.
 
 Use cases:
 
@@ -199,73 +209,68 @@ Use cases:
 - Staging a release internally before pushing it to the public channel
 - Developer workflows where every local build becomes immediately available for self-update across a local fleet
 
-### Deploy telachand
+### Enable the channel server
 
-Create a config file on the host that will serve your channel:
+Add a `channels:` block to `telahubd.yaml`:
 
 ```yaml
-# telachand.yaml
-listen: ":9900"
-data: /var/lib/telachand    # holds dev.json, beta.json, stable.json, and files/
-publicURL: "http://192.168.1.10:9900"
-
-update:
-  channel: stable           # telachand's own self-update channel
+# telahubd.yaml
+channels:
+  enabled: true
+  data: /var/lib/telahubd/channels
+  publicURL: https://hub.example.net/channels
 ```
 
-Start it:
+| Field | Purpose |
+|-------|---------|
+| `enabled` | Mount `/channels/` routes when true |
+| `data` | Directory holding `{channel}.json` files at the root and binaries under `files/` |
+| `publicURL` | External URL prefix written into generated manifests. Used by `telahubd channels publish` as the `downloadBase` source. |
 
-```bash
-telachand -config telachand.yaml
-```
+Restart the hub. The new routes are:
 
-Install as a persistent service:
+- `GET /channels/{name}.json` -- channel manifest
+- `GET /channels/files/` -- directory listing of all channels
+- `GET /channels/files/{channel}/` -- directory listing of one channel
+- `GET /channels/files/{channel}/{binary}` -- binary download
+- `GET /channels/` -- health/status JSON
 
-```bash
-# System service (requires admin/root)
-sudo telachand service install -config /etc/tela/telachand.yaml
-sudo telachand service start
+Each channel has its own subdirectory under `files/` so parallel
+publishes to different channels do not overwrite each other.
 
-# User autostart (no admin required)
-telachand service install --user -config telachand.yaml
-telachand service start --user
-```
-
-The daemon serves three routes:
-
-- `GET /{channel}.json` -- channel manifest
-- `GET /files/{name}` -- binary download
-- `GET /` -- health/status JSON
+The endpoints are public (no auth, wildcard CORS) by design. Release
+manifests are world-readable. Do not place anything in `channels.data`
+that you would not want served.
 
 ### Populate the files directory
 
-Drop binaries into `{data}/files/` using the same naming convention as GitHub release assets:
+Drop binaries into `{data}/files/{channel}/` using the same naming convention as GitHub release assets:
 
 ```
 {data}/files/
-  tela-linux-amd64
-  tela-linux-arm64
-  tela-windows-amd64.exe
-  telad-linux-amd64
-  telad-linux-arm64
-  telad-windows-amd64.exe
-  telahubd-linux-amd64
-  telahubd-linux-arm64
-  telahubd-windows-amd64.exe
-  telachand-linux-amd64
-  telachand-linux-arm64
-  telachand-windows-amd64.exe
-  telavisor-windows-amd64.exe
+  dev/
+    tela-linux-amd64
+    tela-windows-amd64.exe
+    telad-linux-amd64
+    ...
+  beta/
+    tela-linux-amd64
+    ...
+  local/
+    tela-linux-amd64
+    ...
 ```
 
-Only include the binaries you want to distribute. The manifest lists whatever is present; clients look up their own platform entry.
+Only include the binaries you want to distribute on each channel. The
+manifest lists whatever is present in that channel's directory;
+clients look up their own platform entry.
 
 ### Publish a manifest
 
 After placing binaries, generate the manifest:
 
 ```bash
-telachand publish -channel dev -tag v0.11.0-dev.1 -config telachand.yaml
+telahubd channels publish -channel dev -tag v0.12.0-dev.1
 ```
 
 Output:
@@ -276,41 +281,135 @@ Output:
   ...
 
 published dev channel manifest
-  tag:      v0.11.0-dev.1
+  tag:      v0.12.0-dev.1
   binaries: 9
-  base:     http://192.168.1.10:9900/files/
-  manifest: /var/lib/telachand/dev.json
+  base:     https://hub.example.net/channels/files/
+  manifest: /var/lib/telahubd/channels/dev.json
 ```
 
-The manifest is live immediately. The daemon does not need to restart. Each channel has its own manifest; you can maintain all three simultaneously.
+The manifest is live immediately. The hub does not need to restart.
+Each channel has its own manifest; you can maintain all three
+(or any named custom channels) simultaneously.
+
+### Publishing from a separate build machine
+
+The CLI `telahubd channels publish` runs on the same host as the hub
+and reads `channels.data` from the hub's config file. When your build
+pipeline lives elsewhere, use the HTTPS admin API instead:
+
+- `PUT /api/admin/channels/files/{channel}/{binary}` uploads a file
+  into `channels.data/files/{channel}/`. Request body is the file
+  bytes. Owner or admin token required. 500 MiB max per file.
+- `POST /api/admin/channels/publish` with
+  `{"channel":"...","tag":"..."}` hashes everything under
+  `channels.data/files/{channel}/` and writes the manifest. Returns
+  the manifest JSON for verification.
+
+Upload each binary, then call `/publish` once. No SSH, tunnel, or
+file-share mount is needed on the build host.
+
+Reference implementations live under `scripts/` in the tela repo.
+Pick the one for your host OS:
+
+- `scripts/publish-channel.ps1` -- PowerShell 5.1+ / PowerShell 7, for Windows
+- `scripts/publish-channel.sh` -- bash 4+, for Linux and macOS
+
+Both do the same job: cross-compile tela/telad/telahubd for Linux and
+Windows amd64, bundle TelaVisor via `wails build` (Windows binary on
+PowerShell, host-platform binary on bash), and run the upload + publish
+round-trip against any hub with channels hosting enabled.
+
+Configuration comes from `scripts/publish.env` (gitignored):
+
+```
+TELA_PUBLISH_HUB_URL=https://hub.example.net
+TELA_PUBLISH_TOKEN=<owner-or-admin-token>
+```
+
+Get the owner token with `telahubd user show-owner` on the hub (or
+`docker exec <container> telahubd user show-owner -config
+/app/data/telahubd.yaml` on a Dockerised hub). See
+`scripts/publish.env.example` for all supported keys.
+
+#### Bootstrapping a self-hosted channel pipeline
+
+The HTTPS remote-publish endpoints shipped in Tela 0.12. A brand new
+self-hosted hub starts out with whichever telahubd binary the Docker
+image was built against; if that predates 0.12, it has no
+`/api/admin/channels/*` routes and `publish-channel.ps1` will 404.
+
+There is therefore a one-time chicken-and-egg for any hub that is
+itself the only place you have published to: you cannot upload the
+new telahubd binary through its own admin API until it already has
+the admin API. The workaround is a single manual hop:
+
+1. Build locally with `publish-channel.ps1` -- the build step succeeds
+   even when the upload step fails, so your `dist/` directory ends up
+   with a fresh Tela 0.12+ binary set.
+2. Get those binaries onto the hub by any out-of-band means you
+   currently use: copy into an existing OneDrive/S3/nginx host that
+   the hub's `CHANNEL_MANIFEST_URL` build arg points at, `docker cp`
+   into the hub container, a temporary file mount, etc.
+3. Rebuild the hub image so it picks up the new binaries:
+   `docker compose build <hub-service> && docker compose up -d <hub-service>`.
+4. Verify the admin endpoint now exists. A POST without auth should
+   return 401, not 404:
+   ```
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+     https://hub.example.net/api/admin/channels/publish
+   ```
+5. Populate `scripts/publish.env` and run `publish-channel.ps1`
+   again. From this point on every subsequent publish goes straight
+   through the HTTPS admin API.
+
+The specific out-of-band hop in step 2 is unique to each operator's
+pre-0.12 topology. Once the hub has 0.12+ telahubd, the pipeline is
+self-sufficient and the workaround is never needed again.
+
+#### Common pitfalls
+
+- **Version string vs. code version.** The binary's `main.version`
+  string is set by ldflags at build time; it does not imply the code
+  in that binary has any specific feature. If `publish-channel.ps1`
+  404s against a hub whose banner reports a version tag that should
+  have the admin API, you are probably running a binary whose
+  `dist/` copy was built from an older commit. Re-run
+  `publish-channel.ps1` to force a fresh build from the current tip
+  and bootstrap through step 2 once more.
+- **Token mismatch.** `publish.env` holds a token per hub; if you
+  have multiple hubs, you need one `publish.env` per deployment or a
+  way to select between them. The simplest approach is one script
+  working copy per hub.
+- **Counter drift.** The per-channel build counter lives in
+  `scripts/{channel}-build-counter` and increments on every run,
+  including failed runs. A failed publish still bumps the counter;
+  subsequent successful publishes pick up from there. This is
+  intentional -- version tags should never collide even across
+  failed attempts.
 
 ### Point binaries at the self-hosted channel
 
-Set `update.manifestBase` in each binary's config:
+Each binary has a `channel sources` subcommand that writes into its
+config's `update.sources` map:
 
-```yaml
-# telad.yaml
-update:
-  channel: dev
-  manifestBase: http://192.168.1.10:9900/
+```bash
+telad channel sources set dev https://hub.example.net/channels/
+telahubd channel sources set dev https://hub.example.net/channels/
+tela channel sources set dev https://hub.example.net/channels/
 ```
 
-```yaml
-# telahubd.yaml
-update:
-  channel: dev
-  manifestBase: http://192.168.1.10:9900/
-```
-
-For the `tela` client and TelaVisor, set it in `~/.tela/credentials.yaml`:
+Or edit the YAML directly:
 
 ```yaml
+# telad.yaml, telahubd.yaml, or credentials.yaml
 update:
   channel: dev
-  manifestBase: http://192.168.1.10:9900/
+  sources:
+    dev: https://hub.example.net/channels/
 ```
 
-After this, `tela update`, `telad update`, `telahubd update`, and the TelaVisor Update buttons all pull from your telachand instance.
+After this, `tela update`, `telad update`, `telahubd update`, and the
+TelaVisor Update buttons all pull from your hub.
 
 ### Verify
 
@@ -320,9 +419,9 @@ tela channel
 
 ```text
   channel:         dev
-  manifest:        http://192.168.1.10:9900/dev.json
+  manifest:        https://hub.example.net/channels/dev.json
   current version: dev
-  latest version:  v0.11.0-dev.1  (update available)
+  latest version:  v0.12.0-dev.1  (update available)
 ```
 
 ### Publishing new builds
@@ -330,26 +429,9 @@ tela channel
 When you have new binaries:
 
 1. Copy them into `{data}/files/`, replacing the previous versions.
-2. Run `telachand publish -channel <name> -tag <new-tag>`.
+2. Run `telahubd channels publish -channel <name> -tag <new-tag>`.
 3. Clients pull the update on their next `update` invocation.
 
-The manifest tag is arbitrary. For local dev builds, a short git hash or timestamp works well since `dev`-versioned binaries always update regardless of semver comparison.
-
-### telachand self-update
-
-`telachand` updates itself the same way the other binaries do:
-
-```bash
-telachand update                        # from configured channel
-telachand update -channel stable        # one-shot override
-telachand update -dry-run
-```
-
-By default it updates from the official GitHub channel. To pull from another telachand instance:
-
-```yaml
-# telachand.yaml
-update:
-  channel: stable
-  base: http://primary-channel.example.com:9900/
-```
+The manifest tag is arbitrary. For local dev builds, a short git hash
+or timestamp works well since `dev`-versioned binaries always update
+regardless of semver comparison.

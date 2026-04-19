@@ -41,6 +41,9 @@ func cmdChannel(args []string) {
 		case "download":
 			downloadChannelBinary(args[1:])
 			return
+		case "sources":
+			clientChannelSources(args[1:])
+			return
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown channel command: %s\n\n", args[0])
 			printChannelUsage()
@@ -49,6 +52,155 @@ func cmdChannel(args []string) {
 	}
 	// No subcommand. Help flags are consumed by showClientChannel.
 	showClientChannel(args)
+}
+
+// clientChannelSources dispatches the `tela channel sources [list|set|remove]`
+// subcommand. With no further arg, equivalent to `list`.
+func clientChannelSources(args []string) {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "list":
+			listClientSources(args[1:])
+			return
+		case "set":
+			setClientSource(args[1:])
+			return
+		case "remove":
+			removeClientSource(args[1:])
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown sources command: %s\n\n", args[0])
+			printChannelUsage()
+			os.Exit(1)
+		}
+	}
+	listClientSources(args)
+}
+
+// listClientSources prints every channel name the client knows about, with
+// its resolved base URL and whether that came from the baked-in defaults,
+// a sources-map override, or a custom (non-built-in) entry.
+func listClientSources(args []string) {
+	fs := flag.NewFlagSet("channel sources", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	fs.Parse(args)
+	if wantHelp() {
+		printChannelUsage()
+		return
+	}
+	store, err := credstore.Load(credstore.UserPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load credential store: %v\n", err)
+		os.Exit(1)
+	}
+	seen := map[string]bool{}
+	fmt.Printf("%-15s  %s\n", "CHANNEL", "BASE URL")
+	for _, name := range []string{channel.Dev, channel.Beta, channel.Stable} {
+		base := channel.ResolveBase(name, store.Update.Sources)
+		suffix := "  (built-in default)"
+		if v, ok := store.Update.Sources[name]; ok && v != "" {
+			suffix = "  (override)"
+			_ = v
+		}
+		fmt.Printf("%-15s  %s%s\n", name, base, suffix)
+		seen[name] = true
+	}
+	// Sort custom keys for stable output.
+	var customNames []string
+	for name := range store.Update.Sources {
+		if !seen[name] {
+			customNames = append(customNames, name)
+		}
+	}
+	for i := 1; i < len(customNames); i++ {
+		for j := i; j > 0 && customNames[j-1] > customNames[j]; j-- {
+			customNames[j-1], customNames[j] = customNames[j], customNames[j-1]
+		}
+	}
+	for _, name := range customNames {
+		fmt.Printf("%-15s  %s  (custom)\n", name, store.Update.Sources[name])
+	}
+}
+
+// setClientSource adds or overrides a per-channel source URL in the
+// client credential store.
+func setClientSource(args []string) {
+	fs := flag.NewFlagSet("channel sources set", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	fs.Parse(permuteArgs(fs, args))
+	if wantHelp() {
+		printChannelUsage()
+		return
+	}
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Error: 'sources set' requires <name> <url>")
+		os.Exit(1)
+	}
+	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
+	if !channel.IsValid(name) {
+		fmt.Fprintf(os.Stderr, "Error: invalid channel name %q (use lowercase letters, digits, hyphens)\n", name)
+		os.Exit(1)
+	}
+	base := strings.TrimRight(strings.TrimSpace(fs.Arg(1)), "/")
+	// Allow operators to paste a full manifest URL by accident.
+	if strings.HasSuffix(base, ".json") {
+		if i := strings.LastIndex(base, "/"); i >= 0 {
+			base = base[:i]
+		}
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load credential store: %v\n", err)
+		os.Exit(1)
+	}
+	if store.Update.Sources == nil {
+		store.Update.Sources = map[string]string{}
+	}
+	store.Update.Sources[name] = base
+	if err := store.Save(path); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: save credential store: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Set source for channel %s: %s\n", name, base)
+}
+
+// removeClientSource removes a per-channel source URL from the client
+// credential store. Built-in channel names continue to work via baked-in
+// defaults; custom names become unresolvable and the next operation
+// against them errors with guidance.
+func removeClientSource(args []string) {
+	fs := flag.NewFlagSet("channel sources remove", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	fs.Parse(permuteArgs(fs, args))
+	if wantHelp() {
+		printChannelUsage()
+		return
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Error: 'sources remove' requires <name>")
+		os.Exit(1)
+	}
+	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load credential store: %v\n", err)
+		os.Exit(1)
+	}
+	if _, exists := store.Update.Sources[name]; !exists {
+		fmt.Fprintf(os.Stderr, "Error: no source entry for channel %q\n", name)
+		os.Exit(1)
+	}
+	if name == channel.Normalize(store.Update.Channel) && !channel.IsKnown(name) {
+		fmt.Fprintf(os.Stderr, "Note: %q is the currently selected channel and has no baked-in default; updates will fail until you set a source for it or switch channels.\n", name)
+	}
+	delete(store.Update.Sources, name)
+	if err := store.Save(path); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: save credential store: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Removed source for channel %s\n", name)
 }
 
 func printChannelUsage() {
@@ -60,6 +212,9 @@ Usage:
   tela channel set <ch> -manifest-base URL Override the upstream manifest URL prefix
   tela channel show [-channel <ch>]        Print the parsed channel manifest
   tela channel download <binary> [opts]    Download and verify a binary from the channel manifest
+  tela channel sources [list]              List known channel sources (built-ins + overrides + custom)
+  tela channel sources set <name> <url>    Add or override a per-channel base URL
+  tela channel sources remove <name>       Remove a per-channel base URL
 
 Download options:
   -channel <ch>      Channel to download from (default: client's configured channel)
@@ -81,14 +236,18 @@ Hub and agent channels are managed separately via:
 `, credstore.UserPath())
 }
 
-// loadClientChannel returns the configured channel name and optional
-// manifest base override from the user credential store.
+// loadClientChannel returns the configured channel name and the resolved
+// base URL from the user credential store. The base is looked up via
+// channel.ResolveBase against the credstore's sources map, falling back
+// to channel.DefaultBases for built-in channel names.
 func loadClientChannel() (string, string) {
 	store, err := credstore.Load(credstore.UserPath())
 	if err != nil || store == nil {
-		return channel.DefaultChannel, ""
+		name := channel.DefaultChannel
+		return name, channel.ResolveBase(name, nil)
 	}
-	return channel.Normalize(store.Update.Channel), store.Update.ManifestBase
+	name := channel.Normalize(store.Update.Channel)
+	return name, channel.ResolveBase(name, store.Update.Sources)
 }
 
 func showClientChannel(args []string) {
@@ -114,8 +273,13 @@ func showClientChannel(args []string) {
 		return
 	}
 	state := "up to date"
-	if m.Version != version && version != "dev" {
+	if channel.ShouldOfferUpdate(version, m.Channel, m.Version) {
 		state = "update available"
+	} else if m.Version != version && version != "dev" {
+		// Same channel, current binary is ahead of HEAD (e.g. a local
+		// dev build sitting on top of an older published tag). Not an
+		// update offer, but also not strictly equal, so call it out.
+		state = "ahead of channel HEAD"
 	}
 	fmt.Printf("  latest version:  %s  (%s)\n", m.Version, state)
 }
@@ -158,15 +322,19 @@ func setClientChannel(args []string) {
 				base = base[:i]
 			}
 		}
-		store.Update.ManifestBase = base
+		if store.Update.Sources == nil {
+			store.Update.Sources = map[string]string{}
+		}
+		store.Update.Sources[name] = base
 	}
 	if err := store.Save(path); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: save credential store: %v\n", err)
 		os.Exit(1)
 	}
 
+	resolved := channel.ResolveBase(name, store.Update.Sources)
 	fmt.Printf("Client channel set to %s\n", name)
-	fmt.Printf("  manifest: %s\n", channel.ManifestURL(store.Update.ManifestBase, name))
+	fmt.Printf("  manifest: %s\n", channel.ManifestURL(resolved, name))
 }
 
 // resolveChannel returns the channel name (with command-line override) and

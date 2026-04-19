@@ -133,7 +133,8 @@ hubs:
 # files.
 update:
   channel: dev
-  # manifestBase: https://my-fork.example.com/channels/
+  # sources:                                   # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
 ```
 
 Notes:
@@ -275,7 +276,8 @@ token: ""         # optional default token for all machines
 # See RELEASE-PROCESS.md for the channel model.
 update:
   channel: dev
-  # manifestBase: https://my-fork.example.com/channels/   # optional override
+  # sources:                                                # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
 
 machines:
   - name: barn
@@ -289,7 +291,8 @@ machines:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `channel` | string | `dev` | Release channel for self-update: `dev`, `beta`, `stable`, or a custom channel name. |
-| `manifestBase` | string | upstream | Override the channel manifest URL prefix. Used when running a fork against a self-hosted release host. Default is `https://github.com/paulmooreparks/tela/releases/download/channels/`. |
+| `sources` | map[name]url | (none) | Per-channel manifest base URL overrides. Built-in channels (`dev`, `beta`, `stable`) fall back to the baked-in GitHub releases URL when absent. Custom channel names require an entry here (or in the `channel sources` CLI) to resolve. |
+| `manifestBase` | string | (none) | **Deprecated.** Pre-0.12 scalar override. On load, automatically migrated into `sources[channel]` for custom channels, or discarded for built-ins. Kept for one release cycle to preserve existing operator configs; scheduled for removal in 0.13 ([tela#59](https://github.com/paulmooreparks/tela/issues/59)). Do not use in new configs. |
 
 The configured channel is read by the `telad update` CLI subcommand, the
 `telad channel` CLI subcommand (show / set / show-manifest), the
@@ -412,7 +415,19 @@ wwwDir: ""           # omit to use the embedded console
 # See RELEASE-PROCESS.md for the channel model.
 update:
   channel: dev
-  # manifestBase: https://my-fork.example.com/channels/
+  # sources:                                   # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
+
+# Optional: turn this hub into a self-hosted release channel server.
+# When enabled, telahubd mounts /channels/{name}.json and
+# /channels/files/{channel}/{binary} from the directory below. Each
+# channel has its own subdirectory under files/. Replaces the
+# standalone telachand daemon. See "Self-hosted release channel server"
+# below for the full description.
+channels:
+  enabled: false
+  data: /var/lib/telahubd/channels
+  publicURL: https://hub.example.net/channels
 
 auth:
   tokens:
@@ -560,68 +575,80 @@ When running as an OS service, `telad` and `telahubd` read their YAML from a sys
 - Windows: `%ProgramData%\Tela\telad.yaml` and `%ProgramData%\Tela\telahubd.yaml`
 - Linux/macOS: `/etc/tela/telad.yaml` and `/etc/tela/telahubd.yaml`
 
-## `telachand.yaml` (channel daemon config)
+## Self-hosted release channel server
 
-**Binary:** `telachand`
+Self-hosted release channel hosting is a feature of `telahubd` itself as
+of 0.12. A dedicated `telachand` daemon is no longer needed; enable the
+`channels:` block in `telahubd.yaml` to have the hub serve channel
+manifests and binary downloads under `/channels/`.
 
-**Purpose:** Configures the Tela Channel Daemon, a lightweight HTTP server that hosts Tela release channel manifests and binary files. Deploy it when you want a self-hosted alternative to the default GitHub release channel.
-
-**Default config path:** none (pass with `-config`). When installed as a service, the config is copied to:
-
-- Windows: `%ProgramData%\Tela\telachand.yaml`
-- Linux/macOS: `/etc/tela/telachand.yaml`
-
-**Full example:**
+**Config block** (add to `telahubd.yaml`):
 
 ```yaml
-# Address the HTTP server listens on. Default: ":9900"
-listen: ":9900"
-
-# Directory that holds channel manifests (dev.json, beta.json, stable.json)
-# and a "files/" subdirectory of binary downloads.
-# Default: /var/lib/telachand (Linux/macOS), %ProgramData%\telachand (Windows)
-data: /var/lib/telachand
-
-# Public base URL that update clients use to reach this server.
-# Embedded in generated manifests as the downloadBase prefix.
-# Required for "telachand publish" unless -base-url is supplied on the CLI.
-publicURL: "http://192.168.1.10:9900"
-
-# Self-update channel for telachand itself.
-update:
-  channel: stable           # dev, beta, stable, or a custom channel name (default: stable)
-  # base: https://...       # optional: fetch telachand updates from a different server
+channels:
+  enabled: true
+  data: /var/lib/telahubd/channels    # holds {channel}.json and files/{channel}/{binary}
+  publicURL: https://hub.example.net/channels
 ```
 
 **Field reference:**
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `listen` | `:9900` | HTTP listen address |
-| `data` | platform-specific | Root directory for manifests and binary files |
-| `publicURL` | (none) | Base URL embedded in published manifests as `downloadBase` |
-| `update.channel` | `stable` | Release channel for telachand's own self-update |
-| `update.base` | upstream | Override the manifest URL prefix for telachand's self-update |
+| `channels.enabled` | `false` | Mount `/channels/` routes when true |
+| `channels.data` | (none) | Directory holding manifests at the root and binaries under `files/` |
+| `channels.publicURL` | (none) | External URL prefix written into generated manifests as `downloadBase`. Required for `telahubd channels publish` unless `-base-url` is passed on the command line. |
 
-**Pointing tela, telad, or telahubd at a telachand instance:**
+**URL layout:**
 
-Set `manifestBase` in each binary's update block to the telachand server's public URL:
+| Path | Served content |
+|------|----------------|
+| `GET /channels/{channel}.json` | Manifest file written by `telahubd channels publish` |
+| `GET /channels/files/` | Directory listing of all channels that have any binaries uploaded |
+| `GET /channels/files/{channel}/` | Directory listing of binaries for that channel |
+| `GET /channels/files/{channel}/{binary}` | Binary file under `{data}/files/{channel}/` |
+
+Each channel has its own subdirectory under `files/`, so two channels
+can hold different binaries under the same filename without collision.
+
+Endpoints are public (no auth, CORS wildcard) by design — release
+manifests are world-readable. Do not put anything in `channels.data`
+you would not want served.
+
+**Publishing remotely** (owner/admin auth required):
+
+| Path | Method | Purpose |
+|------|--------|---------|
+| `/api/admin/channels/files/{channel}/{name}` | PUT | Upload a binary (request body = file bytes). Writes atomically to `channels.data/files/{channel}/{name}`. 500 MiB max. |
+| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/{channel}/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}`. `baseUrl` is optional and defaults to `channels.publicURL/files/{channel}/`. |
+
+A build pipeline running on a separate host PUTs each binary to the
+upload endpoint, then POSTs to `/publish` to regenerate the manifest.
+No SSH, tunnel, or file-share mount is needed — the hub's admin auth
+is the only credential. See `.vscode/publish-dev.ps1` in the tela
+repo for a reference implementation.
+
+**Pointing tela, telad, or telahubd at a self-hosted channel server:**
+
+Set `update.sources[<channel>]` in each binary's config (or in
+`credentials.yaml` for the `tela` client and TelaVisor):
 
 ```yaml
-# telad.yaml
+# telad.yaml, telahubd.yaml, or credentials.yaml
 update:
-  channel: stable
-  manifestBase: http://192.168.1.10:9900/
+  channel: mychannel
+  sources:
+    mychannel: https://hub.example.net/channels/
 ```
 
-```yaml
-# telahubd.yaml
-update:
-  channel: stable
-  manifestBase: http://192.168.1.10:9900/
-```
+Or use the `channel sources` subcommand, which is available on all three
+binaries and accepts the same shape:
 
-For the `tela` client and TelaVisor, set `update.manifestBase` in `credentials.yaml`, or use `tela channel set stable -manifest-base http://192.168.1.10:9900/`. The same flag is accepted by `telad channel set` and `telahubd channel set`.
+```bash
+telahubd channel sources set mychannel https://hub.example.net/channels/
+telad channel sources set mychannel https://hub.example.net/channels/
+tela channel sources set mychannel https://hub.example.net/channels/
+```
 
 ## Awan Saya: `portal/config.json` (hub directory)
 

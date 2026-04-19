@@ -105,7 +105,6 @@ Three orthogonal axes. Issues should carry one `type:*`, one or more `component:
 - `component:tela` — tela client CLI
 - `component:telad` — telad agent daemon
 - `component:telahubd` — telahubd hub server
-- `component:telachand` — telachand channel daemon
 - `component:telavisor` — TelaVisor desktop GUI
 - `component:awansaya` — Awan Saya portal (cross-repo; issues about AS tracked here when they affect the tela protocol)
 - `component:book` — mdBook under `book/`

@@ -377,7 +377,16 @@ function formatChannelStatus(info) {
   var latest = info.latestVersion || '';
   if (!latest) return 'currently ' + cur;
   if (info.updateAvailable) return 'currently ' + cur + ' (latest ' + latest + ')';
-  return cur + ' (latest)';
+  // updateAvailable=false has two cases:
+  //   1. cur === latest: genuinely up to date.
+  //   2. cur != latest: this binary is from a different release line
+  //      (e.g. local.51 on a dev channel where dev's HEAD is dev.11),
+  //      so the semver comparison says no update is needed but the
+  //      versions are not actually equal. Showing only "cur (latest)"
+  //      hides the channel HEAD and confuses the operator. Make it
+  //      explicit when current != latest.
+  if (cur === latest) return cur + ' (latest)';
+  return 'currently ' + cur + ' (channel HEAD ' + latest + ')';
 }
 
 // preChannelMarker is the placeholder we leave on the channel row when a
@@ -419,11 +428,36 @@ function applySoftwareButton(btnId, statusId, info, fallbackVer) {
     btn.textContent = 'Update to ' + latest;
     btn.disabled = false;
     statusEl.textContent = 'currently running ' + cur;
-  } else {
+  } else if (cur === latest) {
     btn.textContent = 'Up to date';
     btn.disabled = true;
     statusEl.textContent = cur + ' (latest)';
+  } else {
+    // Different release line: cur is "newer" than channel HEAD by semver
+    // (e.g. local.51 vs dev.11), so no upgrade is offered, but the two
+    // are not equal. Surface the channel HEAD so the operator can see
+    // what's actually on the channel they switched to.
+    btn.textContent = 'Up to date';
+    btn.disabled = true;
+    statusEl.textContent = 'currently ' + cur + ' (channel HEAD ' + latest + ')';
   }
+}
+
+// refreshHubManagement re-fetches the hub's channel status (which drives
+// the Release channel dropdown, Software button label, and version hints)
+// and its Channel Sources list. Wired to the Refresh button in the hub's
+// Management header.
+function refreshHubManagement(hubURL) {
+  loadHubChannel(hubURL);
+  loadHubChannelSources(hubURL);
+}
+
+// refreshAgentManagement does the same for a remote agent, re-running the
+// update-status and channel-sources-list mgmt actions so a just-updated
+// agent reflects its new version and sources without a manual reload.
+function refreshAgentManagement(hubURL, machineID) {
+  loadAgentChannel(hubURL, machineID);
+  loadAgentChannelSources(hubURL, machineID);
 }
 
 function loadHubChannel(hubURL) {
@@ -442,7 +476,40 @@ function loadHubChannel(hubURL) {
       applySoftwareButton('hub-update-btn', 'hub-update-status', info);
       return;
     }
-    if (info.channel) sel.value = info.channel;
+    // Repopulate from the hub's own sources (built-ins + hub's update.sources)
+    // before applying the current channel selection. The hub is the authority
+    // on what channels it can resolve; we never substitute the client's list.
+    // GetHubSources may return {"error":"..."} on pre-channel-sources hubs;
+    // treat that as an empty list and let the fallback below synthesize an
+    // entry for whatever channel the hub reports as active.
+    goApp.GetHubSources(hubURL).then(function (raw2) {
+      var parsed = null;
+      try { parsed = JSON.parse(raw2); } catch (e) {}
+      var customs = Array.isArray(parsed) ? parsed : [];
+      sel.innerHTML = '';
+      ['dev', 'beta', 'stable'].forEach(function (n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      customs.forEach(function (src) {
+        var opt = document.createElement('option');
+        opt.value = src.name; opt.textContent = src.name;
+        sel.appendChild(opt);
+      });
+      if (info.channel) {
+        // Honor whatever the hub reports, even if it's not in the dropdown
+        // (e.g. a custom channel removed via the CLI but still active, or a
+        // pre-channel-sources hub where the sources endpoint 404s).
+        var found = Array.prototype.some.call(sel.options, function (o) { return o.value === info.channel; });
+        if (!found) {
+          var opt = document.createElement('option');
+          opt.value = info.channel; opt.textContent = info.channel + ' (active, not in sources)';
+          sel.appendChild(opt);
+        }
+        sel.value = info.channel;
+      }
+    });
     status.textContent = formatChannelStatus(info);
     applySoftwareButton('hub-update-btn', 'hub-update-status', info);
     sel.onchange = function () {
@@ -450,7 +517,10 @@ function loadHubChannel(hubURL) {
       showConfirmDialog('Switch Channel', 'Switch this hub to the ' + newCh + ' channel? New updates will follow the ' + newCh + ' release line.', 'Switch').then(function (yes) {
         if (!yes) { sel.value = info.channel || 'dev'; return; }
         status.textContent = 'switching to ' + newCh + '...';
-        goApp.SetHubChannel(hubURL, newCh, findChannelManifestBase(newCh)).then(function (r) {
+        // No manifestBase override -- the hub resolves from its own
+        // update.sources map for custom channels and from baked-in
+        // DefaultBases for dev/beta/stable.
+        goApp.SetHubChannel(hubURL, newCh, '').then(function (r) {
           var res = {};
           try { res = JSON.parse(r); } catch (e) { }
           if (res.error) { status.textContent = 'error: ' + res.error; return; }
@@ -484,7 +554,50 @@ function loadAgentChannel(hubURL, machineID) {
       applySoftwareButton('agent-update-btn', 'agent-update-status', info);
       return;
     }
-    if (info.channel) sel.value = info.channel;
+    // Repopulate the dropdown from the union of: built-ins, the agent's own
+    // sources, and the hub's sources marked as suggestions. The agent is the
+    // authority on what channels it can resolve; hub-only suggestions are
+    // shown but require an explicit push before the agent will accept them.
+    Promise.all([
+      goApp.GetAgentSources(hubURL, machineID).then(function (r) { try { return JSON.parse(r); } catch (e) { return null; } }),
+      goApp.GetHubSources(hubURL).then(function (r) { try { return JSON.parse(r); } catch (e) { return null; } })
+    ]).then(function (results) {
+      var agentSrcs = Array.isArray(results[0]) ? results[0] : [];
+      var hubSrcs = Array.isArray(results[1]) ? results[1] : [];
+      var agentNames = {};
+      agentSrcs.forEach(function (s) { agentNames[s.name] = true; });
+      sel.innerHTML = '';
+      ['dev', 'beta', 'stable'].forEach(function (n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      agentSrcs.forEach(function (src) {
+        var opt = document.createElement('option');
+        opt.value = src.name; opt.textContent = src.name;
+        opt.setAttribute('data-base', src.manifestBase || '');
+        sel.appendChild(opt);
+      });
+      hubSrcs.forEach(function (src) {
+        if (agentNames[src.name]) return;
+        var opt = document.createElement('option');
+        opt.value = src.name;
+        opt.textContent = src.name + ' (suggest from hub)';
+        opt.setAttribute('data-base', src.manifestBase || '');
+        opt.setAttribute('data-from-hub', '1');
+        sel.appendChild(opt);
+      });
+      if (info.channel) {
+        var found = Array.prototype.some.call(sel.options, function (o) { return o.value === info.channel; });
+        if (!found) {
+          var opt = document.createElement('option');
+          opt.value = info.channel;
+          opt.textContent = info.channel + ' (active, not in sources)';
+          sel.appendChild(opt);
+        }
+        sel.value = info.channel;
+      }
+    });
     status.textContent = formatChannelStatus(info);
     applySoftwareButton('agent-update-btn', 'agent-update-status', info);
     // Cache per-agent update status so the sidebar can show TDL version glyphs.
@@ -498,15 +611,38 @@ function loadAgentChannel(hubURL, machineID) {
     }
     sel.onchange = function () {
       var newCh = sel.value;
-      showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
-        if (!yes) { sel.value = info.channel || 'dev'; return; }
+      var opt = sel.options[sel.selectedIndex];
+      var fromHub = opt && opt.getAttribute('data-from-hub') === '1';
+      var hubBase = opt ? (opt.getAttribute('data-base') || '') : '';
+      var doSwitch = function () {
         status.textContent = 'switching to ' + newCh + '...';
-        goApp.SetAgentChannel(hubURL, machineID, newCh, findChannelManifestBase(newCh)).then(function (r) {
+        goApp.SetAgentChannel(hubURL, machineID, newCh, '').then(function (r) {
           var res = {};
           try { res = JSON.parse(r); } catch (e) { }
           if (res.error) { status.textContent = 'error: ' + res.error; return; }
           loadAgentChannel(hubURL, machineID);
         });
+      };
+      if (fromHub) {
+        // Suggestion picked: push the source to the agent first, then switch.
+        showConfirmDialog('Push Source to Agent',
+          'The "' + newCh + '" channel exists on this hub but not on agent ' + machineID + '. Push the source to the agent and switch?',
+          'Push and switch'
+        ).then(function (yes) {
+          if (!yes) { sel.value = info.channel || 'dev'; return; }
+          status.textContent = 'pushing source...';
+          goApp.SetAgentSource(hubURL, machineID, newCh, hubBase).then(function (r) {
+            var res = {};
+            try { res = JSON.parse(r); } catch (e) { }
+            if (res.error) { status.textContent = 'error: ' + res.error; sel.value = info.channel || 'dev'; return; }
+            doSwitch();
+          });
+        });
+        return;
+      }
+      showConfirmDialog('Switch Agent Channel', 'Switch ' + machineID + ' to the ' + newCh + ' channel?', 'Switch').then(function (yes) {
+        if (!yes) { sel.value = info.channel || 'dev'; return; }
+        doSwitch();
       });
     };
   }).catch(function () {
@@ -532,25 +668,6 @@ function loadClientChannel() {
       });
     };
   });
-}
-
-// syncClientChannelSource re-applies the manifestBase for the client's current
-// channel after channel sources are saved. Editing a channel source URL in
-// Application Settings updates TV settings (channelSources) but leaves the
-// stored manifestBase in credentials.yaml stale. This call detects the mismatch
-// and writes the updated URL back to credentials.yaml.
-function syncClientChannelSource() {
-  goApp.GetClientChannel().then(function (info) {
-    if (!info || !info.channel) return;
-    var ch = info.channel;
-    if (ch === 'dev' || ch === 'beta' || ch === 'stable') return;
-    var newBase = findChannelManifestBase(ch);
-    if (!newBase || newBase === info.manifestBase) return;
-    goApp.SetClientChannel(ch, newBase).then(function () {
-      // Refresh the manifest URL hint in Client Settings if the tab is visible.
-      loadClientChannel();
-    });
-  }).catch(function () {});
 }
 
 function hubUpdate(hubURL, hubName) {
@@ -3025,7 +3142,10 @@ function agentsShowDetail(a) {
   html += '</div>';
 
   // Management
-  html += '<div class="setting-card" id="agent-management-card"><div class="setting-card-title">Management</div>'
+  html += '<div class="setting-card" id="agent-management-card">'
+    + '<div class="setting-card-title-row"><div class="setting-card-title">Management</div>'
+    + '<button type="button" class="btn btn-sm tools-action-btn" onclick="refreshAgentManagement(\'' + ehub + '\',\'' + eid + '\')" title="Refresh channel status">&#x21BB; Refresh</button>'
+    + '</div>'
     + '<div class="setting-card-desc">Remote agent lifecycle controls.</div>'
     + '<table class="kv-table">';
   if (canManage) {
@@ -3043,6 +3163,20 @@ function agentsShowDetail(a) {
   }
   html += '</table></div>';
 
+  // Channel Sources card (only when manageable)
+  if (canManage) {
+    html += '<div class="setting-card" id="agent-channel-sources-card">'
+      + '<div class="setting-card-title">Channel Sources</div>'
+      + '<div class="setting-card-desc">Custom release channels available in this agent\'s Release channel dropdown. Built-in channels (dev, beta, stable) are always present.</div>'
+      + '<div id="agent-channel-sources-list" class="channel-sources-list"></div>'
+      + '<div class="channel-source-add-row" style="margin-top:8px;">'
+      + '<input type="text" id="agent-new-channel-name" class="tb-input channel-src-input-name" placeholder="name (e.g. local)">'
+      + '<input type="text" id="agent-new-channel-base" class="tb-input channel-src-input-base" placeholder="http://localhost:9900/">'
+      + '<button type="button" class="btn btn-sm" onclick="agentAddChannelSource(\'' + ehub + '\',\'' + eid + '\')">Add</button>'
+      + '</div>'
+      + '</div>';
+  }
+
   // Danger Zone
   html += '<div class="setting-card setting-card-danger"><div class="setting-card-title">Danger Zone</div>'
     + '<div class="danger-row"><div class="danger-row-text">'
@@ -3059,6 +3193,9 @@ function agentsShowDetail(a) {
 
   if (canManage && document.getElementById('agent-channel-select')) {
     loadAgentChannel(a.hub, a.id);
+  }
+  if (canManage && document.getElementById('agent-channel-sources-list')) {
+    loadAgentChannelSources(a.hub, a.id);
   }
   if (canManage && document.getElementById('agent-shares-body')) {
     loadAgentSharePaths(a.hub, a.id);
@@ -4589,7 +4726,11 @@ function renderHubSettings(pane) {
       // Software button starts disabled with a neutral label. loadHubChannel
       // overwrites it with the channel-aware truth from the hub's
       // GET /api/admin/update response.
-      html += '<div class="settings-group" id="hub-management-card"><div class="settings-group-header">Management</div>';
+      html += '<div class="settings-group" id="hub-management-card">'
+        + '<div class="settings-group-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+        + '<span>Management</span>'
+        + '<button type="button" class="btn btn-sm tools-action-btn" onclick="refreshHubManagement(\'' + escAttr(hub) + '\')" title="Refresh channel status">&#x21BB; Refresh</button>'
+        + '</div>';
       html += '<div class="settings-row"><div class="settings-label">Log output</div>'
         + '<div class="settings-value"><button class="btn btn-sm" onclick="hubViewLogs(\'' + escAttr(hubName) + '\')">View Logs</button></div></div>';
       html += '<div class="settings-row"><div class="settings-label">Release channel</div>'
@@ -4600,6 +4741,22 @@ function renderHubSettings(pane) {
       html += '<div class="settings-row"><div class="settings-label">Restart</div>'
         + '<div class="settings-value"><button class="btn btn-sm" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
       html += '</div>';
+
+      // Channel Sources card: custom release channels stored in the hub's
+      // own update.sources map. These are visible in the hub's Release
+      // channel dropdown above and persist in the hub's YAML config.
+      // Uses setting-card markup to match the Channel Sources card on the
+      // Agents page so spacing and typography are consistent.
+      html += '<div class="setting-card" id="hub-channel-sources-card">'
+        + '<div class="setting-card-title">Channel Sources</div>'
+        + '<div class="setting-card-desc">Custom release channels available in this hub\'s Release channel dropdown. Built-in channels (dev, beta, stable) are always present.</div>'
+        + '<div id="hub-channel-sources-list" class="channel-sources-list"></div>'
+        + '<div class="channel-source-add-row" style="margin-top:8px;">'
+        + '<input type="text" id="hub-new-channel-name" class="tb-input channel-src-input-name" placeholder="name (e.g. local)">'
+        + '<input type="text" id="hub-new-channel-base" class="tb-input channel-src-input-base" placeholder="http://localhost:9900/">'
+        + '<button type="button" class="btn btn-sm" onclick="hubAddChannelSource(\'' + escAttr(hub) + '\')">Add</button>'
+        + '</div>'
+        + '</div>';
     }
 
     // Danger zone
@@ -4619,6 +4776,7 @@ function renderHubSettings(pane) {
 
     if ((tokenRole === 'owner' || tokenRole === 'admin') && document.getElementById('hub-channel-select')) {
       loadHubChannel(hub);
+      loadHubChannelSources(hub);
     }
   }
 
@@ -5435,7 +5593,6 @@ function refreshSettings() {
     themeRadios.forEach(function (r) { r.checked = r.value === themeVal; });
     applyTelaTheme(themeVal);
 
-    refreshChannelSourcesUI(s.customChannels || []);
   });
 
   // Load channel sources first, then populate the client channel select with
@@ -5462,48 +5619,56 @@ function populateChannelSelect(id) {
   if (current) sel.value = current;
 }
 
-// pendingCustomChannels holds unsaved Add/Remove edits while the settings
-// dialog is open. null means no edits pending (saved state is authoritative).
-var pendingCustomChannels = null;
-
 // refreshChannelSourcesUI renders the custom channel sources list in the
-// Application Settings panel. Uses pendingCustomChannels when present so
-// the UI reflects in-progress edits that have not yet been applied.
-function refreshChannelSourcesUI(saved) {
-  var customs = pendingCustomChannels !== null ? pendingCustomChannels : (saved || []);
+// Client Settings card. Source of truth is the credential store (read via
+// goApp.GetClientSources). All Add/Edit/Remove actions persist immediately;
+// after the backend call returns we reload channelSources and re-render so
+// the UI always reflects what is actually on disk.
+function refreshChannelSourcesUI() {
   var container = document.getElementById('custom-channel-sources');
   if (!container) return;
-  if (customs.length === 0) {
-    container.innerHTML = '<div class="channel-sources-empty">No custom channel sources.</div>';
-    return;
-  }
-  var html = '<table class="channel-sources-table">';
-  customs.forEach(function (src) {
-    html += '<tr data-src-name="' + escAttr(src.name) + '">'
-      + '<td class="channel-src-name">' + escHtml(src.name) + '</td>'
-      + '<td class="channel-src-base">' + escHtml(src.manifestBase) + '</td>'
-      + '<td class="channel-src-actions">'
-      + '<button type="button" class="btn btn-sm channel-src-edit-btn">Edit</button>'
-      + ' <button type="button" class="btn btn-sm btn-danger channel-src-remove-btn">Remove</button>'
-      + '</td>'
-      + '</tr>';
+  goApp.GetClientSources().then(function (raw) {
+    var customs = [];
+    try { customs = JSON.parse(raw) || []; } catch (e) {}
+    if (customs.length === 0) {
+      container.innerHTML = '<div class="channel-sources-empty">No custom channel sources.</div>';
+      return;
+    }
+    var html = '<table class="channel-sources-table">';
+    customs.forEach(function (src) {
+      html += '<tr data-src-name="' + escAttr(src.name) + '">'
+        + '<td class="channel-src-name">' + escHtml(src.name) + '</td>'
+        + '<td class="channel-src-base">' + escHtml(src.manifestBase) + '</td>'
+        + '<td class="channel-src-actions">'
+        + '<button type="button" class="btn btn-sm channel-src-edit-btn">Edit</button>'
+        + ' <button type="button" class="btn btn-sm btn-danger channel-src-remove-btn">Remove</button>'
+        + '</td>'
+        + '</tr>';
+    });
+    html += '</table>';
+    container.innerHTML = html;
+    container.querySelectorAll('tr[data-src-name]').forEach(function (row) {
+      var name = row.getAttribute('data-src-name');
+      row.querySelector('.channel-src-edit-btn').onclick = function () { editChannelSource(name); };
+      row.querySelector('.channel-src-remove-btn').onclick = function () { removeChannelSource(name); };
+    });
   });
-  html += '</table>';
-  container.innerHTML = html;
-  // Attach handlers after render to avoid inline onclick quoting issues.
-  container.querySelectorAll('tr[data-src-name]').forEach(function (row) {
-    var name = row.getAttribute('data-src-name');
-    row.querySelector('.channel-src-edit-btn').onclick = function () { editChannelSource(name); };
-    row.querySelector('.channel-src-remove-btn').onclick = function () { removeChannelSource(name); };
+}
+
+// reloadChannelSourcesAndDropdowns refreshes the in-memory channelSources
+// global (used to populate every channel dropdown) and re-renders the
+// Client Settings card. Call after any successful CRUD mutation.
+function reloadChannelSourcesAndDropdowns() {
+  loadChannelSources(function () {
+    populateChannelSelect('client-channel-select');
+    refreshChannelSourcesUI();
   });
 }
 
 function editChannelSource(oldName) {
   var row = document.querySelector('#custom-channel-sources tr[data-src-name="' + oldName + '"]');
   if (!row) return;
-  var customs = pendingCustomChannels !== null ? pendingCustomChannels
-    : channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; });
-  var src = customs.find(function (s) { return s.name === oldName; });
+  var src = channelSources.find(function (s) { return s.name === oldName; });
   if (!src) return;
   row.innerHTML = '<td><input type="text" class="tb-input channel-src-input-name" value="' + escAttr(src.name) + '"></td>'
     + '<td><input type="text" class="tb-input channel-src-input-base" value="' + escAttr(src.manifestBase) + '"></td>'
@@ -5512,7 +5677,7 @@ function editChannelSource(oldName) {
     + ' <button type="button" class="btn btn-sm channel-src-cancel-btn">Cancel</button>'
     + '</td>';
   row.querySelector('.channel-src-save-btn').onclick = function () { saveChannelSourceEdit(oldName, row); };
-  row.querySelector('.channel-src-cancel-btn').onclick = function () { refreshChannelSourcesUI([]); };
+  row.querySelector('.channel-src-cancel-btn').onclick = function () { refreshChannelSourcesUI(); };
 }
 
 function saveChannelSourceEdit(oldName, row) {
@@ -5520,19 +5685,21 @@ function saveChannelSourceEdit(oldName, row) {
   var newBase = row.querySelector('.channel-src-input-base').value.trim();
   if (!newName) { showError('Channel name is required.'); return; }
   if (!/^[a-z0-9-]+$/.test(newName)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
-  if (newName !== oldName && ['dev', 'beta', 'stable'].indexOf(newName) !== -1) { showError('Cannot use a built-in channel name.'); return; }
+  if (['dev', 'beta', 'stable'].indexOf(newName) !== -1) { showError('Cannot use a built-in channel name.'); return; }
   if (!newBase) { showError('Channel URL is required.'); return; }
-  if (pendingCustomChannels === null) {
-    pendingCustomChannels = channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; }).slice();
+  var apply = function () {
+    goApp.SetClientSource(newName, newBase).then(function (raw) {
+      var resp = {};
+      try { resp = JSON.parse(raw) || {}; } catch (e) {}
+      if (resp.error) { showError(resp.error); return; }
+      reloadChannelSourcesAndDropdowns();
+    });
+  };
+  if (newName !== oldName) {
+    goApp.RemoveClientSource(oldName).then(function () { apply(); });
+  } else {
+    apply();
   }
-  if (newName !== oldName && pendingCustomChannels.some(function (s) { return s.name === newName; })) {
-    showError('A channel named "' + newName + '" already exists.'); return;
-  }
-  pendingCustomChannels = pendingCustomChannels.map(function (s) {
-    return s.name === oldName ? { name: newName, manifestBase: newBase } : s;
-  });
-  refreshChannelSourcesUI([]);
-  markSettingsDirty();
 }
 
 function addChannelSource() {
@@ -5542,30 +5709,300 @@ function addChannelSource() {
   var name = nameEl.value.trim().toLowerCase();
   var base = baseEl.value.trim();
   if (!name || !base) return;
-  // Validate name client-side (lowercase letters/digits/hyphens).
   if (!/^[a-z0-9-]+$/.test(name)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
   if (name === 'dev' || name === 'beta' || name === 'stable') { showError('Cannot add a built-in channel name.'); return; }
-  // Buffer the addition; do not persist until Apply.
-  if (pendingCustomChannels === null) {
-    pendingCustomChannels = channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; }).slice();
+  for (var i = 0; i < channelSources.length; i++) {
+    if (channelSources[i].name === name) { showError('Channel already exists.'); return; }
   }
-  for (var i = 0; i < pendingCustomChannels.length; i++) {
-    if (pendingCustomChannels[i].name === name) { showError('Channel already exists.'); return; }
-  }
-  pendingCustomChannels.push({ name: name, manifestBase: base });
-  nameEl.value = '';
-  baseEl.value = '';
-  refreshChannelSourcesUI([]);
-  markSettingsDirty();
+  goApp.SetClientSource(name, base).then(function (raw) {
+    var resp = {};
+    try { resp = JSON.parse(raw) || {}; } catch (e) {}
+    if (resp.error) { showError(resp.error); return; }
+    nameEl.value = '';
+    baseEl.value = '';
+    reloadChannelSourcesAndDropdowns();
+  });
 }
 
 function removeChannelSource(name) {
-  if (pendingCustomChannels === null) {
-    pendingCustomChannels = channelSources.filter(function (s) { return s.name !== 'dev' && s.name !== 'beta' && s.name !== 'stable'; }).slice();
+  goApp.RemoveClientSource(name).then(function (raw) {
+    var resp = {};
+    try { resp = JSON.parse(raw) || {}; } catch (e) {}
+    if (resp.error) { showError(resp.error); return; }
+    reloadChannelSourcesAndDropdowns();
+  });
+}
+
+// ── Hub channel sources ─────────────────────────────────────────────
+//
+// Mirrors the Client Settings card but targets the hub's update.sources
+// map via the admin API (GET/PUT/DELETE /api/admin/update/sources). All
+// CRUD operations persist immediately and re-render from the server's
+// authoritative response, matching the per-source CLI commands.
+
+function loadHubChannelSources(hub) {
+  var container = document.getElementById('hub-channel-sources-list');
+  if (!container) return;
+  goApp.GetHubSources(hub).then(function (raw) {
+    var parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) {}
+    // Pre-channel-sources hub returns {"error":"..."} (the route 404s).
+    // Hide the whole card rather than show a broken form.
+    if (parsed && !Array.isArray(parsed) && parsed.error) {
+      var card = document.getElementById('hub-channel-sources-card');
+      if (card) card.style.display = 'none';
+      return;
+    }
+    var customs = Array.isArray(parsed) ? parsed : [];
+    if (customs.length === 0) {
+      container.innerHTML = '<div class="channel-sources-empty">No custom channel sources.</div>';
+      return;
+    }
+    var html = '<table class="channel-sources-table">';
+    customs.forEach(function (src) {
+      html += '<tr data-src-name="' + escAttr(src.name) + '">'
+        + '<td class="channel-src-name">' + escHtml(src.name) + '</td>'
+        + '<td class="channel-src-base">' + escHtml(src.manifestBase) + '</td>'
+        + '<td class="channel-src-actions">'
+        + '<button type="button" class="btn btn-sm channel-src-edit-btn">Edit</button>'
+        + ' <button type="button" class="btn btn-sm btn-danger channel-src-remove-btn">Remove</button>'
+        + '</td>'
+        + '</tr>';
+    });
+    html += '</table>';
+    container.innerHTML = html;
+    container.querySelectorAll('tr[data-src-name]').forEach(function (row) {
+      var name = row.getAttribute('data-src-name');
+      row.querySelector('.channel-src-edit-btn').onclick = function () { hubEditChannelSource(hub, name); };
+      row.querySelector('.channel-src-remove-btn').onclick = function () { hubRemoveChannelSource(hub, name); };
+    });
+  });
+}
+
+function hubEditChannelSource(hub, oldName) {
+  var row = document.querySelector('#hub-channel-sources-list tr[data-src-name="' + oldName + '"]');
+  if (!row) return;
+  var oldBase = row.querySelector('.channel-src-base') ? row.querySelector('.channel-src-base').textContent : '';
+  row.innerHTML = '<td><input type="text" class="tb-input channel-src-input-name" value="' + escAttr(oldName) + '"></td>'
+    + '<td><input type="text" class="tb-input channel-src-input-base" value="' + escAttr(oldBase) + '"></td>'
+    + '<td class="channel-src-actions">'
+    + '<button type="button" class="btn btn-sm channel-src-save-btn">Save</button>'
+    + ' <button type="button" class="btn btn-sm channel-src-cancel-btn">Cancel</button>'
+    + '</td>';
+  row.querySelector('.channel-src-save-btn').onclick = function () { hubSaveChannelSourceEdit(hub, oldName, row); };
+  row.querySelector('.channel-src-cancel-btn').onclick = function () { loadHubChannelSources(hub); };
+}
+
+function hubSaveChannelSourceEdit(hub, oldName, row) {
+  var newName = row.querySelector('.channel-src-input-name').value.trim().toLowerCase();
+  var newBase = row.querySelector('.channel-src-input-base').value.trim();
+  if (!newName) { showError('Channel name is required.'); return; }
+  if (!/^[a-z0-9-]+$/.test(newName)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
+  if (['dev', 'beta', 'stable'].indexOf(newName) !== -1) { showError('Cannot use a built-in channel name.'); return; }
+  if (!newBase) { showError('Channel URL is required.'); return; }
+  var apply = function () {
+    goApp.SetHubSource(hub, newName, newBase).then(function (raw) {
+      var resp = {};
+      try { resp = JSON.parse(raw) || {}; } catch (e) {}
+      if (resp.error) { showError(resp.error); return; }
+      loadHubChannelSources(hub);
+      // Re-populate the Release channel dropdown so the new/renamed entry appears.
+      reloadHubChannelDropdown(hub);
+    });
+  };
+  if (newName !== oldName) {
+    goApp.RemoveHubSource(hub, oldName).then(function () { apply(); });
+  } else {
+    apply();
   }
-  pendingCustomChannels = pendingCustomChannels.filter(function (s) { return s.name !== name; });
-  refreshChannelSourcesUI([]);
-  markSettingsDirty();
+}
+
+function hubAddChannelSource(hub) {
+  var nameEl = document.getElementById('hub-new-channel-name');
+  var baseEl = document.getElementById('hub-new-channel-base');
+  if (!nameEl || !baseEl) return;
+  var name = nameEl.value.trim().toLowerCase();
+  var base = baseEl.value.trim();
+  if (!name || !base) return;
+  if (!/^[a-z0-9-]+$/.test(name)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
+  if (name === 'dev' || name === 'beta' || name === 'stable') { showError('Cannot add a built-in channel name.'); return; }
+  goApp.SetHubSource(hub, name, base).then(function (raw) {
+    var resp = {};
+    try { resp = JSON.parse(raw) || {}; } catch (e) {}
+    if (resp.error) { showError(resp.error); return; }
+    nameEl.value = '';
+    baseEl.value = '';
+    loadHubChannelSources(hub);
+    reloadHubChannelDropdown(hub);
+  });
+}
+
+function hubRemoveChannelSource(hub, name) {
+  goApp.RemoveHubSource(hub, name).then(function (raw) {
+    var resp = {};
+    try { resp = JSON.parse(raw) || {}; } catch (e) {}
+    if (resp.error) { showError(resp.error); return; }
+    loadHubChannelSources(hub);
+    reloadHubChannelDropdown(hub);
+  });
+}
+
+// reloadHubChannelDropdown rebuilds the hub's Release channel dropdown
+// from the union of built-in channels and the hub's current sources, then
+// re-selects whatever the hub currently reports as its active channel.
+function reloadHubChannelDropdown(hub) {
+  var sel = document.getElementById('hub-channel-select');
+  if (!sel) return;
+  goApp.GetHubSources(hub).then(function (raw) {
+    var customs = [];
+    try { customs = JSON.parse(raw) || []; } catch (e) {}
+    var current = sel.value;
+    sel.innerHTML = '';
+    ['dev', 'beta', 'stable'].forEach(function (n) {
+      var opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      sel.appendChild(opt);
+    });
+    customs.forEach(function (src) {
+      var opt = document.createElement('option');
+      opt.value = src.name; opt.textContent = src.name;
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  });
+}
+
+// ── Agent channel sources ───────────────────────────────────────────
+//
+// Mirrors the Hub Settings card but routes through the hub-mediated agent
+// management protocol (channel-sources-list/set/remove mgmt actions).
+
+function loadAgentChannelSources(hub, machineID) {
+  var container = document.getElementById('agent-channel-sources-list');
+  if (!container) return;
+  goApp.GetAgentSources(hub, machineID).then(function (raw) {
+    var parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) {}
+    // Pre-channel-sources agent returns {"error":"unknown action ..."}.
+    // Hide the whole card rather than show a broken form.
+    if (parsed && !Array.isArray(parsed) && parsed.error) {
+      var card = document.getElementById('agent-channel-sources-card');
+      if (card) card.style.display = 'none';
+      return;
+    }
+    var customs = Array.isArray(parsed) ? parsed : [];
+    if (customs.length === 0) {
+      container.innerHTML = '<div class="channel-sources-empty">No custom channel sources.</div>';
+      return;
+    }
+    var html = '<table class="channel-sources-table">';
+    customs.forEach(function (src) {
+      html += '<tr data-src-name="' + escAttr(src.name) + '">'
+        + '<td class="channel-src-name">' + escHtml(src.name) + '</td>'
+        + '<td class="channel-src-base">' + escHtml(src.manifestBase) + '</td>'
+        + '<td class="channel-src-actions">'
+        + '<button type="button" class="btn btn-sm channel-src-edit-btn">Edit</button>'
+        + ' <button type="button" class="btn btn-sm btn-danger channel-src-remove-btn">Remove</button>'
+        + '</td>'
+        + '</tr>';
+    });
+    html += '</table>';
+    container.innerHTML = html;
+    container.querySelectorAll('tr[data-src-name]').forEach(function (row) {
+      var name = row.getAttribute('data-src-name');
+      row.querySelector('.channel-src-edit-btn').onclick = function () { agentEditChannelSource(hub, machineID, name); };
+      row.querySelector('.channel-src-remove-btn').onclick = function () { agentRemoveChannelSource(hub, machineID, name); };
+    });
+  });
+}
+
+function agentEditChannelSource(hub, machineID, oldName) {
+  var row = document.querySelector('#agent-channel-sources-list tr[data-src-name="' + oldName + '"]');
+  if (!row) return;
+  var oldBase = row.querySelector('.channel-src-base') ? row.querySelector('.channel-src-base').textContent : '';
+  row.innerHTML = '<td><input type="text" class="tb-input channel-src-input-name" value="' + escAttr(oldName) + '"></td>'
+    + '<td><input type="text" class="tb-input channel-src-input-base" value="' + escAttr(oldBase) + '"></td>'
+    + '<td class="channel-src-actions">'
+    + '<button type="button" class="btn btn-sm channel-src-save-btn">Save</button>'
+    + ' <button type="button" class="btn btn-sm channel-src-cancel-btn">Cancel</button>'
+    + '</td>';
+  row.querySelector('.channel-src-save-btn').onclick = function () { agentSaveChannelSourceEdit(hub, machineID, oldName, row); };
+  row.querySelector('.channel-src-cancel-btn').onclick = function () { loadAgentChannelSources(hub, machineID); };
+}
+
+function agentSaveChannelSourceEdit(hub, machineID, oldName, row) {
+  var newName = row.querySelector('.channel-src-input-name').value.trim().toLowerCase();
+  var newBase = row.querySelector('.channel-src-input-base').value.trim();
+  if (!newName) { showError('Channel name is required.'); return; }
+  if (!/^[a-z0-9-]+$/.test(newName)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
+  if (['dev', 'beta', 'stable'].indexOf(newName) !== -1) { showError('Cannot use a built-in channel name.'); return; }
+  if (!newBase) { showError('Channel URL is required.'); return; }
+  var apply = function () {
+    goApp.SetAgentSource(hub, machineID, newName, newBase).then(function (raw) {
+      var resp = {};
+      try { resp = JSON.parse(raw) || {}; } catch (e) {}
+      if (resp.error) { showError(resp.error); return; }
+      loadAgentChannelSources(hub, machineID);
+      reloadAgentChannelDropdown(hub, machineID);
+    });
+  };
+  if (newName !== oldName) {
+    goApp.RemoveAgentSource(hub, machineID, oldName).then(function () { apply(); });
+  } else {
+    apply();
+  }
+}
+
+function agentAddChannelSource(hub, machineID) {
+  var nameEl = document.getElementById('agent-new-channel-name');
+  var baseEl = document.getElementById('agent-new-channel-base');
+  if (!nameEl || !baseEl) return;
+  var name = nameEl.value.trim().toLowerCase();
+  var base = baseEl.value.trim();
+  if (!name || !base) return;
+  if (!/^[a-z0-9-]+$/.test(name)) { showError('Channel name must contain only lowercase letters, digits, and hyphens.'); return; }
+  if (name === 'dev' || name === 'beta' || name === 'stable') { showError('Cannot add a built-in channel name.'); return; }
+  goApp.SetAgentSource(hub, machineID, name, base).then(function (raw) {
+    var resp = {};
+    try { resp = JSON.parse(raw) || {}; } catch (e) {}
+    if (resp.error) { showError(resp.error); return; }
+    nameEl.value = '';
+    baseEl.value = '';
+    loadAgentChannelSources(hub, machineID);
+    reloadAgentChannelDropdown(hub, machineID);
+  });
+}
+
+function agentRemoveChannelSource(hub, machineID, name) {
+  goApp.RemoveAgentSource(hub, machineID, name).then(function (raw) {
+    var resp = {};
+    try { resp = JSON.parse(raw) || {}; } catch (e) {}
+    if (resp.error) { showError(resp.error); return; }
+    loadAgentChannelSources(hub, machineID);
+    reloadAgentChannelDropdown(hub, machineID);
+  });
+}
+
+function reloadAgentChannelDropdown(hub, machineID) {
+  var sel = document.getElementById('agent-channel-select');
+  if (!sel) return;
+  goApp.GetAgentSources(hub, machineID).then(function (raw) {
+    var customs = [];
+    try { customs = JSON.parse(raw) || []; } catch (e) {}
+    var current = sel.value;
+    sel.innerHTML = '';
+    ['dev', 'beta', 'stable'].forEach(function (n) {
+      var opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      sel.appendChild(opt);
+    });
+    customs.forEach(function (src) {
+      var opt = document.createElement('option');
+      opt.value = src.name; opt.textContent = src.name;
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  });
 }
 
 function gatherSettings() {
@@ -5600,11 +6037,6 @@ function gatherSettings() {
     s.binPath = val === def ? '' : val;
   }
 
-  // Include pending channel source edits when present.
-  if (pendingCustomChannels !== null) {
-    s.customChannels = pendingCustomChannels;
-  }
-
   return s;
 }
 
@@ -5617,7 +6049,6 @@ function applySettings() {
 
   return goApp.SaveSettings(JSON.stringify(s)).then(function () {
       settingsDirty = false;
-      pendingCustomChannels = null;
       setSettingsButtonsDisabled(true);
       if (s.logMaxLines) logMaxLines = s.logMaxLines;
       (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
@@ -5625,12 +6056,6 @@ function applySettings() {
       updateSkippedVersion = '';
       checkForUpdate();
       refreshVersionDisplay();
-      // Reload channel sources so dropdowns reflect the saved list, then sync
-      // credentials.yaml if a custom channel's URL changed.
-      loadChannelSources(function () {
-        populateChannelSelect('client-channel-select');
-        syncClientChannelSource();
-      });
     });
 }
 
@@ -5692,17 +6117,12 @@ function closeSettings() {
   errEl.textContent = '';
   goApp.SaveSettings(JSON.stringify(s)).then(function () {
     settingsDirty = false;
-    pendingCustomChannels = null;
     setSettingsButtonsDisabled(true);
     (function () { var ub = document.getElementById('update-btn'); if (ub) { ub.disabled = true; ub.classList.remove('chrome-warn'); ub.title = 'No updates'; } })();
     updateDismissedForSession = false;
     updateSkippedVersion = '';
     checkForUpdate();
     refreshVersionDisplay();
-    loadChannelSources(function () {
-      populateChannelSelect('client-channel-select');
-      syncClientChannelSource();
-    });
     toggleSettingsOverlay();
   }).catch(function (err) {
     errEl.textContent = 'Save failed: ' + err;
@@ -5723,7 +6143,6 @@ function cancelSettings() {
 }
 
 function discardAndClose() {
-  pendingCustomChannels = null;
   refreshSettings();
   settingsDirty = false;
   setSettingsButtonsDisabled(true);
@@ -6289,6 +6708,8 @@ function refreshClientSettings() {
   refreshClientToolVersions();
   refreshServiceStatus();
   refreshMountStatus();
+  // Channel sources card (render from credstore via backend binding)
+  refreshChannelSourcesUI();
 }
 
 function refreshClientToolVersions() {

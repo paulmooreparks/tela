@@ -14,6 +14,15 @@ patch-level dev builds are too granular to list individually.
 ### Added
 - `telahubd channel` subcommand, bringing the hub into parity with `tela channel` and `telad channel`. Shows the current channel and latest version, switches the channel (`telahubd channel set <name>`), prints the full parsed manifest (`telahubd channel show`). The `-config` flag defaults to the platform-standard config path (`/etc/tela/telahubd.yaml` or `%ProgramData%\Tela\telahubd.yaml`).
 - `telad channel show [-channel <ch>]` prints the full parsed manifest for the agent, mirroring the client and hub.
+- Release channel sources: the legacy `update.manifestBase` scalar is replaced by `update.sources: map[channel]url` across `telad.yaml`, `telahubd.yaml`, and `~/.tela/credentials.yaml`. Pre-0.12 configs migrate automatically on first load. `channel sources list`, `channel sources set <name> <url>`, and `channel sources remove <name>` subcommands on all three binaries.
+- Hub admin API: `GET /api/admin/update/sources`, `PUT /api/admin/update/sources/{name}`, `DELETE /api/admin/update/sources/{name}` for managing the hub's channel sources remotely.
+- Agent mgmt actions: `channel-sources-list`, `channel-sources-set`, `channel-sources-remove` reach remote agents through the hub-mediated management protocol.
+- `tela admin hub channel sources ...` and `tela admin agent <hub> <machine> channel sources ...` passthroughs to manage a remote hub's or agent's sources from the CLI.
+- TelaVisor: Channel Sources cards on Client Settings, Hub Settings, and Agent Settings. Per-target dropdowns show the union of built-in channels plus the target's own sources; agent dropdowns additionally surface hub-side sources as suggestions with an explicit push-on-select flow.
+- First-run channel inference: binaries whose version string matches `vX.Y.0-{channel}.N` default to that channel on first self-update, instead of silently following `stable` and potentially downgrading.
+- Downgrade refusal on `update`: both the local `update` subcommand and the hub/agent admin update endpoints compare the channel head's semver against the running binary and refuse to install an older version. Fixes the silent downgrade class of bugs where switching channels could move a binary backwards.
+- `telahubd` self-hosts release channels in-process under `/channels/`. A new `channels:` config block (enabled, data, publicURL) mounts `GET /channels/{name}.json` for manifests and `GET /channels/files/{channel}/{binary}` for binary downloads, plus directory listings at `/channels/files/` and `/channels/files/{channel}/` for browsing. Accompanied by the `telahubd channels publish` subcommand that scans `channels.data/files/{channel}/`, hashes the binaries, and writes `channels.data/{name}.json`.
+- Remote publishing via admin API: `PUT /api/admin/channels/files/{channel}/{name}` uploads binaries into a per-channel subdirectory and `POST /api/admin/channels/publish` hashes them and writes the manifest. Lets a build pipeline publish to a self-hosted channel server over HTTPS with no SSH or file-share mount. Owner/admin auth required, 500 MiB per-file cap.
 
 ### Fixed
 - Foreground `telahubd` now reads the platform-standard config file (`/etc/tela/telahubd.yaml` on Linux/macOS, `%ProgramData%\Tela\telahubd.yaml` on Windows) when `-config` is not given and no `./data/telahubd.yaml` is present. Previously, running `sudo telahubd user bootstrap` followed by `sudo telahubd` would auto-generate a second owner token because foreground mode never looked at the system config path.
@@ -25,6 +34,9 @@ patch-level dev builds are too granular to list individually.
 - Help flags are now consistent across all three binaries: `-h`, `-?`, `-help`, and `--help` trigger help at every command and subcommand level (e.g. `tela channel set -h`). The bare `help` keyword still works at the top level (`tela help`, `telad help`, `telahubd help`) but no longer runs commands by accident when passed as a positional argument.
 - `telahubd service install -www` now defaults to empty (serve the embedded hub console). The previous default of `./www` wrote a confusing absolute path into the generated config. Operators who want to serve custom static files pass `-www /path/to/dir` explicitly.
 - Book: rewrote the hub install walkthrough with a proxy-first deployment-model table, corrected ordering (`service install` before `user bootstrap`), and added an Apache httpd section alongside Caddy, nginx, and Cloudflare Tunnel.
+
+### Removed
+- `telachand` binary. Channel hosting is now a feature of `telahubd` itself; see the Added entry above. Operators who had a telachand deployment can point their hub's `channels.data` at the old telachand data directory unchanged. The `update.manifestBase` scalar field is kept for one release cycle for migration purposes; it is scheduled for removal in 0.13 (GitHub issue #59).
 
 ## [0.10.1] - 2026-04-17
 

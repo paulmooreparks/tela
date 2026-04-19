@@ -229,7 +229,7 @@ The same steps happen for `telad update` and `telahubd update`, and for the admi
 
 ### "fetch dev manifest: HTTP 404"
 
-The channel manifest URL did not return a manifest. Either the manifest base URL is wrong (you set a `manifestBase` override that points nowhere), or GitHub is having a bad day. Check the URL printed by `tela channel`.
+The channel manifest URL did not return a manifest. Either the manifest base URL is wrong (you set a `sources[<channel>]` override that points nowhere), or GitHub is having a bad day. Check the URL printed by `tela channel`.
 
 ### "verify download: sha256 mismatch"
 
@@ -237,7 +237,7 @@ The downloaded binary did not match the manifest entry. This is the safety net w
 
 ### "requested version vX.Y.Z is not the current vA.B.C on channel <ch>"
 
-You asked for a specific version that is not the channel's current HEAD. Channels are always-current pointers, not version pins. To get an older or newer version, switch channels (or set a custom `manifestBase`). Pre-1.0 there is no other way to pin.
+You asked for a specific version that is not the channel's current HEAD. Channels are always-current pointers, not version pins. To get an older or newer version, switch channels (or set a custom `sources[<channel>]` URL). Pre-1.0 there is no other way to pin.
 
 ### TelaVisor's Update button shows "pre-channel build"
 
@@ -245,6 +245,6 @@ The hub or agent is running a binary from before the channel system was added. U
 
 ## Related
 
-- [Release process](../ops/release-process.md) -- the channel model, promotion, and running a self-hosted channel server with `telachand`
-- [Appendix A: CLI reference](../guide/reference.md) -- full CLI reference for `tela channel`, `tela update`, `telad update`, `telahubd update`, `telachand publish`, `tela admin hub channel`, `tela admin agent channel`
-- [Appendix B: Configuration file reference](../guide/configuration.md) -- the `update.channel` and `update.manifestBase` fields in `telad.yaml`, `telahubd.yaml`, `credentials.yaml`, and `telachand.yaml`
+- [Release process](../ops/release-process.md) -- the channel model, promotion, and running a self-hosted channel server on telahubd
+- [Appendix A: CLI reference](../guide/reference.md) -- full CLI reference for `tela channel`, `tela update`, `telad update`, `telahubd update`, `telahubd channels publish`, `tela admin hub channel`, `tela admin agent channel`
+- [Appendix B: Configuration file reference](../guide/configuration.md) -- the `update.channel`, `update.sources`, and `channels:` fields in `telad.yaml`, `telahubd.yaml`, and `credentials.yaml`

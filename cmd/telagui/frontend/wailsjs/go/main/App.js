@@ -162,6 +162,10 @@ export function GetAgentLogs(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetAgentLogs'](arg1, arg2, arg3);
 }
 
+export function GetAgentSources(arg1, arg2) {
+  return window['go']['main']['App']['GetAgentSources'](arg1, arg2);
+}
+
 export function GetBinStatus() {
   return window['go']['main']['App']['GetBinStatus']();
 }
@@ -176,6 +180,10 @@ export function GetChannelSources() {
 
 export function GetClientChannel() {
   return window['go']['main']['App']['GetClientChannel']();
+}
+
+export function GetClientSources() {
+  return window['go']['main']['App']['GetClientSources']();
 }
 
 export function GetCommandLog() {
@@ -220,6 +228,10 @@ export function GetHubInfo(arg1) {
 
 export function GetHubLogs(arg1, arg2) {
   return window['go']['main']['App']['GetHubLogs'](arg1, arg2);
+}
+
+export function GetHubSources(arg1) {
+  return window['go']['main']['App']['GetHubSources'](arg1);
 }
 
 export function GetHubStatus(arg1) {
@@ -406,12 +418,24 @@ export function ReleaseLocalPort(arg1) {
   return window['go']['main']['App']['ReleaseLocalPort'](arg1);
 }
 
+export function RemoveAgentSource(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RemoveAgentSource'](arg1, arg2, arg3);
+}
+
+export function RemoveClientSource(arg1) {
+  return window['go']['main']['App']['RemoveClientSource'](arg1);
+}
+
 export function RemoveCredential(arg1) {
   return window['go']['main']['App']['RemoveCredential'](arg1);
 }
 
 export function RemoveHub(arg1) {
   return window['go']['main']['App']['RemoveHub'](arg1);
+}
+
+export function RemoveHubSource(arg1, arg2) {
+  return window['go']['main']['App']['RemoveHubSource'](arg1, arg2);
 }
 
 export function RemoveRemote(arg1) {
@@ -486,12 +510,24 @@ export function SetAgentConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetAgentConfig'](arg1, arg2, arg3);
 }
 
+export function SetAgentSource(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetAgentSource'](arg1, arg2, arg3, arg4);
+}
+
 export function SetClientChannel(arg1, arg2) {
   return window['go']['main']['App']['SetClientChannel'](arg1, arg2);
 }
 
+export function SetClientSource(arg1, arg2) {
+  return window['go']['main']['App']['SetClientSource'](arg1, arg2);
+}
+
 export function SetHubChannel(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetHubChannel'](arg1, arg2, arg3);
+}
+
+export function SetHubSource(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetHubSource'](arg1, arg2, arg3);
 }
 
 export function SetModalOpen(arg1) {

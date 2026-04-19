@@ -230,6 +230,13 @@ func (a *App) startup(ctx context.Context) {
 	// Set up system tray icon
 	a.setupTray()
 
+	// One-shot migration of legacy settings.CustomChannels into the
+	// credential store's Update.Sources map. After 0.12 the credential
+	// store is the single source of truth for client channel sources;
+	// the settings.yaml field is read once here and then cleared so
+	// omitempty drops it on the next save.
+	a.migrateCustomChannelsToCredstore()
+
 	// Apply startup settings
 	settings := a.GetSettings()
 
@@ -279,15 +286,19 @@ func (a *App) domReady(ctx context.Context) {
 // auto-download. The user clicks "Restart to Update" to trigger the update.
 // Exception: if tela CLI is not installed at all, it is downloaded immediately.
 func (a *App) checkForUpdates() {
-	latest, err := a.latestRelease()
+	m, err := a.clientChannelManifest()
 	if err != nil {
 		return // offline
 	}
+	latest := m.Version
 
 	needsUpdate := false
 
-	// Check telavisor version
-	if version != latest {
+	// Check telavisor version. ShouldOfferUpdate enforces the
+	// cross-channel rule: if the configured channel's HEAD is on a
+	// different release line than the current binary, any difference
+	// is treated as an update offer, not "I'm newer, ignore."
+	if channelpkg.ShouldOfferUpdate(version, m.Channel, latest) {
 		needsUpdate = true
 	}
 
@@ -302,12 +313,12 @@ func (a *App) checkForUpdates() {
 		// tela not installed -- download it now (first run)
 		a.installTool("tela", latest)
 	} else {
-		// tela exists -- check version
+		// tela exists -- check version against the same channel HEAD.
 		cmd := exec.Command(localPath, "version")
 		hideConsoleWindow(cmd)
 		out, _ := cmd.CombinedOutput()
 		parts := strings.Fields(strings.TrimSpace(string(out)))
-		if len(parts) >= 2 && parts[1] != latest {
+		if len(parts) >= 2 && channelpkg.ShouldOfferUpdate(parts[1], m.Channel, latest) {
 			needsUpdate = true
 		}
 	}
@@ -457,21 +468,26 @@ func (a *App) GetToolVersions() ToolVersions {
 		tv.CLI = "not installed"
 	}
 
-	// Get latest from cache
+	// Resolve the latest version on the configured channel. Use the
+	// manifest (not just the version string) so the cross-channel decision
+	// in ShouldOfferUpdate has the channel field it needs; raw IsNewer
+	// would give wrong answers when the binary is from a different
+	// release line than the channel currently selected (e.g. local.51
+	// while configured channel is dev).
+	var latestChannel string
 	a.mu.Lock()
 	tv.Latest = a.updateVersion
 	a.mu.Unlock()
-
-	if tv.Latest == "" {
-		// Try fetching (may already be cached from checkForUpdates)
-		if latest, err := a.latestRelease(); err == nil {
-			tv.Latest = latest
-		}
+	if m, err := a.clientChannelManifest(); err == nil {
+		tv.Latest = m.Version
+		latestChannel = m.Channel
 	}
 
 	if tv.Latest != "" {
-		tv.GUIBehind = channelpkg.IsNewer(tv.Latest, tv.GUI)
-		tv.CLIBehind = tv.CLI != "not installed" && channelpkg.IsNewer(tv.Latest, tv.CLI)
+		tv.GUIBehind = channelpkg.ShouldOfferUpdate(tv.GUI, latestChannel, tv.Latest)
+		if tv.CLI != "not installed" {
+			tv.CLIBehind = channelpkg.ShouldOfferUpdate(tv.CLI, latestChannel, tv.Latest)
+		}
 	}
 
 	return tv
@@ -2811,6 +2827,175 @@ func (a *App) SetHubChannel(hubName, channelName, manifestBase string) string {
 	return string(data)
 }
 
+// GetHubSources lists the hub's custom channel sources via the admin API.
+// Returns a JSON array of {name, manifestBase}, excluding built-in channels.
+func (a *App) GetHubSources(hubName string) string {
+	data, err := a.adminProxyCall(hubName, "GET", "update/sources", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	var resp struct {
+		Sources map[string]string `json:"sources"`
+		Error   string            `json:"error"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return `{"error":"parse response: ` + err.Error() + `"}`
+	}
+	if resp.Error != "" {
+		return `{"error":"` + resp.Error + `"}`
+	}
+	out := []ChannelSource{}
+	for name, base := range resp.Sources {
+		if channelpkg.IsKnown(name) {
+			continue
+		}
+		out = append(out, ChannelSource{Name: name, ManifestBase: base})
+	}
+	raw, _ := json.Marshal(out)
+	return string(raw)
+}
+
+// SetHubSource adds or updates a custom channel source on the hub.
+func (a *App) SetHubSource(hubName, name, manifestBase string) string {
+	name = channelpkg.Normalize(name)
+	if !channelpkg.IsValid(name) {
+		return `{"error":"invalid channel name"}`
+	}
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot override built-in channel"}`
+	}
+	if strings.TrimSpace(manifestBase) == "" {
+		return `{"error":"manifestBase is required"}`
+	}
+	body, _ := json.Marshal(map[string]string{"base": manifestBase})
+	data, err := a.adminProxyCall(hubName, "PUT", "update/sources/"+url.PathEscape(name), body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// RemoveHubSource removes a custom channel source from the hub.
+func (a *App) RemoveHubSource(hubName, name string) string {
+	name = channelpkg.Normalize(name)
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot remove built-in channel"}`
+	}
+	data, err := a.adminProxyCall(hubName, "DELETE", "update/sources/"+url.PathEscape(name), nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// GetAgentSources lists a remote agent's custom channel sources through
+// the hub-mediated management protocol (channel-sources-list mgmt action).
+// Returns a JSON array of {name, manifestBase}, excluding built-in channels.
+func (a *App) GetAgentSources(hubName, machineID string) string {
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/channel-sources-list", nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	var env struct {
+		OK      *bool           `json:"ok"`
+		Message string          `json:"message"`
+		Error   string          `json:"error"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		return `{"error":"parse response: ` + err.Error() + `"}`
+	}
+	if env.Error != "" {
+		return `{"error":"` + env.Error + `"}`
+	}
+	if env.OK != nil && !*env.OK {
+		msg := env.Message
+		if msg == "" {
+			msg = "agent rejected request"
+		}
+		return `{"error":"` + msg + `"}`
+	}
+	var inner struct {
+		Sources map[string]string `json:"sources"`
+	}
+	if len(env.Payload) > 0 {
+		_ = json.Unmarshal(env.Payload, &inner)
+	}
+	out := []ChannelSource{}
+	for name, base := range inner.Sources {
+		if channelpkg.IsKnown(name) {
+			continue
+		}
+		out = append(out, ChannelSource{Name: name, ManifestBase: base})
+	}
+	raw, _ := json.Marshal(out)
+	return string(raw)
+}
+
+// SetAgentSource adds or updates a custom channel source on the agent
+// via the channel-sources-set mgmt action.
+func (a *App) SetAgentSource(hubName, machineID, name, manifestBase string) string {
+	name = channelpkg.Normalize(name)
+	if !channelpkg.IsValid(name) {
+		return `{"error":"invalid channel name"}`
+	}
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot override built-in channel"}`
+	}
+	if strings.TrimSpace(manifestBase) == "" {
+		return `{"error":"manifestBase is required"}`
+	}
+	body, _ := json.Marshal(map[string]string{"name": name, "base": manifestBase})
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/channel-sources-set", body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return unwrapMgmtResponse(data)
+}
+
+// RemoveAgentSource removes a custom channel source from the agent via
+// the channel-sources-remove mgmt action.
+func (a *App) RemoveAgentSource(hubName, machineID, name string) string {
+	name = channelpkg.Normalize(name)
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot remove built-in channel"}`
+	}
+	body, _ := json.Marshal(map[string]string{"name": name})
+	data, err := a.adminProxyCall(hubName, "POST", "agents/"+url.QueryEscape(machineID)+"/channel-sources-remove", body)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return unwrapMgmtResponse(data)
+}
+
+// unwrapMgmtResponse turns an agent mgmt-response envelope into a flat
+// {ok:true, ...payload} or {error:"..."} JSON string for the frontend.
+func unwrapMgmtResponse(data []byte) string {
+	var env struct {
+		OK      *bool           `json:"ok"`
+		Message string          `json:"message"`
+		Error   string          `json:"error"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		return `{"error":"parse response: ` + err.Error() + `"}`
+	}
+	if env.Error != "" {
+		return `{"error":"` + env.Error + `"}`
+	}
+	if env.OK != nil && !*env.OK {
+		msg := env.Message
+		if msg == "" {
+			msg = "agent rejected request"
+		}
+		return `{"error":"` + msg + `"}`
+	}
+	if len(env.Payload) > 0 {
+		return string(env.Payload)
+	}
+	return `{"ok":true}`
+}
+
 // GetAgentChannelInfo reads a remote agent's channel status through the
 // hub-mediated management protocol.
 func (a *App) GetAgentChannelInfo(hubName, machineID string) string {
@@ -2849,10 +3034,11 @@ func (a *App) GetClientChannel() map[string]string {
 		}
 	}
 	ch := channelpkg.Normalize(store.Update.Channel)
+	base := channelpkg.ResolveBase(ch, store.Update.Sources)
 	return map[string]string{
 		"channel":      ch,
-		"manifestUrl":  channelpkg.ManifestURL(store.Update.ManifestBase, ch),
-		"manifestBase": store.Update.ManifestBase,
+		"manifestUrl":  channelpkg.ManifestURL(base, ch),
+		"manifestBase": base,
 	}
 }
 
@@ -2871,30 +3057,154 @@ func (a *App) SetClientChannel(channelName, manifestBase string) string {
 	}
 	store.Update.Channel = ch
 	if manifestBase != "" {
-		store.Update.ManifestBase = manifestBase
+		if store.Update.Sources == nil {
+			store.Update.Sources = map[string]string{}
+		}
+		store.Update.Sources[ch] = manifestBase
 	} else if channelpkg.IsKnown(ch) {
-		// Switching back to a built-in channel clears any custom base.
-		store.Update.ManifestBase = ""
+		// Switching back to a built-in channel: drop any custom override
+		// for this channel so the baked-in default takes over again.
+		delete(store.Update.Sources, ch)
 	}
 	if err := store.Save(path); err != nil {
 		return `{"error":"save credential store: ` + err.Error() + `"}`
 	}
-	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(store.Update.ManifestBase, ch))
+	resolved := channelpkg.ResolveBase(ch, store.Update.Sources)
+	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(resolved, ch))
 }
 
-// GetChannelSources returns the full list of available release channels: the
-// three built-in channels (dev, beta, stable) followed by any custom channels
-// defined in TV settings. The result is a JSON array of {name, manifestBase}.
+// migrateCustomChannelsToCredstore copies any pre-0.12 custom channels
+// stored in settings.yaml (CustomChannels) into the credential store's
+// Update.Sources map, then clears the legacy field so it disappears on the
+// next settings save. Existing credstore entries win on conflict.
+func (a *App) migrateCustomChannelsToCredstore() {
+	s := a.GetSettings()
+	if len(s.CustomChannels) == 0 {
+		return
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		return
+	}
+	if store.Update.Sources == nil {
+		store.Update.Sources = map[string]string{}
+	}
+	for _, c := range s.CustomChannels {
+		name := channelpkg.Normalize(c.Name)
+		if name == "" || channelpkg.IsKnown(name) {
+			continue
+		}
+		if _, exists := store.Update.Sources[name]; exists {
+			continue
+		}
+		if strings.TrimSpace(c.ManifestBase) == "" {
+			continue
+		}
+		store.Update.Sources[name] = c.ManifestBase
+	}
+	if err := store.Save(path); err != nil {
+		log.Printf("[telavisor] migrate custom channels: save credstore: %v", err)
+		return
+	}
+	s.CustomChannels = nil
+	data, err := yaml.Marshal(&s)
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(settingsPath(), data, 0600); err != nil {
+		log.Printf("[telavisor] migrate custom channels: clear settings field: %v", err)
+	}
+}
+
+// GetChannelSources returns the full list of release channels available to
+// dropdowns: the three built-in channels (dev, beta, stable) followed by any
+// custom channels stored in the credential store. The result is a JSON array
+// of {name, manifestBase}. Built-in entries always carry an empty
+// manifestBase so the resolver falls through to channelpkg.DefaultBases.
 func (a *App) GetChannelSources() string {
 	sources := []ChannelSource{
 		{Name: "dev", ManifestBase: ""},
 		{Name: "beta", ManifestBase: ""},
 		{Name: "stable", ManifestBase: ""},
 	}
-	s := a.GetSettings()
-	sources = append(sources, s.CustomChannels...)
+	store, err := credstore.Load(credstore.UserPath())
+	if err == nil && store != nil {
+		for name, base := range store.Update.Sources {
+			if channelpkg.IsKnown(name) {
+				continue
+			}
+			sources = append(sources, ChannelSource{Name: name, ManifestBase: base})
+		}
+	}
 	data, _ := json.Marshal(sources)
 	return string(data)
+}
+
+// GetClientSources returns just the custom channel sources from the
+// credential store (excluding built-ins). Used by the Client Settings card.
+func (a *App) GetClientSources() string {
+	out := []ChannelSource{}
+	store, err := credstore.Load(credstore.UserPath())
+	if err == nil && store != nil {
+		for name, base := range store.Update.Sources {
+			if channelpkg.IsKnown(name) {
+				continue
+			}
+			out = append(out, ChannelSource{Name: name, ManifestBase: base})
+		}
+	}
+	data, _ := json.Marshal(out)
+	return string(data)
+}
+
+// SetClientSource adds or updates a custom channel source in the credential
+// store. Built-in channel names (dev, beta, stable) are rejected.
+func (a *App) SetClientSource(name, manifestBase string) string {
+	name = channelpkg.Normalize(name)
+	if !channelpkg.IsValid(name) {
+		return `{"error":"invalid channel name"}`
+	}
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot override built-in channel"}`
+	}
+	if strings.TrimSpace(manifestBase) == "" {
+		return `{"error":"manifestBase is required"}`
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		return `{"error":"load credential store: ` + err.Error() + `"}`
+	}
+	if store.Update.Sources == nil {
+		store.Update.Sources = map[string]string{}
+	}
+	store.Update.Sources[name] = manifestBase
+	if err := store.Save(path); err != nil {
+		return `{"error":"save credential store: ` + err.Error() + `"}`
+	}
+	return `{"ok":true}`
+}
+
+// RemoveClientSource removes a custom channel source from the credential
+// store. Built-in channel names cannot be removed.
+func (a *App) RemoveClientSource(name string) string {
+	name = channelpkg.Normalize(name)
+	if channelpkg.IsKnown(name) {
+		return `{"error":"cannot remove built-in channel"}`
+	}
+	path := credstore.UserPath()
+	store, err := credstore.Load(path)
+	if err != nil {
+		return `{"error":"load credential store: ` + err.Error() + `"}`
+	}
+	if store.Update.Sources != nil {
+		delete(store.Update.Sources, name)
+	}
+	if err := store.Save(path); err != nil {
+		return `{"error":"save credential store: ` + err.Error() + `"}`
+	}
+	return `{"ok":true}`
 }
 
 // UpdateServiceAgent self-updates the locally installed telad service.
@@ -2983,8 +3293,8 @@ func (a *App) updateRunningServiceBinary(binaryName string) string {
 			return fmt.Sprintf(`{"error":"telad is registered with %s but no enabled portal source knows that hub: %s"}`, jsonEscape(info.Hub), jsonEscape(lookupErr.Error()))
 		}
 		// Pass TV's own channel manifest coordinates so the agent fetches
-		// from the same source TV is using (e.g. a self-hosted telachand),
-		// not from whatever its own YAML config says.
+		// from the same source TV is using (e.g. a self-hosted channel
+		// server), not from whatever its own YAML config says.
 		m, err := a.clientChannelManifest()
 		if err != nil {
 			return fmt.Sprintf(`{"error":"fetch channel manifest: %s"}`, jsonEscape(err.Error()))
@@ -2992,7 +3302,7 @@ func (a *App) updateRunningServiceBinary(binaryName string) string {
 		store, _ := credstore.Load(credstore.UserPath())
 		var manifestBase string
 		if store != nil {
-			manifestBase = store.Update.ManifestBase
+			manifestBase = channelpkg.ResolveBase(channelpkg.Normalize(m.Channel), store.Update.Sources)
 		}
 		updatePayload := map[string]string{
 			"version":      m.Version,
@@ -3623,10 +3933,13 @@ func (a *App) RefreshBinStatus() []BinaryInfo {
 	store, _ := credstore.Load(credstore.UserPath())
 	var ch, base string
 	if store != nil {
-		ch = store.Update.Channel
-		base = store.Update.ManifestBase
+		ch = channelpkg.Normalize(store.Update.Channel)
+		base = channelpkg.ResolveBase(ch, store.Update.Sources)
+	} else {
+		ch = channelpkg.DefaultChannel
+		base = channelpkg.ResolveBase(ch, nil)
 	}
-	tvChannelFetcher.Fetch(channelpkg.ManifestURL(base, channelpkg.Normalize(ch)))
+	tvChannelFetcher.Fetch(channelpkg.ManifestURL(base, ch))
 	return a.GetBinStatus()
 }
 
@@ -3724,12 +4037,14 @@ var tvChannelFetcher = &channelpkg.Fetcher{}
 
 func (a *App) clientChannelManifest() (*channelpkg.Manifest, error) {
 	store, err := credstore.Load(credstore.UserPath())
-	var ch, base string
+	var ch string
+	var sources map[string]string
 	if err == nil && store != nil {
 		ch = store.Update.Channel
-		base = store.Update.ManifestBase
+		sources = store.Update.Sources
 	}
 	ch = channelpkg.Normalize(ch)
+	base := channelpkg.ResolveBase(ch, sources)
 	return tvChannelFetcher.GetURL(channelpkg.ManifestURL(base, ch))
 }
 
@@ -4014,7 +4329,9 @@ func (a *App) DeleteProfile(name string) error {
 // Settings holds user preferences persisted to disk.
 // ChannelSource is a named release channel with an optional manifest base URL.
 // The three built-in channels (dev, beta, stable) use the default upstream base.
-// Custom entries point at self-hosted telachand instances or other servers.
+// Custom entries point at self-hosted channel servers (telahubd with
+// channels.enabled=true, or any other HTTP server that serves the same
+// manifest and binary layout).
 type ChannelSource struct {
 	Name         string `yaml:"name" json:"name"`
 	ManifestBase string `yaml:"manifestBase" json:"manifestBase"`

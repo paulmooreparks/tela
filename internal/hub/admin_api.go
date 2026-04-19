@@ -65,14 +65,18 @@ import (
 var hubChannelFetcher = &channel.Fetcher{}
 
 // hubChannel returns the configured channel name (defaulting to dev) and
-// the manifest base override (empty for the default upstream).
+// the resolved base URL. The base is looked up via channel.ResolveBase
+// against this hub's sources map, falling back to channel.DefaultBases
+// for built-in channel names.
 func hubChannel() (string, string) {
 	globalCfgMu.RLock()
 	defer globalCfgMu.RUnlock()
 	if globalCfg == nil {
-		return channel.Normalize(""), ""
+		name := channel.Normalize("")
+		return name, channel.ResolveBase(name, nil)
 	}
-	return channel.Normalize(globalCfg.Update.Channel), globalCfg.Update.ManifestBase
+	name := channel.Normalize(globalCfg.Update.Channel)
+	return name, channel.ResolveBase(name, globalCfg.Update.Sources)
 }
 
 // requireOwnerOrAdmin checks the Authorization header and returns the
@@ -898,16 +902,23 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		ch, base := hubChannel()
+		globalCfgMu.RLock()
+		sources := map[string]string{}
+		for k, v := range globalCfg.Update.Sources {
+			sources[k] = v
+		}
+		globalCfgMu.RUnlock()
 		out := map[string]interface{}{
 			"channel":         ch,
 			"manifestUrl":     channel.ManifestURL(base, ch),
 			"currentVersion":  version,
 			"latestVersion":   "",
 			"updateAvailable": false,
+			"sources":         sources,
 		}
 		if latest, err := hubLatestRelease(); err == nil {
 			out["latestVersion"] = latest
-			out["updateAvailable"] = channel.IsNewer(latest, version)
+			out["updateAvailable"] = channel.ShouldOfferUpdate(version, ch, latest)
 		} else {
 			out["error"] = err.Error()
 		}
@@ -974,6 +985,8 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	ver := req.Version
 
+	explicitVersion := req.Version != "" && req.Version != "latest"
+
 	if ver == "" || ver == "latest" {
 		resolved, err := hubLatestRelease()
 		if err != nil {
@@ -990,6 +1003,21 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Downgrade refusal on the channel-HEAD path: if the caller didn't pin a
+	// specific version and the channel's HEAD is older than what's running,
+	// refuse rather than silently downgrade. Only applies when staying on
+	// the same channel; a channel switch is an explicit declaration of
+	// intent to follow the new HEAD regardless of how the semver sort
+	// orders the two lineages. An explicit version also bypasses the gate.
+	targetCh, _ := hubChannel()
+	if !explicitVersion && version != "dev" && !channel.IsCrossChannel(version, targetCh) && !channel.IsNewer(ver, version) {
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusConflict, map[string]string{
+			"error": fmt.Sprintf("latest version on channel is %s, older than currently running %s; specify an explicit version to downgrade", ver, version),
+		})
+		return
+	}
+
 	log.Printf("[hub] update requested to %s", ver)
 	adminCorsHeaders(w, r)
 	writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"ok": true, "message": "updating to " + ver})
@@ -1002,6 +1030,126 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		hubRestartSelf()
 	}()
+}
+
+// handleAdminUpdateSources handles CRUD on the hub's update.sources map.
+//
+//	GET    /api/admin/update/sources              List all sources
+//	PUT    /api/admin/update/sources/{name}       Set: {"base":"..."}
+//	DELETE /api/admin/update/sources/{name}       Remove a source
+//
+// All operations require owner or admin auth and are persisted to YAML
+// (hot-reload via persistConfig). Built-in channels (dev/beta/stable)
+// remain available even after their entry is removed; they fall back to
+// the baked-in default. Custom channel names become unresolvable when
+// their entry is removed.
+func handleAdminUpdateSources(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if _, ok := requireOwnerOrAdmin(w, r); !ok {
+		return
+	}
+
+	// Path is one of:
+	//   /api/admin/update/sources         (list, GET only)
+	//   /api/admin/update/sources/{name}  (set/remove)
+	rest := strings.TrimPrefix(r.URL.Path, "/api/admin/update/sources")
+	rest = strings.TrimPrefix(rest, "/")
+	name := strings.TrimSpace(strings.ToLower(rest))
+
+	switch r.Method {
+	case http.MethodGet:
+		if name != "" {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "GET /api/admin/update/sources/{name} not supported; GET the collection instead"})
+			return
+		}
+		globalCfgMu.RLock()
+		out := map[string]string{}
+		for k, v := range globalCfg.Update.Sources {
+			out[k] = v
+		}
+		globalCfgMu.RUnlock()
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"sources": out})
+		return
+
+	case http.MethodPut:
+		if name == "" {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "PUT requires /api/admin/update/sources/{name}"})
+			return
+		}
+		if !channel.IsValid(name) {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid channel name: " + name})
+			return
+		}
+		var req struct {
+			Base string `json:"base"`
+		}
+		if r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+				adminCorsHeaders(w, r)
+				writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+				return
+			}
+		}
+		base := strings.TrimRight(strings.TrimSpace(req.Base), "/")
+		if strings.HasSuffix(base, ".json") {
+			if i := strings.LastIndex(base, "/"); i >= 0 {
+				base = base[:i]
+			}
+		}
+		globalCfgMu.Lock()
+		if globalCfg.Update.Sources == nil {
+			globalCfg.Update.Sources = map[string]string{}
+		}
+		globalCfg.Update.Sources[name] = base
+		globalCfgMu.Unlock()
+		if err := persistConfig(); err != nil {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "persist config: " + err.Error()})
+			return
+		}
+		log.Printf("[hub] sources[%s] = %s", name, base)
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"ok": true, "name": name, "base": base})
+		return
+
+	case http.MethodDelete:
+		if name == "" {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "DELETE requires /api/admin/update/sources/{name}"})
+			return
+		}
+		globalCfgMu.Lock()
+		_, exists := globalCfg.Update.Sources[name]
+		delete(globalCfg.Update.Sources, name)
+		globalCfgMu.Unlock()
+		if !exists {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "no source entry for channel " + name})
+			return
+		}
+		if err := persistConfig(); err != nil {
+			adminCorsHeaders(w, r)
+			writeAdminJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "persist config: " + err.Error()})
+			return
+		}
+		log.Printf("[hub] sources[%s] removed", name)
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusOK, map[string]interface{}{"ok": true, "name": name})
+		return
+
+	default:
+		adminCorsHeaders(w, r)
+		writeAdminJSON(w, r, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
 }
 
 // hubLatestRelease returns the current version on the hub's configured

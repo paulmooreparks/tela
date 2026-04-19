@@ -37,6 +37,181 @@ func TestIsKnown(t *testing.T) {
 	}
 }
 
+func TestResolveBase(t *testing.T) {
+	cases := []struct {
+		name    string
+		channel string
+		sources map[string]string
+		want    string
+	}{
+		{"built-in with no sources map", Dev, nil, DefaultManifestBase},
+		{"built-in with empty sources map", Beta, map[string]string{}, DefaultManifestBase},
+		{"built-in with empty string in sources", Stable, map[string]string{"stable": ""}, DefaultManifestBase},
+		{"built-in overridden by sources", Stable, map[string]string{"stable": "https://mirror.example.com/"}, "https://mirror.example.com/"},
+		{"custom channel with sources entry", "internal", map[string]string{"internal": "https://internal.example.com/"}, "https://internal.example.com/"},
+		{"custom channel missing from sources returns empty", "internal", nil, ""},
+		{"custom channel with empty sources value returns empty", "internal", map[string]string{"internal": ""}, ""},
+		{"unrelated sources entries don't match", Dev, map[string]string{"internal": "https://internal.example.com/"}, DefaultManifestBase},
+		{"multiple overrides only the matching one wins", Stable, map[string]string{"dev": "https://d/", "stable": "https://s/", "beta": "https://b/"}, "https://s/"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ResolveBase(c.channel, c.sources)
+			if got != c.want {
+				t.Errorf("ResolveBase(%q, %v) = %q, want %q", c.channel, c.sources, got, c.want)
+			}
+		})
+	}
+}
+
+func TestInferFromVersion(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		// Dev channel.
+		{"v0.11.0-dev.11", "dev"},
+		{"0.11.0-dev.1", "dev"},
+		{"V0.11.0-DEV.1", "dev"},
+
+		// Beta channel.
+		{"v0.11.0-beta.1", "beta"},
+		{"v0.11.0-beta.42", "beta"},
+
+		// Stable channel (no prerelease suffix).
+		{"v0.11.0", "stable"},
+		{"v1.2.3", "stable"},
+		{"0.11.0", "stable"},
+
+		// Custom channels.
+		{"v0.11.0-local.32", "local"},
+		{"v0.11.0-experiment.3", "experiment"},
+		{"v0.11.0-nightly.5", "nightly"},
+		{"v0.11.0-feature-mux.1", "feature-mux"},
+
+		// Build metadata is stripped before inference.
+		{"v0.11.0-beta.1+build42", "beta"},
+		{"v0.11.0-local.32+abc123", "local"},
+		{"v0.11.0+build42", "stable"},
+
+		// Whitespace tolerance.
+		{"  v0.11.0-beta.1  ", "beta"},
+
+		// Bad inputs: caller falls back to its own default.
+		{"", ""},
+		{"dev", ""},   // not a semver shape
+		{"v0.11", ""}, // too few parts
+		{"not a version", ""},
+		{"v0.11.0-!invalid!.1", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			got := InferFromVersion(c.in)
+			if got != c.want {
+				t.Errorf("InferFromVersion(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestMigrateManifestBase(t *testing.T) {
+	t.Run("no-op when manifestBase empty", func(t *testing.T) {
+		mb := ""
+		sources := map[string]string{}
+		changed := MigrateManifestBase("local", &mb, &sources)
+		if changed {
+			t.Error("empty manifestBase should be a no-op")
+		}
+		if len(sources) != 0 {
+			t.Errorf("sources should be untouched, got %v", sources)
+		}
+	})
+
+	t.Run("built-in channel discards manifestBase", func(t *testing.T) {
+		mb := "https://parkscomputing.com/content/tela/channels/"
+		var sources map[string]string
+		changed := MigrateManifestBase("stable", &mb, &sources)
+		if !changed {
+			t.Error("built-in migration should report changed=true")
+		}
+		if mb != "" {
+			t.Errorf("manifestBase should be cleared, got %q", mb)
+		}
+		if sources != nil && len(sources) != 0 {
+			t.Errorf("sources should not be populated for built-in, got %v", sources)
+		}
+	})
+
+	t.Run("custom channel copies manifestBase into sources", func(t *testing.T) {
+		mb := "https://parkscomputing.com/content/tela/channels/"
+		var sources map[string]string
+		changed := MigrateManifestBase("local", &mb, &sources)
+		if !changed {
+			t.Error("custom migration should report changed=true")
+		}
+		if mb != "" {
+			t.Errorf("manifestBase should be cleared, got %q", mb)
+		}
+		if sources["local"] != "https://parkscomputing.com/content/tela/channels/" {
+			t.Errorf("sources[local] wrong: got %q", sources["local"])
+		}
+	})
+
+	t.Run("existing sources entry wins; manifestBase still discarded", func(t *testing.T) {
+		mb := "https://old.example.com/"
+		sources := map[string]string{"local": "https://new.example.com/"}
+		changed := MigrateManifestBase("local", &mb, &sources)
+		if !changed {
+			t.Error("should report changed=true because manifestBase was cleared")
+		}
+		if mb != "" {
+			t.Errorf("manifestBase should be cleared, got %q", mb)
+		}
+		if sources["local"] != "https://new.example.com/" {
+			t.Errorf("existing sources entry should win; got %q", sources["local"])
+		}
+	})
+
+	t.Run("empty channel with manifestBase clears but does not populate", func(t *testing.T) {
+		mb := "https://somewhere.example.com/"
+		var sources map[string]string
+		changed := MigrateManifestBase("", &mb, &sources)
+		if !changed {
+			t.Error("should report changed=true because manifestBase was cleared")
+		}
+		if mb != "" {
+			t.Errorf("manifestBase should be cleared, got %q", mb)
+		}
+		if sources != nil && len(sources) != 0 {
+			t.Errorf("sources should not be populated with empty channel name, got %v", sources)
+		}
+	})
+
+	t.Run("nil sources pointer with built-in channel is safe", func(t *testing.T) {
+		mb := "https://x/"
+		var sources map[string]string
+		changed := MigrateManifestBase("dev", &mb, &sources)
+		if !changed {
+			t.Error("should report changed=true")
+		}
+		if sources != nil {
+			t.Errorf("sources should still be nil for built-in, got %v", sources)
+		}
+	})
+}
+
+func TestDefaultBases_ContainsAllBuiltins(t *testing.T) {
+	for _, name := range []string{Dev, Beta, Stable} {
+		if _, ok := DefaultBases[name]; !ok {
+			t.Errorf("DefaultBases is missing built-in channel %q", name)
+		}
+	}
+	// Spot-check: custom names don't accidentally leak in.
+	if _, ok := DefaultBases["internal"]; ok {
+		t.Error("DefaultBases should not contain custom channel names")
+	}
+}
+
 func TestNormalize(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"dev", "dev"},
@@ -372,6 +547,69 @@ func TestFetcher_TruncatesGiantBody(t *testing.T) {
 	_, err := f.Get("dev")
 	if err == nil {
 		t.Fatal("expected parse error from truncated giant body, got nil")
+	}
+}
+
+// ── Cross-channel helpers ──────────────────────────────────────────
+
+func TestIsCrossChannel(t *testing.T) {
+	cases := []struct {
+		name      string
+		current   string
+		target    string
+		wantCross bool
+	}{
+		{"same channel local", "v0.11.0-local.51", "local", false},
+		{"same channel dev", "v0.11.0-dev.11", "dev", false},
+		{"stable to stable", "v0.11.0", "stable", false},
+		{"local to dev", "v0.11.0-local.51", "dev", true},
+		{"dev to beta", "v0.11.0-dev.11", "beta", true},
+		{"local to stable", "v0.11.0-local.51", "stable", true},
+		{"stable to dev", "v0.11.0", "dev", true},
+		{"empty current", "", "dev", false},
+		{"dev sentinel", "dev", "dev", false},
+		{"empty target", "v0.11.0-local.51", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := IsCrossChannel(tc.current, tc.target)
+			if got != tc.wantCross {
+				t.Errorf("IsCrossChannel(%q,%q) = %v, want %v",
+					tc.current, tc.target, got, tc.wantCross)
+			}
+		})
+	}
+}
+
+func TestShouldOfferUpdate(t *testing.T) {
+	cases := []struct {
+		name    string
+		current string
+		channel string
+		latest  string
+		want    bool
+	}{
+		// Same channel, IsNewer rules apply.
+		{"same channel newer", "v0.11.0-local.50", "local", "v0.11.0-local.51", true},
+		{"same channel equal", "v0.11.0-local.51", "local", "v0.11.0-local.51", false},
+		{"same channel older", "v0.11.0-local.51", "local", "v0.11.0-local.50", false},
+		// Cross channel: any difference triggers an update offer, even
+		// when semver puts the current binary "ahead" of the new HEAD.
+		{"cross channel: local ahead of dev by semver", "v0.11.0-local.51", "dev", "v0.11.0-dev.11", true},
+		{"cross channel: dev ahead of local by semver", "v0.11.0-dev.99", "local", "v0.11.0-local.1", true},
+		{"cross channel equal version (degenerate)", "v0.11.0-local.51", "dev", "v0.11.0-local.51", false},
+		// Edge cases.
+		{"dev sentinel always updates if target present", "dev", "dev", "v0.11.0-dev.11", true},
+		{"empty target never offers", "v0.11.0-local.51", "local", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ShouldOfferUpdate(tc.current, tc.channel, tc.latest)
+			if got != tc.want {
+				t.Errorf("ShouldOfferUpdate(%q,%q,%q) = %v, want %v",
+					tc.current, tc.channel, tc.latest, got, tc.want)
+			}
+		})
 	}
 }
 

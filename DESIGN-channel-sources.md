@@ -267,53 +267,54 @@ Per the API-first principle: TelaVisor never parses the output of `tela`, `telad
 
 ## 8. Channel hosting on telahubd
 
-`telachand` as a separate binary is retired. Channel manifest hosting becomes a telahubd subsystem.
+`telachand` as a separate binary is retired in 0.12. Channel manifest hosting is a telahubd subsystem, opt-in via the `channels:` config section.
 
 ### 8.1 Deletions
 
-- `cmd/telachand/` removed.
-- `internal/channeld/` (or its current location) moves to `internal/hubchannels/`.
-- Release workflow drops `telachand-linux-*`, `telachand-darwin-*`, `telachand-windows-*` from the build matrix.
-- `telachand` references in docs updated to point at the hub-hosted equivalent.
-- `telachand` entries in channel manifests removed.
+- `cmd/telachand/` removed entirely.
+- Release workflow drops `telachand-*` from the build matrix and manifest generation loops.
+- CI workflow drops `go build ./cmd/telachand` from the cross-compile step.
+- `telachand` references in docs and code comments updated to point at the hub-hosted equivalent.
 
 ### 8.2 telahubd's `channels:` config section
 
 ```yaml
 # telahubd.yaml
 channels:
-  dir: /var/lib/tela/channels        # local filesystem directory containing manifests and files
-  publicBase: https://hub.example.com/channels/  # what URL agents should reach these at (optional; derived from hub's publicURL otherwise)
+  enabled: true
+  data: /var/lib/telahubd/channels
+  publicURL: https://hub.example.net/channels
 ```
 
-When `channels.dir` is set, telahubd mounts two route families on its existing HTTP mux:
+When `channels.enabled` is true and `channels.data` names a directory, telahubd mounts the following under `/channels/` on its existing HTTP mux:
 
-- `GET /channels/{name}.json` serves `{dir}/{name}.json` verbatim, with `Content-Type: application/json`.
-- `GET /channels/{name}/files/{file}` serves `{dir}/{name}/files/{file}` with appropriate binary `Content-Type`.
+- `GET /channels/{name}.json` serves `{data}/{name}.json` verbatim with `Content-Type: application/json`.
+- `GET /channels/files/{channel}/{binary}` serves `{data}/files/{channel}/{binary}` with Go's file-server `Content-Type` detection.
+- `GET /channels/files/` and `GET /channels/files/{channel}/` return HTML directory listings courtesy of `http.FileServer`, so an operator can browse the published tree in any browser.
 
-Access control: `/channels/` routes are public read (no auth) by default, since channel manifests are meant to be read by unauthenticated binaries bootstrapping themselves. An operator who wants to restrict can configure a reverse-proxy rule in front of the hub.
+Per-channel subdirectories under `files/` mean two channels can hold binaries with the same filename (e.g. `telad-linux-amd64`) without colliding. Earlier in the 0.12 branch a flat `files/` layout was tried; the collision hazard and the lack of a browsable per-channel listing motivated the switch.
 
-Directory layout mirrors exactly what `telachand publish` produces today — no shape change, just a different host process.
+Access control: `/channels/` routes are public read (no auth, wildcard CORS) by design — release manifests and binaries are meant to be fetched by unauthenticated update clients. Operators who need to restrict can front the hub with a reverse proxy.
 
 ### 8.3 `telahubd channels publish` subcommand
 
 ```
-telahubd channels publish --channel <name> --files <dir> [--version vX.Y.Z] [--publish-dir <dir>] [--base-url <url>]
+telahubd channels publish -channel <name> -tag <tag> [-base-url <url>] [-config <path>]
 ```
 
-Scans `--files` for binaries, computes SHA-256s, writes `{publish-dir}/{channel}.json` and copies the files into `{publish-dir}/{channel}/files/`. If `--publish-dir` is omitted, uses the hub config's `channels.dir`. `--base-url` defaults to `{publicBase}/{channel}/files/` if `publicBase` is set.
+Scans `{channels.data}/files/{channel}/` for binaries, computes SHA-256 and size for each, and writes `{channels.data}/{channel}.json`. `downloadBase` in the generated manifest is `{publicURL}/files/{channel}/` unless `-base-url` overrides it.
 
-This is the same publishing logic that lives in today's `telachand publish`, relocated. Operators with existing build scripts point them at the hub's `channels.dir` and swap `telachand publish` for `telahubd channels publish` in the pipeline.
+Same wire format as GitHub-hosted manifests and as the old `telachand publish` output — no parser changes required on the client side.
 
 ### 8.4 Operator story
 
 A hub operator who wants to host internal channels for their fleet:
 
-1. Adds `channels.dir: /var/lib/tela/channels/` and `channels.publicBase: https://hub.example.com/channels/` to `/etc/tela/telahubd.yaml`.
-2. Runs `telahubd service restart`.
-3. Runs `telahubd channels publish --channel stable --files /build/output/` from their CI job to publish a new release.
-4. Points agents at the hub's channel base: `telad channel sources set stable https://hub.example.com/channels/`.
-5. Agents fetch manifests and binaries from the hub. No external internet access required past that.
+1. Adds a `channels:` block to `/etc/tela/telahubd.yaml` and restarts the hub.
+2. Drops binaries into `/var/lib/telahubd/channels/files/`.
+3. Runs `telahubd channels publish -channel stable -tag v0.12.0` to write the manifest.
+4. Points agents at the hub's channel base: `telad channel sources set stable https://hub.example.net/channels/`.
+5. Agents fetch manifests and binaries from the hub.
 
 Standalone channel hosting without a hub is not supported. Tela's architecture has a hub as the management plane; if you have no hub, you do not have a deployment.
 
@@ -325,7 +326,7 @@ Edge case: a `local.N`-suffixed binary compared against a `dev.N`-suffixed lates
 
 ## 10. Migration and rollout
 
-- Pre-1.0, no compat shim. The `manifestBase` field migration code described in 3.4 runs once per host and is deleted before the `0.12` beta tag.
+- Pre-1.0, minimal compat surface. The `manifestBase` struct field and the `MigrateManifestBase` helper described in 3.4 ship in 0.12 so existing persisted configs upgrade automatically on first load. Both are scheduled for deletion in 0.13 (tracked in [tela#59](https://github.com/paulmooreparks/tela/issues/59)), one stable release cycle after 0.12, so any config that has been opened at least once by a 0.12 binary is already rewritten in the new shape before the field disappears.
 - Every binary in the 0.12 release carries identical migration logic. Hub binaries, agent binaries, and client credstore loading all recognize the old shape and rewrite.
 - CHANGELOG under `[Unreleased]` lists every user-visible change: new config field name, retired binary, new CLI subcommand, downgrade refusal.
 - REFERENCE.md gains the new CLI surface. CONFIGURATION.md updates the update-block schema.

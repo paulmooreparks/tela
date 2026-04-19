@@ -517,8 +517,8 @@ telad channel -h | -? | -help | --help                   # print help (works aft
 ```
 
 Set operations write to `telad.yaml` under `update.channel` (and
-`update.manifestBase` if given). `-config` also reads from `TELAD_CONFIG`
-in the environment.
+`update.sources[<channel>]` if a manifest base is given). `-config` also
+reads from `TELAD_CONFIG` in the environment.
 
 ### `telad update`
 
@@ -673,8 +673,8 @@ telahubd channel -h | -? | -help | --help                # print help (works aft
 `-config` defaults to the platform-standard path
 (`/etc/tela/telahubd.yaml` on Linux/macOS, `%ProgramData%\Tela\telahubd.yaml`
 on Windows), so operators rarely need to pass it. Set operations write
-`update.channel` (and `update.manifestBase` if given) into the hub's YAML
-config.
+`update.channel` (and `update.sources[<channel>]` if a manifest base is
+given) into the hub's YAML config.
 
 ### `telahubd update`
 

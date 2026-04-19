@@ -4,6 +4,11 @@ node_modules/
 # Local VS Code workspace config (tasks, scripts) -- not committed
 .vscode/
 
+# Per-operator publish config (contains hub owner token)
+scripts/publish.env
+scripts/*-build-counter
+scripts/channel.txt
+
 # Local cross-compiled build output used by the dev publish script
 dist/
 

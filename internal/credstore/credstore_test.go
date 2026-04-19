@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -70,8 +71,10 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 			"wss://other.example.com": {Token: "tok-2"},
 		},
 		Update: UpdateConfig{
-			Channel:      "beta",
-			ManifestBase: "https://example.com/channels/",
+			Channel: "beta",
+			Sources: map[string]string{
+				"local": "https://example.com/channels/",
+			},
 		},
 	}
 	if err := original.Save(path); err != nil {
@@ -94,8 +97,55 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if loaded.Update.Channel != "beta" {
 		t.Errorf("Update.Channel roundtrip mismatch: %q", loaded.Update.Channel)
 	}
-	if loaded.Update.ManifestBase != "https://example.com/channels/" {
-		t.Errorf("Update.ManifestBase roundtrip mismatch: %q", loaded.Update.ManifestBase)
+	if loaded.Update.Sources["local"] != "https://example.com/channels/" {
+		t.Errorf("Update.Sources[local] roundtrip mismatch: %q", loaded.Update.Sources["local"])
+	}
+}
+
+// TestLoadMigratesLegacyManifestBase verifies that a pre-0.12 credstore
+// with an update.manifestBase field gets migrated into update.sources on
+// load. The field should end up cleared on disk after the next write.
+func TestLoadMigratesLegacyManifestBase(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "credentials.yaml")
+
+	// Simulate a pre-0.12 credstore. Raw YAML is cleaner for this than
+	// constructing a Store with ManifestBase set because the test runs
+	// migration on load which is exactly the path under test.
+	legacy := []byte(`hubs: {}
+update:
+  channel: local
+  manifestBase: https://parkscomputing.com/content/tela/channels/
+`)
+	if err := os.WriteFile(path, legacy, 0600); err != nil {
+		t.Fatalf("write legacy yaml: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Update.Channel != "local" {
+		t.Errorf("channel should be preserved, got %q", loaded.Update.Channel)
+	}
+	if loaded.Update.Sources["local"] != "https://parkscomputing.com/content/tela/channels/" {
+		t.Errorf("manifestBase should have been migrated to sources[local], got %q", loaded.Update.Sources["local"])
+	}
+	if loaded.Update.ManifestBase != "" {
+		t.Errorf("legacy manifestBase should be cleared after migration, got %q", loaded.Update.ManifestBase)
+	}
+
+	// Reading the on-disk file after Load+Save should no longer mention
+	// manifestBase at all (omitempty omits empty strings).
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read migrated file: %v", err)
+	}
+	if strings.Contains(string(raw), "manifestBase") {
+		t.Errorf("migrated file should not mention manifestBase, got:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), "sources:") {
+		t.Errorf("migrated file should include sources:, got:\n%s", raw)
 	}
 }
 

@@ -548,6 +548,17 @@ The hub also exposes a channel-aware admin API:
 | `/api/admin/update` | GET | Returns `{channel, manifestUrl, currentVersion, latestVersion, updateAvailable}` |
 | `/api/admin/update` | PATCH | Set the channel: `{"channel":"beta"}` |
 | `/api/admin/update` | POST | Trigger an update to the channel HEAD |
+| `/api/admin/update/sources` | GET | List the hub's custom channel sources: `{"sources":{"local":"https://..."}}` |
+| `/api/admin/update/sources/{name}` | PUT | Set a source: `{"base":"https://..."}` |
+| `/api/admin/update/sources/{name}` | DELETE | Remove a source |
+
+When `channels.enabled` is true in the hub config, these publish
+endpoints are also available (owner/admin auth required):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/admin/channels/files/{channel}/{name}` | PUT | Upload a binary (request body = file bytes) into `channels.data/files/{channel}/{name}`. 500 MiB max. |
+| `/api/admin/channels/publish` | POST | Hash everything in `channels.data/files/{channel}/` and write `{channel}.json`. Body: `{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}` (baseUrl optional; defaults to `channels.publicURL/files/{channel}/`). Returns the manifest. |
 
 ### Channel management (CLI)
 
@@ -566,10 +577,10 @@ telahubd channel show [-channel <ch>]                    # pretty-print the pars
 telahubd channel -h | -? | -help | --help                # print help (works after any subcommand too)
 ```
 
-Set operations write `update.channel` (and `update.manifestBase` if given)
-into the hub's YAML config. Restart the hub service for background update
-checks to pick up the new channel; the CLI `telahubd update` honors the
-change immediately.
+Set operations write `update.channel` (and `update.sources[<channel>]` if
+a manifest base is given) into the hub's YAML config. Restart the hub
+service for background update checks to pick up the new channel; the CLI
+`telahubd update` honors the change immediately.
 
 See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
 
@@ -983,9 +994,9 @@ telad channel show [-channel <ch>] [-config <path>]      # pretty-print the pars
 telad channel -h | -? | -help | --help                   # print help (works after any subcommand too)
 ```
 
-Set operations write `update.channel` (and `update.manifestBase` if given)
-into the agent's YAML config. `-config` accepts `TELAD_CONFIG` from the
-environment as a fallback.
+Set operations write `update.channel` (and `update.sources[<channel>]` if
+a manifest base is given) into the agent's YAML config. `-config` accepts
+`TELAD_CONFIG` from the environment as a fallback.
 
 See [RELEASE-PROCESS.md](RELEASE-PROCESS.md) for the full channel model.
 
@@ -1886,29 +1897,6 @@ For networking troubleshooting, see [howto/networking.md](howto/networking.md).
 
 ## Quick reference
 
-### telachand commands
-
-```bash
-# Start the channel daemon
-telachand -config telachand.yaml
-
-# Publish a channel manifest (scan files/ dir, compute SHA-256s, write manifest)
-telachand publish -channel dev -tag v0.11.0-dev.1 -config telachand.yaml
-telachand publish -channel stable -tag v0.10.0 -base-url http://192.168.1.10:9900/ -config telachand.yaml
-
-# OS service management
-telachand service install -config telachand.yaml      # system service (requires admin/root)
-telachand service install --user -config telachand.yaml  # user autostart (no admin required)
-telachand service start | stop | restart | status | uninstall [--user]
-telachand service run [--user]                         # invoked by the service manager
-
-# Self-update
-telachand update [-channel <name>] [-dry-run] [-config telachand.yaml]   # any valid channel name (dev, beta, stable, or custom)
-
-# Version
-telachand version
-```
-
 ### telahubd commands
 
 ```bash
@@ -1942,6 +1930,9 @@ telahubd channel                            # show current channel and latest ve
 telahubd channel set <channel>              # switch channel (dev, beta, stable, or custom)
 telahubd channel show [-channel <ch>]       # pretty-print the channel manifest
 telahubd update [-channel <ch>] [-dry-run]  # self-update from the channel manifest
+
+# Self-hosted release channel server (requires channels.enabled in config)
+telahubd channels publish -channel <name> -tag <tag> [-base-url <url>] [-config <path>]
 ```
 
 ### telad commands

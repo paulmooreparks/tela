@@ -302,10 +302,21 @@ type configFile struct {
 }
 
 // updateConfig controls which release channel telad follows for self-update.
-// See RELEASE-PROCESS.md for the channel model.
+// See RELEASE-PROCESS.md for the channel model and
+// DESIGN-channel-sources.md for the sources data model.
 type updateConfig struct {
-	Channel      string `yaml:"channel,omitempty" json:"channel,omitempty"`           // "dev", "beta", "stable" (empty = dev)
-	ManifestBase string `yaml:"manifestBase,omitempty" json:"manifestBase,omitempty"` // override upstream manifest URL prefix
+	// Channel is the currently selected channel name. Resolution happens
+	// via channel.ResolveBase(Channel, Sources).
+	Channel string `yaml:"channel,omitempty" json:"channel,omitempty"`
+
+	// Sources maps channel names to base URLs. See the hub's updateConfig
+	// doc for the resolution rules; same shape on both sides.
+	Sources map[string]string `yaml:"sources,omitempty" json:"sources,omitempty"`
+
+	// ManifestBase is a pre-0.12 field kept only to hand old configs to
+	// channel.MigrateManifestBase on load. Scheduled for removal in 0.13,
+	// tracked in GH issue #59.
+	ManifestBase string `yaml:"manifestBase,omitempty" json:"manifestBase,omitempty"`
 }
 
 // machineConfig describes one machine to register with the hub.
@@ -613,12 +624,13 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 			json.Unmarshal(msg.Payload, &req)
 		}
 		ver := req.Version
+		explicitVersion := req.Version != "" && req.Version != "latest"
 		lg.Printf("mgmt: update requested version=%q channel=%q manifestBase=%q (requestId=%s)", ver, req.Channel, req.ManifestBase, msg.RequestID)
 
 		// Resolve "latest" or empty version. When channel/manifestBase overrides
-		// are supplied (e.g. from TelaVisor pointing at a self-hosted telachand),
-		// use those rather than the agent's own config so that TV and the agent
-		// consult the same manifest.
+		// are supplied (e.g. from TelaVisor pointing at a self-hosted channel
+		// server), use those rather than the agent's own config so that TV and
+		// the agent consult the same manifest.
 		if ver == "" || ver == "latest" {
 			resolved, err := latestReleaseFrom(req.Channel, req.ManifestBase)
 			if err != nil {
@@ -636,6 +648,23 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 			resp, _ := json.Marshal(controlMessage{
 				Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
 				Message: "already running " + ver,
+			})
+			return resp
+		}
+
+		// Downgrade refusal on the channel-HEAD path. Only applies when
+		// we are staying on the same release channel; switching channels
+		// is an explicit declaration of intent to follow the new HEAD
+		// regardless of how the semver sort orders the two lineages.
+		// An explicit version in the request also bypasses the gate.
+		targetCh := req.Channel
+		if targetCh == "" {
+			targetCh, _ = agentChannel()
+		}
+		if !explicitVersion && version != "dev" && !channel.IsCrossChannel(version, targetCh) && !channel.IsNewer(ver, version) {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: fmt.Sprintf("latest version on channel is %s, older than currently running %s; specify an explicit version to downgrade", ver, version),
 			})
 			return resp
 		}
@@ -667,7 +696,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		}
 		if latest, err := latestRelease(); err == nil {
 			out["latestVersion"] = latest
-			out["updateAvailable"] = channel.IsNewer(latest, version)
+			out["updateAvailable"] = channel.ShouldOfferUpdate(version, ch, latest)
 		} else {
 			out["error"] = err.Error()
 		}
@@ -735,6 +764,124 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		})
 		return resp
 
+	case "channel-sources-list":
+		activeConfigMu.RLock()
+		out := map[string]string{}
+		if activeConfig != nil {
+			for k, v := range activeConfig.Update.Sources {
+				out[k] = v
+			}
+		}
+		activeConfigMu.RUnlock()
+		payload, _ := json.Marshal(map[string]interface{}{"sources": out})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
+	case "channel-sources-set":
+		var req struct {
+			Name string `json:"name"`
+			Base string `json:"base"`
+		}
+		if msg.Payload != nil {
+			json.Unmarshal(msg.Payload, &req)
+		}
+		req.Name = strings.TrimSpace(strings.ToLower(req.Name))
+		if !channel.IsValid(req.Name) {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "invalid channel name: " + req.Name,
+			})
+			return resp
+		}
+		base := strings.TrimRight(strings.TrimSpace(req.Base), "/")
+		if strings.HasSuffix(base, ".json") {
+			if i := strings.LastIndex(base, "/"); i >= 0 {
+				base = base[:i]
+			}
+		}
+		activeConfigMu.Lock()
+		cfg := activeConfig
+		cfgPath := activeConfigPath
+		activeConfigMu.Unlock()
+		if cfg == nil || cfgPath == "" {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no config file to update",
+			})
+			return resp
+		}
+		if cfg.Update.Sources == nil {
+			cfg.Update.Sources = map[string]string{}
+		}
+		cfg.Update.Sources[req.Name] = base
+		data, err := yaml.Marshal(cfg)
+		if err == nil {
+			err = os.WriteFile(cfgPath, data, 0600)
+		}
+		if err != nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "write config: " + err.Error(),
+			})
+			return resp
+		}
+		lg.Printf("mgmt: sources[%s] = %s (requestId=%s)", req.Name, base, msg.RequestID)
+		payload, _ := json.Marshal(map[string]interface{}{"ok": true, "name": req.Name, "base": base})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
+	case "channel-sources-remove":
+		var req struct {
+			Name string `json:"name"`
+		}
+		if msg.Payload != nil {
+			json.Unmarshal(msg.Payload, &req)
+		}
+		req.Name = strings.TrimSpace(strings.ToLower(req.Name))
+		activeConfigMu.Lock()
+		cfg := activeConfig
+		cfgPath := activeConfigPath
+		activeConfigMu.Unlock()
+		if cfg == nil || cfgPath == "" {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no config file to update",
+			})
+			return resp
+		}
+		if _, exists := cfg.Update.Sources[req.Name]; !exists {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "no source entry for channel " + req.Name,
+			})
+			return resp
+		}
+		delete(cfg.Update.Sources, req.Name)
+		data, err := yaml.Marshal(cfg)
+		if err == nil {
+			err = os.WriteFile(cfgPath, data, 0600)
+		}
+		if err != nil {
+			resp, _ := json.Marshal(controlMessage{
+				Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
+				Message: "write config: " + err.Error(),
+			})
+			return resp
+		}
+		lg.Printf("mgmt: sources[%s] removed (requestId=%s)", req.Name, msg.RequestID)
+		payload, _ := json.Marshal(map[string]interface{}{"ok": true, "name": req.Name})
+		resp, _ := json.Marshal(controlMessage{
+			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
+			Payload: payload,
+		})
+		return resp
+
 	default:
 		resp, _ := json.Marshal(controlMessage{
 			Type: "mgmt-response", RequestID: msg.RequestID, OK: &notOK,
@@ -779,14 +926,18 @@ func restartSelf(lg *log.Logger) {
 var agentChannelFetcher = &channel.Fetcher{}
 
 // agentChannel returns the configured channel name (defaulting to dev) and
-// the manifest base override (empty for the default upstream).
+// the resolved base URL. The base is looked up via channel.ResolveBase
+// against this agent's sources map, falling back to channel.DefaultBases
+// for built-in channel names.
 func agentChannel() (string, string) {
 	activeConfigMu.RLock()
 	defer activeConfigMu.RUnlock()
 	if activeConfig == nil {
-		return channel.DefaultChannel, ""
+		name := channel.DefaultChannel
+		return name, channel.ResolveBase(name, nil)
 	}
-	return channel.Normalize(activeConfig.Update.Channel), activeConfig.Update.ManifestBase
+	name := channel.Normalize(activeConfig.Update.Channel)
+	return name, channel.ResolveBase(name, activeConfig.Update.Sources)
 }
 
 // latestRelease returns the current version on telad's configured channel.
@@ -797,8 +948,8 @@ func latestRelease() (string, error) {
 // latestReleaseFrom returns the current version on the given channel. When
 // ch or base are empty the agent's own configured values are used as
 // fallbacks. This allows the management API to resolve "latest" against a
-// caller-supplied manifest (e.g. a self-hosted telachand) instead of the
-// agent's own channel config.
+// caller-supplied manifest (e.g. a self-hosted channel server) instead of
+// the agent's own channel config.
 func latestReleaseFrom(ch, base string) (string, error) {
 	agentCh, agentBase := agentChannel()
 	if ch == "" {
@@ -818,8 +969,8 @@ func latestReleaseFrom(ch, base string) (string, error) {
 // configured channel and replaces the current binary. On Windows the running
 // exe is renamed to .old before the new binary is moved into place.
 // chOverride and baseOverride, when non-empty, replace the agent's own
-// channel config for this one update (e.g. when TV sends a custom telachand
-// address). The agent's persistent config is not changed.
+// channel config for this one update (e.g. when TV sends a custom channel
+// server address). The agent's persistent config is not changed.
 func downloadAndStageUpdate(lg *log.Logger, ver, chOverride, baseOverride string) error {
 	exe, err := os.Executable()
 	if err != nil {
@@ -1577,6 +1728,14 @@ func loadConfig(path string) (*configFile, error) {
 	var cfg configFile
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
+	// Removed before the 0.12 beta tag together with the ManifestBase field.
+	if channel.MigrateManifestBase(cfg.Update.Channel, &cfg.Update.ManifestBase, &cfg.Update.Sources) {
+		log.Printf("[agent] migrated legacy update.manifestBase in %s; rewriting", path)
+		if data, err := yaml.Marshal(&cfg); err == nil {
+			_ = os.WriteFile(path, data, 0600)
+		}
 	}
 	if cfg.Hub == "" {
 		return nil, fmt.Errorf("%s: 'hub' is required", path)

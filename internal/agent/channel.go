@@ -34,6 +34,9 @@ func cmdAgentChannel(args []string) {
 		case "show":
 			showAgentChannelManifest(args[1:])
 			return
+		case "sources":
+			agentChannelSources(args[1:])
+			return
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown channel command: %s\n\n", args[0])
 			printAgentChannelUsage()
@@ -44,14 +47,180 @@ func cmdAgentChannel(args []string) {
 	showAgentChannel(args)
 }
 
+// agentChannelSources dispatches `telad channel sources [list|set|remove]`.
+func agentChannelSources(args []string) {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "list":
+			listAgentSources(args[1:])
+			return
+		case "set":
+			setAgentSource(args[1:])
+			return
+		case "remove":
+			removeAgentSource(args[1:])
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown sources command: %s\n\n", args[0])
+			printAgentChannelUsage()
+			os.Exit(1)
+		}
+	}
+	listAgentSources(args)
+}
+
+// listAgentSources prints every channel name the agent knows about with
+// the resolved base URL and origin (built-in default / override / custom).
+func listAgentSources(args []string) {
+	fs := flag.NewFlagSet("telad channel sources", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	configPath := fs.String("config", envOrDefault("TELAD_CONFIG", ""), "Path to telad.yaml (env: TELAD_CONFIG)")
+	fs.Parse(permuteAgentArgs(fs, args))
+	if wantHelp() {
+		printAgentChannelUsage()
+		return
+	}
+	var sources map[string]string
+	if *configPath != "" {
+		cfg, err := loadConfig(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: load config %s: %v\n", *configPath, err)
+			os.Exit(1)
+		}
+		sources = cfg.Update.Sources
+	}
+	seen := map[string]bool{}
+	fmt.Printf("%-15s  %s\n", "CHANNEL", "BASE URL")
+	for _, name := range []string{channel.Dev, channel.Beta, channel.Stable} {
+		base := channel.ResolveBase(name, sources)
+		suffix := "  (built-in default)"
+		if v, ok := sources[name]; ok && v != "" {
+			suffix = "  (override)"
+			_ = v
+		}
+		fmt.Printf("%-15s  %s%s\n", name, base, suffix)
+		seen[name] = true
+	}
+	var customNames []string
+	for name := range sources {
+		if !seen[name] {
+			customNames = append(customNames, name)
+		}
+	}
+	for i := 1; i < len(customNames); i++ {
+		for j := i; j > 0 && customNames[j-1] > customNames[j]; j-- {
+			customNames[j-1], customNames[j] = customNames[j], customNames[j-1]
+		}
+	}
+	for _, name := range customNames {
+		fmt.Printf("%-15s  %s  (custom)\n", name, sources[name])
+	}
+}
+
+// setAgentSource writes a per-channel base URL into the agent's YAML.
+func setAgentSource(args []string) {
+	fs := flag.NewFlagSet("telad channel sources set", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	configPath := fs.String("config", envOrDefault("TELAD_CONFIG", ""), "Path to telad.yaml (env: TELAD_CONFIG)")
+	fs.Parse(permuteAgentArgs(fs, args))
+	if wantHelp() {
+		printAgentChannelUsage()
+		return
+	}
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "Error: 'sources set' requires <name> <url>")
+		os.Exit(1)
+	}
+	if *configPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: -config is required (or set TELAD_CONFIG)")
+		os.Exit(1)
+	}
+	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
+	if !channel.IsValid(name) {
+		fmt.Fprintf(os.Stderr, "Error: invalid channel name %q (use lowercase letters, digits, hyphens)\n", name)
+		os.Exit(1)
+	}
+	base := strings.TrimRight(strings.TrimSpace(fs.Arg(1)), "/")
+	if strings.HasSuffix(base, ".json") {
+		if i := strings.LastIndex(base, "/"); i >= 0 {
+			base = base[:i]
+		}
+	}
+	cfg, err := loadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load config %s: %v\n", *configPath, err)
+		os.Exit(1)
+	}
+	if cfg.Update.Sources == nil {
+		cfg.Update.Sources = map[string]string{}
+	}
+	cfg.Update.Sources[name] = base
+	data, err := yaml.Marshal(cfg)
+	if err == nil {
+		err = os.WriteFile(*configPath, data, 0600)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: write config %s: %v\n", *configPath, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Set source for channel %s: %s\n", name, base)
+	fmt.Printf("  config: %s\n", *configPath)
+}
+
+// removeAgentSource removes a per-channel base URL from the agent's YAML.
+func removeAgentSource(args []string) {
+	fs := flag.NewFlagSet("telad channel sources remove", flag.ExitOnError)
+	wantHelp := cliflag.Help(fs)
+	configPath := fs.String("config", envOrDefault("TELAD_CONFIG", ""), "Path to telad.yaml (env: TELAD_CONFIG)")
+	fs.Parse(permuteAgentArgs(fs, args))
+	if wantHelp() {
+		printAgentChannelUsage()
+		return
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Error: 'sources remove' requires <name>")
+		os.Exit(1)
+	}
+	if *configPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: -config is required (or set TELAD_CONFIG)")
+		os.Exit(1)
+	}
+	name := strings.TrimSpace(strings.ToLower(fs.Arg(0)))
+	cfg, err := loadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: load config %s: %v\n", *configPath, err)
+		os.Exit(1)
+	}
+	if _, exists := cfg.Update.Sources[name]; !exists {
+		fmt.Fprintf(os.Stderr, "Error: no source entry for channel %q\n", name)
+		os.Exit(1)
+	}
+	if name == channel.Normalize(cfg.Update.Channel) && !channel.IsKnown(name) {
+		fmt.Fprintf(os.Stderr, "Note: %q is the currently selected channel and has no baked-in default; updates will fail until you set a source for it or switch channels.\n", name)
+	}
+	delete(cfg.Update.Sources, name)
+	data, err := yaml.Marshal(cfg)
+	if err == nil {
+		err = os.WriteFile(*configPath, data, 0600)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: write config %s: %v\n", *configPath, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Removed source for channel %s\n", name)
+}
+
 func printAgentChannelUsage() {
 	fmt.Fprint(os.Stderr, `telad channel -- agent release channel
 
 Usage:
-  telad channel [-config <path>]                  Show the current channel and latest version
-  telad channel set <channel> [-config <path>]    Switch the agent's release channel
-  telad channel set <ch> -manifest-base URL       Override the upstream manifest URL prefix
-  telad channel show [-channel <ch>]              Print the full parsed channel manifest
+  telad channel [-config <path>]                          Show the current channel and latest version
+  telad channel set <channel> [-config <path>]            Switch the agent's release channel
+  telad channel set <ch> -manifest-base URL               Override the upstream manifest URL prefix
+  telad channel show [-channel <ch>]                      Print the full parsed channel manifest
+  telad channel sources [list] [-config <path>]           List known channel sources
+  telad channel sources set <name> <url> [-config <path>] Add or override a per-channel base URL
+  telad channel sources remove <name> [-config <path>]    Remove a per-channel base URL
 
 Options:
   -config <path>      Path to telad.yaml (env: TELAD_CONFIG). Required for set.
@@ -102,8 +271,10 @@ func showAgentChannel(args []string) {
 		return
 	}
 	state := "up to date"
-	if m.Version != version && version != "dev" {
+	if channel.ShouldOfferUpdate(version, m.Channel, m.Version) {
 		state = "update available"
+	} else if m.Version != version && version != "dev" {
+		state = "ahead of channel HEAD"
 	}
 	fmt.Printf("  latest version:  %s  (%s)\n", m.Version, state)
 }
@@ -152,7 +323,10 @@ func setAgentChannel(args []string) {
 				base = base[:i]
 			}
 		}
-		cfg.Update.ManifestBase = base
+		if cfg.Update.Sources == nil {
+			cfg.Update.Sources = map[string]string{}
+		}
+		cfg.Update.Sources[name] = base
 	}
 
 	data, err := yaml.Marshal(cfg)
@@ -165,8 +339,9 @@ func setAgentChannel(args []string) {
 		os.Exit(1)
 	}
 
+	resolved := channel.ResolveBase(name, cfg.Update.Sources)
 	fmt.Printf("Agent channel set to %s\n", name)
-	fmt.Printf("  manifest: %s\n", channel.ManifestURL(cfg.Update.ManifestBase, name))
+	fmt.Printf("  manifest: %s\n", channel.ManifestURL(resolved, name))
 	fmt.Printf("  config:   %s\n", *configPath)
 }
 

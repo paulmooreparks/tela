@@ -62,6 +62,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/console"
+	"github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/relay"
 	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/telelog"
@@ -203,28 +204,61 @@ type portalEntry struct {
 
 // hubConfig is the YAML configuration for telahubd.
 type hubConfig struct {
-	HubID   string                 `yaml:"hubId,omitempty"`   // Stable hub identity UUID (v4); generated on first start
-	Port    int                    `yaml:"port"`              // HTTP+WS listen port (default 80)
-	UDPPort int                    `yaml:"udpPort"`           // UDP relay port (default 41820)
-	UDPHost string                 `yaml:"udpHost,omitempty"` // public IP/hostname for UDP relay (when behind proxy)
-	Name    string                 `yaml:"name"`              // Display name for this hub
-	WWWDir  string                 `yaml:"wwwDir"`            // Static file directory (default ./www)
-	Auth    authConfig             `yaml:"auth,omitempty"`    // Token-based access control
-	Portals map[string]portalEntry `yaml:"portals,omitempty"` // Registered portals
-	Update  updateConfig           `yaml:"update,omitempty"`  // Self-update channel selection
-	Bridges []bridgeConfig         `yaml:"bridges,omitempty"` // Hub-to-hub transit bridges
+	HubID    string                 `yaml:"hubId,omitempty"`    // Stable hub identity UUID (v4); generated on first start
+	Port     int                    `yaml:"port"`               // HTTP+WS listen port (default 80)
+	UDPPort  int                    `yaml:"udpPort"`            // UDP relay port (default 41820)
+	UDPHost  string                 `yaml:"udpHost,omitempty"`  // public IP/hostname for UDP relay (when behind proxy)
+	Name     string                 `yaml:"name"`               // Display name for this hub
+	WWWDir   string                 `yaml:"wwwDir"`             // Static file directory (default ./www)
+	Auth     authConfig             `yaml:"auth,omitempty"`     // Token-based access control
+	Portals  map[string]portalEntry `yaml:"portals,omitempty"`  // Registered portals
+	Update   updateConfig           `yaml:"update,omitempty"`   // Self-update channel selection
+	Bridges  []bridgeConfig         `yaml:"bridges,omitempty"`  // Hub-to-hub transit bridges
+	Channels channelsConfig         `yaml:"channels,omitempty"` // Self-hosted release channel server (replaces telachand)
+}
+
+// channelsConfig enables the hub to serve release channel manifests and
+// binary downloads under /channels/. It replaces the standalone telachand
+// daemon so a single host can run both hub and channel server. Disabled by
+// default; opt in by setting enabled: true and a Data directory.
+type channelsConfig struct {
+	// Enabled turns the channel server on. When false, no /channels/
+	// routes are mounted and the rest of this struct is ignored.
+	Enabled bool `yaml:"enabled,omitempty"`
+
+	// Data is the directory holding channel manifests and the files/
+	// subdirectory of binary downloads. Default: <hub data dir>/channels.
+	Data string `yaml:"data,omitempty"`
+
+	// PublicURL is the externally reachable base URL for the channel
+	// server, e.g. "https://hub.example.net/channels". Embedded in
+	// generated manifests as the downloadBase prefix. Required for
+	// `telahubd channels publish` unless -base-url is supplied on the
+	// command line.
+	PublicURL string `yaml:"publicURL,omitempty"`
 }
 
 // updateConfig controls which release channel this binary follows for
-// self-update. See RELEASE-PROCESS.md for the channel model and
+// self-update. See RELEASE-PROCESS.md for the channel model,
+// DESIGN-channel-sources.md for the sources data model, and
 // internal/channel for the manifest fetcher.
 type updateConfig struct {
-	// Channel is "dev", "beta", or "stable". Empty means dev (the only
-	// channel that exists pre-1.0).
+	// Channel is the currently selected channel name. Resolution happens
+	// via channel.ResolveBase(Channel, Sources).
 	Channel string `yaml:"channel,omitempty"`
-	// ManifestBase overrides the upstream manifest URL prefix. Operators
-	// running a fork point this at their own release host. Empty means
-	// use channel.DefaultManifestBase.
+
+	// Sources maps channel names to base URLs. Entries override the
+	// baked-in defaults in channel.DefaultBases; entries for custom
+	// channel names enable those channels on this host. An empty-string
+	// value is treated the same as an absent key.
+	Sources map[string]string `yaml:"sources,omitempty"`
+
+	// ManifestBase is a pre-0.12 field kept on the struct so the YAML
+	// parser can pick up old configs and hand them to
+	// channel.MigrateManifestBase. On load this gets moved into Sources
+	// (for custom channels) or discarded (for built-ins) and cleared,
+	// so subsequent writes omit it. The field and migration helper are
+	// scheduled for removal in 0.13, tracked in GH issue #59.
 	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
@@ -237,6 +271,14 @@ func loadHubConfig(path string) (*hubConfig, error) {
 	var cfg hubConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
+	// Removed before the 0.12 beta tag together with the ManifestBase field.
+	if channel.MigrateManifestBase(cfg.Update.Channel, &cfg.Update.ManifestBase, &cfg.Update.Sources) {
+		log.Printf("[hub] migrated legacy update.manifestBase in %s; rewriting", path)
+		if err := writeHubConfig(path, &cfg); err != nil {
+			log.Printf("[hub] warning: could not persist migrated config to %s: %v", path, err)
+		}
 	}
 	return &cfg, nil
 }
@@ -1910,6 +1952,7 @@ Commands:
   user      Manage auth tokens (add, remove, grant, revoke, rotate)
   portal    Manage portal registrations (add, remove, list, sync)
   channel   Show or set the hub's release channel (dev, beta, stable, custom)
+  channels  Manage a self-hosted release channel server (publish manifests)
   update    Self-update the telahubd binary from the configured release channel
   version   Print version and exit
   help      Show this help (also -h, -?, -help, --help)
@@ -1960,6 +2003,9 @@ func Main() {
 			return
 		case "channel":
 			cmdHubChannel(os.Args[2:])
+			return
+		case "channels":
+			cmdChannels(os.Args[2:])
 			return
 		case "update":
 			cmdSelfUpdate(os.Args[2:])
@@ -2259,8 +2305,32 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 	mux.HandleFunc("/api/admin/logs", handleAdminLogs)
 	mux.HandleFunc("/api/admin/restart", handleAdminRestart)
 	mux.HandleFunc("/api/admin/update", handleAdminUpdate)
+	mux.HandleFunc("/api/admin/update/sources/", handleAdminUpdateSources) // /api/admin/update/sources/{name}
+	mux.HandleFunc("/api/admin/update/sources", handleAdminUpdateSources)
+	mux.HandleFunc("/api/admin/channels/files/", handleAdminChannelsFiles) // PUT /api/admin/channels/files/{name}
+	mux.HandleFunc("/api/admin/channels/publish", handleAdminChannelsPublish)
 	mux.HandleFunc("/api/pair", handlePair)
 	mux.HandleFunc("/ws", handleWS)
+
+	// Self-hosted release channel server (replaces telachand). When the
+	// channels feature is disabled in config we register nothing under
+	// /channels/ at all so requests to that path fall through to the
+	// catch-all handler below and return whatever it normally would.
+	globalCfgMu.RLock()
+	channelsEnabled := globalCfg.Channels.Enabled
+	channelsData := globalCfg.Channels.Data
+	globalCfgMu.RUnlock()
+	if channelsEnabled {
+		if channelsData == "" {
+			log.Printf("[hub] channels.enabled is true but channels.data is unset; channel routes not mounted")
+		} else if err := os.MkdirAll(filepath.Join(channelsData, "files"), 0755); err != nil {
+			log.Printf("[hub] channels.data %s: %v; channel routes not mounted", channelsData, err)
+		} else {
+			mux.HandleFunc("/channels/", handleChannels)
+			mux.HandleFunc("/channels", handleChannels)
+			log.Printf("[hub] serving release channels from %s under /channels/", channelsData)
+		}
+	}
 
 	// WebSocket upgrade on root path too (agents/clients connect to /)
 	// Static files are served for non-upgrade HTTP requests.
