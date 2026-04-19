@@ -91,6 +91,9 @@ Agent:
   tela admin agent update -machine <id> [-version vX.Y.Z]  Download a new release and restart
   tela admin agent channel -machine <id>           Show the agent's release channel and current/latest versions
   tela admin agent channel -machine <id> set <ch>  Switch the agent's channel (dev, beta, stable, or custom)
+  tela admin agent channel sources -machine <id>   List the agent's channel sources
+  tela admin agent channel sources -machine <id> set <name> <url>     Add/override a source on the agent
+  tela admin agent channel sources -machine <id> remove <name>        Remove a source on the agent
 
 Hub:
   tela admin hub status                            Show the hub's release channel and current/latest versions
@@ -99,6 +102,9 @@ Hub:
   tela admin hub update [-version vX.Y.Z]          Download a new hub release and restart
   tela admin hub channel                           Show the hub's release channel
   tela admin hub channel set <ch>                  Switch the hub's channel (dev, beta, stable, or custom)
+  tela admin hub channel sources                   List the hub's channel sources
+  tela admin hub channel sources set <name> <url>  Add/override a source on the hub
+  tela admin hub channel sources remove <name>     Remove a source on the hub
 
 Tokens:
   tela admin tokens list                           List all token identities
@@ -784,8 +790,13 @@ func cmdAdminAgentChannel(args []string) {
 		return
 	}
 
+	if rest[0] == "sources" {
+		adminAgentChannelSources(hub, tok, *machine, rest[1:])
+		return
+	}
+
 	if rest[0] != "set" {
-		fmt.Fprintf(os.Stderr, "Error: unknown action %q (expected 'set')\n", rest[0])
+		fmt.Fprintf(os.Stderr, "Error: unknown action %q (expected 'set' or 'sources')\n", rest[0])
 		os.Exit(1)
 	}
 	if len(rest) < 2 {
@@ -809,6 +820,135 @@ func cmdAdminAgentChannel(args []string) {
 		}
 	} else {
 		fmt.Printf("%s: channel updated\n", *machine)
+	}
+}
+
+// adminAgentChannelSources dispatches
+// `tela admin agent channel sources [list|set|remove ...]` by proxying
+// through the hub's /api/admin/agents/{machine}/{action} endpoint to the
+// agent's channel-sources-list/set/remove mgmt actions.
+func adminAgentChannelSources(hub, tok, machine string, args []string) {
+	if len(args) == 0 || args[0] == "list" {
+		status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(machine)+"/channel-sources-list", tok, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		printSourcesList(machine, result)
+		return
+	}
+	switch args[0] {
+	case "set":
+		if len(args) < 3 {
+			fmt.Fprintln(os.Stderr, "Error: 'sources set' requires <name> <url>")
+			os.Exit(1)
+		}
+		payload := map[string]string{"name": args[1], "base": args[2]}
+		status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(machine)+"/channel-sources-set", tok, payload)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		name, _ := result["name"].(string)
+		base, _ := result["base"].(string)
+		fmt.Printf("%s: set source for channel %s: %s\n", machine, name, base)
+	case "remove":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Error: 'sources remove' requires <name>")
+			os.Exit(1)
+		}
+		payload := map[string]string{"name": args[1]}
+		status, result, err := adminHTTP("POST", hub, "/api/admin/agents/"+url.QueryEscape(machine)+"/channel-sources-remove", tok, payload)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		name, _ := result["name"].(string)
+		fmt.Printf("%s: removed source for channel %s\n", machine, name)
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown sources action %q (expected list, set, remove)\n", args[0])
+		os.Exit(1)
+	}
+}
+
+// adminHubChannelSources dispatches
+// `tela admin hub channel sources [list|set|remove ...]` against the hub's
+// /api/admin/update/sources endpoints.
+func adminHubChannelSources(hub, tok string, args []string) {
+	if len(args) == 0 || args[0] == "list" {
+		status, result, err := adminHTTP("GET", hub, "/api/admin/update/sources", tok, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		printSourcesList(hub, result)
+		return
+	}
+	switch args[0] {
+	case "set":
+		if len(args) < 3 {
+			fmt.Fprintln(os.Stderr, "Error: 'sources set' requires <name> <url>")
+			os.Exit(1)
+		}
+		payload := map[string]string{"base": args[2]}
+		status, result, err := adminHTTP("PUT", hub, "/api/admin/update/sources/"+url.PathEscape(args[1]), tok, payload)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		name, _ := result["name"].(string)
+		base, _ := result["base"].(string)
+		fmt.Printf("%s: set source for channel %s: %s\n", hub, name, base)
+	case "remove":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Error: 'sources remove' requires <name>")
+			os.Exit(1)
+		}
+		status, result, err := adminHTTP("DELETE", hub, "/api/admin/update/sources/"+url.PathEscape(args[1]), tok, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		adminCheckError(status, result)
+		name, _ := result["name"].(string)
+		fmt.Printf("%s: removed source for channel %s\n", hub, name)
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown sources action %q (expected list, set, remove)\n", args[0])
+		os.Exit(1)
+	}
+}
+
+// printSourcesList renders the {sources: {...}} response shape returned by
+// the hub admin /api/admin/update/sources GET and the agent
+// channel-sources-list mgmt action. Rows are sorted by channel name for
+// stable output.
+func printSourcesList(label string, result map[string]any) {
+	if label != "" {
+		fmt.Printf("%s\n", label)
+	}
+	raw, _ := result["sources"].(map[string]any)
+	if len(raw) == 0 {
+		fmt.Println("  (no source overrides configured)")
+		return
+	}
+	names := make([]string, 0, len(raw))
+	for k := range raw {
+		names = append(names, k)
+	}
+	for i := 1; i < len(names); i++ {
+		for j := i; j > 0 && names[j-1] > names[j]; j-- {
+			names[j-1], names[j] = names[j], names[j-1]
+		}
+	}
+	fmt.Printf("  %-15s  %s\n", "CHANNEL", "BASE URL")
+	for _, name := range names {
+		v, _ := raw[name].(string)
+		fmt.Printf("  %-15s  %s\n", name, v)
 	}
 }
 
@@ -993,8 +1133,13 @@ func cmdAdminHubChannel(args []string) {
 		return
 	}
 
+	if rest[0] == "sources" {
+		adminHubChannelSources(hub, tok, rest[1:])
+		return
+	}
+
 	if rest[0] != "set" {
-		fmt.Fprintf(os.Stderr, "Error: unknown action %q (expected 'set')\n", rest[0])
+		fmt.Fprintf(os.Stderr, "Error: unknown action %q (expected 'set' or 'sources')\n", rest[0])
 		os.Exit(1)
 	}
 	if len(rest) < 2 {
