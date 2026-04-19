@@ -2849,10 +2849,11 @@ func (a *App) GetClientChannel() map[string]string {
 		}
 	}
 	ch := channelpkg.Normalize(store.Update.Channel)
+	base := channelpkg.ResolveBase(ch, store.Update.Sources)
 	return map[string]string{
 		"channel":      ch,
-		"manifestUrl":  channelpkg.ManifestURL(store.Update.ManifestBase, ch),
-		"manifestBase": store.Update.ManifestBase,
+		"manifestUrl":  channelpkg.ManifestURL(base, ch),
+		"manifestBase": base,
 	}
 }
 
@@ -2871,15 +2872,20 @@ func (a *App) SetClientChannel(channelName, manifestBase string) string {
 	}
 	store.Update.Channel = ch
 	if manifestBase != "" {
-		store.Update.ManifestBase = manifestBase
+		if store.Update.Sources == nil {
+			store.Update.Sources = map[string]string{}
+		}
+		store.Update.Sources[ch] = manifestBase
 	} else if channelpkg.IsKnown(ch) {
-		// Switching back to a built-in channel clears any custom base.
-		store.Update.ManifestBase = ""
+		// Switching back to a built-in channel: drop any custom override
+		// for this channel so the baked-in default takes over again.
+		delete(store.Update.Sources, ch)
 	}
 	if err := store.Save(path); err != nil {
 		return `{"error":"save credential store: ` + err.Error() + `"}`
 	}
-	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(store.Update.ManifestBase, ch))
+	resolved := channelpkg.ResolveBase(ch, store.Update.Sources)
+	return fmt.Sprintf(`{"ok":true,"channel":%q,"manifestUrl":%q}`, ch, channelpkg.ManifestURL(resolved, ch))
 }
 
 // GetChannelSources returns the full list of available release channels: the
@@ -2992,7 +2998,7 @@ func (a *App) updateRunningServiceBinary(binaryName string) string {
 		store, _ := credstore.Load(credstore.UserPath())
 		var manifestBase string
 		if store != nil {
-			manifestBase = store.Update.ManifestBase
+			manifestBase = channelpkg.ResolveBase(channelpkg.Normalize(m.Channel), store.Update.Sources)
 		}
 		updatePayload := map[string]string{
 			"version":      m.Version,
@@ -3623,10 +3629,13 @@ func (a *App) RefreshBinStatus() []BinaryInfo {
 	store, _ := credstore.Load(credstore.UserPath())
 	var ch, base string
 	if store != nil {
-		ch = store.Update.Channel
-		base = store.Update.ManifestBase
+		ch = channelpkg.Normalize(store.Update.Channel)
+		base = channelpkg.ResolveBase(ch, store.Update.Sources)
+	} else {
+		ch = channelpkg.DefaultChannel
+		base = channelpkg.ResolveBase(ch, nil)
 	}
-	tvChannelFetcher.Fetch(channelpkg.ManifestURL(base, channelpkg.Normalize(ch)))
+	tvChannelFetcher.Fetch(channelpkg.ManifestURL(base, ch))
 	return a.GetBinStatus()
 }
 
@@ -3724,12 +3733,14 @@ var tvChannelFetcher = &channelpkg.Fetcher{}
 
 func (a *App) clientChannelManifest() (*channelpkg.Manifest, error) {
 	store, err := credstore.Load(credstore.UserPath())
-	var ch, base string
+	var ch string
+	var sources map[string]string
 	if err == nil && store != nil {
 		ch = store.Update.Channel
-		base = store.Update.ManifestBase
+		sources = store.Update.Sources
 	}
 	ch = channelpkg.Normalize(ch)
+	base := channelpkg.ResolveBase(ch, sources)
 	return tvChannelFetcher.GetURL(channelpkg.ManifestURL(base, ch))
 }
 
