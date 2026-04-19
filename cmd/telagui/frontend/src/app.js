@@ -4701,12 +4701,14 @@ function renderHubSettings(pane) {
         + '<div class="settings-value"><button class="btn btn-sm" onclick="hubRestart(\'' + escAttr(hub) + '\',\'' + escAttr(hubName) + '\')">Restart</button></div></div>';
       html += '</div>';
 
-      // Channel Sources group: custom release channels stored in the hub's
+      // Channel Sources card: custom release channels stored in the hub's
       // own update.sources map. These are visible in the hub's Release
       // channel dropdown above and persist in the hub's YAML config.
-      html += '<div class="settings-group" id="hub-channel-sources-card">'
-        + '<div class="settings-group-header">Channel Sources</div>'
-        + '<div class="settings-group-desc">Custom release channels available in this hub\'s Release channel dropdown. Built-in channels (dev, beta, stable) are always present.</div>'
+      // Uses setting-card markup to match the Channel Sources card on the
+      // Agents page so spacing and typography are consistent.
+      html += '<div class="setting-card" id="hub-channel-sources-card">'
+        + '<div class="setting-card-title">Channel Sources</div>'
+        + '<div class="setting-card-desc">Custom release channels available in this hub\'s Release channel dropdown. Built-in channels (dev, beta, stable) are always present.</div>'
         + '<div id="hub-channel-sources-list" class="channel-sources-list"></div>'
         + '<div class="channel-source-add-row" style="margin-top:8px;">'
         + '<input type="text" id="hub-new-channel-name" class="tb-input channel-src-input-name" placeholder="name (e.g. local)">'
