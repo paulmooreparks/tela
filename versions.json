@@ -1,0 +1,10 @@
+{
+  "generatedAt": "2026-04-20T22:43:39Z",
+  "current": {
+    "stable": { "version": "", "url": "/book/",     "releasedAt": "" },
+    "beta":   { "version": "",   "url": "/book/beta/", "releasedAt": "" },
+    "dev":    { "version": "v0.14.0-dev.3",    "url": "/book/dev/",  "releasedAt": "2026-04-20" }
+  },
+  "archive": [
+  ]
+}
