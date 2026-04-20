@@ -1,0 +1,836 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>B. Configuration file reference - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html" class="active"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/guide/configuration.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="appendix-b-configuration-file-reference"><a class="header" href="#appendix-b-configuration-file-reference">Appendix B: Configuration file reference</a></h1>
+<p>The complete configuration file reference for the three Tela binaries plus the portal hub directory format. Use this appendix as a lookup. The body of the book explains what each setting does and when to change it in narrative form; this appendix lists every key in every config file with its default, its valid values, and a one-line description for the moments when you want to look something up rather than read about it.</p>
+<p>This document describes the configuration files used by the Tela stack:</p>
+<ul>
+<li>Local CLI config files used by <code>tela</code> (portal login + hub aliases)</li>
+<li>Daemon config used by <code>telad</code></li>
+<li>Hub config used by <code>telahubd</code></li>
+<li>Portal hub directory config used by Awan Saya</li>
+</ul>
+<p>If you’re specifically looking for how to create/edit <code>hubs.yaml</code>, start at: <strong><code>hubs.yaml</code> (hub aliases)</strong>.</p>
+<h2 id="where-configs-live-by-os"><a class="header" href="#where-configs-live-by-os">Where configs live (by OS)</a></h2>
+<h3 id="tela-cli-config-directory"><a class="header" href="#tela-cli-config-directory"><code>tela</code> CLI config directory</a></h3>
+<p><code>tela</code> stores its local configuration in:</p>
+<ul>
+<li><strong>Windows:</strong> <code>%APPDATA%\tela\</code></li>
+<li><strong>Linux/macOS:</strong> <code>~/.tela/</code></li>
+</ul>
+<p>Files in this directory:</p>
+<ul>
+<li><code>config.yaml</code> (portal login)</li>
+<li><code>hubs.yaml</code> (local hub alias fallback)</li>
+</ul>
+<h2 id="hubsyaml-hub-aliases"><a class="header" href="#hubsyaml-hub-aliases"><code>hubs.yaml</code> (hub aliases)</a></h2>
+<p><strong>Purpose:</strong> Local, offline fallback mapping from a short hub name (alias) to a WebSocket URL.</p>
+<p><strong>When it's used:</strong> Only when the <code>-hub</code> value is <strong>not</strong> a <code>ws://</code> or <code>wss://</code> URL and the remote lookup fails/unavailable.</p>
+<p>Resolution order in the CLI:</p>
+<ol>
+<li>If <code>-hub</code> starts with <code>ws://</code> or <code>wss://</code> → use as-is.</li>
+<li>Else try configured remotes (requires <code>config.yaml</code> from <code>tela remote add</code>).</li>
+<li>Else fall back to <code>hubs.yaml</code>.</li>
+</ol>
+<p><strong>File location:</strong></p>
+<ul>
+<li>Windows: <code>%APPDATA%\tela\hubs.yaml</code></li>
+<li>Linux/macOS: <code>~/.tela/hubs.yaml</code></li>
+</ul>
+<p><strong>Schema:</strong></p>
+<pre><code class="language-yaml">hubs:
+  &lt;alias&gt;: &lt;ws-or-wss-url&gt;
+</code></pre>
+<ul>
+<li><code>hubs</code> is a mapping/dictionary.</li>
+<li>Alias lookup is <strong>case-sensitive</strong> (e.g. <code>OwlsNest</code> and <code>owlsnest</code> are different).</li>
+<li>The URL is used <strong>exactly as written</strong>. (Unlike portal entries, it is not converted from <code>https://</code> → <code>wss://</code>.)</li>
+</ul>
+<p><strong>Example (local dev):</strong></p>
+<pre><code class="language-yaml">hubs:
+  local: ws://localhost
+  gohub-local: ws://localhost
+</code></pre>
+<p><strong>Example (production):</strong></p>
+<pre><code class="language-yaml">hubs:
+  owlsnest: wss://tela.awansaya.net
+  gohub: wss://gohub.parkscomputing.com
+</code></pre>
+<h3 id="creating-hubsyaml"><a class="header" href="#creating-hubsyaml">Creating <code>hubs.yaml</code></a></h3>
+<ol>
+<li>Create the config directory:
+<ul>
+<li>Windows (PowerShell): <code>mkdir $env:APPDATA\tela -Force</code></li>
+<li>Linux/macOS: <code>mkdir -p ~/.tela</code></li>
+</ul>
+</li>
+<li>Create the file named <code>hubs.yaml</code> in that directory.</li>
+<li>Add a <code>hubs:</code> mapping (see examples above).</li>
+</ol>
+<h3 id="editing-tips"><a class="header" href="#editing-tips">Editing tips</a></h3>
+<ul>
+<li>Prefer <code>wss://</code> for Internet-reachable hubs (TLS).</li>
+<li>Use <code>ws://</code> only for local/testing.</li>
+<li>Keep aliases short and stable (they’re what you pass to <code>tela ... -hub &lt;alias&gt;</code>).</li>
+</ul>
+<h2 id="configyaml-hub-directory-remotes"><a class="header" href="#configyaml-hub-directory-remotes"><code>config.yaml</code> (hub directory remotes)</a></h2>
+<p><strong>Purpose:</strong> Stores remote credentials and discovered endpoints so <code>tela</code> can resolve hub names.</p>
+<p><strong>File location:</strong></p>
+<ul>
+<li>Windows: <code>%APPDATA%\tela\config.yaml</code></li>
+<li>Linux/macOS: <code>~/.tela/config.yaml</code></li>
+</ul>
+<p><strong>How it's created:</strong> <code>tela remote add &lt;name&gt; &lt;url&gt;</code> discovers endpoints via <code>/.well-known/tela</code> (RFC 8615), prompts for a token, and writes this file.</p>
+<p><strong>Schema:</strong></p>
+<pre><code class="language-yaml">remotes:
+  awansaya:
+    url: https://awansaya.net
+    token: ""                # empty token = open-mode remote
+    hub_directory: /api/hubs # discovered via /.well-known/tela
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>url</code> should be <code>http(s)://...</code>.</li>
+<li><code>token</code> is optional; if present it's sent as <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+<li><code>hub_directory</code> is auto-populated during <code>tela remote add</code> via the well-known endpoint. If <code>/.well-known/tela</code> is unavailable, defaults to <code>/api/hubs</code>.</li>
+</ul>
+<h2 id="credentialsyaml-credential-store"><a class="header" href="#credentialsyaml-credential-store"><code>credentials.yaml</code> (credential store)</a></h2>
+<p><strong>Purpose:</strong> Stores hub authentication tokens so you don't need to pass <code>-token</code> on every command.</p>
+<p><strong>File locations:</strong></p>
+<ul>
+<li>User-level: <code>%APPDATA%\tela\credentials.yaml</code> (Windows) or <code>~/.tela/credentials.yaml</code> (Unix)</li>
+<li>System-level: <code>%ProgramData%\Tela\credentials.yaml</code> (Windows) or <code>/etc/tela/credentials.yaml</code> (Unix)</li>
+</ul>
+<p><strong>How it's created:</strong> <code>tela login &lt;hub-url&gt;</code> or <code>telad login -hub &lt;hub-url&gt;</code> (telad requires elevation).</p>
+<p><strong>Schema:</strong></p>
+<pre><code class="language-yaml">hubs:
+  wss://hub.example.com:
+    token: 7bf042ceb070136fec15fdd49797c486225fbe62b6cfd3bb4649f04b32446d62
+    identity: alice
+
+# Optional: which release channel the tela client (and TelaVisor) follows
+# for self-update. Accepts dev (default), beta, stable, or a custom channel
+# name. Hub and agent channels are configured separately in their own YAML
+# files.
+update:
+  channel: dev
+  # sources:                                   # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>The <code>hubs</code> mapping stores credentials by hub URL (normalized: trailing slashes removed, schemes lowercased).</li>
+<li><code>token</code> is required; <code>identity</code> is optional but helpful for tracking.</li>
+<li>File permissions: 0600 (user-level) or 0644 (system-level, for SYSTEM account read access).</li>
+<li>The <code>update</code> block is read by <code>tela channel</code>, <code>tela update</code>, and TelaVisor's
+Application Settings → Release channel selector. It is the <em>client's</em> channel
+preference; hubs and agents have their own under their respective YAML files.</li>
+<li>Set or change with <code>tela channel set &lt;name&gt;</code> (no need to edit by hand).</li>
+</ul>
+<p><strong>Using the credential store:</strong></p>
+<ol>
+<li>
+<p>Store a token:</p>
+<pre><code class="language-bash">tela login wss://hub.example.com
+# Prompts for token and optional identity
+</code></pre>
+</li>
+<li>
+<p>Subsequent commands find the token automatically:</p>
+<pre><code class="language-bash">tela connect -hub wss://hub.example.com -machine barn -ports 22:SSH
+# No -token flag needed
+</code></pre>
+</li>
+<li>
+<p>Remove a stored credential:</p>
+<pre><code class="language-bash">tela logout wss://hub.example.com
+</code></pre>
+</li>
+</ol>
+<p><strong>Token lookup precedence:</strong></p>
+<ol>
+<li><code>-token</code> flag (explicit)</li>
+<li><code>TELA_TOKEN</code> environment variable</li>
+<li>Credential store (user then system)</li>
+</ol>
+<p><code>telad login</code> stores in the system credential store (requires elevation) and persists across service restarts.</p>
+<h2 id="connection-profiles-profilesnameyaml"><a class="header" href="#connection-profiles-profilesnameyaml">Connection profiles (<code>profiles/&lt;name&gt;.yaml</code>)</a></h2>
+<p><strong>Purpose:</strong> Defines one or more hub/machine connections that <code>tela connect -profile &lt;name&gt;</code> opens in parallel, each with its own WireGuard tunnel and auto-reconnect.</p>
+<p><strong>File locations:</strong></p>
+<ul>
+<li>Windows: <code>%APPDATA%\tela\profiles\&lt;name&gt;.yaml</code></li>
+<li>Linux/macOS: <code>~/.tela/profiles/&lt;name&gt;.yaml</code></li>
+</ul>
+<p>An explicit file path can also be passed: <code>tela connect -profile /path/to/profile.yaml</code></p>
+<p><strong>How it's created:</strong> <code>tela profile create &lt;name&gt;</code>, or by writing the file directly.</p>
+<p><strong>Schema:</strong></p>
+<pre><code class="language-yaml">id: my-profile              # optional: stable identifier for this profile
+name: "My Profile"          # optional: display name
+mtu: 1100                   # optional: WireGuard tunnel MTU (default 1100)
+
+connections:
+  - hub: wss://hub.example.com    # or a short name resolved via a configured remote
+    machine: web01
+    token: ${WEB_TOKEN}           # ${VAR} expansion is supported; omit if stored in credentials.yaml
+    services:                     # omit to forward all ports the agent advertises
+      - remote: 22                # forward by port number
+        local: 2201               # optional: remap to a different local port (defaults to remote)
+      - name: postgres            # forward by service name (resolved via hub API at connect time)
+
+# Optional: start a WebDAV mount when the profile connects
+mount:
+  mount: T:                 # drive letter (Windows) or directory path (macOS/Linux)
+  port: 18080               # WebDAV listen port (default 18080)
+  auto: true                # mount automatically on connect
+
+# Optional: DNS configuration
+dns:
+  loopback_prefix: "127.88"  # prefix used by 'tela dns hosts' to generate /etc/hosts entries; does NOT control port binding
+</code></pre>
+<p><strong>Top-level fields:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>No</td><td>Stable identifier for this profile</td></tr>
+<tr><td><code>name</code></td><td>No</td><td>Display name</td></tr>
+<tr><td><code>mtu</code></td><td>No</td><td>WireGuard tunnel MTU; overrides the <code>-mtu</code> flag default of 1100</td></tr>
+<tr><td><code>connections</code></td><td>Yes</td><td>List of hub/machine connections</td></tr>
+<tr><td><code>mount</code></td><td>No</td><td>WebDAV mount to start automatically on connect</td></tr>
+<tr><td><code>dns</code></td><td>No</td><td>DNS configuration. <code>loopback_prefix</code> is used by <code>tela dns hosts</code> to generate /etc/hosts entries for named access; it does not control where services bind.</td></tr>
+</tbody></table>
+</div>
+<p><strong>Connection entry fields:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>hub</code></td><td>Yes</td><td>Hub WebSocket URL (<code>wss://...</code>) or short name</td></tr>
+<tr><td><code>hubId</code></td><td>No</td><td>Stable hub UUID; populated lazily by <code>tela</code>, do not set manually</td></tr>
+<tr><td><code>machine</code></td><td>Yes</td><td>Machine name as registered with the hub</td></tr>
+<tr><td><code>agentId</code></td><td>No</td><td>Stable agent UUID; populated lazily by <code>tela</code>, do not set manually</td></tr>
+<tr><td><code>token</code></td><td>No</td><td>Auth token; omit if stored in <code>credentials.yaml</code></td></tr>
+<tr><td><code>address</code></td><td>No</td><td>Override the loopback address for this machine (must be in <code>127.0.0.0/8</code>)</td></tr>
+<tr><td><code>services</code></td><td>No</td><td>Port or service filter; omit to forward everything the agent advertises</td></tr>
+<tr><td><code>services[].remote</code></td><td>*</td><td>Remote port number to forward</td></tr>
+<tr><td><code>services[].local</code></td><td>No</td><td>Local port to bind (defaults to <code>remote</code>)</td></tr>
+<tr><td><code>services[].name</code></td><td>*</td><td>Service name to resolve via the hub API</td></tr>
+</tbody></table>
+</div>
+<p>* Each service entry needs either <code>remote</code> or <code>name</code>, not both.</p>
+<p><strong>Mount fields:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>mount</code></td><td>No</td><td>Drive letter (Windows <code>T:</code>) or directory path to mount</td></tr>
+<tr><td><code>port</code></td><td>No</td><td>WebDAV listen port (default 18080)</td></tr>
+<tr><td><code>auto</code></td><td>No</td><td>If true, mount automatically when the profile connects</td></tr>
+</tbody></table>
+</div>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>Profile YAML supports <code>${VAR}</code> expansion so tokens can stay out of the file.</li>
+<li>Multiple connections in one profile open in parallel; each reconnects independently on disconnect.</li>
+<li>The default profile can be set with the <code>TELA_PROFILE</code> environment variable.</li>
+</ul>
+<h2 id="teladyaml-daemon--agent-config"><a class="header" href="#teladyaml-daemon--agent-config"><code>telad.yaml</code> (daemon / agent config)</a></h2>
+<p><strong>Purpose:</strong> Runs one <code>telad</code> process that can register one or more machines to a hub.</p>
+<p><strong>Where it’s used:</strong></p>
+<ul>
+<li>Running directly: <code>telad -config telad.yaml</code></li>
+<li>Service mode: the service reads from the system-wide path (see below)</li>
+</ul>
+<p><strong>Top-level schema:</strong></p>
+<pre><code class="language-yaml">hub: ws://localhost
+token: ""         # optional default token for all machines
+
+# Optional: which release channel telad's self-update follows.
+# Accepts dev (default), beta, stable, or a custom channel name.
+# See RELEASE-PROCESS.md for the channel model.
+update:
+  channel: dev
+  # sources:                                                # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
+
+machines:
+  - name: barn
+    # ports: [22, 3389]
+    # services: [{ port: 22, name: SSH }]
+    # target: 127.0.0.1
+</code></pre>
+<p><strong>Update block (<code>update:</code>)</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>channel</code></td><td>string</td><td><code>dev</code></td><td>Release channel for self-update: <code>dev</code>, <code>beta</code>, <code>stable</code>, or a custom channel name.</td></tr>
+<tr><td><code>sources</code></td><td>map[name]url</td><td>(none)</td><td>Per-channel manifest base URL overrides. Built-in channels (<code>dev</code>, <code>beta</code>, <code>stable</code>) fall back to the baked-in GitHub releases URL when absent. Custom channel names require an entry here (or in the <code>channel sources</code> CLI) to resolve.</td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Removed in 0.13:</strong> The pre-0.12 <code>manifestBase</code> scalar field is no
+longer recognised. yaml.v3 silently ignores unknown fields on load,
+so an old config still parses, but a custom channel pointed at by
+<code>manifestBase</code> will fail its next manifest fetch with an empty URL.
+Migrate by writing a <code>sources</code> entry (or running <code>tela channel sources set &lt;channel&gt; &lt;url&gt;</code>) before upgrading from 0.12 to 0.13+.</p>
+</blockquote>
+<p>The configured channel is read by the <code>telad update</code> CLI subcommand, the
+<code>telad channel</code> CLI subcommand (show / set / show-manifest), the
+<code>update</code> and <code>update-channel</code> mgmt actions, and TelaVisor's Agent
+Settings → Release channel dropdown.</p>
+<p><strong>Machine fields:</strong></p>
+<ul>
+<li><code>name</code> (required): machine ID registered with the hub.</li>
+<li><code>displayName</code> (optional): nicer name for UIs.</li>
+<li><code>hostname</code> (optional): overrides OS hostname (useful in containers).</li>
+<li><code>os</code> (optional): defaults to the runtime OS (<code>windows</code>, <code>linux</code>, <code>darwin</code>, …).</li>
+<li><code>tags</code> (optional): list of strings.</li>
+<li><code>location</code> (optional): free-form string.</li>
+<li><code>owner</code> (optional): free-form string.</li>
+<li><code>target</code> (optional): where the real services run; defaults to <code>127.0.0.1</code>.</li>
+<li><code>token</code> (optional): per-machine token override; defaults to top-level <code>token</code>.</li>
+<li>Either <code>ports</code> or <code>services</code> is required:
+<ul>
+<li><code>ports</code>: list of TCP ports (e.g. <code>[22, 3389]</code>).</li>
+<li><code>services</code>: list of service descriptors (below).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Service descriptor schema:</strong></p>
+<pre><code class="language-yaml">services:
+  - port: 22
+    proto: tcp
+    name: SSH
+    description: OpenSSH
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>If you provide <code>services</code> but omit <code>ports</code>, <code>telad</code> derives <code>ports</code> automatically.</li>
+<li>If you provide <code>ports</code> but omit <code>services</code>, <code>telad</code> generates minimal service entries (port-only).</li>
+</ul>
+<p><strong>File share configuration:</strong></p>
+<p>Each machine can expose one or more sandboxed directories for file transfer through the WireGuard tunnel. File sharing is off by default and must be explicitly enabled.</p>
+<pre><code class="language-yaml">shares:
+  - name: docs
+    path: /home/shared/docs
+    writable: true
+    maxFileSize: 50MB
+    maxTotalSize: 1GB
+    allowDelete: false
+    allowedExtensions: []
+    blockedExtensions: [".exe", ".bat", ".cmd", ".ps1", ".sh"]
+  - name: uploads
+    path: /home/shared/uploads
+    writable: true
+    allowDelete: true
+</code></pre>
+<p>Share fields:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td>(required)</td><td>Share name. Used in WebDAV paths (<code>/machine/share/path</code>) and the <code>-share NAME</code> flag on <code>tela files</code> commands.</td></tr>
+<tr><td><code>path</code></td><td>string</td><td>(required)</td><td>Absolute path to the shared directory. Created on startup if missing.</td></tr>
+<tr><td><code>writable</code></td><td>bool</td><td><code>false</code></td><td>Allows clients to upload files, create directories, rename, and move</td></tr>
+<tr><td><code>maxFileSize</code></td><td>string</td><td><code>50MB</code></td><td>Maximum size of a single uploaded file. Supports KB, MB, GB suffixes.</td></tr>
+<tr><td><code>maxTotalSize</code></td><td>string</td><td>(none)</td><td>Maximum total size of all files in the shared directory</td></tr>
+<tr><td><code>allowDelete</code></td><td>bool</td><td><code>false</code></td><td>Allows clients to delete files. Requires <code>writable: true</code>.</td></tr>
+<tr><td><code>allowedExtensions</code></td><td>[]string</td><td><code>[]</code></td><td>Whitelist of file extensions. Empty means all extensions are allowed (subject to <code>blockedExtensions</code>).</td></tr>
+<tr><td><code>blockedExtensions</code></td><td>[]string</td><td>see above</td><td>Blacklist of file extensions. Applied after <code>allowedExtensions</code>.</td></tr>
+</tbody></table>
+</div>
+<p><strong>Deprecated:</strong> The <code>fileShare</code> (singular) key is still accepted and is synthesized as a share named <code>legacy</code>. It will be removed in 1.0. Migrate to the <code>shares</code> list.</p>
+<pre><code class="language-yaml"># Deprecated -- use shares instead
+fileShare:
+  enabled: true
+  directory: /home/shared
+</code></pre>
+<p><strong>Example (two machines):</strong></p>
+<pre><code class="language-yaml">hub: wss://tela.awansaya.net
+token: "shared-secret"
+
+machines:
+  - name: barn
+    displayName: Barn (Windows)
+    os: windows
+    tags: ["lab", "rdp"]
+    ports: [3389]
+    target: 192.168.1.10
+
+  - name: nas
+    displayName: NAS
+    os: linux
+    services:
+      - port: 22
+        name: SSH
+      - port: 445
+        name: SMB
+    target: 192.168.1.50
+</code></pre>
+<h2 id="telahubdyaml-hub-server-config"><a class="header" href="#telahubdyaml-hub-server-config"><code>telahubd.yaml</code> (hub server config)</a></h2>
+<p><strong>Purpose:</strong> Configures the Go hub server (<code>telahubd</code>).</p>
+<p><strong>Schema:</strong></p>
+<pre><code class="language-yaml">hubId: ""            # optional: stable identifier for this hub instance
+port: 80
+udpPort: 41820
+udpHost: ""          # public IP/hostname for UDP relay (when behind proxy)
+name: owlsnest
+wwwDir: ""           # omit to use the embedded console
+
+# Optional: how long graceful shutdown waits for in-flight requests to
+# finish after SIGTERM (or a context cancel from a test harness). A
+# second signal during the drain forces immediate exit. Accepts any
+# Go duration literal: "30s", "2m", "500ms".
+shutdownTimeout: 30s
+
+# Optional: which release channel telahubd's self-update follows.
+# Accepts dev (default), beta, stable, or a custom channel name.
+# See RELEASE-PROCESS.md for the channel model.
+update:
+  channel: dev
+  # sources:                                   # optional per-channel URL overrides
+  #   dev: https://my-fork.example.com/channels/
+
+# Optional: turn this hub into a self-hosted release channel server.
+# When enabled, telahubd mounts /channels/{name}.json and
+# /channels/files/{channel}/{binary} from the directory below. Each
+# channel has its own subdirectory under files/. Replaces the
+# standalone telachand daemon. See "Self-hosted release channel server"
+# below for the full description.
+channels:
+  enabled: false
+  data: /var/lib/telahubd/channels
+  publicURL: https://hub.example.net/channels
+
+auth:
+  tokens:
+    - id: alice
+      token: &lt;hex-string&gt;
+      hubRole: owner         # "owner" | "admin" | "viewer" | "" (user)
+    - id: bob
+      token: &lt;hex-string&gt;
+      hubRole: ""            # regular user
+  machines:
+    "*":                     # wildcard - applies to all machines
+      registerToken: &lt;token&gt; # only this token may register
+      connectTokens:         # tokens allowed to connect
+        - &lt;token&gt;
+      manageTokens:          # tokens allowed to manage (config, logs, restart)
+        - &lt;token&gt;
+    barn:
+      registerToken: &lt;token&gt;
+      connectTokens:
+        - &lt;token&gt;
+      manageTokens:
+        - &lt;token&gt;
+
+# Portal registrations (managed via 'telahubd portal' or 'tela admin portals')
+portals:
+  awansaya:                        # portal name (key)
+    url: https://awansaya.net      # portal base URL
+    syncToken: &lt;hex&gt;               # per-hub sync token returned by portal on registration
+    hubDirectory: /api/hubs        # hub directory endpoint (discovered via /.well-known/tela)
+    # token is the portal admin token used only during registration; not persisted
+
+# Hub bridging (experimental): forward specific machines to a remote hub
+bridges:
+  - hubId: remote-hub              # identifier of the remote hub
+    url: wss://remote-hub.example.com
+    token: &lt;token&gt;                 # auth token on the remote hub
+    maxHops: 3                     # maximum relay hops (default 0 = unlimited)
+    machines: [web01, db01]        # machines to bridge to the remote hub
+</code></pre>
+<h3 id="core-fields"><a class="header" href="#core-fields">Core fields</a></h3>
+<ul>
+<li><code>port</code>, <code>udpPort</code>, <code>udpHost</code>, <code>name</code>, <code>wwwDir</code>: same as the corresponding env vars.</li>
+<li>Precedence: <strong>env vars override YAML</strong>, and YAML overrides built-in defaults.</li>
+<li>Supported env vars: <code>TELAHUBD_PORT</code>, <code>TELAHUBD_UDP_PORT</code>, <code>TELAHUBD_UDP_HOST</code>, <code>TELAHUBD_NAME</code>, <code>TELAHUBD_WWW_DIR</code>.</li>
+<li>Portal-related env vars: <code>TELAHUBD_PORTAL_URL</code>, <code>TELAHUBD_PORTAL_TOKEN</code>, <code>TELAHUBD_PUBLIC_URL</code>.</li>
+<li><code>udpHost</code>: when the hub is behind a proxy or tunnel (e.g. Cloudflare) that doesn't forward UDP, set this to the hub's real public IP or a DNS name that resolves to it. The hub includes this in <code>udp-offer</code> messages so clients send UDP to the right address.</li>
+</ul>
+<h3 id="auth-block-auth"><a class="header" href="#auth-block-auth">Auth block (<code>auth:</code>)</a></h3>
+<p>For a conceptual overview of how tokens, roles, and machine permissions work together, see <a href="ACCESS-MODEL.html">ACCESS-MODEL.md</a>.</p>
+<p>When <code>auth:</code> is absent or has no tokens, the hub runs in <strong>open mode</strong> (no authentication, same behavior as before auth was added). When tokens are present, <strong>every</strong> register and connect request must carry a valid Bearer token.</p>
+<p><strong><code>auth.tokens</code></strong>: list of token identities:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>yes</td><td>Human-friendly label (e.g. <code>alice</code>, <code>ci-bot</code>)</td></tr>
+<tr><td><code>token</code></td><td>yes</td><td>Hex secret (64-char recommended). Generated by <code>tela admin tokens add</code> or <code>openssl rand -hex 32</code></td></tr>
+<tr><td><code>hubRole</code></td><td>no</td><td><code>"owner"</code> | <code>"admin"</code> | <code>"viewer"</code> | <code>""</code> (regular user)</td></tr>
+</tbody></table>
+</div>
+<p><strong><code>auth.machines</code></strong>: per-machine access control:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>registerToken</code></td><td>no</td><td>If set, only this token may register (or re-register) this machine</td></tr>
+<tr><td><code>connectTokens</code></td><td>no</td><td>List of tokens allowed to connect to this machine</td></tr>
+<tr><td><code>manageTokens</code></td><td>no</td><td>List of tokens allowed to manage this machine (view/edit config, view logs, restart)</td></tr>
+</tbody></table>
+</div>
+<p>Use <code>"*"</code> as the machine key for a wildcard rule that applies to all machines. Owner and admin role tokens implicitly have manage access to all machines.</p>
+<h3 id="auth-evaluation-order"><a class="header" href="#auth-evaluation-order">Auth evaluation order</a></h3>
+<ol>
+<li>If <code>auth.tokens</code> is empty → open mode, allow everything. (Note: on first startup with no tokens, the hub auto-generates an owner token, so open mode requires deliberate configuration.)</li>
+<li>Incoming request must carry a valid token via <code>Authorization: Bearer &lt;token&gt;</code> header (or cookie for browser sessions).</li>
+<li>Owner/admin tokens bypass per-machine checks.</li>
+<li>For <code>register</code>: check <code>machines[machineId].registerToken</code> then <code>machines["*"].registerToken</code>.</li>
+<li>For <code>connect</code>: check <code>machines[machineId].connectTokens</code> then <code>machines["*"].connectTokens</code>.</li>
+</ol>
+<h3 id="environment-variable-bootstrap-tela_owner_token"><a class="header" href="#environment-variable-bootstrap-tela_owner_token">Environment variable bootstrap (<code>TELA_OWNER_TOKEN</code>)</a></h3>
+<p>For Docker deployments where you don't have shell access to the hub, you can bootstrap authentication via an environment variable:</p>
+<ol>
+<li>Generate a token locally:
+<pre><code class="language-bash">openssl rand -hex 32
+</code></pre>
+</li>
+<li>Set <code>TELA_OWNER_TOKEN</code> in your Docker Compose environment:
+<pre><code class="language-yaml">environment:
+  - TELA_OWNER_TOKEN=&lt;your-generated-token&gt;
+</code></pre>
+</li>
+<li>On first startup (when no tokens exist in the config), the hub automatically:
+<ul>
+<li>Creates an <code>owner</code> identity with the provided token</li>
+<li>Adds a wildcard <code>*</code> machine ACL granting the owner full access</li>
+<li>Persists the config to disk</li>
+</ul>
+</li>
+<li>On subsequent startups, the env var is ignored (tokens already exist).</li>
+</ol>
+<p>Once bootstrapped, use <code>tela admin</code> commands to manage tokens remotely. No shell access to the hub is needed.</p>
+<p><code>tela admin</code> sub-commands resolve the auth token in this order: <code>-token</code> flag &gt; <code>TELA_OWNER_TOKEN</code> env var &gt; <code>TELA_TOKEN</code> env var.</p>
+<h3 id="console-viewer-token"><a class="header" href="#console-viewer-token">Console viewer token</a></h3>
+<p>When auth is enabled, the hub auto-generates a <code>console-viewer</code> identity with the <code>viewer</code> role at startup. This token is injected into the built-in web console so it can call <code>/api/status</code> without manual configuration. The viewer role grants read-only access to status endpoints but cannot register machines or manage tokens.</p>
+<h3 id="docker-config-persistence"><a class="header" href="#docker-config-persistence">Docker config persistence</a></h3>
+<p>In Docker deployments, the hub persists its YAML config at <code>/app/data/telahubd.yaml</code> on a named volume (<code>hub-data</code>). This ensures auth config survives container recreation.</p>
+<h3 id="admin-rest-api"><a class="header" href="#admin-rest-api">Admin REST API</a></h3>
+<p>When auth is enabled, the hub exposes admin endpoints for remote management. All admin endpoints require an owner or admin token.</p>
+<p><strong>Unified access API</strong> (recommended). Each access entry represents one identity and its per-machine permissions:</p>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>GET</code></td><td><code>/api/admin/access</code></td><td>List all identities with their per-machine permissions</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/admin/access/{id}</code></td><td>Get one identity's access entry</td></tr>
+<tr><td><code>PATCH</code></td><td><code>/api/admin/access/{id}</code></td><td>Update identity (rename: <code>{"id":"new-name"}</code>)</td></tr>
+<tr><td><code>DELETE</code></td><td><code>/api/admin/access/{id}</code></td><td>Remove identity and scrub all ACL references</td></tr>
+<tr><td><code>PUT</code></td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Set permissions: <code>{"permissions":["connect","manage"]}</code></td></tr>
+<tr><td><code>DELETE</code></td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Revoke all permissions on a machine</td></tr>
+</tbody></table>
+</div>
+<p><strong>Token management:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>GET</code></td><td><code>/api/admin/tokens</code></td><td>List all token identities (token values are previewed, not exposed)</td></tr>
+<tr><td><code>POST</code></td><td><code>/api/admin/tokens</code></td><td>Add a new token identity (returns the full token once)</td></tr>
+<tr><td><code>DELETE</code></td><td><code>/api/admin/tokens/{id}</code></td><td>Remove a token identity and clean up its ACL references</td></tr>
+</tbody></table>
+</div>
+<p>Changes made through the admin API take effect immediately (hot-reload) with no hub restart needed. See the <code>tela admin access</code> CLI commands for the corresponding client interface.</p>
+<p><strong>Using a config file:</strong></p>
+<ul>
+<li><code>telahubd -config telahubd.yaml</code></li>
+</ul>
+<h3 id="service-mode-config-location"><a class="header" href="#service-mode-config-location">Service-mode config location</a></h3>
+<p>When running as an OS service, <code>telad</code> and <code>telahubd</code> read their YAML from a system-wide directory:</p>
+<ul>
+<li>Windows: <code>%ProgramData%\Tela\telad.yaml</code> and <code>%ProgramData%\Tela\telahubd.yaml</code></li>
+<li>Linux/macOS: <code>/etc/tela/telad.yaml</code> and <code>/etc/tela/telahubd.yaml</code></li>
+</ul>
+<h2 id="self-hosted-release-channel-server"><a class="header" href="#self-hosted-release-channel-server">Self-hosted release channel server</a></h2>
+<p>Self-hosted release channel hosting is a feature of <code>telahubd</code> itself as
+of 0.12. A dedicated <code>telachand</code> daemon is no longer needed; enable the
+<code>channels:</code> block in <code>telahubd.yaml</code> to have the hub serve channel
+manifests and binary downloads under <code>/channels/</code>.</p>
+<p><strong>Config block</strong> (add to <code>telahubd.yaml</code>):</p>
+<pre><code class="language-yaml">channels:
+  enabled: true
+  data: /var/lib/telahubd/channels    # holds {channel}.json and files/{channel}/{binary}
+  publicURL: https://hub.example.net/channels
+</code></pre>
+<p><strong>Field reference:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>channels.enabled</code></td><td><code>false</code></td><td>Mount <code>/channels/</code> routes when true</td></tr>
+<tr><td><code>channels.data</code></td><td>(none)</td><td>Directory holding manifests at the root and binaries under <code>files/</code></td></tr>
+<tr><td><code>channels.publicURL</code></td><td>(none)</td><td>External URL prefix written into generated manifests as <code>downloadBase</code>. Required for <code>telahubd channels publish</code> unless <code>-base-url</code> is passed on the command line.</td></tr>
+</tbody></table>
+</div>
+<p><strong>URL layout:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Path</th><th>Served content</th></tr></thead><tbody>
+<tr><td><code>GET /channels/{channel}.json</code></td><td>Manifest file written by <code>telahubd channels publish</code></td></tr>
+<tr><td><code>GET /channels/files/</code></td><td>Directory listing of all channels that have any binaries uploaded</td></tr>
+<tr><td><code>GET /channels/files/{channel}/</code></td><td>Directory listing of binaries for that channel</td></tr>
+<tr><td><code>GET /channels/files/{channel}/{binary}</code></td><td>Binary file under <code>{data}/files/{channel}/</code></td></tr>
+</tbody></table>
+</div>
+<p>Each channel has its own subdirectory under <code>files/</code>, so two channels
+can hold different binaries under the same filename without collision.</p>
+<p>Endpoints are public (no auth, CORS wildcard) by design — release
+manifests are world-readable. Do not put anything in <code>channels.data</code>
+you would not want served.</p>
+<p><strong>Publishing remotely</strong> (owner/admin auth required):</p>
+<div class="table-wrapper"><table><thead><tr><th>Path</th><th>Method</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>/api/admin/channels/files/{channel}/{name}</code></td><td>PUT</td><td>Upload a binary (request body = file bytes). Writes atomically to <code>channels.data/files/{channel}/{name}</code>. 500 MiB max.</td></tr>
+<tr><td><code>/api/admin/channels/publish</code></td><td>POST</td><td>Hash everything in <code>channels.data/files/{channel}/</code> and write <code>{channel}.json</code>. Body: <code>{"channel":"local","tag":"v0.12.0-local.1","baseUrl":"..."}</code>. <code>baseUrl</code> is optional and defaults to <code>channels.publicURL/files/{channel}/</code>.</td></tr>
+</tbody></table>
+</div>
+<p>A build pipeline running on a separate host PUTs each binary to the
+upload endpoint, then POSTs to <code>/publish</code> to regenerate the manifest.
+No SSH, tunnel, or file-share mount is needed — the hub's admin auth
+is the only credential. See <code>.vscode/publish-dev.ps1</code> in the tela
+repo for a reference implementation.</p>
+<p><strong>Pointing tela, telad, or telahubd at a self-hosted channel server:</strong></p>
+<p>Set <code>update.sources[&lt;channel&gt;]</code> in each binary's config (or in
+<code>credentials.yaml</code> for the <code>tela</code> client and TelaVisor):</p>
+<pre><code class="language-yaml"># telad.yaml, telahubd.yaml, or credentials.yaml
+update:
+  channel: mychannel
+  sources:
+    mychannel: https://hub.example.net/channels/
+</code></pre>
+<p>Or use the <code>channel sources</code> subcommand, which is available on all three
+binaries and accepts the same shape:</p>
+<pre><code class="language-bash">telahubd channel sources set mychannel https://hub.example.net/channels/
+telad channel sources set mychannel https://hub.example.net/channels/
+tela channel sources set mychannel https://hub.example.net/channels/
+</code></pre>
+<h2 id="awan-saya-portalconfigjson-hub-directory"><a class="header" href="#awan-saya-portalconfigjson-hub-directory">Awan Saya: <code>portal/config.json</code> (hub directory)</a></h2>
+<p><strong>Repo:</strong> Awan Saya</p>
+<p><strong>File location:</strong> <code>awansaya/www/portal/config.json</code></p>
+<p><strong>Purpose:</strong> The portal’s hub directory, served at <code>GET /api/hubs</code>.</p>
+<p><strong>Schema:</strong></p>
+<pre><code class="language-json">{
+  "hubs": [
+    { "name": "owlsnest", "url": "https://tela.awansaya.net", "viewerToken": "&lt;hex&gt;" }
+  ]
+}
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>url</code> is the hub's public URL. The portal server uses it to proxy status requests.</li>
+<li><code>viewerToken</code> (optional) is the hub's viewer token. The portal server includes it when proxying <code>/api/status</code> and <code>/api/history</code> so that auth-enabled hubs return data. Tokens are never exposed to the browser.</li>
+<li>When <code>tela</code> resolves hubs via a portal, it converts <code>https://</code> → <code>wss://</code> (and <code>http://</code> → <code>ws://</code>) automatically.</li>
+<li>You can manage this file by:
+<ul>
+<li>Using the portal UI "Add Hub" form (which calls <code>POST /api/hubs</code>), or</li>
+<li>Editing it directly.</li>
+</ul>
+</li>
+<li>Set <code>AWANSAYA_API_TOKEN</code> on the portal server (via a <code>.env</code> file) to require <code>Authorization: Bearer &lt;token&gt;</code> for adding/removing hubs. Reading the hub directory (<code>GET /api/hubs</code>) is always open.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../guide/reference.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/access-model.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../guide/reference.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/access-model.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
