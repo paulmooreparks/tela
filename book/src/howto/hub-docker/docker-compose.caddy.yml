@@ -1,0 +1,67 @@
+# telahubd + Caddy: production-grade single-box deployment.
+#
+# Caddy terminates TLS, handles automatic Let's Encrypt issuance and
+# renewal, and reverse-proxies HTTP + WebSocket to telahubd over the
+# internal Docker network. telahubd exposes its HTTP port only to
+# Caddy; the UDP relay port goes direct from the host to telahubd
+# because Caddy is a TCP-only proxy and cannot forward UDP.
+#
+# Usage:
+#   1. Point an A record at this host. Set HUB_DOMAIN in .env.
+#   2. Open firewall ports 80/tcp, 443/tcp, 41820/udp.
+#   3. Copy .env.example to .env and fill in at least HUB_DOMAIN
+#      and TELA_OWNER_TOKEN.
+#   4. docker compose -f docker-compose.caddy.yml up -d
+#   5. Caddy takes about a minute to issue the cert on first start.
+#      `docker compose logs caddy` confirms when it lands.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+
+    ports:
+      - "80:80"     # Let's Encrypt HTTP-01 challenge + 301 to HTTPS
+      - "443:443"   # Hub HTTPS + WebSocket
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data        # issued certs + account keys
+      - caddy-config:/config    # Caddy's managed state
+
+    environment:
+      # Surfaced to the Caddyfile as {$HUB_DOMAIN}.
+      - HUB_DOMAIN=${HUB_DOMAIN}
+
+    depends_on:
+      - telahubd
+
+  telahubd:
+    image: ghcr.io/paulmooreparks/telahubd:stable
+    container_name: telahubd
+    restart: unless-stopped
+
+    # HTTP port is NOT published on the host; only Caddy talks to
+    # telahubd:80 over the internal network. UDP relay port IS
+    # published on the host (Caddy cannot proxy UDP). The /udp
+    # suffix is REQUIRED -- omitting it loses the UDP relay tier.
+    ports:
+      - "41820:41820/udp"
+
+    environment:
+      - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
+      - TELAHUBD_NAME=${TELAHUBD_NAME:-}
+      # Set to the public hostname or IP that agents / clients
+      # reach the UDP relay at. Usually the same domain as
+      # HUB_DOMAIN, but UDP has to dodge any CDN or proxy that
+      # sits in front of the TLS path.
+      - TELAHUBD_UDP_HOST=${TELAHUBD_UDP_HOST:-${HUB_DOMAIN}}
+
+    volumes:
+      - telahubd-data:/data
+
+volumes:
+  telahubd-data:
+  caddy-data:
+  caddy-config:

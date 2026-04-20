@@ -317,9 +317,15 @@ func bootstrapAuth(cfg *hubConfig, cfgPath string, ownerToken string) {
 		ConnectTokens: []string{ownerToken},
 	}
 
-	// Persist so the token survives container restarts.
+	// Persist so the token survives container and service restarts. A
+	// write failure here means bootstrap ran in memory only -- the next
+	// restart will generate a fresh token and the one the operator just
+	// captured is useless. Log loudly; do not silently swallow.
 	if cfgPath != "" {
-		_ = writeHubConfig(cfgPath, cfg)
+		if err := writeHubConfig(cfgPath, cfg); err != nil {
+			log.Printf("[hub] WARNING: bootstrap token not persisted to %s: %v", cfgPath, err)
+			log.Printf("[hub] WARNING: the token above will NOT survive restart; fix config file permissions or restart with a writable -config path")
+		}
 	}
 }
 
@@ -343,9 +349,15 @@ func autoBootstrapAuth(cfg *hubConfig, cfgPath string) bool {
 	fmt.Println("")
 	fmt.Printf("  Owner token: %s\n", ownerToken)
 	fmt.Println("")
-	fmt.Println("  Save this token -- it will not be displayed again.")
 	fmt.Println("  Use it with: tela admin --hub <URL> --token <TOKEN>")
 	fmt.Println("  Or set env:  TELA_OWNER_TOKEN=" + ownerToken)
+	if cfgPath != "" {
+		fmt.Printf("  Persisted to: %s\n", cfgPath)
+		fmt.Println("  Recover later with: telahubd user show-owner -config " + cfgPath)
+	} else {
+		fmt.Println("  WARNING: no -config path set; token is IN-MEMORY ONLY and")
+		fmt.Println("  will be regenerated on restart.")
+	}
 	fmt.Println("==============================================================")
 
 	return true

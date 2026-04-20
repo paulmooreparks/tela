@@ -1,0 +1,54 @@
+# telahubd-minimal.yml -- smallest viable Docker deployment.
+#
+# One service. Port 80 directly exposed. No reverse proxy, no TLS.
+# Suitable for LAN-only dev and test. Do NOT run this on the public
+# internet; operators publishing a hub to the open web must front it
+# with Caddy (docker-compose.caddy.yml) or nginx (docker-compose.nginx.yml)
+# for TLS termination and origin logging.
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in TELA_OWNER_TOKEN.
+#   2. docker compose -f docker-compose.minimal.yml up -d
+#   3. On a workstation: tela login http://<host>  (http, not https)
+#      and paste the token from .env when prompted.
+
+services:
+  telahubd:
+    image: ghcr.io/paulmooreparks/telahubd:stable
+    container_name: telahubd
+    restart: unless-stopped
+
+    ports:
+      # HTTP + WebSocket. Remap the host side if port 80 is taken.
+      - "80:80"
+      # UDP relay. The /udp suffix is REQUIRED. Without it Docker
+      # exposes only the TCP side; the UDP relay tier silently fails
+      # and every session falls back to slower WebSocket transport.
+      - "41820:41820/udp"
+
+    environment:
+      # Bootstrap owner token. Generate with `openssl rand -hex 32`.
+      # If unset, telahubd auto-generates one on first start and
+      # prints it in `docker logs`; see section 6 of DESIGN-docker.md.
+      - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
+
+      # Display name for this hub. Appears in TelaVisor sidebars and
+      # portal listings. Defaults to empty (unnamed).
+      - TELAHUBD_NAME=${TELAHUBD_NAME:-}
+
+      # Public hostname or IP for the UDP relay path. Clients STUN-
+      # detect their reflexive address and try to hole-punch directly
+      # to this value on 41820/udp. Must NOT go through any TCP proxy
+      # (Cloudflare, ngrok, Caddy) -- those do not forward UDP.
+      # Leave blank on LAN; set to the host's reachable IP or DNS
+      # name in any non-trivial network.
+      - TELAHUBD_UDP_HOST=${TELAHUBD_UDP_HOST:-}
+
+    volumes:
+      # Persistent state: telahubd.yaml with auth tokens, portal
+      # registrations, hub identity. Named volume keeps ownership
+      # right for the image's nonroot user (uid 65532).
+      - telahubd-data:/data
+
+volumes:
+  telahubd-data:

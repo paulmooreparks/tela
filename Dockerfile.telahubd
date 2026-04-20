@@ -1,0 +1,112 @@
+# Dockerfile.telahubd -- Tela hub server image.
+#
+# Multi-stage build that compiles telahubd from this repo and packages
+# it on a distroless/static base. Final image is around 25 MB and runs
+# as a non-root user.
+#
+# Build:
+#   docker build -f Dockerfile.telahubd -t telahubd:dev .
+#
+# Run (with bootstrap owner token; see "First-run" below for alternatives):
+#   docker run --rm \
+#     -p 80:80 \
+#     -p 41820:41820/udp \
+#     -e TELA_OWNER_TOKEN=$(openssl rand -hex 32) \
+#     -v telahubd-data:/data \
+#     telahubd:dev
+#
+# Notes:
+#
+#   - The TELAHUBD_PORT default is 80; remap with -p HOST:80 if you
+#     need a different host port.
+#   - The UDP relay port MUST be published with the /udp suffix
+#     (-p 41820:41820/udp). Without /udp, Docker exposes only the TCP
+#     side and the entire UDP relay tier silently fails to work; the
+#     hub falls back to WebSocket and operators wonder why their
+#     latency is awful.
+#   - /data is the persistent state directory: telahubd.yaml, history
+#     ring buffer, generated tokens. Mount a named volume or bind mount
+#     here so config and tokens survive container recreation.
+#   - The image runs as a non-root user (uid 65532, "nonroot" in the
+#     distroless image). Bind-mounted host directories must be readable
+#     and writable by that uid.
+#
+# First-run bootstrap (see book/src/howto/hub.md for details):
+#
+#   1. TELA_OWNER_TOKEN=<hex> on `docker run` -- preferred. The hub
+#      seeds the owner identity from the env var on a blank config and
+#      persists it; subsequent restarts use the persisted token.
+#   2. `docker run --rm telahubd user bootstrap` against a volume-
+#      mounted config dir to write the token, then start the server
+#      with the same volume. Two-step but explicit.
+#   3. Auto-bootstrap on first start (no env var, no prior config):
+#      telahubd generates an owner token and prints it to stdout
+#      exactly once. Capture it from `docker logs` immediately or you
+#      will have to do `user show-owner` later from inside the
+#      container.
+
+# ── Stage 1: build ──────────────────────────────────────────────────
+FROM golang:1.25-alpine AS build
+
+# git is required for go modules that resolve via VCS.
+RUN apk add --no-cache git
+
+WORKDIR /src
+
+# Cache module downloads as a separate layer so source-only edits
+# don't force a fresh `go mod download` on every build.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Bring in the rest of the source.
+COPY . .
+
+# Build telahubd as a fully static binary. CGO is off by default with
+# alpine + musl, but spell it out and -ldflags '-w -s' to drop the
+# debug tables.
+ARG TELA_VERSION=dev
+ENV CGO_ENABLED=0
+ENV GOFLAGS=-trimpath
+RUN go build \
+    -ldflags="-s -w -X main.version=${TELA_VERSION}" \
+    -o /out/telahubd \
+    ./cmd/telahubd
+
+# ── Stage 2: runtime ────────────────────────────────────────────────
+FROM gcr.io/distroless/static-debian12:nonroot
+
+ARG TELA_VERSION=dev
+LABEL org.opencontainers.image.title="telahubd" \
+      org.opencontainers.image.description="Tela hub server (telahubd) -- HTTP/WebSocket signalling, UDP relay, optional self-hosted release channel server." \
+      org.opencontainers.image.version="${TELA_VERSION}" \
+      org.opencontainers.image.source="https://github.com/paulmooreparks/tela" \
+      org.opencontainers.image.licenses="MIT"
+
+# Single static binary, copied to a path on the default PATH inside
+# distroless. The container's USER is "nonroot" (uid 65532) inherited
+# from the base image.
+COPY --from=build /out/telahubd /usr/local/bin/telahubd
+
+# Default state directory. The image's nonroot user owns it after
+# `docker volume create` thanks to Docker's volume init copying the
+# image's directory ownership; bind mounts from a host path need the
+# operator to chown to 65532 first.
+WORKDIR /data
+VOLUME ["/data"]
+
+EXPOSE 80
+EXPOSE 41820/udp
+
+# HEALTHCHECK uses the binary itself (the distroless base has no curl or
+# wget). `telahubd health` probes http://127.0.0.1:80/.well-known/tela
+# and exits 0 when the hub is serving. See DESIGN-docker.md section 12.2
+# for why we add a subcommand instead of baking in wget-static.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/telahubd", "health"]
+
+# Default command runs the hub. Override with subcommands as needed:
+#   docker run --rm telahubd user bootstrap
+#   docker run --rm telahubd channels publish -channel local -tag vX.Y.Z
+#   docker run --rm telahubd health
+ENTRYPOINT ["/usr/local/bin/telahubd"]
+CMD ["-config", "/data/telahubd.yaml"]

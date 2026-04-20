@@ -1957,6 +1957,7 @@ Commands:
   channel   Show or set the hub's release channel (dev, beta, stable, custom)
   channels  Manage a self-hosted release channel server (publish manifests)
   update    Self-update the telahubd binary from the configured release channel
+  health    Probe the local hub and exit 0 if healthy (Docker HEALTHCHECK)
   version   Print version and exit
   help      Show this help (also -h, -?, -help, --help)
 
@@ -2013,6 +2014,9 @@ func Main() {
 		case "update":
 			cmdSelfUpdate(os.Args[2:])
 			return
+		case "health":
+			cmdHealth(os.Args[2:])
+			return
 		case "version", "--version":
 			fmt.Printf("telahubd %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 			os.Exit(0)
@@ -2045,10 +2049,20 @@ func Main() {
 		var err error
 		cfg, err = loadHubConfig(absPath)
 		if err != nil {
-			log.Fatalf("config: %v", err)
+			if errors.Is(err, os.ErrNotExist) {
+				// First-start bootstrap path: the operator pointed -config
+				// at a file that does not exist yet (e.g. a Docker run
+				// against an empty volume). Carry the path forward; the
+				// env-var or auto bootstrap below will create it.
+				log.Printf("[hub] -config %s does not exist; will create on bootstrap", absPath)
+				cfg = nil
+			} else {
+				log.Fatalf("config: %v", err)
+			}
+		} else {
+			log.Printf("[hub] loaded config from %s", absPath)
 		}
 		*configPath = absPath
-		log.Printf("[hub] loaded config from %s", absPath)
 	} else {
 		// Check for previously persisted config (from env bootstrap / admin API)
 		const defaultDataConfig = "data/telahubd.yaml"
