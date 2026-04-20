@@ -5,3 +5,32 @@
     color: rgba(255, 255, 255, 0.35);
     border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+.sidebar-version-line {
+    font-weight: 500;
+    margin-bottom: 0.4em;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.sidebar-edition-switcher {
+    font-size: 0.9em;
+    line-height: 1.5;
+}
+
+.sidebar-edition-label {
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.sidebar-edition-link {
+    color: rgba(255, 255, 255, 0.55);
+    text-decoration: none;
+}
+
+.sidebar-edition-link:hover {
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: underline;
+}
+
+.sidebar-edition-sep {
+    color: rgba(255, 255, 255, 0.25);
+}
