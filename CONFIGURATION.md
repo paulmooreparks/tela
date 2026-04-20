@@ -292,7 +292,13 @@ machines:
 |-------|------|---------|-------------|
 | `channel` | string | `dev` | Release channel for self-update: `dev`, `beta`, `stable`, or a custom channel name. |
 | `sources` | map[name]url | (none) | Per-channel manifest base URL overrides. Built-in channels (`dev`, `beta`, `stable`) fall back to the baked-in GitHub releases URL when absent. Custom channel names require an entry here (or in the `channel sources` CLI) to resolve. |
-| `manifestBase` | string | (none) | **Deprecated.** Pre-0.12 scalar override. On load, automatically migrated into `sources[channel]` for custom channels, or discarded for built-ins. Kept for one release cycle to preserve existing operator configs; scheduled for removal in 0.13 ([tela#59](https://github.com/paulmooreparks/tela/issues/59)). Do not use in new configs. |
+
+> **Removed in 0.13:** The pre-0.12 `manifestBase` scalar field is no
+> longer recognised. yaml.v3 silently ignores unknown fields on load,
+> so an old config still parses, but a custom channel pointed at by
+> `manifestBase` will fail its next manifest fetch with an empty URL.
+> Migrate by writing a `sources` entry (or running `tela channel
+> sources set <channel> <url>`) before upgrading from 0.12 to 0.13+.
 
 The configured channel is read by the `telad update` CLI subcommand, the
 `telad channel` CLI subcommand (show / set / show-manifest), the

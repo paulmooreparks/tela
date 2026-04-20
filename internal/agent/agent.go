@@ -312,11 +312,6 @@ type updateConfig struct {
 	// Sources maps channel names to base URLs. See the hub's updateConfig
 	// doc for the resolution rules; same shape on both sides.
 	Sources map[string]string `yaml:"sources,omitempty" json:"sources,omitempty"`
-
-	// ManifestBase is a pre-0.12 field kept only to hand old configs to
-	// channel.MigrateManifestBase on load. Scheduled for removal in 0.13,
-	// tracked in GH issue #59.
-	ManifestBase string `yaml:"manifestBase,omitempty" json:"manifestBase,omitempty"`
 }
 
 // machineConfig describes one machine to register with the hub.
@@ -738,8 +733,21 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		if req.Channel != "" {
 			cfg.Update.Channel = req.Channel
 		}
+		// Backward-compat: if the caller sent the legacy manifestBase field
+		// (e.g. 'tela admin agent ... channel set X -manifest-base Y'),
+		// redirect it into Sources[channel] so the operator's intent
+		// survives the removal of the deprecated config field in #59.
 		if req.ManifestBase != "" {
-			cfg.Update.ManifestBase = req.ManifestBase
+			ch := req.Channel
+			if ch == "" {
+				ch = cfg.Update.Channel
+			}
+			if ch != "" {
+				if cfg.Update.Sources == nil {
+					cfg.Update.Sources = map[string]string{}
+				}
+				cfg.Update.Sources[ch] = req.ManifestBase
+			}
 		}
 		data, err := yaml.Marshal(cfg)
 		if err == nil {
@@ -1729,14 +1737,6 @@ func loadConfig(path string) (*configFile, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
-	// Removed before the 0.12 beta tag together with the ManifestBase field.
-	if channel.MigrateManifestBase(cfg.Update.Channel, &cfg.Update.ManifestBase, &cfg.Update.Sources) {
-		log.Printf("[agent] migrated legacy update.manifestBase in %s; rewriting", path)
-		if data, err := yaml.Marshal(&cfg); err == nil {
-			_ = os.WriteFile(path, data, 0600)
-		}
-	}
 	if cfg.Hub == "" {
 		return nil, fmt.Errorf("%s: 'hub' is required", path)
 	}
@@ -2131,9 +2131,20 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 					activeConfig.Update.Channel = d.Channel
 					lg.Printf("using hub default update channel: %s", d.Channel)
 				}
-				if activeConfig.Update.ManifestBase == "" && d.ManifestBase != "" {
-					activeConfig.Update.ManifestBase = d.ManifestBase
-					lg.Printf("using hub default manifest base: %s", d.ManifestBase)
+				// Merge hub-pushed sources into the agent's local map.
+				// Local entries win on conflict so a deliberately-set
+				// agent-side source URL is never silently overwritten.
+				for name, base := range d.Sources {
+					if base == "" {
+						continue
+					}
+					if activeConfig.Update.Sources == nil {
+						activeConfig.Update.Sources = map[string]string{}
+					}
+					if _, exists := activeConfig.Update.Sources[name]; !exists {
+						activeConfig.Update.Sources[name] = base
+						lg.Printf("using hub default source for channel %s: %s", name, base)
+					}
 				}
 				activeConfigMu.Unlock()
 			}

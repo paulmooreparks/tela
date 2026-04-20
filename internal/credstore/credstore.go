@@ -12,7 +12,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/service"
 )
 
@@ -41,11 +40,6 @@ type UpdateConfig struct {
 	// and agent configFile; shared across the three on this host via
 	// TelaVisor's sources-editing UI.
 	Sources map[string]string `yaml:"sources,omitempty"`
-
-	// ManifestBase is a pre-0.12 field kept only to hand old configs to
-	// channel.MigrateManifestBase on load. Scheduled for removal in 0.13,
-	// tracked in GH issue #59.
-	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
 // UserDir returns the user-level tela config directory.
@@ -91,12 +85,6 @@ func Load(path string) (*Store, error) {
 
 	if store.Hubs == nil {
 		store.Hubs = make(map[string]Credential)
-	}
-
-	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
-	// Removed before the 0.12 beta tag together with the ManifestBase field.
-	if channel.MigrateManifestBase(store.Update.Channel, &store.Update.ManifestBase, &store.Update.Sources) {
-		_ = store.Save(path)
 	}
 
 	return &store, nil

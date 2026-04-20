@@ -152,43 +152,6 @@ func looksLikeSemverCore(s string) bool {
 	return true
 }
 
-// MigrateManifestBase applies the pre-0.12 update.manifestBase → update.sources
-// migration in place. If manifestBase is empty, the function is a no-op.
-// Otherwise:
-//
-//   - When the channel is a built-in (dev / beta / stable), manifestBase is
-//     discarded. The baked-in default takes over. The operator's original
-//     override is lost; that is the accepted tradeoff for getting off the
-//     old shape cleanly.
-//   - When the channel is a custom name, manifestBase is moved into
-//     sources[channel] unless sources[channel] is already set (in which
-//     case the existing sources entry wins and manifestBase is simply
-//     discarded).
-//
-// In all cases *manifestBase is cleared to the empty string so the legacy
-// field will be omitted from the next on-disk write (omitempty kicks in).
-// Returns true when the function made any change, suitable for a one-time
-// log notice at the call site.
-//
-// This helper is scheduled for removal in 0.13 together with the
-// ManifestBase fields on the three config structs that still carry it.
-// See GitHub issue #59 for the deletion checklist.
-func MigrateManifestBase(channelName string, manifestBase *string, sources *map[string]string) bool {
-	if manifestBase == nil || *manifestBase == "" {
-		return false
-	}
-	if channelName != "" && !IsKnown(channelName) {
-		if *sources == nil {
-			*sources = map[string]string{}
-		}
-		if _, exists := (*sources)[channelName]; !exists {
-			(*sources)[channelName] = *manifestBase
-		}
-	}
-	*manifestBase = ""
-	return true
-}
-
 // BinaryEntry describes one binary listed in a channel manifest.
 type BinaryEntry struct {
 	SHA256 string `json:"sha256"`

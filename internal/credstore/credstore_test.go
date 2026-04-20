@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -102,16 +101,15 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
-// TestLoadMigratesLegacyManifestBase verifies that a pre-0.12 credstore
-// with an update.manifestBase field gets migrated into update.sources on
-// load. The field should end up cleared on disk after the next write.
-func TestLoadMigratesLegacyManifestBase(t *testing.T) {
+// TestLoadIgnoresUnknownLegacyManifestBase verifies that a pre-0.12
+// credstore on disk with an update.manifestBase field still loads cleanly
+// post-#59. yaml.v3 silently drops unknown fields, so the operator gets a
+// store with the channel preserved but no source URL; the next manifest
+// fetch errors visibly and points at `tela channel sources set`.
+func TestLoadIgnoresUnknownLegacyManifestBase(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "credentials.yaml")
 
-	// Simulate a pre-0.12 credstore. Raw YAML is cleaner for this than
-	// constructing a Store with ManifestBase set because the test runs
-	// migration on load which is exactly the path under test.
 	legacy := []byte(`hubs: {}
 update:
   channel: local
@@ -123,29 +121,13 @@ update:
 
 	loaded, err := Load(path)
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Load should accept unknown manifestBase silently: %v", err)
 	}
 	if loaded.Update.Channel != "local" {
 		t.Errorf("channel should be preserved, got %q", loaded.Update.Channel)
 	}
-	if loaded.Update.Sources["local"] != "https://parkscomputing.com/content/tela/channels/" {
-		t.Errorf("manifestBase should have been migrated to sources[local], got %q", loaded.Update.Sources["local"])
-	}
-	if loaded.Update.ManifestBase != "" {
-		t.Errorf("legacy manifestBase should be cleared after migration, got %q", loaded.Update.ManifestBase)
-	}
-
-	// Reading the on-disk file after Load+Save should no longer mention
-	// manifestBase at all (omitempty omits empty strings).
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read migrated file: %v", err)
-	}
-	if strings.Contains(string(raw), "manifestBase") {
-		t.Errorf("migrated file should not mention manifestBase, got:\n%s", raw)
-	}
-	if !strings.Contains(string(raw), "sources:") {
-		t.Errorf("migrated file should include sources:, got:\n%s", raw)
+	if len(loaded.Update.Sources) != 0 {
+		t.Errorf("Sources should be empty post-migration-removal, got %v", loaded.Update.Sources)
 	}
 }
 
