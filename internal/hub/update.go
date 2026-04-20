@@ -97,7 +97,9 @@ func cmdSelfUpdate(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: channel %q has no source URL; run 'telahubd channel sources set %s <url>' or switch to a built-in channel.\n", ch, ch)
 		os.Exit(1)
 	}
-	m, err := hubChannelFetcher.GetURL(channel.ManifestURL(base, ch))
+	// Bypass the manifest cache on the install path so we never refuse a
+	// just-published tag because a stale entry is still warm.
+	m, err := hubChannelFetcher.Fetch(channel.ManifestURL(base, ch))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: fetch %s manifest: %v\n", ch, err)
 		os.Exit(1)
