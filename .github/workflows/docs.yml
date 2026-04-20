@@ -103,10 +103,14 @@ jobs:
           #   __TELA_BOOK_CHANNEL__  -> stable | beta | dev | archive
           # We snapshot the originals so the stable job can re-fill them as
           # 'archive' for the archive copy without re-checking out.
+          # Files are optional: old tags (pre-PR #65) lack channel-banner.js,
+          # and may have a hardcoded version string with no placeholder.
           mkdir -p /tmp/book-snapshot
-          cp book/src/introduction.md     /tmp/book-snapshot/
-          cp book/src/sidebar-version.js  /tmp/book-snapshot/
-          cp book/src/channel-banner.js   /tmp/book-snapshot/
+          for f in introduction.md sidebar-version.js channel-banner.js; do
+            if [ -f "book/src/$f" ]; then
+              cp "book/src/$f" "/tmp/book-snapshot/$f"
+            fi
+          done
 
       - name: Fill placeholders for channel edition
         env:
@@ -115,8 +119,10 @@ jobs:
         run: |
           cd book/src
           for f in introduction.md sidebar-version.js channel-banner.js; do
-            sed -i "s|__TELA_BOOK_VERSION__|$TAG|g" "$f"
-            sed -i "s|__TELA_BOOK_CHANNEL__|$CHANNEL|g" "$f"
+            if [ -f "$f" ]; then
+              sed -i "s|__TELA_BOOK_VERSION__|$TAG|g" "$f"
+              sed -i "s|__TELA_BOOK_CHANNEL__|$CHANNEL|g" "$f"
+            fi
           done
 
       - name: Build channel edition
@@ -132,13 +138,17 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          cp /tmp/book-snapshot/introduction.md     book/src/introduction.md
-          cp /tmp/book-snapshot/sidebar-version.js  book/src/sidebar-version.js
-          cp /tmp/book-snapshot/channel-banner.js   book/src/channel-banner.js
+          for f in introduction.md sidebar-version.js channel-banner.js; do
+            if [ -f "/tmp/book-snapshot/$f" ]; then
+              cp "/tmp/book-snapshot/$f" "book/src/$f"
+            fi
+          done
           cd book/src
           for f in introduction.md sidebar-version.js channel-banner.js; do
-            sed -i "s|__TELA_BOOK_VERSION__|$TAG|g" "$f"
-            sed -i "s|__TELA_BOOK_CHANNEL__|archive|g" "$f"
+            if [ -f "$f" ]; then
+              sed -i "s|__TELA_BOOK_VERSION__|$TAG|g" "$f"
+              sed -i "s|__TELA_BOOK_CHANNEL__|archive|g" "$f"
+            fi
           done
 
       - name: Build archive copy
