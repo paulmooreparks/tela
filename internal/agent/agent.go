@@ -1002,7 +1002,11 @@ func downloadAndStageUpdate(lg *log.Logger, ver, chOverride, baseOverride string
 	if baseOverride != "" {
 		base = baseOverride
 	}
-	m, err := agentChannelFetcher.GetURL(channel.ManifestURL(base, ch))
+	// Install paths bypass the manifest cache: a stale manifest would
+	// make us refuse a freshly-published version or install the wrong
+	// bytes. Display paths (e.g. channel-status polling) continue to
+	// use GetURL with its 5-minute TTL.
+	m, err := agentChannelFetcher.Fetch(channel.ManifestURL(base, ch))
 	if err != nil {
 		return fmt.Errorf("fetch %s manifest: %w", ch, err)
 	}

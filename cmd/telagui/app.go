@@ -553,7 +553,8 @@ func (a *App) GetUpdateInfo() UpdateInfo {
 // Reads from the client's configured channel manifest end-to-end so
 // dev/beta/stable users get the right tag and SHA-256 verification.
 func (a *App) RestartToUpdate() error {
-	m, err := a.clientChannelManifest()
+	// Bypass the manifest cache: this is an install path.
+	m, err := a.clientChannelManifestFresh()
 	if err != nil {
 		return fmt.Errorf("fetch channel manifest: %w", err)
 	}
@@ -3294,8 +3295,12 @@ func (a *App) updateRunningServiceBinary(binaryName string) string {
 		}
 		// Pass TV's own channel manifest coordinates so the agent fetches
 		// from the same source TV is using (e.g. a self-hosted channel
-		// server), not from whatever its own YAML config says.
-		m, err := a.clientChannelManifest()
+		// server), not from whatever its own YAML config says. Bypass the
+		// manifest cache here because the agent's install path also
+		// bypasses; if either side reads a stale entry, the version TV
+		// sends and the version the agent sees on its own fetch can
+		// diverge and the install gets refused.
+		m, err := a.clientChannelManifestFresh()
 		if err != nil {
 			return fmt.Sprintf(`{"error":"fetch channel manifest: %s"}`, jsonEscape(err.Error()))
 		}
@@ -3369,7 +3374,8 @@ func (a *App) updateUnmanagedBinary(binaryName string) string {
 		exePath = filepath.Join(a.effectiveBinPath(), binaryName+ext)
 	}
 
-	m, err := a.clientChannelManifest()
+	// Bypass the manifest cache: this is an install path.
+	m, err := a.clientChannelManifestFresh()
 	if err != nil {
 		return fmt.Sprintf(`{"error":"fetch channel manifest: %s"}`, jsonEscape(err.Error()))
 	}
@@ -3952,7 +3958,8 @@ func (a *App) InstallBinary(name string) error {
 		return fmt.Errorf("create bin dir: %w", err)
 	}
 
-	m, err := a.clientChannelManifest()
+	// Bypass the manifest cache: this is an install path.
+	m, err := a.clientChannelManifestFresh()
 	if err != nil {
 		return fmt.Errorf("fetch channel manifest: %w", err)
 	}
@@ -4048,6 +4055,24 @@ func (a *App) clientChannelManifest() (*channelpkg.Manifest, error) {
 	return tvChannelFetcher.GetURL(channelpkg.ManifestURL(base, ch))
 }
 
+// clientChannelManifestFresh is the install-path companion to
+// clientChannelManifest: it bypasses the manifest cache so a freshly
+// published tag is never refused (or mis-installed) because a 5-minute
+// cached entry is still warm. Use this from any code that is about to
+// download a binary; status displays should keep using the cached form.
+func (a *App) clientChannelManifestFresh() (*channelpkg.Manifest, error) {
+	store, err := credstore.Load(credstore.UserPath())
+	var ch string
+	var sources map[string]string
+	if err == nil && store != nil {
+		ch = store.Update.Channel
+		sources = store.Update.Sources
+	}
+	ch = channelpkg.Normalize(ch)
+	base := channelpkg.ResolveBase(ch, sources)
+	return tvChannelFetcher.Fetch(channelpkg.ManifestURL(base, ch))
+}
+
 // latestRelease returns the current version on the client's configured
 // release channel. Replaces the old GitHub /releases/latest call so that
 // dev/beta/stable users see the right "available" target.
@@ -4066,8 +4091,9 @@ func (a *App) installTool(name, version string) (string, error) {
 	}
 
 	// version is a hint from the caller; the channel manifest is the
-	// authoritative source for both the URL and the SHA-256.
-	m, err := a.clientChannelManifest()
+	// authoritative source for both the URL and the SHA-256. Bypass the
+	// cache here so a just-published tag is honoured immediately.
+	m, err := a.clientChannelManifestFresh()
 	if err != nil {
 		return "", fmt.Errorf("fetch channel manifest: %w", err)
 	}

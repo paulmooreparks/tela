@@ -1195,7 +1195,9 @@ func hubDownloadAndStage(ver string) error {
 	binaryName := fmt.Sprintf("telahubd-%s-%s%s", runtime.GOOS, runtime.GOARCH, ext)
 
 	ch, base := hubChannel()
-	m, err := hubChannelFetcher.GetURL(channel.ManifestURL(base, ch))
+	// Install paths bypass the manifest cache. See the agent-side note
+	// in downloadAndStageUpdate.
+	m, err := hubChannelFetcher.Fetch(channel.ManifestURL(base, ch))
 	if err != nil {
 		return fmt.Errorf("fetch %s manifest: %w", ch, err)
 	}
