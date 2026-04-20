@@ -11,6 +11,15 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Removed
+- The deprecated `update.manifestBase` config field is gone from `telad.yaml`, `telahubd.yaml`, and `~/.tela/credentials.yaml`, along with the in-process `MigrateManifestBase` migration helper that ported pre-0.12 configs to the `update.sources` map shape on first load. Operators upgrading directly from pre-0.12 to 0.13+ should run `tela channel sources set <channel> <url>` (or its `telad`/`telahubd` equivalents) before relying on the channel; an old config still parses (yaml.v3 silently drops unknown fields), but a custom channel previously pointed at by `manifestBase` will fail its next manifest fetch with an empty URL.
+
+### Changed
+- The hub's "default update" message pushed to registering agents now carries an `update.sources` map instead of the legacy `manifestBase` scalar. Agents merge the map into their local sources, with local entries winning on conflict so a deliberately-set agent-side URL is never overwritten silently.
+- The legacy `manifestBase` field on `PATCH /api/admin/update` request bodies and on the agent `update-channel` mgmt action is now redirected into `sources[channel]` server-side. The `-manifest-base` CLI flag on `tela admin hub channel set` and `tela admin agent ... channel set` continues to work; the operator-facing API shape is unchanged.
+
+Closes #59.
+
 ## [0.12.0] - 2026-04-20
 
 ### Added

@@ -326,7 +326,7 @@ Edge case: a `local.N`-suffixed binary compared against a `dev.N`-suffixed lates
 
 ## 10. Migration and rollout
 
-- Pre-1.0, minimal compat surface. The `manifestBase` struct field and the `MigrateManifestBase` helper described in 3.4 ship in 0.12 so existing persisted configs upgrade automatically on first load. Both are scheduled for deletion in 0.13 (tracked in [tela#59](https://github.com/paulmooreparks/tela/issues/59)), one stable release cycle after 0.12, so any config that has been opened at least once by a 0.12 binary is already rewritten in the new shape before the field disappears.
+- The `manifestBase` struct field and the `MigrateManifestBase` helper described in 3.4 shipped in 0.12 so existing persisted configs upgraded automatically on first load. Both were deleted in 0.13 (tela#59) one stable release cycle later, by which point every config opened at least once by a 0.12 binary had already been rewritten in the new shape. After 0.13, a pre-0.12 config with only `manifestBase` parses cleanly (yaml.v3 silently drops unknown fields) but the unresolved channel produces a clear runtime error pointing the operator at `tela channel sources set`.
 - Every binary in the 0.12 release carries identical migration logic. Hub binaries, agent binaries, and client credstore loading all recognize the old shape and rewrite.
 - CHANGELOG under `[Unreleased]` lists every user-visible change: new config field name, retired binary, new CLI subcommand, downgrade refusal.
 - REFERENCE.md gains the new CLI surface. CONFIGURATION.md updates the update-block schema.

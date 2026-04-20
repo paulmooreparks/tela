@@ -62,7 +62,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/paulmooreparks/tela/console"
-	"github.com/paulmooreparks/tela/internal/channel"
 	"github.com/paulmooreparks/tela/internal/relay"
 	"github.com/paulmooreparks/tela/internal/service"
 	"github.com/paulmooreparks/tela/internal/telelog"
@@ -253,14 +252,6 @@ type updateConfig struct {
 	// channel names enable those channels on this host. An empty-string
 	// value is treated the same as an absent key.
 	Sources map[string]string `yaml:"sources,omitempty"`
-
-	// ManifestBase is a pre-0.12 field kept on the struct so the YAML
-	// parser can pick up old configs and hand them to
-	// channel.MigrateManifestBase. On load this gets moved into Sources
-	// (for custom channels) or discarded (for built-ins) and cleared,
-	// so subsequent writes omit it. The field and migration helper are
-	// scheduled for removal in 0.13, tracked in GH issue #59.
-	ManifestBase string `yaml:"manifestBase,omitempty"`
 }
 
 // loadHubConfig reads a telahubd YAML config file.
@@ -272,14 +263,6 @@ func loadHubConfig(path string) (*hubConfig, error) {
 	var cfg hubConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	// One-shot migration from pre-0.12 update.manifestBase to update.sources.
-	// Removed before the 0.12 beta tag together with the ManifestBase field.
-	if channel.MigrateManifestBase(cfg.Update.Channel, &cfg.Update.ManifestBase, &cfg.Update.Sources) {
-		log.Printf("[hub] migrated legacy update.manifestBase in %s; rewriting", path)
-		if err := writeHubConfig(path, &cfg); err != nil {
-			log.Printf("[hub] warning: could not persist migrated config to %s: %v", path, err)
-		}
 	}
 	return &cfg, nil
 }
@@ -1302,10 +1285,22 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	}
 	replyMsg := registeredReply{Type: "registered", MachineID: machineName}
 	globalCfgMu.RLock()
-	if globalCfg.Update.Channel != "" || globalCfg.Update.ManifestBase != "" {
+	if globalCfg.Update.Channel != "" || len(globalCfg.Update.Sources) > 0 {
+		// Hand the agent its starting channel and a copy of the hub's
+		// sources map so an agent that has nothing configured locally
+		// inherits the hub operator's preferred channel and the URL it
+		// resolves to. The agent merges this on registration; entries
+		// the agent already has in its own sources map win on conflict.
+		var srcCopy map[string]string
+		if len(globalCfg.Update.Sources) > 0 {
+			srcCopy = make(map[string]string, len(globalCfg.Update.Sources))
+			for k, v := range globalCfg.Update.Sources {
+				srcCopy[k] = v
+			}
+		}
 		replyMsg.DefaultUpdate = &updateConfig{
-			Channel:      globalCfg.Update.Channel,
-			ManifestBase: globalCfg.Update.ManifestBase,
+			Channel: globalCfg.Update.Channel,
+			Sources: srcCopy,
 		}
 	}
 	globalCfgMu.RUnlock()

@@ -948,10 +948,22 @@ func handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 		if req.Channel != "" {
 			globalCfg.Update.Channel = req.Channel
 		}
-		// PATCH semantics: only set manifestBase if the field was sent.
-		// We use a sentinel here: empty means "leave alone".
+		// PATCH semantics: a non-empty manifestBase in the request is
+		// redirected into Sources[channel] so the legacy '-manifest-base'
+		// CLI flag still works after the deprecated config field was
+		// removed in #59. Operators authoring fresh configs should use
+		// 'channel sources set' instead.
 		if req.ManifestBase != "" {
-			globalCfg.Update.ManifestBase = req.ManifestBase
+			ch := req.Channel
+			if ch == "" {
+				ch = globalCfg.Update.Channel
+			}
+			if ch != "" {
+				if globalCfg.Update.Sources == nil {
+					globalCfg.Update.Sources = map[string]string{}
+				}
+				globalCfg.Update.Sources[ch] = req.ManifestBase
+			}
 		}
 		globalCfgMu.Unlock()
 		if err := persistConfig(); err != nil {
