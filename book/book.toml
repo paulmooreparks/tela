@@ -24,8 +24,8 @@ git-repository-url = "https://github.com/paulmooreparks/tela"
 edit-url-template = "https://github.com/paulmooreparks/tela/edit/main/{path}"
 site-url = "/tela/"
 mathjax-support = false
-additional-css = ["src/sidebar-version.css"]
-additional-js = ["src/sidebar-version.js"]
+additional-css = ["src/sidebar-version.css", "src/channel-banner.css"]
+additional-js = ["src/sidebar-version.js", "src/channel-banner.js"]
 # additional-css and additional-js for mermaid are added by
 # `mdbook-mermaid install .`, which the CI workflow runs after
 # installing the preprocessor binary. Local builds need the same step

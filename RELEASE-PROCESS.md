@@ -145,6 +145,22 @@ In all three cases the workflow:
 
 ---
 
+## What `docs.yml` does
+
+`docs.yml` fires on the same tag pushes as `release.yml` and publishes a per-channel edition of the book to GitHub Pages:
+
+| Tag shape | Edition published | URL |
+|-----------|-------------------|-----|
+| `vX.Y.Z` (stable) | stable root + frozen archive copy | `…/tela/` and `…/tela/archive/vX.Y.Z/` |
+| `vX.Y.Z-beta.N` | beta | `…/tela/beta/` |
+| `vX.Y.Z-dev.N` | dev | `…/tela/dev/` |
+
+Each edition is a full mdBook build with `site-url` set to the edition's deploy path. The workflow substitutes the tag name into `__TELA_BOOK_VERSION__` and the channel name into `__TELA_BOOK_CHANNEL__` placeholders in `introduction.md`, `sidebar-version.js`, and `channel-banner.js` before building. Non-stable editions carry a banner at the top of every page telling the reader which channel they are on and linking back to stable.
+
+Deploys use `peaceiris/actions-gh-pages` with `keep_files: true` so each deploy writes only to its own subtree and the other editions survive. See [DESIGN-book-versioning.md](DESIGN-book-versioning.md) for the full design.
+
+---
+
 ## Cadence
 
 Pre-1.0:
@@ -231,7 +247,7 @@ The end-of-life date for the previous major is announced in the release notes fo
    ```
    git log <last-stable-tag>..HEAD --oneline
    ```
-   Same review as above. Also update the version string in two places to match the new stable tag (e.g. `v0.9.0`): the italic line at the top of `book/src/introduction.md`, and the `textContent` string in `book/src/sidebar-version.js`. Commit those changes before promoting so the published book reflects the release.
+   Same review as above. The book's version label and channel banner are filled in by the docs workflow from the tag name, so no manual edits to `book/src/introduction.md` or `book/src/sidebar-version.js` are needed.
 
 2. Run the promotion workflow:
    ```

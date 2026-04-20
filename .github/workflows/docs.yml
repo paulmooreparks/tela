@@ -2,40 +2,79 @@
 #
 # The book lives in book/ and pulls most of its chapter content from .md
 # files at the repository root via mdBook's {{#include}} preprocessor, so
-# the docs and the source code are atomically updated together. There is
-# no second source of truth.
+# the docs and the source code are atomically updated together.
 #
-# Triggered on every push to main that touches docs source. The published
-# site lives at https://paulmooreparks.github.io/tela/.
+# Three editions are published, one per release channel, at three URLs on
+# the same GitHub Pages site:
+#
+#   https://paulmooreparks.github.io/tela/           <- current stable
+#   https://paulmooreparks.github.io/tela/beta/      <- current beta
+#   https://paulmooreparks.github.io/tela/dev/       <- current dev
+#   https://paulmooreparks.github.io/tela/archive/   <- frozen stable archive
+#
+# Each edition is triggered by a tag push on that channel:
+#   v[0-9]+.[0-9]+.[0-9]+       -> stable    (root + archive/vX.Y.Z/)
+#   v*-beta.*                    -> beta      (beta/)
+#   v*-dev.*                     -> dev       (dev/)
+#
+# Each deploy writes only to its own subtree; other subtrees are preserved
+# via keep_files: true on peaceiris/actions-gh-pages.
+#
+# See DESIGN-book-versioning.md for the full design.
 
 name: Docs
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "book/**"
-      - "**/*.md"
-      - ".github/workflows/docs.yml"
-  workflow_dispatch: {}
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-beta.*"
+      - "v[0-9]+.[0-9]+.[0-9]+-dev.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build docs for (e.g. v0.13.0, v0.13.0-beta.3, v0.14.0-dev.1)"
+        required: true
+        type: string
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write  # peaceiris/actions-gh-pages pushes to the gh-pages branch
 
-# Allow only one concurrent docs deployment, but don't cancel an in-progress
-# run -- we want it to finish so the previous deployment is consistent.
 concurrency:
-  group: pages
+  group: docs-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      - name: Resolve tag and channel
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if [ -z "$TAG" ]; then
+            echo "::error::No tag resolved from event"
+            exit 1
+          fi
+
+          case "$TAG" in
+            *-dev.*)  CHANNEL=dev ;;
+            *-beta.*) CHANNEL=beta ;;
+            v[0-9]*.[0-9]*.[0-9]*) CHANNEL=stable ;;
+            *)
+              echo "::error::Tag $TAG does not match a known channel pattern"
+              exit 1
+              ;;
+          esac
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "Building channel=$CHANNEL for tag=$TAG"
+
+      - name: Checkout tag source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
 
       - name: Install mdBook
         run: |
@@ -56,23 +95,135 @@ jobs:
           cd book
           mdbook-mermaid install .
 
-      - name: Build book
+      - name: Snapshot placeholder files
+        run: |
+          # The book source carries two placeholders that the workflow fills
+          # in at build time so each edition is labelled correctly:
+          #   __TELA_BOOK_VERSION__  -> the tag (e.g. v0.13.0-beta.3)
+          #   __TELA_BOOK_CHANNEL__  -> stable | beta | dev | archive
+          # We snapshot the originals so the stable job can re-fill them as
+          # 'archive' for the archive copy without re-checking out.
+          mkdir -p /tmp/book-snapshot
+          cp book/src/introduction.md     /tmp/book-snapshot/
+          cp book/src/sidebar-version.js  /tmp/book-snapshot/
+          cp book/src/channel-banner.js   /tmp/book-snapshot/
+
+      - name: Fill placeholders for channel edition
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          CHANNEL: ${{ steps.tag.outputs.channel }}
+        run: |
+          cd book/src
+          for f in introduction.md sidebar-version.js channel-banner.js; do
+            sed -i "s|__TELA_BOOK_VERSION__|$TAG|g" "$f"
+            sed -i "s|__TELA_BOOK_CHANNEL__|$CHANNEL|g" "$f"
+          done
+
+      - name: Build channel edition
+        env:
+          MDBOOK_OUTPUT__HTML__SITE_URL: ${{ steps.tag.outputs.channel == 'stable' && '/tela/' || format('/tela/{0}/', steps.tag.outputs.channel) }}
         run: |
           cd book
           mdbook build
+          mv book ../_edition
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Restore snapshot and fill placeholders for archive copy
+        if: steps.tag.outputs.channel == 'stable'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          cp /tmp/book-snapshot/introduction.md     book/src/introduction.md
+          cp /tmp/book-snapshot/sidebar-version.js  book/src/sidebar-version.js
+          cp /tmp/book-snapshot/channel-banner.js   book/src/channel-banner.js
+          cd book/src
+          for f in introduction.md sidebar-version.js channel-banner.js; do
+            sed -i "s|__TELA_BOOK_VERSION__|$TAG|g" "$f"
+            sed -i "s|__TELA_BOOK_CHANNEL__|archive|g" "$f"
+          done
+
+      - name: Build archive copy
+        if: steps.tag.outputs.channel == 'stable'
+        env:
+          MDBOOK_OUTPUT__HTML__SITE_URL: /tela/archive/${{ steps.tag.outputs.tag }}/
+        run: |
+          cd book
+          # mdbook build overwrites its output dir; clear any prior output
+          # just to be safe on self-hosted runners.
+          rm -rf book
+          mdbook build
+          mv book ../_archive
+
+      - name: Deploy channel edition
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: book/book
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_edition
+          destination_dir: ${{ steps.tag.outputs.channel == 'stable' && '' || steps.tag.outputs.channel }}
+          keep_files: true
+          commit_message: "docs: deploy ${{ steps.tag.outputs.channel }} edition ${{ steps.tag.outputs.tag }}"
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Deploy archive copy
+        if: steps.tag.outputs.channel == 'stable'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_archive
+          destination_dir: archive/${{ steps.tag.outputs.tag }}
+          keep_files: true
+          commit_message: "docs: archive stable edition ${{ steps.tag.outputs.tag }}"
+
+      - name: Regenerate archive index
+        if: steps.tag.outputs.channel == 'stable'
+        env:
+          NEW_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # Enumerate archive/v*/ on gh-pages, newest first by semver, and
+          # build a standalone HTML landing page that links to each frozen
+          # edition. Release date is the commit date of that edition's
+          # index.html on gh-pages.
+          git fetch origin gh-pages --depth=50
+          git worktree add /tmp/gh-pages origin/gh-pages
+          cd /tmp/gh-pages/archive
+          {
+            echo '<!doctype html>'
+            echo '<html lang="en"><head><meta charset="utf-8">'
+            echo '<title>Tela documentation archive</title>'
+            echo '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            echo '<style>'
+            echo 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:720px;margin:3em auto;padding:0 1em;color:#1a1a1a;background:#fafafa}'
+            echo 'h1{font-weight:600;font-size:1.6em;margin-bottom:0.2em}'
+            echo 'p.lede{color:#555;margin-top:0}'
+            echo 'ul{list-style:none;padding:0;margin-top:2em}'
+            echo 'li{padding:0.75em 1em;border-bottom:1px solid #e5e5e5}'
+            echo 'li:last-child{border-bottom:none}'
+            echo 'a{color:#2a5db0;text-decoration:none;font-weight:500}'
+            echo 'a:hover{text-decoration:underline}'
+            echo 'time{color:#777;font-size:0.9em;margin-left:0.5em}'
+            echo '.back{display:inline-block;margin-top:2em;color:#555;font-size:0.9em}'
+            echo '</style>'
+            echo '</head><body>'
+            echo '<h1>Tela documentation archive</h1>'
+            echo '<p class="lede">Frozen documentation for previous stable releases. The current stable release is at <a href="/tela/">paulmooreparks.github.io/tela</a>.</p>'
+            echo '<ul>'
+            for dir in $(ls -1d v*/ 2>/dev/null | sed 's|/$||' | sort -V -r); do
+              DATE=$(git log -1 --format=%aI -- "archive/$dir/index.html" 2>/dev/null | cut -dT -f1 || echo "")
+              if [ -n "$DATE" ]; then
+                echo "<li><a href=\"/tela/archive/$dir/\">$dir</a> <time>$DATE</time></li>"
+              else
+                echo "<li><a href=\"/tela/archive/$dir/\">$dir</a></li>"
+              fi
+            done
+            echo '</ul>'
+            echo '<a class="back" href="/tela/">&larr; Back to current stable documentation</a>'
+            echo '</body></html>'
+          } > index.html
+          cd /tmp/gh-pages
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add archive/index.html
+          if git diff --cached --quiet; then
+            echo "Archive index unchanged."
+          else
+            git commit -m "docs: regenerate archive index after $NEW_TAG"
+            git push origin HEAD:gh-pages
+          fi
