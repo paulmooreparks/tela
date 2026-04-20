@@ -124,6 +124,17 @@ jobs:
               sed -i "s|__TELA_BOOK_CHANNEL__|$CHANNEL|g" "$f"
             fi
           done
+          # Defensive fallback: old tags (pre-PR #65) have hardcoded version
+          # strings instead of placeholders, and whoever cut those releases
+          # may have forgotten to bump the label. Force the version to match
+          # the tag being built so the published edition is always labelled
+          # correctly regardless of what the source tree says.
+          if [ -f introduction.md ]; then
+            sed -i -E "s|(\*This edition documents Tela )v[0-9][.0-9a-z-]*(\.\*)|\1$TAG\2|" introduction.md
+          fi
+          if [ -f sidebar-version.js ]; then
+            sed -i -E "s|textContent = 'v[0-9][.0-9a-z-]*'|textContent = '$TAG'|" sidebar-version.js
+          fi
 
       - name: Build channel edition
         env:
