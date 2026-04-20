@@ -11,6 +11,16 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Added
+- Docker-first distribution for `telahubd`. A new `Dockerfile.telahubd` at the repo root builds the hub from source onto `gcr.io/distroless/static-debian12:nonroot`; the release workflow publishes multi-arch (linux/amd64 + linux/arm64) images to `ghcr.io/paulmooreparks/telahubd` under the `:stable`, `:latest`, `:beta`, and `:v<version>` tags. Dev-channel builds do not publish Docker images to keep the registry tidy; operators who want to run a dev build via Docker rebuild the Dockerfile locally from the dev tag's source.
+- `telahubd health` subcommand that probes `http://127.0.0.1:<port>/.well-known/tela` and exits 0 when healthy. Used by the Docker image's `HEALTHCHECK` directive so `docker ps` reports container health without a shell in the distroless base image.
+- Three copy-paste `docker-compose` templates under `book/src/howto/hub-docker/`: `minimal` (LAN / dev), `caddy` (production with auto-Let's Encrypt), `nginx` (for operators with existing nginx). Each template is a working file plus a fully-written reverse-proxy config (Caddyfile, nginx.conf) with the WebSocket upgrade handling spelled out.
+- Book's hub install chapter rewritten to lead with Docker; the native-binary install is kept intact but demoted to an "alternative" section. Authentication and TLS subsections now call out which steps a Docker install has already handled.
+
+### Fixed
+- `telahubd -config /path/to/file` treats a non-existent file as a first-start signal instead of fatal-erroring during `loadHubConfig`. The bootstrap path (env-var or auto) writes the config to the supplied path on first successful start. Previously a `docker run` against an empty volume crashed immediately; now it bootstraps cleanly.
+- `autoBootstrapAuth` banner now reports where the token was persisted and how to retrieve it later via `telahubd user show-owner`. Previously the banner said "it will not be displayed again" with no follow-up pointer, leaving operators who missed the first boot line without a recovery breadcrumb. Persist failures (unwritable `/data`, permission issues on a bind mount) now log two `WARNING` lines instead of being silently swallowed.
+
 ### Fixed
 - `tela update`, `telad update`, `telahubd update`, the hub admin `POST /api/admin/update` endpoint, the agent `update` mgmt action, and TelaVisor's local-binary install paths now bypass the channel-manifest cache. Previously a 5-minute in-process cache could make an install path read a stale manifest and refuse a freshly-published tag (or, for TV-mediated agent updates, send the agent a version that did not match what the agent saw on its own fetch). Status displays still use the cached path; only the install side fetches fresh.
 

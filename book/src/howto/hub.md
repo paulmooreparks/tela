@@ -8,23 +8,137 @@ Every agent and every client in your Tela deployment points at this hub. They co
 
 By the end of this chapter you will have:
 
-- `telahubd` running as a managed OS service
-- A reverse proxy of your choice terminating TLS on port 443 (or a direct deployment without a proxy)
+- `telahubd` running either as a Docker container (recommended) or as a managed OS service
+- A reverse proxy terminating TLS on port 443, typically Caddy with an auto-issued Let's Encrypt certificate
 - An owner token secured and ready to use for administration
-- Optionally, a UDP relay port open for faster tunnels
+- UDP port 41820 open for faster tunnels (optional but worth doing)
 - Optionally, the hub registered with a portal directory so clients can find it by name
 
-The hub's public URL will be `wss://hub.example.com`. Agents use that URL in their `telad.yaml`. Clients use it in their connection profiles. Nothing else needs to change when you add new machines, they all find the hub the same way.
+The hub's public URL will be `wss://hub.example.com`. Agents use that URL in their `telad.yaml`. Clients use it in their connection profiles. Nothing else needs to change when you add new machines; they all find the hub the same way.
 
-This chapter takes you from "I ran through the [First connection](../getting-started/first-connection.md) walkthrough" to a production-grade deployment with TLS, authentication, and a service manager.
+This chapter takes you from "I ran through the [First connection](../getting-started/first-connection.md) walkthrough" to a production-grade deployment with TLS, authentication, and a supervisor (Docker or the OS service manager) that keeps the hub running.
 
 ## Hub server: `telahubd`
 
 `telahubd` is the Go-native hub server. Single binary, no runtime dependencies. It serves HTTP, WebSocket relay, and UDP relay on one process.
 
-### Install (bare-metal)
+Two install paths are supported. Pick whichever suits the host.
 
-Pre-built binaries for Windows, Linux, and macOS are available on the [GitHub Releases](https://github.com/paulmooreparks/tela/releases) page.
+- **Docker (recommended).** `docker compose up -d` with one of the ready-made templates. TLS via Caddy with automatic Let's Encrypt, three commands from a fresh VM to a running hub with a valid certificate. This is the default path the chapter walks through.
+- **Native binary (alternative).** Download, install as an OS service, register with the service manager. Still fully supported and appropriate for operators who cannot or do not want to run Docker.
+
+### Install: Docker (recommended)
+
+Prerequisites: Docker Engine and Docker Compose plugin. Any modern Docker install ships both; `docker compose version` confirms the plugin is present.
+
+This walkthrough deploys the Caddy-fronted production template from `book/src/howto/hub-docker/`. Caddy terminates TLS with an auto-issued Let's Encrypt certificate; telahubd runs behind it on the internal Docker network; the UDP relay port is published directly from the host to telahubd because Caddy is TCP-only.
+
+#### Step 1. Point DNS
+
+Point an `A` record for your hub's hostname (for example `hub.example.com`) at the Docker host's public IP. Let's Encrypt needs this to resolve correctly before it will issue the certificate; if DNS is wrong, the first `docker compose up` appears to hang on the Caddy logs at the ACME challenge step.
+
+#### Step 2. Open firewall ports
+
+Three inbound ports on the Docker host:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 80 | TCP | Let's Encrypt HTTP-01 challenge and the 301 to HTTPS. Caddy can be switched to DNS-01 if port 80 must stay closed; see the Caddy docs. |
+| 443 | TCP | Hub HTTPS and WebSocket. |
+| 41820 | UDP | UDP relay tier. See "The UDP gotcha" below. |
+
+#### Step 3. Pull the compose template
+
+Three templates live under [`book/src/howto/hub-docker/`](hub-docker/) in the repo. For the Caddy-fronted production setup:
+
+```bash
+mkdir -p /srv/telahubd && cd /srv/telahubd
+curl -Lo docker-compose.yml   https://raw.githubusercontent.com/paulmooreparks/tela/main/book/src/howto/hub-docker/docker-compose.caddy.yml
+curl -Lo Caddyfile             https://raw.githubusercontent.com/paulmooreparks/tela/main/book/src/howto/hub-docker/Caddyfile
+curl -Lo .env.example          https://raw.githubusercontent.com/paulmooreparks/tela/main/book/src/howto/hub-docker/.env.example
+cp .env.example .env
+```
+
+#### Step 4. Fill in `.env`
+
+Edit `.env` and set at least two values:
+
+```ini
+TELA_OWNER_TOKEN=<run: openssl rand -hex 32>
+HUB_DOMAIN=hub.example.com
+```
+
+Optionally also set `TELAHUBD_NAME` (display name shown in TelaVisor and portal listings) and `TELAHUBD_UDP_HOST` (only needed if the UDP relay path reaches the hub through a different hostname than `HUB_DOMAIN`).
+
+Do not commit `.env` anywhere public; it contains the owner token.
+
+#### Step 5. Bring it up
+
+```bash
+docker compose up -d
+```
+
+Caddy takes roughly a minute on first start to issue the Let's Encrypt certificate. `docker compose logs -f caddy` shows the ACME exchange; the final log line is `certificate obtained successfully` on `hub.example.com`.
+
+Once the certificate is issued, verify:
+
+```bash
+curl https://hub.example.com/.well-known/tela
+```
+
+The response is a small JSON document with `hubId` and `protocolVersion` fields. If that is what you see, the hub is live.
+
+#### Step 6. Confirm the owner token
+
+The token is whatever you put in `.env`. To use it from a workstation:
+
+```bash
+tela login https://hub.example.com
+# paste the token when prompted
+```
+
+If you left `TELA_OWNER_TOKEN` blank in `.env`, telahubd auto-generated one on first boot and logged it. Retrieve it either from `docker compose logs telahubd` (the boot banner prints the token once) or on demand:
+
+```bash
+docker exec telahubd telahubd user show-owner -config /data/telahubd.yaml
+```
+
+#### The UDP gotcha
+
+Every compose template in this chapter publishes UDP port 41820 with the `/udp` suffix:
+
+```yaml
+ports:
+  - "41820:41820/udp"
+```
+
+Without the suffix, Docker exposes only the TCP side. telahubd does not listen on TCP 41820, so the mapping silently does nothing, and every relay session falls back to WebSocket-over-TCP. The hub still works but round-trip latency roughly doubles and throughput is cut in half on sessions that would otherwise hole-punch to UDP.
+
+If adapting one of the templates and sessions feel slow, `docker port <container-name>` should report `41820/udp`. If it reports `41820/tcp` instead, the suffix was dropped.
+
+#### Choosing a different template
+
+The Caddy template suits most production deployments. Two alternatives live alongside it:
+
+- [`docker-compose.minimal.yml`](hub-docker/docker-compose.minimal.yml) -- telahubd alone on port 80. For LAN-only dev or test. No TLS.
+- [`docker-compose.nginx.yml`](hub-docker/docker-compose.nginx.yml) -- telahubd plus nginx, for operators who already run nginx. Bring your own certs. The bundled `nginx.conf` includes the WebSocket upgrade handling, which is easy to get wrong.
+
+See [`hub-docker/README.md`](hub-docker/) for the full decision table and per-template notes.
+
+#### Upgrading
+
+Docker-based upgrades use `docker pull` and a compose restart, not `telahubd update`:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+The named volume for `/data` survives container recreation, so config and tokens are preserved. To pin to a specific version instead of tracking `:stable`, edit the `image:` line in the compose file to `ghcr.io/paulmooreparks/telahubd:v0.13.0` or any other published tag.
+
+### Install: native binary (alternative)
+
+Pre-built binaries for Windows, Linux, and macOS are available on the [GitHub Releases](https://github.com/paulmooreparks/tela/releases) page. Choose this path if Docker is unavailable on the host, if you are running on Windows Server without Docker Desktop, or if you prefer integrating with the host's service manager directly.
 
 The install flow has five steps. Do them in this order. The service install step writes a clean config file; the bootstrap step adds the owner token to that file; the service-start step reads the populated config. Running them out of order either duplicates tokens or leaves you starting the hub against a blank config.
 
@@ -192,7 +306,9 @@ TELAHUBD_UDP_HOST=myhost.example.com telahubd    # advertise real IP for UDP
 
 ## Authentication
 
-The owner token generated by `telahubd user bootstrap` in step 4 of the install flow is the highest-privilege credential on the hub. An identity with the owner role can add and remove all other identities, change permissions, restart the hub, and perform every administrative operation. Treat it like a root password: store it in a password manager or secrets vault, do not paste it into scripts or shell history, and do not distribute it to agents or end users.
+> **Docker install**: the Docker walkthrough above already set the owner token via `TELA_OWNER_TOKEN` in `.env` and captured it to your password manager. Skip to [Managing tokens remotely with `tela admin`](#managing-tokens-remotely-with-tela-admin) below.
+
+The owner token generated by `telahubd user bootstrap` in step 4 of the native install flow is the highest-privilege credential on the hub. An identity with the owner role can add and remove all other identities, change permissions, restart the hub, and perform every administrative operation. Treat it like a root password: store it in a password manager or secrets vault, do not paste it into scripts or shell history, and do not distribute it to agents or end users.
 
 In normal operation, the owner token is used only from a trusted administrator workstation to run `tela admin` commands. Day-to-day agent connections and user connections use tokens you create with `tela admin tokens add`, which carry the `user` role and are scoped to specific machines via the access control list.
 
@@ -345,6 +461,8 @@ Then add the `tela-hub` network tag to your VM instance.
 **Self-hosted / bare metal:** Ensure `ufw`, `iptables`, or your router forwards these ports to the hub machine.
 
 ## Publish with TLS (recommended)
+
+> **Docker install**: the Docker walkthrough above already configured Caddy and Let's Encrypt via `docker-compose.caddy.yml`. Skip to [Register with a hub directory](#register-with-a-hub-directory) below. The subsections here apply to native installs that need a separately-managed reverse proxy.
 
 Running the hub without TLS (`ws://`) works for local development, but production hubs should use TLS (`wss://`). This protects hub authentication tokens in transit and is required by browsers for the hub console over HTTPS.
 
