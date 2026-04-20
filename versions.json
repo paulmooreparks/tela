@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-20T22:43:39Z",
+  "generatedAt": "2026-04-20T22:52:43Z",
   "current": {
     "stable": { "version": "", "url": "/book/",     "releasedAt": "" },
-    "beta":   { "version": "",   "url": "/book/beta/", "releasedAt": "" },
+    "beta":   { "version": "v0.14.0-beta.1",   "url": "/book/beta/", "releasedAt": "2026-04-20" },
     "dev":    { "version": "v0.14.0-dev.3",    "url": "/book/dev/",  "releasedAt": "2026-04-20" }
   },
   "archive": [
