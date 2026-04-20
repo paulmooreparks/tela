@@ -31,7 +31,7 @@ Two install paths are supported. Pick whichever suits the host.
 
 Prerequisites: Docker Engine and Docker Compose plugin. Any modern Docker install ships both; `docker compose version` confirms the plugin is present.
 
-This walkthrough deploys the Caddy-fronted production template from `book/src/howto/hub-docker/`. Caddy terminates TLS with an auto-issued Let's Encrypt certificate; telahubd runs behind it on the internal Docker network; the UDP relay port is published directly from the host to telahubd because Caddy is TCP-only.
+This walkthrough deploys the Caddy-fronted production template. Caddy terminates TLS with an auto-issued Let's Encrypt certificate, telahubd runs behind it on the internal Docker network, and the UDP relay port is published directly from the host to telahubd because Caddy is TCP-only. Three templates are maintained in the tela repo under [`deploy/docker/`](https://github.com/paulmooreparks/tela/tree/main/deploy/docker); the "Choosing a different template" section below covers the other two.
 
 #### Step 1. Point DNS
 
@@ -49,13 +49,14 @@ Three inbound ports on the Docker host:
 
 #### Step 3. Pull the compose template
 
-Three templates live under [`book/src/howto/hub-docker/`](hub-docker/) in the repo. For the Caddy-fronted production setup:
+Download the Caddy-fronted production template and its companions into a working directory on the Docker host:
 
 ```bash
 mkdir -p /srv/telahubd && cd /srv/telahubd
-curl -Lo docker-compose.yml   https://raw.githubusercontent.com/paulmooreparks/tela/main/book/src/howto/hub-docker/docker-compose.caddy.yml
-curl -Lo Caddyfile             https://raw.githubusercontent.com/paulmooreparks/tela/main/book/src/howto/hub-docker/Caddyfile
-curl -Lo .env.example          https://raw.githubusercontent.com/paulmooreparks/tela/main/book/src/howto/hub-docker/.env.example
+BASE=https://raw.githubusercontent.com/paulmooreparks/tela/main/deploy/docker
+curl -Lo docker-compose.yml "$BASE/docker-compose.caddy.yml"
+curl -Lo Caddyfile          "$BASE/Caddyfile"
+curl -Lo .env.example       "$BASE/.env.example"
 cp .env.example .env
 ```
 
@@ -120,10 +121,15 @@ If adapting one of the templates and sessions feel slow, `docker port <container
 
 The Caddy template suits most production deployments. Two alternatives live alongside it:
 
-- [`docker-compose.minimal.yml`](hub-docker/docker-compose.minimal.yml) -- telahubd alone on port 80. For LAN-only dev or test. No TLS.
-- [`docker-compose.nginx.yml`](hub-docker/docker-compose.nginx.yml) -- telahubd plus nginx, for operators who already run nginx. Bring your own certs. The bundled `nginx.conf` includes the WebSocket upgrade handling, which is easy to get wrong.
+| Template | Topology | When to pick it |
+|----------|----------|-----------------|
+| `docker-compose.caddy.yml` + `Caddyfile` | telahubd + Caddy with auto-Let's Encrypt | Production with a public hostname. This walkthrough. |
+| `docker-compose.minimal.yml` | telahubd alone on port 80, no TLS | LAN-only dev or test. Never the public internet. |
+| `docker-compose.nginx.yml` + `nginx.conf` | telahubd + nginx, bring your own certs | Operators who already run nginx and manage certificates via certbot, cert-manager, or similar. |
 
-See [`hub-docker/README.md`](hub-docker/) for the full decision table and per-template notes.
+Switch templates by downloading a different compose file in step 3 above and re-running `docker compose up -d`. The `telahubd-data` named volume is reused across templates, so config and tokens persist when you switch topology.
+
+Browse all three on GitHub: [tela/deploy/docker/](https://github.com/paulmooreparks/tela/tree/main/deploy/docker).
 
 #### Upgrading
 
