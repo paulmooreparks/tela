@@ -1,0 +1,347 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>MSP / IT support - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html" class="active"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/use-cases/msp-it-support.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="msp-and-it-support"><a class="header" href="#msp-and-it-support">MSP and IT support</a></h1>
+<h2 id="the-scenario"><a class="header" href="#the-scenario">The scenario</a></h2>
+<p>You provide managed IT services or remote support to multiple customers. Each customer has Windows workstations and servers you need to reach for maintenance, troubleshooting, and remote desktop sessions. Today, this means asking customers to open RDP to the internet, maintaining per-customer VPN configs, or using a paid remote-access product.</p>
+<p>With Tela, you deploy a small hub per customer (or per customer segment). An agent runs on each customer machine, making an outbound connection to the hub with no firewall changes on the customer's side. Your technicians connect through the hub using individual tokens -- so you know who accessed which machine and when, and revoking a departed technician's access takes one command.</p>
+<p>From a technician's workstation, connecting to a customer's machines looks like:</p>
+<pre><code>Services available:
+  localhost:3389   → RDP          (acme-desktop-01)
+  localhost:13389  → RDP          (acme-desktop-02)
+  localhost:22     → SSH          (acme-server-01)
+</code></pre>
+<p>The customer's IT team does not need to configure anything on their firewall. The machines just work, from wherever the technician is.</p>
+<h2 id="recommended-topology"><a class="header" href="#recommended-topology">Recommended topology</a></h2>
+<p>For MSP-style support, there are two common models:</p>
+<ol>
+<li><strong>One hub per customer</strong> (recommended isolation)</li>
+<li><strong>One hub for multiple customers</strong> (requires careful naming and stricter access controls)</li>
+</ol>
+<p>The steps below assume one hub per customer.</p>
+<hr />
+<h2 id="step-1---deploy-a-hub-for-a-customer"><a class="header" href="#step-1---deploy-a-hub-for-a-customer">Step 1 - Deploy a hub for a customer</a></h2>
+<ol>
+<li>Deploy the hub on infrastructure you control.</li>
+<li>Publish a customer-specific URL (example: <code>wss://acme-hub.example.com</code>).</li>
+<li>Ensure WebSockets work.</li>
+</ol>
+<p>See <a href="../howto/hub.html">Run a hub on the public internet</a> for the full hub deployment guide, including TLS setup and firewall rules.</p>
+<hr />
+<h2 id="step-2---set-up-authentication"><a class="header" href="#step-2---set-up-authentication">Step 2 - Set up authentication</a></h2>
+<p>The hub prints an owner token on first start. Save it, then create identities for the customer's machines and your technicians:</p>
+<pre><code class="language-bash"># Create an agent token for the customer's machines
+tela admin tokens add acme-agent -hub wss://acme-hub.example.com -token &lt;owner-token&gt;
+# Save the printed token -- this is &lt;agent-token&gt; used in telad on each customer machine (Step 3)
+
+# Grant the agent permission to register each machine
+tela admin access grant acme-agent ws-01 register -hub wss://acme-hub.example.com -token &lt;owner-token&gt;
+tela admin access grant acme-agent srv-01 register -hub wss://acme-hub.example.com -token &lt;owner-token&gt;
+
+# Create technician tokens (one per technician so access can be revoked individually)
+tela admin tokens add tech-bob -hub wss://acme-hub.example.com -token &lt;owner-token&gt;
+# Save the printed token -- give it to Bob for use with tela connect (Step 4)
+tela admin access grant tech-bob ws-01 connect -hub wss://acme-hub.example.com -token &lt;owner-token&gt;
+tela admin access grant tech-bob srv-01 connect -hub wss://acme-hub.example.com -token &lt;owner-token&gt;
+</code></pre>
+<p>See <a href="../howto/hub.html">Run a hub on the public internet</a> for the full list of <code>tela admin</code> commands.</p>
+<hr />
+<h2 id="step-3---register-customer-machines"><a class="header" href="#step-3---register-customer-machines">Step 3 - Register customer machines</a></h2>
+<h3 id="pattern-a---endpoint-agent-preferred"><a class="header" href="#pattern-a---endpoint-agent-preferred">Pattern A - Endpoint agent (preferred)</a></h3>
+<p>On each customer machine, run <code>telad</code> and expose only required ports.</p>
+<p>Example (Windows workstation, RDP only):</p>
+<pre><code class="language-powershell">telad.exe -hub wss://acme-hub.example.com -machine ws-01 -ports "3389" -token &lt;agent-token&gt;
+</code></pre>
+<p>Example (Linux server, SSH only):</p>
+<pre><code class="language-bash">telad -hub wss://acme-hub.example.com -machine srv-01 -ports "22" -token &lt;agent-token&gt;
+</code></pre>
+<p>For persistent deployment, install <code>telad</code> as an OS service (see <a href="../howto/services.html">Run Tela as an OS service</a>).</p>
+<h3 id="pattern-b---customer-site-gateway"><a class="header" href="#pattern-b---customer-site-gateway">Pattern B - Customer-site gateway</a></h3>
+<p>Use this when you can't install <code>telad</code> on individual endpoints. Run <code>telad</code> on a small gateway device that can reach internal targets, and configure one machine entry per target.</p>
+<p>Example <code>telad.yaml</code>:</p>
+<pre><code class="language-yaml">hub: wss://acme-hub.example.com
+token: "&lt;agent-token&gt;"
+machines:
+  - name: ws-01
+    ports: [3389]
+    target: 192.168.1.10
+  - name: srv-01
+    ports: [22]
+    target: 192.168.1.20
+</code></pre>
+<hr />
+<h2 id="step-4---technician-workflow"><a class="header" href="#step-4---technician-workflow">Step 4 - Technician workflow</a></h2>
+<p>On the technician's machine:</p>
+<ol>
+<li>Download <code>tela</code> and verify the checksum.</li>
+<li>List machines:</li>
+</ol>
+<pre><code class="language-bash">tela machines -hub wss://acme-hub.example.com -token &lt;tech-token&gt;
+</code></pre>
+<ol start="3">
+<li>Connect:</li>
+</ol>
+<pre><code class="language-bash">tela connect -hub wss://acme-hub.example.com -machine ws-01 -token &lt;tech-token&gt;
+</code></pre>
+<ol start="4">
+<li>Use the local address shown in the output. For RDP:</li>
+</ol>
+<pre><code class="language-powershell">mstsc /v:localhost:PORT
+</code></pre>
+<hr />
+<h2 id="operational-guidance"><a class="header" href="#operational-guidance">Operational guidance</a></h2>
+<ul>
+<li>Use naming conventions (customer + role + number).</li>
+<li>Expose only what you need.</li>
+<li>Prefer encrypted service protocols.</li>
+<li>Treat the gateway (if used) as critical infrastructure.</li>
+</ul>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="rdp-opens-but-cant-log-in"><a class="header" href="#rdp-opens-but-cant-log-in">RDP opens but can't log in</a></h3>
+<ul>
+<li>Tela only transports TCP. Windows authentication policies still apply.</li>
+</ul>
+<h3 id="endpoint-agent-cant-connect-out"><a class="header" href="#endpoint-agent-cant-connect-out">Endpoint agent can't connect out</a></h3>
+<ul>
+<li>Check the customer firewall allows outbound HTTPS.</li>
+</ul>
+<h3 id="telad-logs-auth_required"><a class="header" href="#telad-logs-auth_required"><code>telad</code> logs "auth_required"</a></h3>
+<ul>
+<li>Check that the <code>-token</code> flag or <code>token:</code> config field is set and the token is valid.</li>
+<li>Verify the identity has been granted <code>register</code> access to the machine.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../use-cases/distributed-teams.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../use-cases/education-labs.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../use-cases/distributed-teams.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../use-cases/education-labs.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
