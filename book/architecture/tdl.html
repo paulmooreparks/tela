@@ -1,0 +1,1807 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>E. Tela Design Language - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html" class="active"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/architecture/tdl.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="appendix-e-tela-design-language"><a class="header" href="#appendix-e-tela-design-language">Appendix E: Tela Design Language</a></h1>
+<p>This appendix is the reference for the Tela Design Language (TDL): the visual language shared across all Tela products. Any contributor building a UI that should feel like part of the Tela family should use this as their guide. The <a href="../guide/telavisor.html">TelaVisor</a> chapter is the canonical example of TDL in practice.</p>
+<p>A <a href="https://parkscomputing.com/content/tdl-reference.html">visual component reference</a> is available that shows every TDL primitive rendered in both light and dark themes.</p>
+<p>The Tela Design Language defines the visual language shared across every product
+in the Tela ecosystem: TelaVisor (desktop client), TelaBoard (demo application),
+Awan Saya (portal), and any future Tela application. TDL is a specification, not
+a suggestion. Applications built on it look and behave like members of the same
+family because they share the same primitives, the same interaction rules, and
+the same visual contract.</p>
+<p>This document is the reference for implementers. A live HTML reference of every
+component in both light and dark themes lives at
+<a href="cmd/telagui/mockups/tdl-reference.html">cmd/telagui/mockups/tdl-reference.html</a>.
+Open it alongside this document to see the primitives in context.</p>
+<h2 id="the-four-categories"><a class="header" href="#the-four-categories">The four categories</a></h2>
+<p>Every interactive or state-bearing element in a TDL application falls into
+exactly one of four categories. The categories never share a location, so
+their visual styles never compete.</p>
+<div class="table-wrapper"><table><thead><tr><th>Category</th><th>Where</th><th>Invariant signal</th></tr></thead><tbody>
+<tr><td><code>.btn</code></td><td>Content area</td><td>Elevation (border + drop shadow + fill).</td></tr>
+<tr><td><code>.status</code></td><td>Content area</td><td>Flat inline text with a glyph prefix.</td></tr>
+<tr><td><code>.chrome-btn</code></td><td>Topbar only</td><td>Persistent circular outline.</td></tr>
+<tr><td><code>.brand-link</code></td><td>Topbar top-left</td><td>Cursor, subtle brightness hover, focus ring.</td></tr>
+</tbody></table>
+</div>
+<p><strong>Rule of disjoint location.</strong> A <code>.chrome-btn</code> in content would be ambiguous
+(users could not tell it from a status badge). A <code>.btn</code> in the topbar would be
+visually loud. A <code>.brand-link</code> is a one-of-a-kind element that exists only at
+the top-left of the topbar. The four categories never mix locations, which is
+what keeps them unambiguous.</p>
+<p><strong>Rule of visible affordance.</strong> Every interactive element must look interactive
+without depending on hover. Touch devices cannot hover. Colorblind users cannot
+rely on color alone. Elevation, persistent outline, and meaning-carrying glyphs
+are the invariants that must carry the signal.</p>
+<p><strong>Rule of no false affordance.</strong> Anything that is not clickable must not look
+clickable. No outlined boxes around static labels. No filled pills for
+non-interactive state. No <code>cursor: pointer</code> on static elements.</p>
+<h2 id="design-tokens"><a class="header" href="#design-tokens">Design tokens</a></h2>
+<p>All colors, spacing, and typography are defined as CSS custom properties on
+<code>:root</code>. Every TDL application copies this block exactly. The theme is applied
+by setting <code>data-theme="light"</code> or <code>data-theme="dark"</code> on <code>&lt;html&gt;</code>.</p>
+<pre><code class="language-css">:root {
+  /* Light theme — default */
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-alt: #f0f1f4;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --border: #e2e5ea;
+
+  /* Brand */
+  --accent: #2ecc71;
+  --accent-hover: #27ae60;
+
+  /* Semantic */
+  --warn: #f39c12;
+  --danger: #e74c3c;
+  --danger-hover: #c0392b;
+
+  /* Button surfaces */
+  --btn-bg: #ffffff;
+  --btn-secondary-hover: #f0f1f4;
+  --input-bg: #ffffff;
+
+  /* Elevation */
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.04),
+    0 1px 3px rgba(15,23,42,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.85);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.08),
+    0 1px 3px rgba(39,174,96,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.35);
+  --shadow-card: 0 1px 3px rgba(15,23,42,0.05);
+
+  /* Shape */
+  --radius: 8px;
+  --radius-sm: 4px;
+
+  /* Topbar (light variant) is set on the .topbar element itself via
+     --tb-* custom properties, not on :root. See the Topbar section. */
+
+  /* Typography */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+[data-theme="dark"] {
+  --bg: #111827;
+  --surface: #1f2937;
+  --surface-alt: #1a2332;
+  --text: #e5e7eb;
+  --text-muted: #9ca3af;
+  --border: #4b5668;
+  --btn-bg: #2a3545;
+  --btn-secondary-hover: #3a465c;
+  --input-bg: #1a2332;
+  --shadow-btn:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.09);
+  --shadow-btn-primary:
+    0 1px 0 rgba(0,0,0,0.4),
+    0 2px 4px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4);
+}
+</code></pre>
+<h3 id="color-rules"><a class="header" href="#color-rules">Color rules</a></h3>
+<ul>
+<li><strong>Accent green</strong> (<code>#2ecc71</code>) is the brand color. It appears in the logo
+suffix, active states, primary buttons, connected indicators, and the
+"current version" status marker. Accent is theme-invariant: the same green
+reads correctly on light and dark surfaces.</li>
+<li><strong>Warn amber</strong> (<code>#f39c12</code>) is used for in-progress states and "update
+available" markers. Never use amber for success.</li>
+<li><strong>Danger red</strong> (<code>#e74c3c</code>) is used for destructive actions, error messages,
+and the "disconnected" state. Never use red for non-destructive purposes.</li>
+<li><strong>Text colors</strong> are blue-tinted, not pure gray. <code>--text</code> is <code>#1a1a2e</code> in
+light mode, <code>#e5e7eb</code> in dark. This subtle tint ties the palette together.</li>
+<li><strong>Borders</strong> are also blue-tinted (<code>#e2e5ea</code> light, <code>#4b5668</code> dark).</li>
+</ul>
+<h3 id="theme-selection"><a class="header" href="#theme-selection">Theme selection</a></h3>
+<p>Applications support three theme modes: light, dark, and system. When the user
+selects "system," the application listens to the <code>prefers-color-scheme</code> media
+query and sets the <code>data-theme</code> attribute accordingly. The user's preference is
+stored in <code>localStorage</code> (key: <code>theme</code>) so it persists across sessions.</p>
+<h2 id="typography"><a class="header" href="#typography">Typography</a></h2>
+<p>One family for body text (system UI stack), one family for monospace (for code,
+version strings, paths, IDs, and terminal output). Font weights are restricted
+to 400, 500, 600, and 700. Italic and underline are not used for emphasis.</p>
+<div class="table-wrapper"><table><thead><tr><th>Role</th><th>Size</th><th>Weight</th><th>Notes</th></tr></thead><tbody>
+<tr><td>Page title</td><td>28px</td><td>700</td><td>One per page, <code>letter-spacing: -0.01em</code>.</td></tr>
+<tr><td>Section header</td><td>20px</td><td>700</td><td>Major sections within a page.</td></tr>
+<tr><td>Card title</td><td>14-15px</td><td>600-700</td><td>Card and modal headers.</td></tr>
+<tr><td>Group label</td><td>13px</td><td>600</td><td>Uppercase, <code>letter-spacing: 0.06em</code>, <code>--text-muted</code>.</td></tr>
+<tr><td>Body</td><td>13px</td><td>400</td><td>Default size for all content.</td></tr>
+<tr><td>Muted</td><td>12px</td><td>400</td><td>Descriptions, hints. Color via <code>--text-muted</code>, never opacity.</td></tr>
+<tr><td>Monospace</td><td>12px</td><td>400-600</td><td>Version strings, paths, IDs, code, terminal.</td></tr>
+</tbody></table>
+</div>
+<h2 id="buttons"><a class="header" href="#buttons">Buttons</a></h2>
+<p>Every content-area button shares an <strong>elevation invariant</strong>: a 1px border, a
+non-zero drop shadow, and a fill that contrasts with the card it sits on. The
+elevation signals "raised = pressable" without depending on hover or color
+perception.</p>
+<pre><code class="language-css">.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--text);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--btn-bg);
+  box-shadow: var(--shadow-btn);
+  transition: background 0.12s, box-shadow 0.08s, transform 0.05s;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.btn:hover { background: var(--btn-secondary-hover); }
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
+}
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #1f2937;
+  border-color: var(--accent-hover);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn-primary);
+}
+.btn-primary:hover { background: var(--accent-hover); color: #1f2937; }
+
+.btn-danger {
+  background: var(--btn-bg);
+  color: var(--danger);
+  border-color: var(--border);
+}
+.btn-danger::before,
+.btn-destructive::before {
+  content: '\26A0';  /* ⚠ */
+  font-size: 13px;
+  line-height: 1;
+}
+.btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+.btn-destructive {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger-hover);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn-primary);
+}
+.btn-destructive:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-icon {
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+  min-width: 28px;
+  justify-content: center;
+}
+</code></pre>
+<h3 id="variants"><a class="header" href="#variants">Variants</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Class</th><th>Role</th><th>Where</th></tr></thead><tbody>
+<tr><td><code>.btn.btn-primary</code></td><td>Main commit action</td><td>Content area. Exactly one per form, modal, or settings card.</td></tr>
+<tr><td><code>.btn</code></td><td>Default / secondary</td><td>Content area. Cancel, Refresh, Logs, Browse, Restart.</td></tr>
+<tr><td><code>.btn.btn-danger</code></td><td>Initiates destructive action</td><td>Content area. Delete, Remove, Revoke. Carries an automatic ⚠ glyph prefix.</td></tr>
+<tr><td><code>.btn.btn-destructive</code></td><td>Commits irreversible destructive action</td><td>Confirmation modals only. Filled red. Carries an automatic ⚠ glyph.</td></tr>
+<tr><td><code>.btn.btn-icon</code></td><td>Square icon-only button</td><td>Content toolbars and list rows. Carries a <code>title</code> attribute.</td></tr>
+<tr><td><code>.btn.btn-sm</code></td><td>Small modifier</td><td>Dense contexts: toolbars, row-level actions.</td></tr>
+</tbody></table>
+</div>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<ul>
+<li><strong>One primary per context.</strong> A view, form, or modal has exactly one
+<code>.btn-primary</code>. If the design seems to need two, one of them is a secondary
+or a danger.</li>
+<li><strong>Destructive is confirmation-only.</strong> <code>.btn-destructive</code> never appears outside
+a confirmation modal. Its sibling is always a <code>.btn</code> labeled "Cancel".</li>
+<li><strong>Danger is reversible or confirmable.</strong> <code>.btn-danger</code> initiates destruction
+but does not commit it. Irreversible actions route through a confirmation
+modal containing a <code>.btn-destructive</code>.</li>
+<li><strong>Icon buttons are uniform size.</strong> Every <code>.btn-icon</code> in the same strip has
+the same height so they read as a row of uniform controls. The class sets
+a fixed <code>min-width</code> and centered alignment.</li>
+<li><strong>Toolbars and tab bars use <code>.btn.btn-sm</code>.</strong> There is no separate toolbar
+button class. A toolbar's tinted background is what makes it distinct, not
+a special button style.</li>
+</ul>
+<h2 id="links"><a class="header" href="#links">Links</a></h2>
+<p>Links are the one place in TDL where underline carries meaning. Any text the
+user can click must be underlined. This rule is absolute: it applies to web
+apps (Awan Saya), to desktop apps (TelaVisor, TelaBoard), to menus, to
+modals, and to help text. It does not apply to the brand link, which is the
+documented exception.</p>
+<pre><code class="language-css">.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.link:hover {
+  color: var(--accent-hover);
+  text-decoration-thickness: 2px;
+}
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.link:visited { color: var(--accent); }
+
+/* Muted link: same underline rule, but with --text-muted color so the
+   link is subordinate to surrounding body content. Used for footer
+   links, secondary navigation, and metadata cross-references. */
+.link-muted {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-muted:hover {
+  color: var(--text);
+  text-decoration-thickness: 2px;
+}
+</code></pre>
+<h3 id="rules-1"><a class="header" href="#rules-1">Rules</a></h3>
+<ul>
+<li><strong>Every link is underlined.</strong> The underline is visible by default, not only
+on hover. Users must not have to hover to discover that text is clickable.</li>
+<li><strong>Color is accent or muted, never blue.</strong> Blue hyperlinks are a web
+convention that predates TDL. TDL uses accent green for primary links and
+text-muted for secondary links. Both remain underlined.</li>
+<li><strong>Hover thickens the underline</strong> from 1px to 2px. Color shifts from
+<code>--accent</code> to <code>--accent-hover</code>, or from <code>--text-muted</code> to <code>--text</code>.</li>
+<li><strong>Focus-visible outline is required.</strong> Links are keyboard-reachable and
+must show a focus ring.</li>
+<li><strong>No visited color.</strong> Links keep their color regardless of visited state.
+TDL applications do not track link history, and visited-style coloring
+adds visual noise without benefit.</li>
+<li><strong>Links are not buttons.</strong> A link navigates or reveals. A button commits
+an action. If the element changes application state beyond showing a new
+view or loading new data, it must be a <code>.btn</code>, not a <code>.link</code>.</li>
+<li><strong>Brand link is the one exception.</strong> <code>.brand-link</code> at the top-left of the
+topbar intentionally omits the underline to preserve the brand mark.
+Every other link on screen is underlined.</li>
+</ul>
+<h2 id="mode-bar"><a class="header" href="#mode-bar">Mode bar</a></h2>
+<p>A mode bar is a compact toggle group that switches between top-level
+application modes. TelaVisor uses it to switch between "Clients" and
+"Infrastructure". Awan Saya uses a similar pattern to switch between user
+views and admin views.</p>
+<p>Mode bars live in the topbar, not in content. They use an outlined container
+(the affordance for "these are interactive options") with a full-width accent
+bar flush along the bottom edge of the active segment (the existing TDL
+vocabulary for "you are here", already used by the main tab bar's active
+indicator). Because mode bars live in the topbar, they inherit the topbar's
+chrome context and use topbar-scoped <code>--tb-*</code> custom properties.</p>
+<p>The active segment is bold, uses <code>cursor: default</code>, and carries no button
+chrome (no hover fill, no raised appearance). It is unambiguously "you are
+here", not "click me". Inactive segments show a hover fill on mouseover to
+confirm they are interactive.</p>
+<pre><code class="language-css">.mode-bar {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--tb-chrome-border);
+  border-radius: 6px;
+  background: var(--tb-chrome-bg);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mode-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--tb-chrome-fg);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.mode-btn + .mode-btn {
+  border-left: 1px solid var(--tb-chrome-border);
+}
+.mode-btn:hover:not(.active) {
+  color: var(--tb-chrome-hover-fg);
+  background: var(--tb-chrome-hover-bg);
+}
+.mode-btn.active {
+  color: var(--tb-chrome-hover-fg);
+  font-weight: 700;
+  cursor: default;
+}
+.mode-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+}
+.mode-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+</code></pre>
+<h3 id="rules-2"><a class="header" href="#rules-2">Rules</a></h3>
+<ul>
+<li><strong>Topbar-only.</strong> Mode bars appear only in the topbar. Content-area
+navigation uses the main tab bar (<code>.tab</code>), not a mode bar.</li>
+<li><strong>Exactly one active mode.</strong> A mode bar has at least two segments and
+exactly one <code>.active</code>. A mode bar with one segment should not exist.</li>
+<li><strong>Segments are short labels.</strong> One or two words per segment. Icons
+without labels are not allowed because the mode switch is a navigational
+commit, not a compact tool.</li>
+<li><strong>Active is not a button.</strong> The active segment has <code>cursor: default</code>,
+no hover state, no fill, and no button chrome. Only the bold label and
+the 3px accent bar at the bottom edge signal "you are here". This is
+deliberately the inverse of the naive "active = filled button" pattern,
+because a filled button would read as "click me" and confuse the user
+into thinking the mode bar is a toggle they must click repeatedly.</li>
+<li><strong>Inactive segments are hoverable.</strong> Inactive segments show a subtle
+hover fill (via <code>--tb-chrome-hover-bg</code>) so the interactive affordance
+is visible before hover too (the container border alone).</li>
+<li><strong>No glyph prefixes.</strong> Mode bars do not carry icons or dots. The text
+label alone is the signal.</li>
+<li><strong>Placement.</strong> Centered in the topbar between the brand link and the
+chrome button strip. When the viewport is narrow, the mode bar may shift
+left-of-center but never wraps to a new line.</li>
+</ul>
+<h2 id="status-badges"><a class="header" href="#status-badges">Status badges</a></h2>
+<p>Status labels are flat, inline, non-interactive, and always prefixed by a glyph
+(colored dot, checkmark, or arrow). The glyph is the primary signal so meaning
+survives red-green colorblindness (WCAG 1.4.1). Status elements never have a
+border, fill, or elevation.</p>
+<pre><code class="language-css">.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.status-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status-online   { color: var(--accent); }
+.status-degraded { color: var(--warn); }
+.status-error    { color: var(--danger); }
+.status-offline  { color: var(--text-muted); }
+
+/* Version status */
+.status-current::before  { content: '\2713'; margin-right: 4px; }  /* ✓ */
+.status-outdated::before { content: '\2191'; margin-right: 4px; }  /* ↑ */
+.status-current  { color: var(--accent); font-family: var(--mono); font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.status-outdated { color: var(--warn);   font-family: var(--mono); font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+</code></pre>
+<h3 id="version-status-rule"><a class="header" href="#version-status-rule">Version status rule</a></h3>
+<p>Apply <code>.status-current</code> or <code>.status-outdated</code> to the <strong>installed</strong> version only.
+The <strong>available</strong> (latest) version is rendered in the default text color with
+no status decoration. A user looking at a version pair always sees which side
+is the installation and whether it needs updating.</p>
+<h3 id="chips"><a class="header" href="#chips">Chips</a></h3>
+<p>Chips are small flat filled pills for neutral metadata tags: counts, platform
+labels, region or environment names. Chips explicitly do not convey state — use
+<code>.status</code> for state.</p>
+<pre><code class="language-css">.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: none;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+</code></pre>
+<p>Chips have no border. Outlined boxes around text are a web convention for
+interactive tags (GitHub labels, Stack Overflow tags); a border would be a
+false affordance for non-interactive metadata.</p>
+<h3 id="status-dots"><a class="header" href="#status-dots">Status dots</a></h3>
+<p>The raw colored-dot primitive. Used when only a status indicator is needed
+without a label, typically paired with a name instead.</p>
+<pre><code class="language-css">.dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-online   { background: var(--accent); }
+.dot-degraded { background: var(--warn); }
+.dot-error    { background: var(--danger); }
+.dot-offline  { background: var(--text-muted); }
+</code></pre>
+<p>When a <code>.dot</code> is used alone (without a label), pair it with a <code>title</code> attribute
+so the meaning is reachable by screen readers.</p>
+<h2 id="form-inputs"><a class="header" href="#form-inputs">Form inputs</a></h2>
+<p>All inputs share a common grammar: a 1px border, subtle surface fill, accent
+focus ring (3px low-opacity), and a consistent padding scale. Labels appear
+above the control except for checkboxes and radios, where the label is to the
+right of the control.</p>
+<pre><code class="language-css">.form-input,
+.form-select,
+.form-textarea {
+  padding: 7px 11px;
+  font-size: 13px;
+  font-family: var(--font);
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(46,204,113,0.15);
+}
+.form-input.mono { font-family: var(--mono); font-size: 12px; }
+.form-input.invalid { border-color: var(--danger); }
+.form-input:disabled { background: var(--surface-alt); color: var(--text-muted); cursor: not-allowed; }
+
+.form-textarea { font-family: var(--mono); min-height: 80px; resize: vertical; }
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.form-label { font-size: 12px; font-weight: 600; color: var(--text); }
+.form-hint  { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.form-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+.form-error::before { content: '\26A0'; font-size: 12px; }
+
+.form-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.form-check input[type="checkbox"],
+.form-check input[type="radio"] {
+  width: 14px; height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+</code></pre>
+<h3 id="rules-3"><a class="header" href="#rules-3">Rules</a></h3>
+<ul>
+<li><strong>Labels above, not beside.</strong> A <code>.form-label</code> is always on its own line
+above the control. The one exception is the <code>.form-check</code> wrapper for
+checkboxes and radios, where the label sits to the right of the control.</li>
+<li><strong>Mono for verbatim content.</strong> Use <code>.form-input.mono</code> whenever the value
+is something the user copies verbatim: tokens, IDs, paths, version strings.</li>
+<li><strong>Validation is inline.</strong> When an input fails validation, mark the control
+with <code>.invalid</code> and place a <code>.form-error</code> immediately below it. The error
+message carries an automatic ⚠ prefix.</li>
+<li><strong>Focus ring is always visible.</strong> The 3px accent-colored focus ring appears
+on every input on <code>:focus</code> (not just <code>:focus-visible</code>) because inputs are
+keyboard targets in all contexts.</li>
+</ul>
+<h2 id="cards"><a class="header" href="#cards">Cards</a></h2>
+<p>Cards are the primary content container. Surface background, 1px border, 8px
+radius, subtle shadow. Cards never nest inside other cards. For visual grouping
+inside a card, use <code>.h3.sub</code> labels with spacing.</p>
+<pre><code class="language-css">.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: var(--shadow-card);
+}
+.card-title { font-size: 14px; font-weight: 600; margin: 0; }
+.card-desc  { font-size: 12px; color: var(--text-muted); margin: 0 0 14px; }
+.card-body  { font-size: 13px; }
+.card-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-alt);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.card-danger { border-color: var(--danger); }
+.card-danger .card-title { color: var(--danger); }
+.card-danger .card-title::before {
+  content: '\26A0\00a0';
+  font-size: 14px;
+}
+</code></pre>
+<p>The <code>.card-danger</code> modifier is used for "Danger zone" sections that house
+irreversible actions. The red border and ⚠ prefix on the title signal the
+content's severity without requiring the user to read the copy first.</p>
+<h2 id="modals"><a class="header" href="#modals">Modals</a></h2>
+<p>Modals center on a semi-transparent overlay. The dialog has a header with
+title and close button, a body, and an action footer on a tinted background.</p>
+<pre><code class="language-css">.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-dialog {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
+  width: 440px;
+  max-width: 90vw;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 20px; font-size: 13px; }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--border);
+}
+</code></pre>
+<h3 id="rules-4"><a class="header" href="#rules-4">Rules</a></h3>
+<ul>
+<li><strong>No browser dialogs.</strong> <code>alert()</code>, <code>confirm()</code>, and <code>prompt()</code> are banned.
+Every dialog is a themed modal with the structure above.</li>
+<li><strong>Two buttons, predictable order.</strong> A confirmation modal has exactly two
+buttons: Cancel on the left, commit action on the right. The commit is
+either <code>.btn-primary</code> or <code>.btn-destructive</code>, never both in the same modal.</li>
+<li><strong>Modals capture window chrome.</strong> While any modal is open, native window
+controls (OS title-bar close, Cmd+Q, <code>beforeunload</code>) must route through the
+modal's cancel flow first. The application does not dismiss until the modal
+is handled, just like a native OS dialog. Implementations bind the window
+close event while a modal is active and either block the close or
+programmatically trigger the modal's Cancel handler.</li>
+<li><strong>Modals stack.</strong> When a modal opens a child modal (for example, a "discard
+unsaved changes?" confirmation opened from inside a settings modal), the
+child must render above its parent. Implementations use a shared modal
+stack that assigns ascending z-index per push, or give each nested overlay
+a strictly higher z-index than its parent. A confirmation dialog hidden
+behind its parent is a serious bug: from the user's perspective, clicking
+Cancel appears to do nothing.</li>
+</ul>
+<h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
+<p>Tables use uppercase-muted headers, muted row separators, and a hover highlight
+on selectable rows. Numeric or identifier columns use the monospace font.</p>
+<pre><code class="language-css">.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--surface-alt);
+}
+.table tr:last-child td { border-bottom: none; }
+.table tr.selectable { cursor: pointer; }
+.table tr.selectable:hover { background: var(--surface-alt); }
+.table .mono-col { font-family: var(--mono); font-size: 12px; }
+</code></pre>
+<h2 id="tabs-and-toolbars"><a class="header" href="#tabs-and-toolbars">Tabs and toolbars</a></h2>
+<p>Tab bars use text buttons with an accent bottom border on the active tab.
+Toolbars are containers for content-area command buttons; the buttons
+themselves are <code>.btn.btn-sm</code> — the same elevation invariant as every other
+content button, just smaller.</p>
+<pre><code class="language-css">.tab-bar {
+  display: flex;
+  align-items: center;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+.tab {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.tab-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+</code></pre>
+<h3 id="rules-5"><a class="header" href="#rules-5">Rules</a></h3>
+<ul>
+<li><strong>Tabs are for navigation, toolbars are for actions.</strong> A tab switches the
+active view. A toolbar button operates on the current view's content.</li>
+<li><strong>Separate the two visually.</strong> Use a <code>.tab-sep</code> between the tab group and any
+trailing command buttons so it is clear the commands are not tabs.</li>
+<li><strong>Toolbars carry <code>.btn.btn-sm</code>, not a custom class.</strong> The tinted toolbar
+background differentiates the region; the buttons inside it are regular
+content buttons.</li>
+</ul>
+<h2 id="sidebar-list-items"><a class="header" href="#sidebar-list-items">Sidebar list items</a></h2>
+<p>Sidebar items are selectable rows with a left accent border on the active item.
+They pair a name (and optional dot, chip, or version status) with a tight hit
+area.</p>
+<pre><code class="language-css">.sidebar {
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.sidebar-item + .sidebar-item { border-top: 1px solid var(--surface-alt); }
+.sidebar-item:hover { background: var(--surface-alt); }
+.sidebar-item.active {
+  background: var(--surface-alt);
+  border-left-color: var(--accent);
+}
+</code></pre>
+<h3 id="rules-6"><a class="header" href="#rules-6">Rules</a></h3>
+<ul>
+<li><strong>Sort deterministically.</strong> Lists in the sidebar must have a stable sort
+order, typically alphabetical by display name. A list that reorders on each
+refresh is a bug.</li>
+<li><strong>Meta on a second line.</strong> Secondary information (version, hostname, tags)
+goes on a second line below the name, not beside it. The tight column makes
+side-by-side layouts hard to read.</li>
+<li><strong>Selection is a left border.</strong> The active item carries a 3px accent left
+border and a surface-alt background. Never use a full background color for
+selection — it competes with content.</li>
+</ul>
+<h2 id="topbar"><a class="header" href="#topbar">Topbar</a></h2>
+<p>The topbar is the application chrome at the top of the window. It has a true
+light variant and a true dark variant. Chrome buttons and the brand mark use
+topbar-scoped custom properties (<code>--tb-*</code>) so the same markup adapts to either
+context. The topbar is the only place where <code>.chrome-btn</code> and <code>.brand-link</code>
+appear.</p>
+<pre><code class="language-css">.topbar {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  background: var(--tb-bg);
+  border-color: var(--tb-border);
+}
+.topbar.tb-dark {
+  --tb-bg: #0f172a;
+  --tb-border: #1e293b;
+  --tb-brand: #ffffff;
+  --tb-chrome-fg: #cbd5e1;
+  --tb-chrome-border: rgba(255,255,255,0.28);
+  --tb-chrome-bg: rgba(255,255,255,0.04);
+  --tb-chrome-hover-fg: #ffffff;
+  --tb-chrome-hover-bg: rgba(255,255,255,0.12);
+  --tb-chrome-hover-border: rgba(255,255,255,0.5);
+}
+.topbar.tb-light {
+  --tb-bg: #ffffff;
+  --tb-border: #d8dce4;
+  --tb-brand: #1a1a2e;
+  --tb-chrome-fg: #475569;
+  --tb-chrome-border: #cbd5e1;
+  --tb-chrome-bg: #ffffff;
+  --tb-chrome-hover-fg: #0f172a;
+  --tb-chrome-hover-bg: #eef0f4;
+  --tb-chrome-hover-border: #94a3b8;
+}
+</code></pre>
+<p>Applications select the topbar variant based on the active theme. In light
+mode, use <code>.topbar.tb-light</code>; in dark mode, use <code>.topbar.tb-dark</code>.</p>
+<h3 id="brand-link"><a class="header" href="#brand-link">Brand link</a></h3>
+<p>The clickable brand mark in the top-left. This is the deliberate exception to
+the "visible non-hover affordance" rule. Web convention has trained users that
+a top-left logo goes home, so the click must work — but any button chrome
+around the brand mark would destroy it.</p>
+<pre><code class="language-css">.brand {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tb-brand);
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+}
+.brand em { color: var(--accent); font-style: normal; }
+.brand img.brand-logo {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: -5px;
+  margin-right: 8px;
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  transition: filter 0.15s;
+}
+.brand-link:hover { filter: brightness(1.15); }
+.brand-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+</code></pre>
+<p>The brand is two-tone. The prefix (Tela, Awan) uses <code>--tb-brand</code> (dark text on
+light topbar, white on dark topbar). The suffix (<code>&lt;em&gt;Visor&lt;/em&gt;</code>, <code>&lt;em&gt;Saya&lt;/em&gt;</code>)
+stays accent green in both themes.</p>
+<p>Markup:</p>
+<pre><code class="language-html">&lt;button class="brand-link" type="button" onclick="goHome()"&gt;
+  &lt;span class="brand"&gt;
+    &lt;img class="brand-logo" src="logo.png" alt="Tela"&gt;Tela&lt;em&gt;Visor&lt;/em&gt;
+  &lt;/span&gt;
+&lt;/button&gt;
+</code></pre>
+<p><strong>Rules:</strong></p>
+<ul>
+<li><strong>One brand link per application, at the top-left of the topbar.</strong> Never
+anywhere else.</li>
+<li><strong>No underline on hover.</strong> The brand mark is sacred. Hover is a brightness
+bump only.</li>
+<li><strong>The click target is per-app.</strong> TelaVisor: go to Status. Awan Saya: go
+home. TelaBoard: go to the demo landing page.</li>
+<li><strong>Focus outline is required.</strong> The brand link is often the first Tab stop,
+so keyboard users must see a clear focus indicator.</li>
+</ul>
+<h3 id="chrome-buttons"><a class="header" href="#chrome-buttons">Chrome buttons</a></h3>
+<p>Circular icon-only buttons that live in the topbar. Persistent outlined border
+is the affordance — no elevation, no hover dependency.</p>
+<pre><code class="language-css">.chrome-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--tb-chrome-border);
+  background: var(--tb-chrome-bg);
+  color: var(--tb-chrome-fg);
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.chrome-btn:hover {
+  background: var(--tb-chrome-hover-bg);
+  border-color: var(--tb-chrome-hover-border);
+  color: var(--tb-chrome-hover-fg);
+}
+.chrome-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chrome-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.chrome-btn svg { display: block; stroke: currentColor; }
+
+.chrome-btn.chrome-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chrome-btn.chrome-accent:hover {
+  background: rgba(46,204,113,0.15);
+  color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.chrome-btn.chrome-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.chrome-btn.chrome-danger:hover {
+  background: rgba(231,76,60,0.15);
+  color: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+</code></pre>
+<h3 id="rules-7"><a class="header" href="#rules-7">Rules</a></h3>
+<ul>
+<li><strong>Topbar only.</strong> A chrome button never appears in content. A content icon
+button never appears in the topbar. This disjointness is what keeps them
+distinguishable.</li>
+<li><strong>Use inline SVG for glyphs.</strong> Some platforms render Unicode glyphs (⚙, ⚠, 📁)
+as colorful emoji, which breaks the monochrome chrome convention. Inline
+SVGs using <code>stroke="currentColor"</code> inherit the correct color in both light
+and dark topbars and render consistently across platforms.</li>
+<li><strong>Variants are semantic.</strong> Use <code>.chrome-accent</code> for primary or active states
+(Connect, Mount folder). Use <code>.chrome-danger</code> for Quit. Neutral chrome
+buttons use the base class alone.</li>
+</ul>
+<h2 id="feedback"><a class="header" href="#feedback">Feedback</a></h2>
+<h3 id="toasts"><a class="header" href="#toasts">Toasts</a></h3>
+<p>Transient notifications that appear briefly at the top of the window. Three
+variants: error (default), success, warn. Each carries a glyph prefix.</p>
+<pre><code class="language-css">.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.toast::before { content: '\26A0'; font-size: 14px; }
+.toast.toast-success { background: var(--accent); color: #1f2937; }
+.toast.toast-success::before { content: '\2713'; }
+.toast.toast-warn { background: var(--warn); color: #2d1f00; }
+</code></pre>
+<p>Toasts auto-dismiss after 3-5 seconds for success and warn. Error toasts
+require manual dismissal so the user has time to read and act on the error.</p>
+<h3 id="empty-states"><a class="header" href="#empty-states">Empty states</a></h3>
+<pre><code class="language-css">.empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  background: var(--surface-alt);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+</code></pre>
+<p>An empty state explains what the user sees (or doesn't see) and includes a
+pointer to the action the user should take next. An empty sidebar with the
+text "No agents registered. Pair Agent to add one." is a good empty state. An
+empty sidebar with no text is not.</p>
+<h2 id="progress-and-code"><a class="header" href="#progress-and-code">Progress and code</a></h2>
+<pre><code class="language-css">.progress {
+  background: var(--surface-alt);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+  width: 100%;
+}
+.progress-bar {
+  background: var(--accent);
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.code-block {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface-alt);
+  color: var(--text);
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+</code></pre>
+<p>Code blocks are for command examples, config snippets, and terminal output.
+Simple token highlighting is available via <code>.tok-comment</code> (muted), <code>.tok-kw</code>
+(accent), <code>.tok-str</code> (warn) spans.</p>
+<h2 id="log-panel"><a class="header" href="#log-panel">Log panel</a></h2>
+<p>The log panel is a dockable bottom-of-window container for multi-source log
+output. It is TelaVisor-specific in its current implementation but generalizes
+to "any docked panel with tabs and a collapse affordance". Tabs behave like
+the main tab bar. Individual tabs may be closable. The panel itself collapses
+to a single-row header with a label next to the expand chevron.</p>
+<p>Every control in the log panel header uses the standard button classes:</p>
+<ul>
+<li><strong>Tabs</strong> are <code>.log-panel-tab</code> (active accent underline, like <code>.tab</code>).</li>
+<li><strong>Attach-source button</strong> (<code>+</code>) is <code>.btn.btn-sm.btn-icon</code>.</li>
+<li><strong>Action buttons</strong> (Copy, Save, Clear) are <code>.btn.btn-sm</code>.</li>
+<li><strong>Verbose toggle</strong> is a <code>.form-check</code> inline checkbox.</li>
+<li><strong>Collapse/expand chevron</strong> is <code>.btn.btn-sm.btn-icon</code>.</li>
+</ul>
+<p>There are no custom button classes inside the log panel. Every interactive
+element carries the same elevation invariant as the rest of the application.</p>
+<h3 id="rules-8"><a class="header" href="#rules-8">Rules</a></h3>
+<ul>
+<li><strong>Log timestamps are ISO 8601 UTC.</strong> The client converts to local time
+for display in other views, but raw log output stays in UTC so logs from
+multiple machines line up when cross-referenced.</li>
+<li><strong>Label next to chevron when collapsed.</strong> When the panel is collapsed to
+its single-row header, a short identifying label (e.g. "Logs") appears
+immediately to the left of the expand chevron.</li>
+<li><strong>Clearing inline height on collapse.</strong> If the panel's height is ever
+set as an inline style (for example by a resize handle), implementations
+must clear that inline style on collapse so the CSS class rule can apply.</li>
+</ul>
+<h2 id="dropdown-menus"><a class="header" href="#dropdown-menus">Dropdown menus</a></h2>
+<p>Dropdowns are small floating panels anchored to a trigger button. Used for
+user menus, theme pickers, attach-source popovers, and any short list of
+options where a full modal would be overkill.</p>
+<pre><code class="language-css">.menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 0 0 1px var(--border);
+  padding: 6px 0;
+  min-width: 200px;
+  font-size: 13px;
+}
+.menu-header {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--surface-alt);
+  margin-bottom: 4px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--surface-alt); }
+.menu-item-icon {
+  width: 16px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.menu-item.active { color: var(--accent); font-weight: 600; }
+.menu-item.active .menu-item-icon { color: var(--accent); }
+.menu-item.danger { color: var(--danger); }
+.menu-item.danger .menu-item-icon { color: var(--danger); }
+.menu-sep {
+  height: 1px;
+  background: var(--surface-alt);
+  margin: 4px 0;
+}
+</code></pre>
+<h3 id="rules-9"><a class="header" href="#rules-9">Rules</a></h3>
+<ul>
+<li><strong>Menu, not modal, for short choice lists.</strong> Theme picker, sign out, attach
+source. If the interaction collects more than one field or requires
+confirmation, use a modal.</li>
+<li><strong>Icon column aligns across items.</strong> The 16px <code>.menu-item-icon</code> column is
+reserved even on items without icons, so everything lines up.</li>
+<li><strong>Dismissal is standard.</strong> A menu dismisses on: click outside, Escape key,
+trigger re-click, or selection of an item. The trigger button toggles
+<code>aria-expanded</code> for screen readers.</li>
+<li><strong>Danger items go last.</strong> A destructive menu item (Sign out, Delete account)
+is always the last item in the menu, separated from safe items by a
+<code>.menu-sep</code>.</li>
+</ul>
+<h2 id="layout-primitives"><a class="header" href="#layout-primitives">Layout primitives</a></h2>
+<h3 id="sidebar--detail"><a class="header" href="#sidebar--detail">Sidebar + detail</a></h3>
+<p>The canonical layout for any view with a selectable list and its detail pane.
+The sidebar is a fixed width; the detail pane fills remaining space and
+scrolls independently.</p>
+<pre class="mermaid">block-beta
+  columns 3
+  Sidebar[&quot;Sidebar\n(fixed width)&quot;]:1
+  Detail[&quot;Detail pane\n(flex: 1, scrollable)&quot;]:2
+
+  style Sidebar fill:#f0f1f4,color:#1a1a2e
+  style Detail fill:#ffffff,color:#1a1a2e
+</pre>
+<h3 id="page-structure"><a class="header" href="#page-structure">Page structure</a></h3>
+<pre class="mermaid">block-beta
+  columns 1
+  Topbar[&quot;Topbar (.topbar.tb-light or .tb-dark)&quot;]
+  TabBar[&quot;Main tab bar&quot;]
+  Content[&quot;Content area (scrollable)&quot;]
+  LogPanel[&quot;Log panel (docked bottom, collapsible)&quot;]
+</pre>
+<p>The log panel is optional. Applications without log output (Awan Saya, web
+pages) omit it entirely.</p>
+<h2 id="writing-style"><a class="header" href="#writing-style">Writing style</a></h2>
+<ul>
+<li>Do not use emdash or semicolons.</li>
+<li>Do not use curly quotes. Use straight quotes (<code>'</code> or <code>"</code>) only.</li>
+<li>Write in a factual, technical style. Do not use marketing language.</li>
+<li>Print only actionable information in UI text. Do not include reassurance
+messages ("Settings saved successfully") or explanations of internal
+mechanics.</li>
+<li>All dates and times in data, logs, and configs are ISO 8601 UTC. The client
+converts to local time for display.</li>
+</ul>
+<h2 id="scrollbars"><a class="header" href="#scrollbars">Scrollbars</a></h2>
+<p>Custom scrollbars for WebKit browsers (used in TelaVisor's Wails WebView and
+all Chromium-based browsers):</p>
+<pre><code class="language-css">::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</code></pre>
+<h2 id="invariant-rules"><a class="header" href="#invariant-rules">Invariant rules</a></h2>
+<p>These rules are the soul of TDL. Violations are bugs, not style preferences.</p>
+<ol>
+<li>
+<p><strong>Category separation.</strong> Every interactive or state-bearing element is
+exactly one of: <code>.btn</code>, <code>.status</code>, <code>.chrome-btn</code>, <code>.brand-link</code>. Categories
+never share a location.</p>
+</li>
+<li>
+<p><strong>Color plus glyph redundancy.</strong> Any state information that matters is
+conveyed by both color and shape. Destructive actions carry a ⚠ glyph.
+Current versions carry a ✓. Outdated versions carry a ↑. Status badges
+carry a colored dot. Color alone fails WCAG 1.4.1.</p>
+</li>
+<li>
+<p><strong>No false affordances.</strong> An element that is not clickable must not look
+clickable. No outlined boxes around static labels, no filled pills for
+non-interactive state, no <code>cursor: pointer</code> on non-buttons.</p>
+</li>
+<li>
+<p><strong>One primary per context.</strong> A view, form, or modal has exactly one
+<code>.btn-primary</code>. Confirmation modals have exactly one <code>.btn-destructive</code>
+sibling to a Cancel.</p>
+</li>
+<li>
+<p><strong>ISO UTC everywhere.</strong> All timestamps in data, logs, and configs are
+ISO 8601 UTC. Never store or transmit local time.</p>
+</li>
+<li>
+<p><strong>No emoji in chrome.</strong> Platforms render Unicode glyphs as colorful emoji.
+Prefer inline SVG for any icon that must render consistently.</p>
+</li>
+<li>
+<p><strong>Modals capture window chrome.</strong> Native window controls (title-bar close,
+Cmd+Q, <code>beforeunload</code>) must route through the active modal's cancel flow
+first.</p>
+</li>
+<li>
+<p><strong>Modals stack correctly.</strong> Child modals render above their parents.
+A confirmation dialog hidden behind its parent is a serious bug.</p>
+</li>
+<li>
+<p><strong>Deterministic list order.</strong> Sidebar and list views have a stable sort
+order (typically alphabetical). A list that reorders on each refresh is
+a bug.</p>
+</li>
+<li>
+<p><strong>No browser dialogs.</strong> <code>alert()</code>, <code>confirm()</code>, and <code>prompt()</code> are banned.
+Every dialog is a themed modal.</p>
+</li>
+<li>
+<p><strong>Every link is underlined.</strong> Any clickable text must be underlined by
+default, not only on hover. The underline is the universal affordance
+for text links. The brand link is the one exception.</p>
+</li>
+<li>
+<p><strong>Mode bars live in the topbar only.</strong> Content-area navigation uses the
+main tab bar, never a segmented mode bar.</p>
+</li>
+</ol>
+<h2 id="implementation-checklist"><a class="header" href="#implementation-checklist">Implementation checklist</a></h2>
+<p>When building a new TDL application or restyling an existing one:</p>
+<ol>
+<li>Copy the <code>:root</code> and <code>[data-theme="dark"]</code> CSS variable blocks exactly.</li>
+<li>Pick a topbar variant (<code>.tb-light</code> or <code>.tb-dark</code>) and wire it to the
+active theme.</li>
+<li>Use <code>.brand-link</code> for the top-left logo, with per-app click target.</li>
+<li>Use <code>.mode-bar</code> + <code>.mode-btn</code> for top-level mode switching in the topbar.</li>
+<li>Use <code>.chrome-btn</code> for every topbar icon button; use inline SVG glyphs.</li>
+<li>Use <code>.btn</code> family for every content-area button.</li>
+<li>Use <code>.link</code> / <code>.link-muted</code> for every clickable text outside the topbar,
+always underlined.</li>
+<li>Use <code>.status</code> family for every state indicator.</li>
+<li>Use <code>.chip</code> for neutral metadata tags (flat filled pills, no border).</li>
+<li>Use <code>.form-input</code>, <code>.form-select</code>, <code>.form-textarea</code>, and <code>.form-check</code>
+for inputs. Wrap in <code>.form-group</code> with a label above.</li>
+<li>Use <code>.card</code> for content containers. Use <code>.card-danger</code> for danger zones.</li>
+<li>Use <code>.modal-overlay</code> + <code>.modal-dialog</code>, never browser dialogs.</li>
+<li>Implement the modal stack so child modals render above parents.</li>
+<li>Implement window-close capture so quit is blocked while a modal is open.</li>
+<li>Apply the scrollbar styles.</li>
+<li>Follow the writing style rules for all UI text.</li>
+<li>Open <a href="cmd/telagui/mockups/tdl-reference.html">cmd/telagui/mockups/tdl-reference.html</a>
+in a browser and verify your implementation matches the reference in
+both light and dark themes.</li>
+</ol>
+<hr />
+<h1 id="tdl-for-the-command-line"><a class="header" href="#tdl-for-the-command-line">TDL for the command line</a></h1>
+<p>TDL extends beyond graphical interfaces. Tela ships three command-line
+binaries (<code>tela</code>, <code>telad</code>, <code>telahubd</code>) that are as much a part of the product
+as TelaVisor and Awan Saya. Operators spend as much time in terminals as in
+windowed UIs, so the CLI must present the same coherent personality: clear
+structure, predictable output, and the same "actionable information only,
+no reassurance" voice that governs the GUI.</p>
+<p>The rules in this section apply to every Tela CLI binary. New subcommands,
+new output, and new flags must conform. Where existing binaries diverge from
+these rules, the divergence is a bug to be fixed, not a precedent to preserve.</p>
+<h2 id="command-grammar"><a class="header" href="#command-grammar">Command grammar</a></h2>
+<p>Tela CLIs use a two-level grammar: <code>&lt;binary&gt; &lt;verb&gt; [&lt;subject&gt;] [flags] [args]</code>.</p>
+<pre><code>tela connect -profile home
+tela admin access grant alice workstation connect
+telad service install -config /etc/tela/agent.yaml
+telahubd user show-owner -config /etc/tela/hub.yaml
+</code></pre>
+<h3 id="rules-10"><a class="header" href="#rules-10">Rules</a></h3>
+<ul>
+<li><strong>Verbs are lowercase, hyphenated for multi-word.</strong> <code>show-owner</code>, not
+<code>showOwner</code> or <code>show_owner</code>. One word is preferred; <code>list</code>, <code>add</code>, <code>remove</code>,
+<code>get</code>, <code>set</code>, <code>update</code>, <code>pair</code>, <code>connect</code>, <code>status</code>, <code>login</code>, <code>logout</code>.</li>
+<li><strong>Subject nesting is allowed when the verb operates on a resource.</strong>
+<code>tela admin access grant ...</code> is grammatically <code>admin</code> (namespace) +
+<code>access</code> (resource) + <code>grant</code> (action). Nested grammar is used only when
+the namespace groups multiple related resources. If there is only one
+resource, flatten: <code>telad update</code>, not <code>telad self update</code>.</li>
+<li><strong>Flags follow the verb.</strong> Global flags before the verb are not supported.
+Every flag belongs to a specific subcommand's <code>flag.FlagSet</code>.</li>
+<li><strong>Flags may appear after positional arguments.</strong> Implementations must use
+the shared <code>permuteArgs</code> helper so that
+<code>tela admin access grant alice workstation -expires 30d</code> parses the same
+as <code>tela admin access grant -expires 30d alice workstation</code>. The helper
+lives in <code>internal/cliutil</code>.</li>
+<li><strong>Boolean flags are single-form.</strong> <code>-v</code> enables verbose. <code>-dry-run</code>
+enables dry run. There is no <code>--no-v</code> or <code>-v=false</code>. If the inverse
+matters, use a second named flag.</li>
+<li><strong>Short and long forms are not provided.</strong> There is only one form per
+flag. <code>-v</code> is the only verbose flag; there is no <code>--verbose</code>. This keeps
+help text shorter and tab completion unambiguous.</li>
+<li><strong>Env vars mirror flags for non-secret values.</strong> Every flag that controls
+connection target, profile, or configuration has an equivalent
+<code>TELA_*</code> / <code>TELAD_*</code> / <code>TELAHUBD_*</code> environment variable. Flag takes
+precedence over env; env takes precedence over built-in default.</li>
+</ul>
+<h3 id="verb-vocabulary"><a class="header" href="#verb-vocabulary">Verb vocabulary</a></h3>
+<p>These verbs have fixed meanings across all three binaries. Do not repurpose.</p>
+<div class="table-wrapper"><table><thead><tr><th>Verb</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>status</code></td><td>Print current state, read-only.</td></tr>
+<tr><td><code>list</code></td><td>List items of a kind, read-only, table output.</td></tr>
+<tr><td><code>get</code></td><td>Retrieve a single item by identifier, read-only.</td></tr>
+<tr><td><code>add</code></td><td>Create a new item.</td></tr>
+<tr><td><code>remove</code></td><td>Delete an item. Paired with confirmation or <code>-force</code>.</td></tr>
+<tr><td><code>set</code></td><td>Update a property on an existing item.</td></tr>
+<tr><td><code>update</code></td><td>Self-update the binary from its release channel.</td></tr>
+<tr><td><code>pair</code></td><td>Interactive first-time registration of a machine or hub.</td></tr>
+<tr><td><code>login</code></td><td>Store credentials in the local credstore.</td></tr>
+<tr><td><code>logout</code></td><td>Remove credentials from the local credstore.</td></tr>
+<tr><td><code>connect</code></td><td>Establish a session.</td></tr>
+<tr><td><code>service</code></td><td>Install or manage the binary as an OS service.</td></tr>
+<tr><td><code>version</code></td><td>Print the binary's version string.</td></tr>
+<tr><td><code>help</code></td><td>Print help text.</td></tr>
+</tbody></table>
+</div>
+<h2 id="help-text"><a class="header" href="#help-text">Help text</a></h2>
+<p>Help is the CLI's own documentation. It must be complete enough that a user
+never has to leave the terminal to understand what a command does.</p>
+<h3 id="invocation"><a class="header" href="#invocation">Invocation</a></h3>
+<p>Every binary responds to:</p>
+<ul>
+<li><code>&lt;binary&gt;</code> alone (no arguments) — print top-level help and exit 0.</li>
+<li><code>&lt;binary&gt; help</code> — same as above.</li>
+<li><code>&lt;binary&gt; -h</code> or <code>&lt;binary&gt; --help</code> — same as above.</li>
+<li><code>&lt;binary&gt; &lt;verb&gt; -h</code> or <code>&lt;binary&gt; &lt;verb&gt; --help</code> — print that verb's help
+and exit 0.</li>
+</ul>
+<p><code>-h</code> on a subcommand is a recognized flag, not a parse error. Implementations
+must call <code>fs.BoolVar(&amp;showHelp, "h", false, ...)</code> on every FlagSet or use the
+shared help wiring in <code>internal/cliutil</code>.</p>
+<h3 id="format"><a class="header" href="#format">Format</a></h3>
+<pre><code>&lt;binary&gt; &lt;verb&gt; — one-line description
+
+USAGE
+  &lt;binary&gt; &lt;verb&gt; [&lt;subject&gt;] [flags] [args]
+
+DESCRIPTION
+  Paragraph form. Explain what the command does, what it reads from, what
+  it writes to, and any precondition. No more than 5-6 lines.
+
+FLAGS
+  -flag-name &lt;type&gt;   Description. Default: &lt;default&gt;.
+  -another-flag       Description.
+
+EXAMPLES
+  &lt;binary&gt; &lt;verb&gt; simple-case
+  &lt;binary&gt; &lt;verb&gt; -flag-name value complex-case
+
+SEE ALSO
+  &lt;binary&gt; &lt;related-verb&gt;, &lt;binary&gt; &lt;related-verb-2&gt;
+</code></pre>
+<h3 id="rules-11"><a class="header" href="#rules-11">Rules</a></h3>
+<ul>
+<li><strong>One-line summary first.</strong> The top line is the verb name plus a single
+sentence description. This is what top-level <code>&lt;binary&gt; help</code> lists.</li>
+<li><strong>Sections are in fixed order.</strong> USAGE, DESCRIPTION, FLAGS, EXAMPLES,
+SEE ALSO. Omit sections that do not apply. Do not invent new sections.</li>
+<li><strong>Examples are concrete and runnable.</strong> Not <code>tela connect -hub &lt;url&gt;</code>.
+Yes <code>tela connect -hub owlsnest.parkscomputing.com -machine dev-vm</code>.</li>
+<li><strong>Flag column is aligned.</strong> Use <code>text/tabwriter</code> or equivalent so all
+flag descriptions start at the same column.</li>
+<li><strong>No marketing language.</strong> Do not write "easily connect to your hub".
+Write "Connect to a hub and open a session."</li>
+<li><strong>Help goes to stdout on success, stderr on error.</strong> <code>tela help</code> exits 0
+and prints to stdout. <code>tela unknown-verb</code> exits 1 and prints the
+top-level help to stderr with an error line on top.</li>
+</ul>
+<h3 id="shared-helper"><a class="header" href="#shared-helper">Shared helper</a></h3>
+<p>A shared help renderer lives in <code>internal/cliutil</code>. Subcommands declare their
+help as a struct literal:</p>
+<pre><code class="language-go">var connectHelp = cliutil.Help{
+    Summary:     "Connect to a hub and open a session.",
+    Usage:       "tela connect [flags]",
+    Description: `Opens a WireGuard tunnel to the specified machine and binds local ports to the services exposed by the agent.`,
+    Examples: []string{
+        "tela connect -hub owlsnest.parkscomputing.com -machine dev-vm",
+        "tela connect -profile home",
+    },
+    SeeAlso: []string{"tela status", "tela machines", "tela services"},
+}
+</code></pre>
+<p>The helper formats sections, aligns flags, and handles both <code>-h</code> and the
+<code>help &lt;verb&gt;</code> form uniformly.</p>
+<h2 id="output"><a class="header" href="#output">Output</a></h2>
+<p>The CLI has three output streams: stdout for data the user requested, stderr
+for diagnostic logs, and stderr for errors. They are never interleaved on
+the same stream.</p>
+<h3 id="stream-discipline"><a class="header" href="#stream-discipline">Stream discipline</a></h3>
+<ul>
+<li><strong>stdout</strong> — the result of the command. A list of machines, a status
+report, a created token, a JSON document. Must be pipeable and parseable.</li>
+<li><strong>stderr (diagnostic)</strong> — <code>log.Printf</code> output with ISO 8601 UTC timestamps
+and component prefixes. Routed through <code>internal/telelog</code>. Used for
+async operations, reconnect attempts, state changes.</li>
+<li><strong>stderr (error)</strong> — the final <code>Error: &lt;message&gt;</code> line printed just
+before exit. Exit code is non-zero.</li>
+</ul>
+<p>A command that prints nothing to stdout and exits 0 has succeeded silently.
+Do not print "Done." or "Success." Silence is the success signal.</p>
+<h3 id="success-output"><a class="header" href="#success-output">Success output</a></h3>
+<ul>
+<li><strong>No reassurance messages.</strong> <code>Credentials stored for owlsnest</code> is wrong.
+The command succeeded; the exit code says so. If the user wants
+confirmation, they can run <code>tela status</code>.</li>
+<li><strong>Tables use <code>text/tabwriter</code>.</strong> Column headers are uppercase, separated
+by tabs, with two-space padding. Alignment is left for identifiers and
+strings, right for numeric counts.
+<pre><code>MACHINE        STATUS     SERVICES             SESSION
+dev-vm         online     ssh, rdp             abc123
+work-laptop    online     rdp, git             def456
+</code></pre>
+</li>
+<li><strong>Table headers use the same uppercase-muted convention as GUI tables.</strong>
+Identifiers, versions, paths, and token strings use the monospace
+convention visually when terminals support it (they always do; monospace
+is the default).</li>
+<li><strong>Timestamps are ISO 8601 UTC.</strong> Same rule as GUI logs. Never print
+local time, never print relative time ("3 minutes ago") as the only
+form. Relative time may be added as a trailing parenthetical hint but
+the UTC stamp is always the authoritative value.</li>
+<li><strong>Structured output is opt-in via <code>-json</code>.</strong> Every command that produces
+tabular output also supports <code>-json</code> for a machine-readable shape.
+The JSON shape is stable; the table layout is for humans only and may
+change.</li>
+</ul>
+<h3 id="error-output"><a class="header" href="#error-output">Error output</a></h3>
+<ul>
+<li><strong>Format:</strong> <code>Error: &lt;short description&gt;</code> to stderr, one line, no trailing
+period. Unwrap the error chain and print only the outermost message
+unless <code>-v</code> is set (then print the full chain).</li>
+<li><strong>Exit codes:</strong>
+<ul>
+<li><strong>0</strong> — success.</li>
+<li><strong>1</strong> — runtime error (network, permission, not found, etc.).</li>
+<li><strong>2</strong> — usage error (unknown flag, missing required argument,
+invalid argument format). Pair with help text printed to stderr.</li>
+<li><strong>3</strong> — configuration error (config file missing, credential store
+inaccessible, schema mismatch).</li>
+<li>Other codes are reserved; do not invent new ones.</li>
+</ul>
+</li>
+<li><strong>Error messages are actionable.</strong> <code>Error: hub not found</code> is insufficient.
+<code>Error: hub "owlsnest" not found in credential store — run "tela login"</code> is
+actionable.</li>
+<li><strong>No stack traces by default.</strong> Stack traces are for panics, not user
+errors. A panic is a bug report; a handled error is a message.</li>
+<li><strong>Suggestions on unknown verbs.</strong> When a verb is misspelled, suggest the
+nearest match using Levenshtein distance:
+<pre><code>Error: unknown command "conect"
+Did you mean: connect?
+</code></pre>
+</li>
+</ul>
+<h3 id="color-and-glyphs"><a class="header" href="#color-and-glyphs">Color and glyphs</a></h3>
+<p>Tela CLI output is monochrome by default. The design does not use color for
+state signaling because terminals vary wildly in palette, background, and
+colorblind-friendliness, and pipes to <code>grep</code> and <code>awk</code> strip color anyway.</p>
+<ul>
+<li><strong>Glyph redundancy over color.</strong> The same <code>✓</code> / <code>↑</code> / <code>⚠</code> glyphs used in
+the GUI also appear in CLI output for version status, update status, and
+warnings:
+<pre><code>tela       ✓ v0.7.0-dev.20
+telad      ↑ v0.7.0-dev.18  (update available: v0.7.0-dev.20)
+telahubd     not installed
+</code></pre>
+The glyph is the primary signal; if the terminal supports color, color
+is added as a reinforcement.</li>
+<li><strong>Color is opt-in.</strong> Add color only when <code>stdout</code> is a TTY (<code>isatty</code>) and
+the environment variable <code>NO_COLOR</code> is not set (per the
+<a href="https://no-color.org">no-color.org</a> convention).</li>
+<li><strong>Use at most three colors.</strong> Accent (green, <code>\033[32m</code>) for "good" or
+"current". Warn (yellow, <code>\033[33m</code>) for "update" or "degraded". Danger
+(red, <code>\033[31m</code>) for errors. No background colors. No bold. Reset after
+every colored token.</li>
+<li><strong>A <code>-no-color</code> flag overrides both TTY detection and <code>NO_COLOR</code>.</strong> It is
+the escape hatch for scripts that want predictable output regardless of
+environment.</li>
+</ul>
+<h3 id="progress-indication"><a class="header" href="#progress-indication">Progress indication</a></h3>
+<ul>
+<li><strong>No spinners.</strong> Spinners do not pipe cleanly and are unreadable in logs.
+For operations that take more than two seconds, print progress lines to
+stderr with ISO timestamps:
+<pre><code>2026-04-11T03:22:01Z connecting to owlsnest.parkscomputing.com...
+2026-04-11T03:22:03Z wireguard handshake complete
+2026-04-11T03:22:03Z local port 10022 -&gt; dev-vm:22
+</code></pre>
+</li>
+<li><strong>Long operations print start, key milestones, and end.</strong> Not every
+packet, not every retry, not every heartbeat. Verbose output is behind <code>-v</code>.</li>
+</ul>
+<h2 id="logging-vs-output"><a class="header" href="#logging-vs-output">Logging vs output</a></h2>
+<p>The CLI follows the same split as the rest of Tela:</p>
+<ul>
+<li><strong><code>log.Printf</code> → telelog → stderr</strong> for operational diagnostics. ISO UTC
+timestamps, bracketed component prefix, machine-readable by <code>grep</code> and
+log aggregators.</li>
+<li><strong><code>fmt.Printf</code> → stdout</strong> for command results. No timestamps, no
+component prefix, formatted for humans.</li>
+</ul>
+<p>The two never mix. A command that needs to tell the user "I am connecting"
+uses <code>log.Printf</code>, not <code>fmt.Printf</code>. A command that returns data the user
+requested uses <code>fmt.Printf</code>, not <code>log.Printf</code>. Piping <code>tela machines | awk ...</code>
+must never include diagnostic noise on stdout.</p>
+<h3 id="verbose-and-quiet"><a class="header" href="#verbose-and-quiet">Verbose and quiet</a></h3>
+<ul>
+<li><strong><code>-v</code></strong> enables verbose diagnostic logging to stderr. Idempotent;
+passing it twice does not enable debug.</li>
+<li><strong>There is no <code>-q</code> / <code>--quiet</code>.</strong> The default is already quiet. Commands
+do not print chatter unless asked.</li>
+<li><strong>No log levels.</strong> Diagnostic logging is binary: on or off. If a message
+is worth printing, it is worth printing whenever <code>-v</code> is set.</li>
+</ul>
+<h2 id="configuration-and-credentials"><a class="header" href="#configuration-and-credentials">Configuration and credentials</a></h2>
+<ul>
+<li><strong>Config file discovery order:</strong> <code>-config</code> flag &gt; binary-specific env var
+(<code>TELA_CONFIG</code>, <code>TELAD_CONFIG</code>, <code>TELAHUBD_CONFIG</code>) &gt; auto-detect in
+the binary's standard path &gt; built-in defaults.</li>
+<li><strong>Credentials:</strong> looked up from the local credstore (user-level for
+<code>tela</code>, system-level for <code>telad</code> and <code>telahubd</code>) by hub URL. Flag
+<code>-token</code> and env <code>TELA_TOKEN</code> override lookup.</li>
+<li><strong>Never print credentials to stdout.</strong> Even on success. <code>tela login</code>
+echoes nothing. <code>tela token show</code> (if it exists) prints the token only
+when <code>-reveal</code> is passed explicitly.</li>
+</ul>
+<h2 id="interactive-prompts"><a class="header" href="#interactive-prompts">Interactive prompts</a></h2>
+<ul>
+<li><strong>Use sparingly.</strong> A well-designed CLI accepts its input via flags,
+env vars, or files. Prompts are a fallback for interactive setup.</li>
+<li><strong>Only <code>pair</code> and <code>login</code> prompt.</strong> <code>tela pair</code> prompts for the
+verification code. <code>tela login</code> prompts for the token when
+<code>-token</code> is not given and stdin is a TTY.</li>
+<li><strong>Password / token input is masked.</strong> Use <code>golang.org/x/term.ReadPassword</code>
+(which already lives in the Go standard library's extended module). Never
+echo the token as the user types it.</li>
+<li><strong>Confirmation prompts use <code>y/N</code> (capital default).</strong> Destructive
+commands without <code>-force</code> prompt:
+<pre><code>This will permanently delete token tk_01K8ABYZ. Continue? [y/N]:
+</code></pre>
+The default is No. An empty response is treated as No. <code>-force</code> skips
+the prompt entirely.</li>
+<li><strong>No prompts when stdin is not a TTY.</strong> A command that requires input but
+is run in a script must fail with a usage error, not hang waiting for
+input that will never come.</li>
+</ul>
+<h2 id="harmonization-across-binaries"><a class="header" href="#harmonization-across-binaries">Harmonization across binaries</a></h2>
+<p>The three binaries must present the same personality. Current divergences
+that violate this rule are:</p>
+<ol>
+<li><strong>Help text length.</strong> <code>tela</code> help is 80+ lines, <code>telahubd</code> help is 44.
+Target: all three produce help of comparable depth for comparable
+complexity.</li>
+<li><strong>Subcommand nesting.</strong> <code>tela admin</code> uses two-level nesting; <code>telahubd user</code> and <code>telahubd portal</code> are top-level with action suffixes. Pick
+one pattern per binary and apply it consistently.</li>
+<li><strong><code>-config</code> handling.</strong> <code>telahubd</code> infers from a default path,
+<code>telad</code> requires the flag, <code>tela</code> does not use the flag at all. The
+service binaries (<code>telad</code>, <code>telahubd</code>) should both default to their
+standard path and accept <code>-config</code> as an override.</li>
+<li><strong><code>-h</code> support.</strong> Currently relies on <code>flag.ExitOnError</code> default
+behavior. Every binary should explicitly bind <code>-h</code> on every FlagSet
+via <code>internal/cliutil</code>.</li>
+<li><strong>Exit codes.</strong> All errors currently exit 1. Introduce the 1/2/3 split
+(runtime / usage / config) across all three.</li>
+</ol>
+<p>These are tracked as harmonization work items, not design questions. The
+spec above is the target; the current binaries are being brought into line
+with it.</p>
+<h2 id="implementation-checklist-for-a-new-cli-command"><a class="header" href="#implementation-checklist-for-a-new-cli-command">Implementation checklist for a new CLI command</a></h2>
+<ol>
+<li>Create a <code>FlagSet</code> via <code>cliutil.NewFlagSet("&lt;binary&gt; &lt;verb&gt;")</code> so <code>-h</code>
+is wired and help rendering is shared.</li>
+<li>Declare a <code>cliutil.Help{}</code> struct with summary, usage, description,
+examples, and see-also.</li>
+<li>Call <code>cliutil.PermuteArgs(args)</code> before parsing so flags can appear
+after positional arguments.</li>
+<li>Parse flags with <code>fs.Parse(permuted)</code>. Handle <code>-h</code> by printing help
+and returning nil.</li>
+<li>Validate arguments before any side effects. Missing or malformed
+arguments return a usage error (exit code 2).</li>
+<li>Emit diagnostic progress via <code>log.Printf</code> on stderr. Emit the result
+via <code>fmt.Printf</code> on stdout.</li>
+<li>Support <code>-json</code> if the output is tabular.</li>
+<li>Support <code>-v</code> if the operation is long or has interesting intermediate
+state.</li>
+<li>On error, print <code>Error: &lt;message&gt;</code> to stderr and return the
+appropriate exit code.</li>
+<li>Add the verb to the binary's top-level help one-line list.</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/portal-protocol.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../glossary.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/portal-protocol.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../glossary.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>

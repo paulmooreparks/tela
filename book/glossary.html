@@ -1,0 +1,465 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>F. Glossary - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="src/sidebar-version.css">
+        <link rel="stylesheet" href="src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="glossary.html" class="active"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/glossary.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="appendix-f-glossary"><a class="header" href="#appendix-f-glossary">Appendix F: Glossary</a></h1>
+<h2 id="agent"><a class="header" href="#agent">Agent</a></h2>
+<p>A running instance of <code>telad</code> that registers one or more machines with a hub and
+forwards TCP connections from clients to local services. An agent initiates an
+outbound WebSocket connection to the hub and keeps it open; no inbound port is
+needed on the agent's host.</p>
+<p>Two deployment patterns:</p>
+<ul>
+<li><strong>Endpoint agent</strong>: <code>telad</code> runs on the same host as the services it exposes.
+Each machine entry points to <code>127.0.0.1</code>.</li>
+<li><strong>Gateway agent</strong> (bridge): <code>telad</code> runs on a separate host that can reach
+internal targets. Each machine entry points to a different IP on the local
+network, letting one agent represent many machines.</li>
+</ul>
+<p>See also: <a href="#machine">Machine</a>, <a href="#hub">Hub</a>.</p>
+<hr />
+<h2 id="channel"><a class="header" href="#channel">Channel</a></h2>
+<p>The release track a Tela binary follows for self-updates. Three channels exist:</p>
+<div class="table-wrapper"><table><thead><tr><th>Channel</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>dev</code></td><td>Built from every commit to <code>main</code>. Most current, least tested.</td></tr>
+<tr><td><code>beta</code></td><td>Promoted from <code>dev</code> on demand. Stabilized builds for early adopters.</td></tr>
+<tr><td><code>stable</code></td><td>Promoted from <code>beta</code>. Recommended for production.</td></tr>
+</tbody></table>
+</div>
+<p>Each binary has its own channel setting. The <code>tela</code> client and TelaVisor share
+the setting in <code>credentials.yaml</code> (<code>update.channel</code>). <code>telad</code> and <code>telahubd</code>
+each have it in their own YAML config.</p>
+<p>See <a href="../ops/release-process.html">Release process</a>.</p>
+<hr />
+<h2 id="connect-permission"><a class="header" href="#connect-permission">Connect permission</a></h2>
+<p>A machine permission that allows a token to open a client session (<code>tela connect</code>)
+to a specific machine. Multiple tokens may hold connect permission on the same
+machine. Owner and admin role tokens implicitly have connect access to all
+machines without an explicit grant.</p>
+<p>See also: <a href="#machine-permission">Machine permission</a>, <a href="#role">Role</a>.</p>
+<hr />
+<h2 id="credential-store"><a class="header" href="#credential-store">Credential store</a></h2>
+<p>A per-user file (<code>credentials.yaml</code>) that stores hub tokens so you do not need
+to pass <code>-token</code> on every command. Written by <code>tela login</code>; read automatically
+by <code>tela</code> and TelaVisor. Stored at:</p>
+<ul>
+<li>Windows: <code>%APPDATA%\tela\credentials.yaml</code></li>
+<li>Linux/macOS: <code>~/.tela/credentials.yaml</code></li>
+</ul>
+<p>Token lookup order: <code>-token</code> flag &gt; <code>TELA_TOKEN</code> environment variable &gt;
+credential store (user, then system).</p>
+<hr />
+<h2 id="fabric"><a class="header" href="#fabric">Fabric</a></h2>
+<p>The interconnection layer that lets endpoints reach each other without each
+endpoint knowing the topology. Tela is a fabric in the leaf-spine sense: the
+hub is the spine, agents and clients are the leaves, and most traffic travels
+client to hub to agent. Direct peer-to-peer connections are negotiated when
+the network allows, but they are an optimization rather than the default path.</p>
+<p>Tela is not a routed mesh in the Tailscale, Nebula, or ZeroTier sense.</p>
+<hr />
+<h2 id="file-share"><a class="header" href="#file-share">File share</a></h2>
+<p>An optional feature of <code>telad</code> that exposes a sandboxed directory on the
+agent host for file transfer over the WireGuard tunnel. Disabled by default.
+Configured per machine under the <code>shares:</code> list in <code>telad.yaml</code>.</p>
+<p>See <a href="../guide/file-sharing.html">File sharing</a>.</p>
+<hr />
+<h2 id="fleet"><a class="header" href="#fleet">Fleet</a></h2>
+<p>A collection of groups. A fleet may contain a single group (a simple
+single-hub deployment) or many groups across multiple sites, environments,
+or customers. The fleet is the unit of reasoning for operators who manage
+infrastructure at scale. Portals support fleet-scale deployments by listing
+multiple hubs in a single directory, letting clients resolve any hub by
+name without knowing its URL in advance.</p>
+<p>See also: <a href="#group">Group</a>, <a href="#portal">Portal</a>.</p>
+<hr />
+<h2 id="group"><a class="header" href="#group">Group</a></h2>
+<p>One hub (<code>telahubd</code>) together with all the agents (<code>telad</code>) connected to
+it. A group is the basic operational unit of a Tela deployment. The analogy
+is a carrier battle group: the hub is the carrier, and the agents are the
+support vessels operating under it. A single-hub deployment is one group.
+A larger deployment, where separate hubs serve different environments or
+customer sites, is a fleet of groups.</p>
+<p>See also: <a href="#hub">Hub</a>, <a href="#fleet">Fleet</a>.</p>
+<hr />
+<h2 id="hub"><a class="header" href="#hub">Hub</a></h2>
+<p>A running instance of <code>telahubd</code>. The hub is the coordination point for the
+fabric: it accepts WebSocket connections from agents and clients, relays
+encrypted WireGuard traffic between them, enforces access control, and serves
+the web console and admin API.</p>
+<p>The hub never decrypts tunnel payloads. WireGuard encryption is end-to-end
+between agent and client; the hub sees only ciphertext.</p>
+<p>See also: <a href="#agent">Agent</a>, <a href="#zero-knowledge-relay">Zero-knowledge relay</a>.</p>
+<hr />
+<h2 id="hub-alias"><a class="header" href="#hub-alias">Hub alias</a></h2>
+<p>A short name mapped to a hub WebSocket URL in <code>hubs.yaml</code> (for local fallback)
+or via a portal remote (for network-resolved lookup). Aliases let you write
+<code>-hub owlsnest</code> instead of <code>-hub wss://tela.awansaya.net</code>. Alias lookup is
+case-sensitive.</p>
+<p>See <a href="../guide/configuration.html">Configuration</a>.</p>
+<hr />
+<h2 id="identity"><a class="header" href="#identity">Identity</a></h2>
+<p>The human-readable name attached to a token (for example, <code>alice</code>,
+<code>prod-web01-agent</code>, <code>ci-bot</code>). Identity names appear in the hub console, CLI
+output, and access listings. The name has no security function; the token value
+is the credential. You can rename an identity with <code>tela admin access rename</code>
+without affecting the underlying token or permissions.</p>
+<p>See also: <a href="#token">Token</a>.</p>
+<hr />
+<h2 id="machine"><a class="header" href="#machine">Machine</a></h2>
+<p>A logical endpoint registered by an agent with a hub. A machine has a name
+(the ID used in <code>-machine</code> flags and access grants), an optional display name,
+and a list of exposed services. One <code>telad</code> process can register multiple
+machines. A machine is what operators connect to; it is not necessarily a
+physical host.</p>
+<p>See also: <a href="#service">Service</a>, <a href="#agent">Agent</a>.</p>
+<hr />
+<h2 id="machine-permission"><a class="header" href="#machine-permission">Machine permission</a></h2>
+<p>A per-machine authorization entry that controls what a token can do on a
+specific machine. Three permissions exist:</p>
+<div class="table-wrapper"><table><thead><tr><th>Permission</th><th>What it allows</th></tr></thead><tbody>
+<tr><td><code>register</code></td><td>Register an agent for this machine. Only one token may hold this per machine.</td></tr>
+<tr><td><code>connect</code></td><td>Open a client session to this machine. Multiple tokens may hold this.</td></tr>
+<tr><td><code>manage</code></td><td>Send management commands (config, logs, restart) to this machine's agent. Multiple tokens may hold this.</td></tr>
+</tbody></table>
+</div>
+<p>Permissions are granted with <code>tela admin access grant</code> and can use the wildcard
+<code>*</code> to apply to all machines. Owner and admin role tokens bypass all permission
+checks.</p>
+<p>See <a href="../architecture/access-model.html">Access model</a>.</p>
+<hr />
+<h2 id="manage-permission"><a class="header" href="#manage-permission">Manage permission</a></h2>
+<p>A machine permission that allows a token to send management commands to a
+machine's agent through the hub: read and write config, stream logs, restart
+the agent. Owner and admin role tokens have implicit manage access to all
+machines.</p>
+<p>See also: <a href="#machine-permission">Machine permission</a>.</p>
+<hr />
+<h2 id="open-mode"><a class="header" href="#open-mode">Open mode</a></h2>
+<p>The state the hub operates in when no tokens are configured. In open mode,
+every API call is permitted without authentication. The hub auto-generates an
+owner token on first startup specifically to prevent accidental open mode. Open
+mode requires deliberate configuration (removing all tokens from the config).</p>
+<hr />
+<h2 id="pair-code"><a class="header" href="#pair-code">Pair code</a></h2>
+<p>A short-lived, single-use code generated by the hub (<code>tela admin pair-code</code>)
+that lets a new agent or client authenticate without a pre-shared token. When
+the pair code is used, the hub issues a permanent token and saves it. Pair codes
+expire; their default lifetime is configurable.</p>
+<p>See <a href="admin.html">Hub administration</a>.</p>
+<hr />
+<h2 id="portal"><a class="header" href="#portal">Portal</a></h2>
+<p>A web service that maintains a directory of hubs. The <code>tela</code> client can resolve
+hub aliases through a portal using <code>tela remote add</code>. The portal protocol is a
+documented wire contract; Awan Saya is the reference implementation.</p>
+<p>See <a href="portal-protocol.html">Portal protocol</a>.</p>
+<hr />
+<h2 id="register-permission"><a class="header" href="#register-permission">Register permission</a></h2>
+<p>A machine permission that allows a token to register an agent for a specific
+machine. Only one token may hold the register permission per machine at a time.
+If a second token tries to register the same machine name with a different
+credential, the hub rejects it.</p>
+<p>See also: <a href="#machine-permission">Machine permission</a>.</p>
+<hr />
+<h2 id="role"><a class="header" href="#role">Role</a></h2>
+<p>A label on a token that controls hub-level API access. Four roles exist:</p>
+<div class="table-wrapper"><table><thead><tr><th>Role</th><th>Hub-level access</th><th>Machine-level access</th></tr></thead><tbody>
+<tr><td><code>owner</code></td><td>Full access including owner management</td><td>Implicit access to all machines</td></tr>
+<tr><td><code>admin</code></td><td>Full access except owner-only operations</td><td>Implicit access to all machines</td></tr>
+<tr><td><code>user</code></td><td>No admin API access</td><td>Only what machine permissions explicitly grant</td></tr>
+<tr><td><code>viewer</code></td><td>Read-only: <code>/api/status</code>, <code>/api/history</code></td><td>None</td></tr>
+</tbody></table>
+</div>
+<p>The default role when none is specified is <code>user</code>. Roles are set at token
+creation time with the <code>-role</code> flag.</p>
+<p>See <a href="../architecture/access-model.html">Access model</a>.</p>
+<hr />
+<h2 id="service"><a class="header" href="#service">Service</a></h2>
+<p>A TCP port exposed by a machine. A service has a port number, an optional
+name (for example, <code>SSH</code>, <code>Postgres</code>), and an optional protocol label.
+When a client connects to a machine, the tunnel maps each service port to a
+local address on the client's loopback interface.</p>
+<p>See also: <a href="#machine">Machine</a>.</p>
+<hr />
+<h2 id="session"><a class="header" href="#session">Session</a></h2>
+<p>A single client connection to a machine. Each session gets a /24 subnet on
+the <code>10.77.0.0/16</code> range: the agent side is <code>10.77.{idx}.1</code> and the client
+side is <code>10.77.{idx}.2</code>. Session index is monotonically incrementing per
+machine, up to 254 concurrent sessions.</p>
+<hr />
+<h2 id="telavisor"><a class="header" href="#telavisor">TelaVisor</a></h2>
+<p>The desktop graphical user interface (GUI) for Tela. Built with Wails v2 (Go
+backend, vanilla JavaScript frontend). Provides hub browsing, machine listing,
+connection management, agent management, and hub administration in a native
+window. Available on Windows; macOS and Linux builds require building from
+source.</p>
+<p>See <a href="telavisor.html">TelaVisor</a>.</p>
+<hr />
+<h2 id="token"><a class="header" href="#token">Token</a></h2>
+<p>A 64-character hexadecimal string (32 random bytes) that serves as the
+authentication credential for a hub. Tokens are shown in full only once, at
+creation or rotation time. The hub stores the full value for comparison;
+the admin API returns only an 8-character preview afterward.</p>
+<p>Token lookup order for CLI commands: <code>-token</code> flag &gt; <code>TELA_TOKEN</code> environment
+variable &gt; credential store.</p>
+<p>See also: <a href="#identity">Identity</a>, <a href="#role">Role</a>, <a href="#credential-store">Credential store</a>.</p>
+<hr />
+<h2 id="udp-relay"><a class="header" href="#udp-relay">UDP relay</a></h2>
+<p>The fallback transport for WireGuard traffic when a direct peer-to-peer path
+cannot be negotiated. The hub listens on a UDP port (default 41820) and relays
+WireGuard packets between agent and client. If UDP is blocked, <code>tela</code> falls
+back automatically to WebSocket relay.</p>
+<p>See also: <a href="#websocket-relay">WebSocket relay</a>.</p>
+<hr />
+<h2 id="upstream"><a class="header" href="#upstream">Upstream</a></h2>
+<p>A named hub alias stored in a <code>telad</code> config, enabling <code>telad</code> to register the
+same machines with more than one hub. Upstreams let one agent be reachable
+through multiple independent hubs without running multiple <code>telad</code> processes.</p>
+<p>See <a href="upstreams.html">Upstreams</a>.</p>
+<hr />
+<h2 id="websocket-relay"><a class="header" href="#websocket-relay">WebSocket relay</a></h2>
+<p>The primary transport for WireGuard traffic. The hub relays encrypted WireGuard
+packets between agent and client over the same persistent WebSocket connection
+used for signaling. Works through HTTP proxies and corporate firewalls that
+block UDP. Slower than UDP relay for high-throughput workloads.</p>
+<p>See also: <a href="#udp-relay">UDP relay</a>.</p>
+<hr />
+<h2 id="zero-knowledge-relay"><a class="header" href="#zero-knowledge-relay">Zero-knowledge relay</a></h2>
+<p>The property that the hub relays WireGuard-encrypted traffic without being able
+to decrypt it. WireGuard keys are held only by agents and clients. The hub sees
+ciphertext. This means a compromised hub cannot read tunnel payloads, only
+disrupt connectivity.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="architecture/tdl.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="architecture/tdl.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="src/sidebar-version.js"></script>
+        <script src="src/channel-banner.js"></script>
+        <script src="mermaid.min.js"></script>
+        <script src="mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>

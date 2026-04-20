@@ -1,0 +1,1308 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>TelaVisor desktop app - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html" class="active"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/guide/telavisor.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="telavisor"><a class="header" href="#telavisor">TelaVisor</a></h1>
+<p>TelaVisor is the desktop graphical interface for Tela. It wraps the <code>tela</code>
+command-line tool in a window with menus, dialogs, panels, and a file
+browser, so you can manage connections, hubs, agents, profiles, files, and
+credentials without ever opening a terminal. It runs on Windows, Linux, and
+macOS.</p>
+<h2 id="what-telavisor-is-and-what-it-is-not"><a class="header" href="#what-telavisor-is-and-what-it-is-not">What TelaVisor is, and what it is not</a></h2>
+<p>TelaVisor manages the full life cycle of connecting to remote services
+through Tela hubs:</p>
+<ol>
+<li><strong>Storing hub credentials.</strong> Add hubs by Uniform Resource Locator (URL)
+and token, or use a one-time pairing code. Credentials are stored in
+the same credential store that <code>tela login</code> uses, so the desktop client
+and the command line share the same set of authenticated hubs.</li>
+<li><strong>Selecting services.</strong> Browse machines registered on each hub, see
+which are online, and check the services you want to connect to.</li>
+<li><strong>Connecting with one click.</strong> TelaVisor saves your selections as a
+connection profile, launches <code>tela connect -profile</code>, and monitors the
+process.</li>
+<li><strong>Monitoring tunnel status.</strong> The Status view shows each selected
+service with its remote port, local address, and current state. Status
+updates arrive in real time over tela's WebSocket control application
+programming interface (API).</li>
+<li><strong>Managing hubs.</strong> View hub settings, manage tokens, configure
+per-machine access, view connection history, generate pairing codes,
+view remote logs, and update or restart hub binaries from
+Infrastructure mode.</li>
+<li><strong>Managing agents.</strong> View agent details, services, file share
+configuration, push configuration changes through the hub-mediated
+management protocol, view remote logs, and update or restart agent
+binaries from the Agents tab.</li>
+<li><strong>Managing multiple profiles.</strong> Create, rename, delete, import, and
+export profiles. Each profile is a standalone YAML file compatible
+with <code>tela connect -profile</code>.</li>
+<li><strong>Browsing remote files.</strong> The built-in file browser provides
+Explorer-style access to file shares on connected machines through the
+encrypted tunnel.</li>
+</ol>
+<p>TelaVisor does <strong>not</strong> implement tunneling itself. The encrypted WireGuard
+tunnel is built by the <code>tela</code> command-line process. TelaVisor is a control
+surface around that process: it writes profile files, launches the binary,
+talks to its local control API, and renders state. The
+<a href="#how-telavisor-works-with-tela">How TelaVisor works with tela</a> section at
+the end of this chapter explains the architecture.</p>
+<p>TelaVisor is also the reference implementation of the
+<a href="../architecture/tdl.html">Tela Design Language</a>, the visual language shared
+across all Tela products. The top bar, the mode toggle, the tab bar, the
+toolbar separators, the icon buttons, the modals, and the color system
+that you see in TelaVisor are the canonical examples of TDL.</p>
+<h2 id="installing-and-launching"><a class="header" href="#installing-and-launching">Installing and launching</a></h2>
+<p>TelaVisor ships as a single-file native application for each supported
+platform. Download the appropriate build from your configured release
+channel and run it. There is no installer to navigate, no kernel driver to
+sign, no service to register unless you choose to install one. The
+application starts with a default profile pre-populated and the Status tab
+visible.</p>
+<p>On first launch, TelaVisor's title bar shows the application name and
+version, the mode toggle in the center, and several icon buttons on the
+right side: a power button (the connection toggle), a file manager
+shortcut, an information button, an update warning indicator (only when an
+update is available), a settings gear, and a quit button. The window is
+resizable. Window position and size are saved on close and restored on the
+next launch.</p>
+<p>The application supports light and dark themes. The default is the system
+preference, which you can override in
+<a href="#application-settings">Application Settings</a>.</p>
+<h2 id="the-two-mode-layout"><a class="header" href="#the-two-mode-layout">The two-mode layout</a></h2>
+<p>TelaVisor uses a two-mode layout. The mode toggle in the center of the
+title bar switches between <strong>Clients</strong> mode and <strong>Infrastructure</strong> mode.
+Each mode has its own tab bar and its own set of features.</p>
+<ul>
+<li><strong>Clients mode</strong> is for <em>connecting to remote services</em>. Its tabs are
+Status, Profiles, Files, and Client Settings. Read this mode as
+<em>everything a user does to use a tunnel</em>.</li>
+<li><strong>Infrastructure mode</strong> is for <em>administering the system that the
+tunnels run on</em>. Its tabs are Hubs, Agents, Remotes, and Credentials.
+Read this mode as <em>everything an operator does to keep tunnels working</em>.</li>
+</ul>
+<p>A persistent log panel sits at the bottom of the window across both modes.
+You can drag its top edge to resize it, or click the chevron to collapse
+it to a slim status bar. The
+<a href="#log-panel">Log panel</a> section covers it in detail.</p>
+<p>The two modes have different audiences but the same window. A user who
+only ever needs to make connections can stay in Clients mode and never
+visit Infrastructure mode. An operator who runs hubs and agents on behalf
+of others spends most of their time in Infrastructure mode. A power user
+moves between both freely.</p>
+<h2 id="clients-mode"><a class="header" href="#clients-mode">Clients mode</a></h2>
+<h3 id="status"><a class="header" href="#status">Status</a></h3>
+<p>The Status tab is the page TelaVisor opens to. It is the page that
+answers the question <em>am I connected, and to what?</em></p>
+<p>When TelaVisor is not connected, the Status page shows the active profile
+name, a "Disconnected" badge, and a list of services that the profile is
+configured to expose. Each service line shows a grey indicator dot, the
+service name, the remote port on the target machine, the local address
+that <code>tela</code> would bind to, and a status reading "Not connected."</p>
+<p><img src="../screens/telavisor-status-disconnected.png" alt="Status tab, disconnected" /></p>
+<p>The power button in the title bar is grey when disconnected.
+Clicking it starts the connection.
+The button turns amber and pulses while the tunnel is being established,
+then turns solid green when the tunnel is up.</p>
+<p>When the tunnel is up, the Status page changes shape. The "Disconnected"
+badge becomes a green "Connected" badge with the process identifier (PID)
+of the tela child process in parentheses, the power button turns
+green, and each service line updates to show its current state. A service
+that is bound and waiting for traffic reads "Listening." A service with
+an active session reads "Active" with the number of current connections.
+A service that failed to bind reads the bind error in red.</p>
+<p><img src="../screens/telavisor-status-connected.png" alt="Status tab, connected" /></p>
+<p>Each service indicator dot is grey when disconnected, green when listening
+or active. The transitions between Listening and Active happen in real
+time as you start and stop sessions against the local addresses from
+outside TelaVisor. Open <code>ssh user@localhost -p PORT</code> (using the port shown
+in the Status tab) against a Listening SSH service and the dot stays green;
+the count next to "Active" goes up by one for the duration of the session
+and back to "Listening" when the session ends.</p>
+<p>The status updates arrive over a local WebSocket that the <code>tela</code> process
+opens for TelaVisor to subscribe to. There is no polling. The values you
+see on the Status page are pushed by <code>tela</code> the moment they change in the
+tunnel.</p>
+<p>To disconnect, click the power button in the title bar again, or quit
+TelaVisor. If you have <em>Confirm disconnect</em> enabled in
+<a href="#application-settings">Application Settings</a>, TelaVisor asks for
+confirmation before tearing the tunnel down.</p>
+<h3 id="profiles"><a class="header" href="#profiles">Profiles</a></h3>
+<p>The Profiles tab is where you build connection profiles. A connection
+profile is a YAML file that names one or more hubs, the machines on those
+hubs you want to reach, and the services on those machines you want to
+expose locally. The same YAML file format is consumed by <code>tela connect -profile</code> from the command line; the desktop application and the command
+line use profiles interchangeably.</p>
+<p>The Profiles tab has a toolbar across the top with the controls for
+managing the profile collection. From left to right, the toolbar contains:</p>
+<ul>
+<li><strong>Profile dropdown.</strong> Selects the active profile. Clicking the dropdown
+opens a list of every profile in your profile directory. Selecting one
+loads it into the editor below and makes it the active profile for the
+Status, Files, and Client Settings tabs as well.</li>
+<li><strong>Undo.</strong> Reverts unsaved changes to the most recently saved state of
+the profile.</li>
+<li><strong>Save.</strong> Writes the current selections to the profile YAML file. The
+button is enabled only when there are unsaved changes.</li>
+<li><strong>New.</strong> Creates a new empty profile. Prompts for the profile name and
+creates an empty YAML file in the profile directory.</li>
+<li><strong>Delete.</strong> Deletes the active profile, with confirmation.</li>
+<li><strong>Import.</strong> Imports a profile YAML file from a path on disk. Useful for
+receiving a profile from another machine or another user.</li>
+<li><strong>Export.</strong> Saves the active profile to a chosen path on disk. Useful
+for sharing a profile or backing it up.</li>
+</ul>
+<p>Below the toolbar, the page is split into a left sidebar and a right
+panel. The left sidebar lists three things: a <em>Profile Settings</em> entry,
+the hubs you have credentials for, and a <em>Preview</em> entry. Each hub has a
+checkbox that toggles whether the hub is included in the profile. Hubs
+that are checked expand to show the machines registered with them. Each
+machine has a coloured dot indicating its current online state.</p>
+<p>The right panel changes based on what you have selected in the sidebar.</p>
+<h4 id="profile-settings"><a class="header" href="#profile-settings">Profile Settings</a></h4>
+<p>Selecting the <em>Profile Settings</em> row in the sidebar shows the
+profile-level configuration. This is the configuration that applies to
+the profile as a whole, not to any one machine.</p>
+<p><img src="../screens/telavisor-profiles-profile-settings.png" alt="Profiles tab, Profile Settings" /></p>
+<p>The Profile Settings panel contains:</p>
+<ul>
+<li><strong>Name.</strong> The display name of the profile. The name is the file name
+of the YAML file (minus the extension) and is what appears in the
+profile dropdown.</li>
+<li><strong>File Share Mount.</strong> The Web Distributed Authoring and Versioning
+(WebDAV) mount configuration. An <em>Enable</em> checkbox turns the mount
+on or off. The <em>Mount point</em> field sets the local path or drive letter
+to mount onto. The <em>Port</em> field sets the local TCP port the WebDAV
+server listens on. The <em>Auto-mount on connect</em> checkbox mounts the
+share automatically when the profile connects. Below these controls,
+a live preview lists every machine in the profile that has file
+sharing enabled. Each listed machine will appear as a folder under
+the mount point when the tunnel is connected. The mount feature is
+the desktop equivalent of <code>tela mount</code> from the command line.</li>
+<li><strong>MTU.</strong> The Maximum Transmission Unit override for the WireGuard
+interface. The default is 1100, which works on every network the
+project has tested against. The override is useful when a specific
+link path requires a smaller MTU to avoid fragmentation. The <em>Use
+default</em> checkbox uses the default value and disables the input box.</li>
+</ul>
+<p>The Profile Settings panel is where you set up things that apply to the
+profile regardless of which machine you are connecting to.</p>
+<h4 id="switching-profiles"><a class="header" href="#switching-profiles">Switching profiles</a></h4>
+<p>The profile dropdown in the toolbar shows every profile in your profile
+directory. Click the dropdown to open the list and select a profile to
+switch to.</p>
+<p><img src="../screens/telavisor-profiles-switcher.png" alt="Profiles tab, profile switcher" /></p>
+<p>Switching profiles loads the selected profile into the editor and makes
+it the active profile across the rest of the application. The Status
+tab, the Files tab, the Client Settings tab, and the connection state
+all follow the active profile. If you switch profiles while connected,
+TelaVisor disconnects the current profile first (asking for confirmation
+if confirm-disconnect is enabled), then loads the new profile without
+automatically reconnecting. Click the power button in the title bar to
+connect with the new profile.</p>
+<h4 id="hub-view"><a class="header" href="#hub-view">Hub view</a></h4>
+<p>Clicking a hub in the sidebar shows a summary card for that hub in the
+right panel.</p>
+<p><img src="../screens/telavisor-profiles-hub.png" alt="Profiles tab, hub view" /></p>
+<p>The hub summary shows the hub name, the hub URL, and three statistics:</p>
+<ul>
+<li><strong>Machines.</strong> The total number of machines registered with this hub.</li>
+<li><strong>Online.</strong> The number of those machines that are currently online.</li>
+<li><strong>Selected services.</strong> The number of services on this hub that are
+currently included in the profile.</li>
+</ul>
+<p>The hub view is the place to get a quick read on whether the hub has the
+machines you expect. From here you can drill into a specific machine by
+clicking it in the sidebar.</p>
+<h4 id="machine-view"><a class="header" href="#machine-view">Machine view</a></h4>
+<p>Clicking a machine in the sidebar shows the services that machine
+exposes through the hub.</p>
+<p><img src="../screens/telavisor-profiles-machine.png" alt="Profiles tab, machine services" /></p>
+<p>The machine view shows the machine name, the hub it is registered with,
+the machine's online status, and a list of every service the machine
+exposes. Each service has a checkbox that toggles whether the service is
+included in the profile. The columns show:</p>
+<ul>
+<li><strong>Service name.</strong> Either the name the agent advertised (for example,
+<code>SSH</code>, <code>RDP</code>, <code>postgres</code>) or, if the agent did not advertise a name,
+the port number.</li>
+<li><strong>Remote port.</strong> The port the service listens on inside the
+encrypted tunnel, on the agent side.</li>
+<li><strong>Protocol.</strong> The transport protocol of the service (almost always
+<code>tcp</code> because Tela is a TCP fabric).</li>
+<li><strong>Local address.</strong> The address and port the <code>tela</code> process binds on
+<code>127.0.0.1</code> when the profile is connected. The first choice is the
+service's real port (for example, <code>localhost:22</code> for SSH). If that port
+is already in use, the client tries <code>port+10000</code> (<code>localhost:10022</code>),
+then <code>port+10001</code>, and so on until a free port is found. The actual bound
+address and port are shown here once the profile is connected.</li>
+</ul>
+<p>When the tunnel is connected, the hub and machine checkboxes are
+disabled. This prevents accidental profile changes during an active
+session. To edit the profile, disconnect first.</p>
+<h4 id="preview"><a class="header" href="#preview">Preview</a></h4>
+<p>Clicking the <em>Preview</em> row in the sidebar shows the live YAML preview of
+the profile.</p>
+<p><img src="../screens/telavisor-profiles-preview.png" alt="Profiles tab, YAML preview" /></p>
+<p>The preview displays the exact YAML that TelaVisor will write to the
+profile file when you click Save. The file path of the profile is shown
+in the header of the preview panel. The YAML preview is read-only inside
+TelaVisor; if you want to edit the profile by hand, open the file in a
+text editor and the changes will be reflected the next time TelaVisor
+loads it.</p>
+<p>The preview is also the canonical answer to the question <em>what command
+line equivalent does this profile correspond to?</em> The same YAML file
+works with <code>tela connect -profile &lt;path&gt;</code> from a shell, so the preview
+shows you exactly what is happening under the hood when you click
+Connect.</p>
+<h3 id="files"><a class="header" href="#files">Files</a></h3>
+<p>The Files tab is the built-in file browser. It uses the agent's file
+share protocol over the encrypted tunnel to list, upload, download,
+rename, move, and delete files on machines that have file sharing
+enabled. There is no Secure Shell (SSH), no Server Message Block (SMB),
+and no Web Distributed Authoring and Versioning (WebDAV) mount required;
+the file browser talks the file share protocol directly.</p>
+<h4 id="when-the-tunnel-is-down"><a class="header" href="#when-the-tunnel-is-down">When the tunnel is down</a></h4>
+<p>When the tunnel is not connected, opening the Files tab shows the list
+of machines in the active profile, but the only state you can see is
+"disconnected."</p>
+<p><img src="../screens/telavisor-files-machines-disconnected.png" alt="Files tab, machine list (disconnected)" /></p>
+<p>You cannot browse files until you connect the profile. The Files tab in
+this state is mostly informational: it tells you which machines are part
+of the active profile and that none of them are reachable yet.</p>
+<h4 id="when-the-tunnel-is-up"><a class="header" href="#when-the-tunnel-is-up">When the tunnel is up</a></h4>
+<p>When the tunnel is connected, the Files tab shows each machine with its
+file share status: a coloured indicator dot, the machine name, the hub
+it is registered with, and badges describing the file share's policies.</p>
+<p><img src="../screens/telavisor-files-machines.png" alt="Files tab, machine list" /></p>
+<p>The badges include:</p>
+<ul>
+<li><strong>Writable.</strong> The agent allows uploads and modifications.</li>
+<li><strong>Delete.</strong> The agent allows file deletion.</li>
+<li><strong>Max:</strong> the maximum file size the agent will accept on upload.</li>
+<li><strong>Blocked:</strong> the file extensions the agent refuses to accept on
+upload.</li>
+</ul>
+<p>These badges come from the agent's file share configuration and are
+read-only in this view. Editing them is done from the
+<a href="#agents">Agents tab</a> in Infrastructure mode, on a machine where you
+have the manage permission.</p>
+<h4 id="browsing-files"><a class="header" href="#browsing-files">Browsing files</a></h4>
+<p>Clicking a machine opens its file share in an Explorer-style browser.</p>
+<p><img src="../screens/telavisor-files-browse.png" alt="Files tab, browsing" /></p>
+<p>The browser layout has four parts:</p>
+<ul>
+<li><strong>Address bar.</strong> Back, up, and a path display showing the current
+directory. Each segment of the path is clickable to navigate to that
+ancestor directory.</li>
+<li><strong>Action bar.</strong> Buttons for <em>Upload</em>, <em>New Folder</em>, <em>Rename</em>,
+<em>Download</em>, and <em>Delete</em>, plus a <em>Hide dotfiles</em> toggle on the right.
+Each action button is enabled or disabled based on the current
+selection and the file share's permissions. Upload and New Folder
+require the share to be writable. Delete requires the share to allow
+deletion.</li>
+<li><strong>File list.</strong> A sortable table with columns for <em>Name</em>, <em>Date
+modified</em>, <em>Type</em>, and <em>Size</em>. Folders are listed first, then files,
+each group sorted alphabetically by default. Click a column header to
+sort by that column.</li>
+<li><strong>Status bar.</strong> Shows the file count, folder count, total size of the
+current directory, and a read-write or read-only indicator for the
+share.</li>
+</ul>
+<p>Selection follows standard desktop conventions:</p>
+<ul>
+<li><strong>Click</strong> to select a single item.</li>
+<li><strong>Ctrl+click</strong> to toggle individual items in a multi-selection.</li>
+<li><strong>Shift+click</strong> to extend a range selection.</li>
+<li><strong>Double-click a file</strong> to download it.</li>
+<li><strong>Double-click a folder</strong> to enter it.</li>
+</ul>
+<p>Drag and drop is supported on writable shares. Drag a file or folder
+onto a target folder to move it. If the dragged item is part of a
+multi-selection, all selected items move together. The target folder
+highlights with a dashed outline while the drag is over it.</p>
+<p>The file list updates in real time. When files are created, modified,
+deleted, or renamed on the remote machine by any process, the changes
+appear in the file list automatically. This works because the agent
+watches the file share directory using the operating system's native
+file change notifications and pushes change events back through the
+tunnel to TelaVisor.</p>
+<h3 id="client-settings"><a class="header" href="#client-settings">Client Settings</a></h3>
+<p>The Client Settings tab is where you configure how the <code>tela</code> process
+runs on the local machine. It has its own toolbar at the top with <em>Undo</em>
+and <em>Save</em> buttons. Both are enabled when there are pending changes.</p>
+<p><img src="../screens/telavisor-client-settings.png" alt="Client Settings" /></p>
+<p>The tab contains four sections.</p>
+<h4 id="default-profile"><a class="header" href="#default-profile">Default Profile</a></h4>
+<p>A dropdown that selects which profile loads when TelaVisor starts and is
+used by the system service when one is installed. The dropdown lists every
+profile in your profile directory.</p>
+<h4 id="binary-location"><a class="header" href="#binary-location">Binary Location</a></h4>
+<p>The folder where TelaVisor looks for the managed binaries: <code>tela</code>,
+<code>telad</code>, and <code>telahubd</code>. The default is the platform's standard local
+application directory:</p>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Default location</th></tr></thead><tbody>
+<tr><td>Windows</td><td><code>%LOCALAPPDATA%\tela</code></td></tr>
+<tr><td>Linux</td><td><code>~/.local/share/tela</code></td></tr>
+<tr><td>macOS</td><td><code>~/Library/Application Support/tela</code></td></tr>
+</tbody></table>
+</div>
+<p>Use the <em>Browse</em> button to choose a different folder, or <em>Restore Default</em>
+to reset.</p>
+<p>The Binary Location is the directory where TelaVisor will install or
+update tools through the <em>Installed Tools</em> table below. It is also the
+directory the system service is configured against, so all four roles
+(TelaVisor, the <code>tela</code> CLI, <code>telad</code>, <code>telahubd</code>) read and write the same
+binaries from the same place.</p>
+<h4 id="installed-tools"><a class="header" href="#installed-tools">Installed Tools</a></h4>
+<p>A table showing every Tela binary that TelaVisor manages. Each row has
+four columns:</p>
+<ul>
+<li><strong>Tool.</strong> The binary name (TelaVisor, tela, telad, telahubd).</li>
+<li><strong>Installed.</strong> The version currently on disk in the configured Binary
+Location, or <em>not installed</em>.</li>
+<li><strong>Available.</strong> The latest version on the release channel TelaVisor
+itself is following.</li>
+<li><strong>Action.</strong> A button that depends on the row's state. <em>Update</em> if the
+installed version is older than the available version. <em>Install</em> if
+the binary is missing. <em>Up to date</em> (disabled) if the installed
+version matches the available version.</li>
+</ul>
+<p>The available version comes from the release channel manifest, not from
+GitHub <code>releases/latest</code>. So a TelaVisor configured to follow the <code>dev</code>
+channel compares against <code>dev.json</code>, a TelaVisor on <code>beta</code> against
+<code>beta.json</code>, a TelaVisor on <code>stable</code> against <code>stable.json</code>. Changing the
+channel in <a href="#application-settings">Application Settings</a> immediately
+changes which manifest the table compares against, and the buttons in
+this table re-evaluate. Every download is verified against the channel
+manifest's SHA-256 hash before being written to disk.</p>
+<p>When <code>telad</code> or <code>telahubd</code> is installed as a managed operating system
+service, the Installed Tools row shows <code>service (running)</code> or <code>service (stopped)</code> next to the binary name. The Update button in this state
+delegates the swap to the elevated service process; TelaVisor itself
+does not need to be elevated. After the service restarts against the
+new binary, the Installed column polls the on-disk version until it
+changes, so the displayed version always reflects what is actually
+running.</p>
+<p>The <em>Refresh</em> button at the top right of the table re-checks every row
+against the channel manifest. Use it after changing channels or after
+publishing a new release.</p>
+<h4 id="system-service"><a class="header" href="#system-service">System Service</a></h4>
+<p>Controls for installing the <code>tela</code> client as a system service. The
+service runs the default profile as an always-on background tunnel that
+starts with the operating system, so the tunnel is up before any user
+logs in. This is useful for production deployments where the tunnel
+needs to survive logouts and reboots.</p>
+<p><img src="../screens/telavisor-client-settings2.png" alt="Client Settings, scrolled" /></p>
+<p>The Status field shows whether the service is currently <em>Installed</em> or
+<em>Not installed</em>. Four buttons control the service: <em>Install</em>, <em>Start</em>,
+<em>Stop</em>, and <em>Uninstall</em>. The buttons are enabled or disabled based on
+the current state. <em>Install</em> asks for elevation (User Account Control on
+Windows, <code>sudo</code> on Linux, an authentication prompt on macOS). The
+service uses the platform-native service manager: Windows Service
+Control Manager (SCM) on Windows, systemd on Linux, launchd on macOS.</p>
+<h4 id="user-autostart"><a class="header" href="#user-autostart">User Autostart</a></h4>
+<p>Controls for running the <code>tela</code> client as a user-level autostart task
+that launches when you log in, without requiring administrator
+privileges. Unlike the System Service, User Autostart runs in your
+login session, which means it starts only after you log in and stops
+when you log out. It is suited to personal machines where you want
+the tunnel up for your own use but do not need it active before login
+or for other users.</p>
+<p>The Status field shows whether autostart is currently <em>Installed</em> or
+<em>Not installed</em>. Three buttons control it: <em>Install</em>, <em>Start</em>, and
+<em>Stop</em>. <em>Install</em> does not require elevation. On Windows, TelaVisor
+registers a Scheduled Task that triggers at login. On Linux, it writes
+a systemd user unit. On macOS, it installs a LaunchAgent.</p>
+<h2 id="infrastructure-mode"><a class="header" href="#infrastructure-mode">Infrastructure mode</a></h2>
+<p>Switching the mode toggle in the title bar to <em>Infrastructure</em> changes
+the tab bar to the four administration tabs: Hubs, Agents, Remotes, and
+Credentials. Infrastructure mode is for operators. None of the features
+in this mode are required for a user who only wants to make a connection.
+All of them become important the moment you start running hubs or agents
+on behalf of yourself or others.</p>
+<h3 id="hubs"><a class="header" href="#hubs">Hubs</a></h3>
+<p>The Hubs tab is the centre of operator workflows. It is where you
+administer any hub you have credentials for: viewing settings, managing
+machines, granting and revoking access, issuing tokens, viewing
+connection history, and updating or restarting the hub binary.</p>
+<p>The tab is laid out with a sidebar on the left containing a hub picker
+dropdown, a navigation list of views, and an <em>Add Hub</em> button at the
+bottom. The right panel shows the currently selected view for the
+currently selected hub.</p>
+<h4 id="hub-picker"><a class="header" href="#hub-picker">Hub picker</a></h4>
+<p>The hub picker at the top of the sidebar lists every hub you have
+credentials for. Clicking it opens a dropdown of hub URLs.</p>
+<p><img src="../screens/telavisor-hub-picker.png" alt="Hub picker, open" /></p>
+<p>Selecting a hub from the dropdown loads its data into the views below.
+All five views (Hub Settings, Machines, Access, Tokens, History) are
+scoped to the currently selected hub.</p>
+<p>If you do not have credentials for any hub yet, the dropdown is empty
+and the <em>Add Hub</em> button at the bottom of the sidebar is the only way
+forward. <em>Add Hub</em> opens a dialog where you can paste a hub URL and
+either a token or a one-time pairing code.</p>
+<h4 id="hub-settings"><a class="header" href="#hub-settings">Hub Settings</a></h4>
+<p>The Hub Settings view shows everything about the hub itself: connection
+details, hub metadata, portal registrations, lifecycle controls, and
+destructive actions.</p>
+<p><img src="../screens/telavisor-hub-settings.png" alt="Hub Settings" /></p>
+<p>The Connection section at the top shows:</p>
+<ul>
+<li><strong>URL.</strong> The hub's connection URL, beginning with <code>wss://</code> for
+WebSocket Secure or <code>ws://</code> for plain WebSocket.</li>
+<li><strong>Status.</strong> The hub's online state.</li>
+<li><strong>Your role.</strong> The role of the token you authenticated with: owner,
+admin, user, or viewer. This determines which actions in the rest of
+the page you are allowed to take.</li>
+<li><strong>Console.</strong> A clickable link to the hub's web console (the
+browser-based admin interface that the hub serves on its own URL).</li>
+</ul>
+<p>Below Connection, the Hub Info section shows metadata reported by the
+hub at <code>/api/status</code>:</p>
+<ul>
+<li><strong>Hub name.</strong> The hub's configured name.</li>
+<li><strong>Hostname.</strong> The hostname of the machine the hub is running on.</li>
+<li><strong>Platform.</strong> The operating system and architecture (<code>linux/amd64</code>,
+<code>windows/amd64</code>, etc.).</li>
+<li><strong>Version.</strong> The release version of the hub binary, with a coloured
+badge showing whether it is current or behind the channel manifest.
+Green with <code>(latest: vX.Y.Z)</code> when current, amber with <code>update available: vX.Y.Z</code> when behind. The "available" version comes from
+the hub's own release channel manifest, so a hub running on the <code>dev</code>
+channel is compared against <code>dev.json</code>, a hub on <code>stable</code> against
+<code>stable.json</code>.</li>
+<li><strong>Go version.</strong> The Go runtime version the hub binary was compiled
+with.</li>
+<li><strong>Uptime.</strong> How long the hub process has been running since its last
+start.</li>
+</ul>
+<p>Below Hub Info, the Portals section lists hub directories the hub is
+registered with. Each entry shows the directory name and the directory
+URL. Adding a portal here is the equivalent of running <code>telahubd portal add</code> from the command line.</p>
+<p>The Management section provides hub lifecycle controls. These are only
+visible to owners and admins:</p>
+<ul>
+<li><strong>Log output.</strong> A <em>View Logs</em> button that opens a new tab in the log
+panel streaming the hub's recent log buffer through the
+<code>/api/admin/logs</code> endpoint.</li>
+<li><strong>Release channel.</strong> A dropdown showing the hub's currently
+configured release channel (<code>dev</code>, <code>beta</code>, or <code>stable</code>) with a status
+string showing the current and latest versions on that channel.
+Changing the dropdown opens a confirmation dialog and, on confirm,
+sends <code>PATCH /api/admin/update</code> to the hub to switch its channel
+persistently. The Software button below updates immediately to
+reflect the new channel's HEAD. If the hub is too old to support
+channels (returns HTTP 405 for the new endpoint), the row hides
+itself and the Software button shows <code>pre-channel build (update first via legacy path)</code>.</li>
+<li><strong>Software.</strong> Shows whether the hub is up to date or behind the
+channel's HEAD. The button label reads either <code>Up to date</code> (disabled)
+or <code>Update to vX.Y.Z</code> (active). Clicking the active button asks the
+hub to download the new release, verify it against the channel
+manifest's SHA-256 hash, replace its binary, and restart. Progress is
+shown inline (<code>Hub is downloading update and restarting...</code>,
+<code>Waiting for hub to restart... (1)</code>, <code>Updated to vX.Y.Z</code>) and the
+page re-renders when the hub comes back online. The label and
+disabled state are derived from the channel manifest, not from the
+GitHub <code>/releases/latest</code> API, so a hub on <code>dev</code> cannot be told to
+"update to v0.5.0" (the <code>stable</code> HEAD).</li>
+<li><strong>Restart.</strong> Requests an immediate graceful restart of the hub
+process.</li>
+</ul>
+<p>The Danger Zone at the bottom of the page provides destructive actions:
+removing the hub from TelaVisor's local list (which does not affect the
+hub itself, only your local credentials and view) and clearing all
+stored hub tokens from the local credential file.</p>
+<p>The Hub Settings view is the same shape regardless of which hub you have
+selected. The values change with the hub; the layout does not. A second
+hub on a different release version would show the same panels with
+different version badges.</p>
+<p><img src="../screens/telavisor-hub-settings-gohub.png" alt="Hub Settings for a second hub" /></p>
+<h4 id="machines"><a class="header" href="#machines">Machines</a></h4>
+<p>The Machines view lists all machines registered on the selected hub
+with their online status, last-seen timestamp, advertised services, and
+active session count.</p>
+<p><img src="../screens/telavisor-hub-machines.png" alt="Machines view" /></p>
+<p>Each machine row shows:</p>
+<ul>
+<li><strong>Online indicator.</strong> A coloured dot, green for online, grey for
+offline.</li>
+<li><strong>Machine name.</strong> The name the agent registered with.</li>
+<li><strong>Last seen timestamp.</strong> Either the most recent contact time for an
+online machine, or the last time the machine was seen for an offline
+machine, in ISO 8601 Coordinated Universal Time (UTC) format.</li>
+<li><strong>Service badges.</strong> A pill for each service the machine advertises,
+showing the service name and the remote port (for example, <code>SSH :22</code>,
+<code>RDP :3389</code>).</li>
+<li><strong>Active session count.</strong> The number of active client sessions on
+this machine, on the right side of the row.</li>
+</ul>
+<p>The Machines view is read-only. To edit a machine's configuration, find
+the agent in the <a href="#agents">Agents tab</a> and use the agent detail panel.
+To remove a machine from a hub, use the Danger Zone in the agent
+detail.</p>
+<h4 id="access"><a class="header" href="#access">Access</a></h4>
+<p>The Access view shows the unified per-identity, per-machine permission
+model. Each identity is a card showing its role pill, token preview, and the
+machines it has permissions on.</p>
+<p><img src="../screens/telavisor-hub-access.png" alt="Access view" /></p>
+<p>For each identity card you see:</p>
+<ul>
+<li><strong>Identity name.</strong> The name the token was issued under.</li>
+<li><strong>Role pill.</strong> Owner, admin, user, or viewer. Owner and admin roles
+have implicit access to all machines, so their cards do not list
+per-machine permissions; the absence of a list is the
+whole-permission grant.</li>
+<li><strong>Token preview.</strong> The first 8 characters of the token, followed by
+an ellipsis. Full tokens are only visible at creation time.</li>
+<li><strong>Per-machine permissions.</strong> A list of machines this identity has
+explicit permissions on, each with a comma-separated list of the
+granted permissions (<code>register</code>, <code>connect</code>, <code>manage</code>).</li>
+<li><strong>Rename button.</strong> Renames the identity. Tokens are not affected by
+the rename.</li>
+</ul>
+<p>The <em>Grant Access</em> button at the bottom of the page opens a dialog that
+lets you grant permissions to any identity on any machine. The dialog
+asks you to choose an identity, choose a machine (or the wildcard <code>*</code>
+which applies to all machines), and choose which of the three
+permissions to grant: <em>Connect</em> lets the identity open a tunnel to the
+machine; <em>Register</em> lets the identity register the machine (single
+assignment, only one identity can be the registrant); <em>Manage</em> lets the
+identity view and edit the agent's configuration, view its logs, and
+restart or update it remotely.</p>
+<p>The Access view is the canonical place to answer the question <em>who can
+do what to which machine on this hub</em>. It is the visual equivalent of
+the unified <code>/api/admin/access</code> API endpoint.</p>
+<h4 id="tokens"><a class="header" href="#tokens">Tokens</a></h4>
+<p>The Tokens view manages authentication tokens for the selected hub. You
+can create new identities, rotate tokens, delete identities, and
+generate one-time pairing codes.</p>
+<p><img src="../screens/telavisor-hub-tokens.png" alt="Tokens view" /></p>
+<p>The token table shows every identity on the hub, with columns for:</p>
+<ul>
+<li><strong>Identity.</strong> The identity name.</li>
+<li><strong>Role.</strong> A coloured role pill.</li>
+<li><strong>Token preview.</strong> The first 8 characters of the token. Full tokens
+are only visible immediately after creation or rotation, never again.</li>
+<li><strong>Actions.</strong> <em>Rotate</em> (issues a new token for the identity, showing
+the new token in a one-time dialog) and <em>Delete</em> (removes the
+identity, with confirmation).</li>
+</ul>
+<p>The <em>Add Token</em> button at the top creates a new identity. The dialog
+asks for an identity name and a role (owner, admin, user, or viewer)
+and shows the new token in a one-time display after creation. Save the
+token immediately; you will not see it again.</p>
+<p>The <em>Generate Pairing Code</em> button issues a short-lived, single-use
+code (for example, <code>ABCD-1234</code>) that can be exchanged for a permanent
+token by running <code>tela pair</code> from the command line or by pasting the
+code into TelaVisor's pairing flow on another machine. The dialog lets
+you choose the role of the resulting token and the expiration window
+(10 minutes to 7 days). Pairing codes are the recommended way to
+onboard a user or an agent, because they avoid copying 64-character
+hex tokens by hand.</p>
+<p>To change a token's role, delete the identity and create a new one with
+the desired role. Roles are immutable on existing tokens by design;
+changing the role would invalidate the principle that the token at a
+given hash always confers a known set of permissions.</p>
+<h4 id="history"><a class="header" href="#history">History</a></h4>
+<p>The History view shows recent session events on the selected hub:
+agent registrations, client connections, client disconnections, agent
+disconnections.</p>
+<p><img src="../screens/telavisor-hub-history.png" alt="History view" /></p>
+<p>Each row shows:</p>
+<ul>
+<li><strong>Timestamp.</strong> The event time in ISO 8601 UTC.</li>
+<li><strong>Event type.</strong> <code>agent-register</code>, <code>agent-disconnect</code>,
+<code>client-connect</code>, <code>client-disconnect</code>.</li>
+<li><strong>Identity.</strong> The identity that triggered the event, when known.</li>
+<li><strong>Machine.</strong> The machine the event applies to, when relevant.</li>
+</ul>
+<p>The history is held in a fixed-size ring buffer in the hub. Older
+events are evicted as new ones arrive. The buffer survives within a
+single hub process and is reset when the hub restarts. Persistent audit
+log shipping is planned under the <em>Audit log retention</em> item in
+<a href="https://github.com/paulmooreparks/tela/blob/main/ROADMAP-1.0.md">ROADMAP-1.0.md</a>.</p>
+<h3 id="agents"><a class="header" href="#agents">Agents</a></h3>
+<p>The Agents tab manages every agent (<code>telad</code> instance) visible across all
+the hubs you have credentials for, <em>without requiring an active tunnel
+connection</em>. The agents are listed by querying each hub's machines
+endpoint and merging the results into a single fleet view. You can
+manage an agent on a hub on the other side of the world without first
+opening a tunnel to one of its services.</p>
+<p>The tab is laid out with a sidebar on the left listing every visible
+agent and a detail panel on the right. A toolbar above the detail panel
+contains <em>Undo</em>, <em>Save</em>, <em>Restart</em>, and <em>Logs</em> buttons that act on the
+currently selected agent. <em>Undo</em> and <em>Save</em> are enabled when there are
+unsaved changes. <em>Restart</em> and <em>Logs</em> are always enabled when an agent
+is selected.</p>
+<h4 id="agent-list"><a class="header" href="#agent-list">Agent list</a></h4>
+<p>When no agent is selected, the right panel is empty with a prompt to
+select one.</p>
+<p><img src="../screens/telavisor-agents-list.png" alt="Agents tab, no selection" /></p>
+<p>Each entry in the agent sidebar shows:</p>
+<ul>
+<li><strong>Online indicator.</strong> A coloured dot.</li>
+<li><strong>Agent name.</strong> The name the agent registered as.</li>
+<li><strong>Agent version.</strong> The release version of the agent binary, displayed
+as a small caption.</li>
+</ul>
+<p>A <em>Pair Agent</em> button at the bottom of the sidebar opens the same
+pairing flow used for users: it asks for a pairing code generated by
+the <a href="#tokens">Tokens view</a> and exchanges it for a permanent agent
+token, then registers the agent with the hub the code was issued from.</p>
+<h4 id="agent-detail"><a class="header" href="#agent-detail">Agent detail</a></h4>
+<p>Selecting an agent in the sidebar shows the agent detail panel on the
+right.</p>
+<p><img src="../screens/telavisor-agents.png" alt="Agent detail, top half" /></p>
+<p>The detail panel is divided into cards, each covering one aspect of
+the agent.</p>
+<p><strong>Agent Info</strong> is a read-only card showing metadata reported by the
+agent at registration:</p>
+<ul>
+<li><strong>Version.</strong> The release version with an up-to-date badge.</li>
+<li><strong>Hub.</strong> The hub the agent is registered with.</li>
+<li><strong>Hostname.</strong> The hostname of the machine the agent is running on.</li>
+<li><strong>Platform.</strong> The operating system and architecture.</li>
+<li><strong>Last seen.</strong> The last contact timestamp.</li>
+<li><strong>Active sessions.</strong> The number of active client sessions on this
+machine right now.</li>
+</ul>
+<p><strong>Display Name</strong> is an editable field for a human-readable name shown
+in dashboards and portals. Defaults to the registered machine name.</p>
+<p><strong>Tags</strong> is an editable field for comma-separated metadata tags. Useful
+for filtering large fleets by environment, region, customer, or any
+other dimension that matters to your operation.</p>
+<h4 id="location-services-and-file-share"><a class="header" href="#location-services-and-file-share">Location, Services, and File Share</a></h4>
+<p>Scrolling further down the agent detail panel reveals the operational
+configuration cards.</p>
+<p><img src="../screens/telavisor-agents-fileshare.png" alt="Agent detail: Location, Services, and File Share" /></p>
+<p><strong>Location</strong> is an editable free-text field describing the physical or
+logical location of the machine. Used for documentation and dashboard
+display. Tela does not interpret it.</p>
+<p><strong>Services</strong> lists the ports and protocols the agent exposes through
+the tunnel. Each row shows the service name, the remote port, and the
+protocol. The list is read-only here because changing the advertised
+services requires editing the agent's <code>telad.yaml</code> file directly. To
+add or remove a service, use the agent's local configuration file or
+push a new configuration through the management protocol.</p>
+<p><strong>File Share</strong> is the editable agent file share configuration. The card
+contains:</p>
+<ul>
+<li><strong>Enabled.</strong> A checkbox that turns the file share on or off.</li>
+<li><strong>Writable.</strong> A checkbox that controls whether uploads are allowed.</li>
+<li><strong>Allow delete.</strong> A checkbox that controls whether deletion is
+allowed.</li>
+<li><strong>Max file size.</strong> A field that sets the largest file the agent will
+accept on upload, in megabytes.</li>
+<li><strong>Blocked extensions.</strong> A comma-separated list of file extensions
+the agent will refuse to accept on upload, regardless of the
+writable setting. Useful for blocking executables and scripts.</li>
+</ul>
+<p>Editable fields in any card are pushed to the agent through the
+hub-mediated management protocol when you click <em>Save</em>. The agent
+validates the new configuration and persists it to its <code>telad.yaml</code>
+file. Changes that pass validation take effect immediately. Changes
+that fail validation are rejected with an error message.</p>
+<p>The manage permission is required to edit any of these fields. Owner
+and admin roles have it implicitly. User-role tokens need an explicit
+manage grant on the relevant machine, issued through the
+<a href="#access">Access view</a>.</p>
+<h4 id="management-and-danger-zone"><a class="header" href="#management-and-danger-zone">Management and Danger Zone</a></h4>
+<p>Scrolling to the bottom of the agent detail panel reveals the
+Management card and the Danger Zone.</p>
+<p><img src="../screens/telavisor-agents-management.png" alt="Agent detail: Management and Danger Zone" /></p>
+<p>The Management card mirrors the layout of the hub Management card from
+<a href="#hub-settings">Hub Settings</a>:</p>
+<ul>
+<li>
+<p><strong>Configuration.</strong> A <em>View Config</em> button that opens the agent's
+running configuration in a dialog. The configuration is fetched live
+through the management protocol so it reflects what the agent is
+actually using right now, not what is on disk in
+<code>telad.yaml</code>.</p>
+</li>
+<li>
+<p><strong>Log output.</strong> A <em>View Logs</em> button that opens a new tab in the log
+panel and fetches the agent's recent log buffer through the
+<code>update-status</code> mgmt action via the hub's mediated management proxy.</p>
+</li>
+<li>
+<p><strong>Release channel.</strong> A dropdown showing the agent's currently
+configured release channel with a status string showing current and
+latest versions on that channel. Changing the dropdown opens a
+confirmation dialog and, on confirm, sends the <code>update-channel</code> mgmt
+action through the hub-mediated proxy to switch the agent's channel
+persistently. Pre-channel agents (older <code>telad</code> versions that do not
+recognize the action) hide the row and show <code>pre-channel build (update first via legacy path)</code> next to the Software button.</p>
+</li>
+<li>
+<p><strong>Software.</strong> Shows whether the agent is up to date or behind the
+channel's HEAD. The label, title, and disabled state are derived
+from the channel manifest via the agent's <code>update-status</code> mgmt
+action, so an agent on <code>dev</code> is never offered a <code>stable</code> build.
+Clicking <em>Update</em> opens a confirmation dialog before proceeding.</p>
+<p><img src="../screens/telavisor-agents-update.png" alt="Update Agent confirmation dialog" /></p>
+<p>The dialog names the machine and confirms that the agent will restart
+after the update. Clicking <em>Update</em> in the dialog sends the <code>update</code>
+mgmt action through the hub-mediated proxy. The agent downloads the
+new release, verifies it against the channel manifest's SHA-256, and
+atomically swaps its binary.</p>
+<p><img src="../screens/telavisor-agents-update2.png" alt="Agent detail during update" /></p>
+<p>While the update is in progress the Software row shows a progress
+indicator. The rest of the management panel remains visible. If the
+agent is running under a service manager (Windows SCM, systemd,
+launchd) it exits cleanly and the manager restarts it against the
+new binary. If the agent is running standalone it relaunches itself.</p>
+<p><img src="../screens/telavisor-agents-update3.png" alt="Agent detail after update" /></p>
+<p>Once the agent reconnects, the Software row reflects the new version.
+The channel and version information updates automatically as the
+agent re-reports its state through the management protocol.</p>
+</li>
+<li>
+<p><strong>Restart.</strong> Requests a graceful restart of the agent process.</p>
+</li>
+</ul>
+<p>The Danger Zone at the bottom of the agent detail panel provides two
+destructive actions:</p>
+<ul>
+<li><strong>Force Disconnect.</strong> Drops the agent's current connection to the
+hub. The agent's reconnect logic will attempt to re-establish the
+connection within seconds. Useful for forcing the agent to pick up a
+new configuration that requires a reconnection.</li>
+<li><strong>Remove Machine.</strong> Removes the machine from the hub entirely,
+invalidating its registration. The agent will need to re-register on
+its next connection. This is the action to take when retiring a
+machine.</li>
+</ul>
+<p>When <code>telad</code> runs as an operating system service (Windows SCM, systemd,
+launchd) the same Update and Restart actions work because <code>telad</code>
+detects that it is running under a process manager and exits cleanly,
+letting the manager restart the binary. This avoids leaving orphan
+processes from a self-spawned restart.</p>
+<h3 id="remotes"><a class="header" href="#remotes">Remotes</a></h3>
+<p>The Remotes tab manages hub directory endpoints for short name
+resolution. This is the desktop equivalent of the <code>tela remote</code> family
+of CLI commands. Each remote maps a name to a directory URL that
+provides hub discovery via <code>/.well-known/tela</code> and <code>/api/hubs</code>.</p>
+<p><img src="../screens/telavisor-remotes.png" alt="Remotes view" /></p>
+<p>The view shows a table of registered remotes with two columns:</p>
+<ul>
+<li><strong>Name.</strong> The short name you assigned to the remote. This is the
+name the <code>tela</code> command line and TelaVisor use to look up hub URLs.</li>
+<li><strong>URL.</strong> The directory's base URL.</li>
+</ul>
+<p>A <em>Remove</em> button on each row removes the remote, with confirmation.</p>
+<p>Below the table, an input row with <em>Name</em>, <em>Portal URL</em>, and <em>Add</em>
+fields lets you register a new remote. The Name field is the short
+name you want to use; the Portal URL field is the base URL of the
+directory.</p>
+<p>Once a remote is registered, you can use short hub names like
+<code>tela connect -hub work</code> and the client resolves <em>work</em> through the
+remote into a full hub URL. See the
+<a href="directories.html">Hub directories and portals</a> chapter for the directory
+protocol itself.</p>
+<h3 id="credentials"><a class="header" href="#credentials">Credentials</a></h3>
+<p>The Credentials tab shows every hub token stored in your local
+credential file. This is the desktop equivalent of <code>tela login</code> and
+<code>tela logout</code>.</p>
+<p><img src="../screens/telavisor-credentials.png" alt="Credentials view" /></p>
+<p>The view shows a table of credential entries with two columns:</p>
+<ul>
+<li><strong>Hub.</strong> The hub URL the credentials are stored under.</li>
+<li><strong>Identity.</strong> The identity name on that hub. May be empty for
+legacy entries that were stored before identity tracking was added.</li>
+</ul>
+<p>Each row has a <em>Remove</em> button to delete that entry from the
+credential file. A <em>Clear All</em> button at the bottom removes every
+stored credential. Both actions ask for confirmation.</p>
+<p>Removing a credential entry does not invalidate the token on the hub.
+It only removes the local copy. To revoke a token on the hub, use the
+<a href="#tokens">Tokens view</a> on the hub itself.</p>
+<p>The credentials file is stored at:</p>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Path</th></tr></thead><tbody>
+<tr><td>Windows</td><td><code>%APPDATA%\tela\credentials.yaml</code></td></tr>
+<tr><td>Linux</td><td><code>~/.tela/credentials.yaml</code></td></tr>
+<tr><td>macOS</td><td><code>~/.tela/credentials.yaml</code></td></tr>
+</tbody></table>
+</div>
+<p>The file is created with <code>0600</code> permissions (owner read-write only) on
+Unix systems and the equivalent restrictive Access Control List (ACL)
+on Windows. The same file is shared with the <code>tela</code> CLI, so credentials
+added through TelaVisor are visible to <code>tela</code> and vice versa.</p>
+<h2 id="log-panel"><a class="header" href="#log-panel">Log panel</a></h2>
+<p>The log panel is a persistent area at the bottom of the window that
+provides tabbed log output visible across both modes. You can resize it
+by dragging its top edge, or collapse it to a slim bar showing only a
+<em>Logs</em> label and an expand chevron.</p>
+<p><img src="../screens/telavisor-status-log.png" alt="Log panel with tela output" /></p>
+<p>The panel auto-scrolls to the bottom as new lines arrive. If you scroll
+up to read history, auto-scroll pauses until you scroll back to the
+bottom. Each pane is limited to a configurable maximum number of lines
+(default 5000, configurable in
+<a href="#application-settings">Application Settings</a>).</p>
+<h3 id="built-in-tabs"><a class="header" href="#built-in-tabs">Built-in tabs</a></h3>
+<p>Three tabs are always present.</p>
+<ul>
+<li><strong>TelaVisor.</strong> Application events: startup, profile loading,
+connection state changes, errors. This is the place to look first
+when something in TelaVisor itself is misbehaving.</li>
+<li><strong>tela.</strong> Live output from the <code>tela</code> child process. The same
+output you would see if you ran <code>tela connect -profile &lt;path&gt;</code> in a
+terminal yourself. This is the canonical place to look when the
+tunnel is failing to connect or behaving unexpectedly.</li>
+<li><strong>Commands.</strong> A filterable log of every API call and CLI command
+TelaVisor issues. Each row shows a method badge (<code>GET</code>, <code>POST</code>,
+<code>DEL</code>, <code>CLI</code>), a timestamp, the URL or command line, and a copy
+button. Click a row to expand it for the full request and response.
+The Commands tab is the answer to <em>what would I have to type at a
+shell to do what TelaVisor just did?</em></li>
+</ul>
+<p>The Commands tab is also useful for learning the underlying CLI behind
+a UI action, troubleshooting an unexpected response, or scripting
+equivalent operations.</p>
+<h3 id="toolbar"><a class="header" href="#toolbar">Toolbar</a></h3>
+<p>The log panel toolbar across the top has four buttons that act on the
+currently active tab:</p>
+<ul>
+<li><strong>Verbose.</strong> Toggles verbose logging for the <code>tela</code> process. The
+setting persists for the current session and resets to the default
+on restart unless overridden in
+<a href="#application-settings">Application Settings</a>.</li>
+<li><strong>Copy.</strong> Copies the active tab's content to the clipboard.</li>
+<li><strong>Save.</strong> Saves the active tab's content to a file.</li>
+<li><strong>Clear.</strong> Clears the active tab.</li>
+</ul>
+<h3 id="attaching-log-sources"><a class="header" href="#attaching-log-sources">Attaching log sources</a></h3>
+<p>The <code>+</code> button at the right end of the tab strip opens the <em>attach
+popover</em>. The popover lists every hub you have credentials for and
+every agent visible across those hubs.</p>
+<p><img src="../screens/telavisor-log-attach-popover.png" alt="Attach log source popover" /></p>
+<p>Clicking a hub opens a new tab streaming <code>GET /api/admin/logs</code> from
+that hub. Clicking an agent opens a new tab fetching the agent's log
+ring through the hub's mediated management protocol. The popover
+renders next to the <code>+</code> button using fixed positioning so it is not
+clipped by the scrollable tab strip. Click outside the popover to
+dismiss it.</p>
+<p>Dynamic log tabs use the same close-button pattern as the built-in
+tabs. Each agent or hub log tab shows a coloured status dot:</p>
+<ul>
+<li><strong>Green.</strong> The log fetched successfully and the source is reporting
+fresh lines.</li>
+<li><strong>Amber.</strong> The log is being fetched (in flight).</li>
+<li><strong>Grey.</strong> Idle, or the source is offline.</li>
+</ul>
+<p><img src="../screens/telavisor-status-agent-log.png" alt="Log tab for an agent" /></p>
+<p>The log panel remembers which dynamic tabs were open between sessions.
+Tabs you open via <em>View Logs</em> (in the Hubs or Agents tab) or via the
+attach popover are saved to the TelaVisor settings file and restored
+on the next launch. This makes the log panel a persistent operator
+dashboard rather than a transient buffer: the hubs and agents you care
+about stay attached across restarts.</p>
+<h2 id="application-settings"><a class="header" href="#application-settings">Application Settings</a></h2>
+<p>The Application Settings dialog is opened from the gear icon in the
+title bar. A toolbar at the top of the dialog provides <em>Apply</em>,
+<em>Apply &amp; Close</em>, and <em>Cancel</em> buttons. <em>Apply</em> and <em>Apply &amp; Close</em> are
+disabled until at least one setting changes.</p>
+<p><img src="../screens/telavisor-app-settings.png" alt="Application Settings, top" /></p>
+<p>The settings are organized into sections.</p>
+<h3 id="connection"><a class="header" href="#connection">Connection</a></h3>
+<ul>
+<li><strong>Auto-connect on launch.</strong> When checked, TelaVisor automatically
+connects using the default profile when the application starts.</li>
+<li><strong>Reconnect on drop.</strong> When checked, TelaVisor attempts to reconnect
+automatically if the connection drops unexpectedly. The reconnect
+logic uses the same backoff schedule as the <code>tela</code> CLI.</li>
+<li><strong>Confirm disconnect.</strong> When checked, TelaVisor shows a confirmation
+prompt before disconnecting or quitting while connected.</li>
+</ul>
+<h3 id="appearance"><a class="header" href="#appearance">Appearance</a></h3>
+<ul>
+<li><strong>Theme.</strong> <em>Light</em>, <em>Dark</em>, or <em>System</em> (follows the operating
+system preference). The change takes effect immediately when you
+click Apply.</li>
+</ul>
+<h3 id="window"><a class="header" href="#window">Window</a></h3>
+<ul>
+<li><strong>Minimize to tray on close.</strong> When checked, closing the window
+hides TelaVisor to the system tray instead of exiting. The
+application remains running in the background and can be restored
+by clicking the tray icon. Without this setting, closing the window
+quits the application.</li>
+</ul>
+<h3 id="updates"><a class="header" href="#updates">Updates</a></h3>
+<ul>
+<li><strong>Check for updates automatically.</strong> When checked, TelaVisor checks
+for new versions at startup against the configured release channel.</li>
+<li><strong>Release channel.</strong> A dropdown that selects which release channel
+TelaVisor and the <code>tela</code> CLI follow for self-update: <code>dev</code>, <code>beta</code>,
+<code>stable</code>, or any custom channel you have configured. The preference
+is stored in the user credential store (<code>~/.tela/credentials.yaml</code>
+on Unix, <code>%APPDATA%\tela\credentials.yaml</code> on Windows) and shared
+with the <code>tela</code> CLI; running <code>tela channel set &lt;name&gt;</code> from a shell
+and changing this dropdown are equivalent. Hubs and agents have
+their own release channels, configured separately in their YAML
+files, through the <em>Release channel</em> controls in
+<a href="#hub-settings">Hub Settings</a> and the agent
+<a href="#management-and-danger-zone">Management</a> card, or from a shell via
+<code>telahubd channel set &lt;name&gt;</code> and <code>telad channel set &lt;name&gt;</code>
+directly on those machines.</li>
+</ul>
+<p><img src="../screens/telavisor-app-settings2.png" alt="Application Settings, scrolled" /></p>
+<h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
+<ul>
+<li><strong>Verbose by default.</strong> When checked, the <code>tela</code> process is started
+with verbose logging on every connection. Useful for diagnostic
+builds.</li>
+<li><strong>Max log lines per pane.</strong> Limits the number of lines kept in each
+log tab in the <a href="#log-panel">Log panel</a>. The default is 5000. Older
+lines are evicted as new ones arrive.</li>
+</ul>
+<h2 id="about-dialog"><a class="header" href="#about-dialog">About dialog</a></h2>
+<p>The About dialog is opened by clicking the <strong>TelaVisor</strong> title in the
+top-left corner of the title bar, or by clicking the information icon
+in the title bar. It shows version numbers for both TelaVisor and the
+<code>tela</code> CLI, project links, license information, dependency credits, and
+the path to the CLI binary.</p>
+<p><img src="../screens/telavisor-about.png" alt="About dialog" /></p>
+<p>The dialog is the canonical place to confirm what version of TelaVisor
+and <code>tela</code> you are running, and which channels they are configured to
+follow. Use it when filing bug reports.</p>
+<h2 id="update-indicator"><a class="header" href="#update-indicator">Update indicator</a></h2>
+<p>When an update is available for any of the binaries TelaVisor manages,
+an orange warning icon appears in the title bar. Clicking the icon
+opens an update dialog that shows current and latest versions for each
+binary, with per-binary <em>Update</em> and <em>Install</em> buttons.</p>
+<p>The update dialog is the same workflow as the
+<a href="#installed-tools">Installed Tools table in Client Settings</a>, exposed
+as a one-click affordance from the title bar so you do not have to
+navigate to find it. The dialog also has <em>Remind Later</em> (hides the
+indicator until the next restart) and <em>Skip This Version</em> (hides the
+indicator until a newer version is released) options.</p>
+<p>If TelaVisor was installed via a system package manager (winget,
+Chocolatey, apt, brew), the self-update mechanism is disabled. Use the
+package manager to update instead. The update indicator will not
+appear in this case.</p>
+<h2 id="connection-status-icon"><a class="header" href="#connection-status-icon">Connection status icon</a></h2>
+<p>The power button in the title bar indicates the current connection
+state at a glance:</p>
+<ul>
+<li><strong>Grey.</strong> Disconnected.</li>
+<li><strong>Amber, pulsing.</strong> Connecting or disconnecting.</li>
+<li><strong>Green.</strong> Connected.</li>
+</ul>
+<p>You can click the button at any time from any tab to toggle the connection.
+When connected, clicking it disconnects. When disconnected, clicking it
+connects using the current profile.</p>
+<h2 id="system-tray"><a class="header" href="#system-tray">System tray</a></h2>
+<p>When <em>Minimize to tray on close</em> is enabled in
+<a href="#application-settings">Application Settings</a>, closing the window
+hides TelaVisor to the system tray (the notification area) instead of
+quitting. The application remains running and the tunnel stays up.</p>
+<p>You can left-click or double-click the tray icon to show the window
+again. Right-clicking the tray icon opens a small menu with <em>Show</em> and
+<em>Quit</em> options. <em>Quit</em> exits the application and tears down the tunnel.</p>
+<p>The tray feature is useful for keeping a long-running tunnel out of
+the way without committing to installing a system service.</p>
+<h2 id="how-telavisor-works-with-tela"><a class="header" href="#how-telavisor-works-with-tela">How TelaVisor works with tela</a></h2>
+<p>TelaVisor does not implement WireGuard, gVisor, the hub protocol, the
+agent protocol, or any of the other parts of the Tela fabric directly.
+It is a control surface around the <code>tela</code> command-line process. The
+flow of a connection is:</p>
+<ol>
+<li><strong>TelaVisor writes a profile YAML file</strong> with your selected hubs,
+machines, and services. This is the same
+file format documented in <a href="https://github.com/paulmooreparks/tela/blob/main/REFERENCE.md">REFERENCE.md</a>.</li>
+<li><strong>TelaVisor runs <code>tela connect -profile &lt;path&gt;</code></strong> as a child process.</li>
+<li><strong>The <code>tela</code> process opens a local control API</strong> on a random
+localhost port with a random one-time bearer token. The token is
+passed to TelaVisor via a private channel (an environment variable
+on the child process) so other processes on the same machine cannot
+guess it.</li>
+<li><strong>TelaVisor connects to the control API's WebSocket endpoint</strong> to
+receive real-time events: <code>service_bound</code>, <code>tunnel_activity</code>,
+<code>connection_state</code>. These are the events that drive the Status tab
+updates.</li>
+<li><strong>The <code>tela</code> process output streams to the <em>tela</em> tab</strong> in the log
+panel through the same control API.</li>
+<li><strong>When you click Disconnect</strong>, TelaVisor signals the <code>tela</code> process
+to shut down gracefully. The process closes the WireGuard tunnels,
+releases the local listeners, and exits.</li>
+</ol>
+<p>The profile YAML that TelaVisor writes is the same format that the
+<code>tela</code> CLI consumes. Profiles are interchangeable between the two: a
+profile created in TelaVisor works at the command line, and a profile
+written by hand for the command line works in TelaVisor.</p>
+<p>For administration features (Hubs, Agents, Remotes, Credentials),
+TelaVisor talks to the hubs directly over their HTTPS APIs using the
+credentials in the local credential file. There is no <code>tela</code> child
+process involved in those requests; TelaVisor uses the same hub admin
+endpoints that the CLI's <code>tela admin</code> family uses.</p>
+<h2 id="profile-storage"><a class="header" href="#profile-storage">Profile storage</a></h2>
+<p>Profiles are stored in the user's application data directory:</p>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Path</th></tr></thead><tbody>
+<tr><td>Windows</td><td><code>%APPDATA%\tela\profiles\</code></td></tr>
+<tr><td>Linux</td><td><code>~/.tela/profiles/</code></td></tr>
+<tr><td>macOS</td><td><code>~/.tela/profiles/</code></td></tr>
+</tbody></table>
+</div>
+<p>Each profile is a single YAML file. The file name (minus the <code>.yaml</code>
+extension) is the profile name. You can edit profile files by hand
+with any text editor; TelaVisor reloads them on the next time it
+opens the profile.</p>
+<p>The default profile, used at startup and by the system service, is
+configured in <a href="#client-settings">Client Settings</a>.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>TelaVisor's own settings are stored in <code>telavisor-settings.yaml</code> in
+the same Tela configuration directory as the credential file. Window
+position and size are saved automatically on close and restored on the
+next launch. All other settings (theme, default profile, release
+channel, log lines, attached log tabs) take effect when you click
+<em>Apply</em> or <em>Apply &amp; Close</em> in the Application Settings dialog and
+persist across restarts.</p>
+<h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
+<p>TelaVisor requires <a href="https://wails.io/docs/gettingstarted/installation">Wails v2</a>
+and its prerequisites: Go 1.25 or newer, Node.js, and the platform
+WebView runtime (WebView2 on Windows, webkit2gtk on Linux, the system
+WebKit on macOS).</p>
+<pre><code class="language-bash">cd cmd/telagui
+wails build
+</code></pre>
+<p>The output binary is in <code>cmd/telagui/build/bin/</code>.</p>
+<p>For development with live reload:</p>
+<pre><code class="language-bash">cd cmd/telagui
+wails dev
+</code></pre>
+<p>Note that the JavaScript, HTML, and CSS frontend is bundled into the Go
+binary at build time, not at runtime, so editing the frontend requires
+a <code>wails build</code> to take effect.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../guide/hub-console.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../howto/channels.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../guide/hub-console.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../howto/channels.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
