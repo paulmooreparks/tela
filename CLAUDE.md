@@ -64,6 +64,7 @@ Related project: **Awan Saya** (`c:\Users\paul\source\repos\awansatu`) -- portal
 - Write in the style of a technical writer producing exact documentation, unless instructed otherwise.
 - Be very clear and thorough in technical writing. Do not leave out steps.
 - Spell out the first abbeviation usage in a document unless you can be reasonably sure the abbreviation is known in context (e.g., TCP and UDP are known, FOSS is not necessarily known)
+- Capitalize all headings and subheadings using standard English Title Case. Do not use sentence case for headings. For example, write "What Tela Is" not "What Tela is", and "The Three Binaries" not "The three binaries". Articles ("a", "an", "the"), short prepositions ("of", "to", "in", "on", "at", "by", "for", "with"), and coordinating conjunctions ("and", "but", "or", "nor", "so") stay lowercase unless they are the first or last word. This applies to every heading in every markdown file, HTML page, design document, and inline comment section banner. The rule also applies to pull request titles and commit subject lines.
 
 ## Editorial Workflow (markdown sweeps)
 

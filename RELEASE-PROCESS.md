@@ -147,17 +147,21 @@ In all three cases the workflow:
 
 ## What `docs.yml` does
 
-`docs.yml` fires on the same tag pushes as `release.yml` and publishes a per-channel edition of the book to GitHub Pages:
+`docs.yml` fires on the same tag pushes as `release.yml`. It publishes the Tela project site at [telaproject.org](https://telaproject.org/), which has a landing page at the root and per-channel book editions under `/book/`:
 
-| Tag shape | Edition published | URL |
-|-----------|-------------------|-----|
-| `vX.Y.Z` (stable) | stable root + frozen archive copy | `…/tela/` and `…/tela/archive/vX.Y.Z/` |
-| `vX.Y.Z-beta.N` | beta | `…/tela/beta/` |
-| `vX.Y.Z-dev.N` | dev | `…/tela/dev/` |
+| Tag shape | What gets published | URL |
+|-----------|---------------------|-----|
+| `vX.Y.Z` (stable) | stable book + frozen archive copy + landing page + TDL + 404 | `…/book/` and `…/book/archive/vX.Y.Z/` (plus the root landing page gets re-copied) |
+| `vX.Y.Z-beta.N` | beta book | `…/book/beta/` |
+| `vX.Y.Z-dev.N` | dev book | `…/book/dev/` |
 
-Each edition is a full mdBook build with `site-url` set to the edition's deploy path. The workflow substitutes the tag name into `__TELA_BOOK_VERSION__` and the channel name into `__TELA_BOOK_CHANNEL__` placeholders in `introduction.md`, `sidebar-version.js`, and `channel-banner.js` before building. Non-stable editions carry a banner at the top of every page telling the reader which channel they are on and linking back to stable.
+Each book edition is a full mdBook build with `site-url` set to the edition's deploy path. The workflow substitutes the tag name into `__TELA_BOOK_VERSION__` and the channel name into `__TELA_BOOK_CHANNEL__` placeholders in `introduction.md`, `sidebar-version.js`, and `channel-banner.js` before building. Non-stable editions carry a banner at the top of every page telling the reader which channel they are on and linking back to stable.
 
-Deploys use `peaceiris/actions-gh-pages` with `keep_files: true` so each deploy writes only to its own subtree and the other editions survive. See [DESIGN-book-versioning.md](DESIGN-book-versioning.md) for the full design.
+The landing page (`site/index.html` + `site/style.css` + `site/versions.js` + `site/404.html`) and the canonical TDL stylesheet (`tdl/tdl.css`) only ship with stable deploys. Beta and dev deploys do not touch those artifacts, so the landing page only reflects source that made it to stable.
+
+Every deploy (stable, beta, or dev) regenerates `/versions.json` and `/book/archive/index.html` from the resulting `gh-pages` state, so the landing page's version map and the archive index are always current.
+
+Deploys use `peaceiris/actions-gh-pages` with `keep_files: true` so each deploy writes only to its own subtree and the other subtrees survive. See [DESIGN-book-versioning.md](DESIGN-book-versioning.md) and [DESIGN-telaproject-site.md](DESIGN-telaproject-site.md) for the full designs.
 
 ---
 

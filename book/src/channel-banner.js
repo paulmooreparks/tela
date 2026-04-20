@@ -28,7 +28,7 @@
         var banner = document.createElement('div');
         banner.className = 'channel-banner channel-banner-' + channel;
 
-        var stableLink = '<a href="/tela/">paulmooreparks.github.io/tela</a>';
+        var stableLink = '<a href="/book/">telaproject.org/book</a>';
         var message = '';
 
         if (channel === 'beta') {

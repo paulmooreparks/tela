@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Page Not Found</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
+    <link rel="stylesheet" href="/tdl.css">
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .site-404 {
+            max-width: 640px;
+            margin: 96px auto;
+            padding: 0 24px;
+        }
+        .site-404-code {
+            font-family: var(--mono);
+            font-size: 14px;
+            color: var(--text-muted);
+            letter-spacing: 0.1em;
+            margin: 0 0 8px;
+        }
+        .site-404-title {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin: 0 0 16px;
+        }
+        .site-404-body {
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--text);
+            margin: 0 0 24px;
+        }
+        .site-404-hint {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            border-radius: var(--radius-sm);
+            padding: 14px 18px;
+            margin: 0 0 24px;
+            font-size: 14px;
+        }
+        .site-404-hint code {
+            font-family: var(--mono);
+            color: var(--accent);
+        }
+        .site-404-ctas {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="site-404">
+        <p class="site-404-code">404</p>
+        <h1 class="site-404-title">Page Not Found</h1>
+        <p class="site-404-body">
+            That path does not exist on telaproject.org. The book and its editions may be found under <code>/book/</code>; links that
+            pointed at the old layout on <code>paulmooreparks.github.io/tela/</code> may not have survived.
+        </p>
+
+        <div class="site-404-hint" id="smart-hint">
+            Looking for a book page? Try prefixing the path with <code>/book/</code> and see if it exists.
+        </div>
+
+        <div class="site-404-ctas">
+            <a class="link" href="/">Back to home</a>
+            <a class="link" href="/book/">Read the book</a>
+            <a class="link" href="/book/beta/">Beta release</a>
+            <a class="link" href="/book/dev/">Dev release</a>
+            <a class="link" href="/book/archive/">Archived releases</a>
+        </div>
+    </div>
+
+    <script>
+    // If the user arrived at /something/deep/page.html, suggest /book/something/deep/page.html.
+    (function () {
+        var path = window.location.pathname;
+        if (!path || path === '/' || path.indexOf('/book/') === 0) return;
+        var hint = document.getElementById('smart-hint');
+        if (!hint) return;
+        var guess = '/book' + path;
+        hint.innerHTML =
+            'Did you mean <a class="link" href="' + guess + '">' +
+            '<code>' + guess + '</code></a>? The book moved under <code>/book/</code>.';
+    })();
+    </script>
+</body>
+</html>

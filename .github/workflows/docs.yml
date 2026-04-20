@@ -1,26 +1,32 @@
-# Build the Tela documentation site with mdBook and publish to GitHub Pages.
+# Build the Tela project site and book with mdBook, and publish to
+# GitHub Pages as https://telaproject.org/ (with paulmooreparks.github.io/tela
+# as a legacy redirect endpoint that GitHub Pages handles automatically
+# once the custom domain is bound).
 #
-# The book lives in book/ and pulls most of its chapter content from .md
-# files at the repository root via mdBook's {{#include}} preprocessor, so
-# the docs and the source code are atomically updated together.
+# Layout produced on gh-pages:
 #
-# Three editions are published, one per release channel, at three URLs on
-# the same GitHub Pages site:
-#
-#   https://paulmooreparks.github.io/tela/           <- current stable
-#   https://paulmooreparks.github.io/tela/beta/      <- current beta
-#   https://paulmooreparks.github.io/tela/dev/       <- current dev
-#   https://paulmooreparks.github.io/tela/archive/   <- frozen stable archive
+#   /                           <- landing page from site/*, TDL from tdl/*
+#   /versions.json              <- machine-readable version map (regen each deploy)
+#   /404.html                   <- smart 404 with /book/ path hint
+#   /book/                      <- current stable book
+#   /book/beta/                 <- current beta book
+#   /book/dev/                  <- current dev book
+#   /book/archive/              <- archive landing page
+#   /book/archive/vX.Y.Z/       <- frozen stable editions
 #
 # Each edition is triggered by a tag push on that channel:
-#   v[0-9]+.[0-9]+.[0-9]+       -> stable    (root + archive/vX.Y.Z/)
-#   v*-beta.*                    -> beta      (beta/)
-#   v*-dev.*                     -> dev       (dev/)
+#   v[0-9]+.[0-9]+.[0-9]+        -> stable    (book/ + book/archive/vX.Y.Z/)
+#   v*-beta.*                    -> beta      (book/beta/)
+#   v*-dev.*                     -> dev       (book/dev/)
 #
-# Each deploy writes only to its own subtree; other subtrees are preserved
-# via keep_files: true on peaceiris/actions-gh-pages.
+# Stable deploys also (re)publish the landing page, TDL, and 404 page from
+# site/ and tdl/ in the source tree. Beta and dev do not touch those
+# artifacts, so the landing page reflects stable's source tree only.
 #
-# See DESIGN-book-versioning.md for the full design.
+# Every deploy regenerates /versions.json from the resulting gh-pages
+# state so the landing page's version map is always current.
+#
+# See DESIGN-telaproject-site.md (§8) and DESIGN-book-versioning.md.
 
 name: Docs
 
@@ -97,14 +103,14 @@ jobs:
 
       - name: Snapshot placeholder files
         run: |
-          # The book source carries two placeholders that the workflow fills
-          # in at build time so each edition is labelled correctly:
+          # Book source carries placeholders that the workflow fills at build
+          # time so each edition is labelled correctly:
           #   __TELA_BOOK_VERSION__  -> the tag (e.g. v0.13.0-beta.3)
           #   __TELA_BOOK_CHANNEL__  -> stable | beta | dev | archive
-          # We snapshot the originals so the stable job can re-fill them as
+          # Snapshot the originals so the stable job can re-fill them as
           # 'archive' for the archive copy without re-checking out.
-          # Files are optional: old tags (pre-PR #65) lack channel-banner.js,
-          # and may have a hardcoded version string with no placeholder.
+          # Files are optional: old tags lack channel-banner.js and may have
+          # a hardcoded version string with no placeholder.
           mkdir -p /tmp/book-snapshot
           for f in introduction.md sidebar-version.js channel-banner.js; do
             if [ -f "book/src/$f" ]; then
@@ -124,11 +130,8 @@ jobs:
               sed -i "s|__TELA_BOOK_CHANNEL__|$CHANNEL|g" "$f"
             fi
           done
-          # Defensive fallback: old tags (pre-PR #65) have hardcoded version
-          # strings instead of placeholders, and whoever cut those releases
-          # may have forgotten to bump the label. Force the version to match
-          # the tag being built so the published edition is always labelled
-          # correctly regardless of what the source tree says.
+          # Defensive fallback: old tags have hardcoded version strings
+          # instead of placeholders. Force the version to match the tag.
           if [ -f introduction.md ]; then
             sed -i -E "s|(\*This edition documents Tela )v[0-9][.0-9a-z-]*(\.\*)|\1$TAG\2|" introduction.md
           fi
@@ -138,7 +141,7 @@ jobs:
 
       - name: Build channel edition
         env:
-          MDBOOK_OUTPUT__HTML__SITE_URL: ${{ steps.tag.outputs.channel == 'stable' && '/tela/' || format('/tela/{0}/', steps.tag.outputs.channel) }}
+          MDBOOK_OUTPUT__HTML__SITE_URL: ${{ steps.tag.outputs.channel == 'stable' && '/book/' || format('/book/{0}/', steps.tag.outputs.channel) }}
         run: |
           cd book
           mdbook build
@@ -165,39 +168,59 @@ jobs:
       - name: Build archive copy
         if: steps.tag.outputs.channel == 'stable'
         env:
-          MDBOOK_OUTPUT__HTML__SITE_URL: /tela/archive/${{ steps.tag.outputs.tag }}/
+          MDBOOK_OUTPUT__HTML__SITE_URL: /book/archive/${{ steps.tag.outputs.tag }}/
         run: |
           cd book
-          # mdbook build overwrites its output dir; clear any prior output
-          # just to be safe on self-hosted runners.
           rm -rf book
           mdbook build
           mv book ../_archive
 
-      # Deploy in two separate steps, one for stable (root) and one for
-      # beta/dev (subdirectory). A single step with a ternary
-      # `channel == 'stable' && '' || channel` does not work: GitHub
-      # Actions expressions treat empty string as falsy, so the ternary
-      # short-circuits and destination_dir ends up as 'stable' instead of
-      # empty. Splitting the step is the standard workaround.
-      - name: Deploy channel edition (stable, to root)
+      # Stage the landing page, TDL, and 404 into _site for deploy.
+      # Only stable deploys publish these; beta and dev leave them alone.
+      # site/ contains index.html, style.css, tdl.css, 404.html, and
+      # assets/; everything under it is copied to the gh-pages root.
+      #
+      # The landing page's hero CTA and stable-version card reference the
+      # stable version via a __TELA_SITE_STABLE_VERSION__ placeholder. We
+      # sed it to the tag being deployed so the rendered page always says
+      # the right thing, without needing runtime JS.
+      - name: Stage site assets
+        if: steps.tag.outputs.channel == 'stable'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          mkdir -p _site
+          cp -r site/. _site/
+          if [ -f _site/index.html ]; then
+            sed -i "s|__TELA_SITE_STABLE_VERSION__|$TAG|g" _site/index.html
+          fi
+          ls -la _site/
+
+      # -- Deploys ----------------------------------------------------------
+      #
+      # Split into separate peaceiris steps per destination because GitHub
+      # Actions' expression evaluator treats empty strings as falsy (so a
+      # ternary with '' as the true branch short-circuits wrong).
+
+      - name: Deploy book (stable, to /book/)
         if: steps.tag.outputs.channel == 'stable'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./_edition
+          destination_dir: book
           keep_files: true
-          commit_message: "docs: deploy stable edition ${{ steps.tag.outputs.tag }}"
+          commit_message: "docs: deploy stable book ${{ steps.tag.outputs.tag }}"
 
-      - name: Deploy channel edition (beta or dev, to subdirectory)
+      - name: Deploy book (beta or dev, to /book/<channel>/)
         if: steps.tag.outputs.channel != 'stable'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./_edition
-          destination_dir: ${{ steps.tag.outputs.channel }}
+          destination_dir: book/${{ steps.tag.outputs.channel }}
           keep_files: true
-          commit_message: "docs: deploy ${{ steps.tag.outputs.channel }} edition ${{ steps.tag.outputs.tag }}"
+          commit_message: "docs: deploy ${{ steps.tag.outputs.channel }} book ${{ steps.tag.outputs.tag }}"
 
       - name: Deploy archive copy
         if: steps.tag.outputs.channel == 'stable'
@@ -205,62 +228,136 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./_archive
-          destination_dir: archive/${{ steps.tag.outputs.tag }}
+          destination_dir: book/archive/${{ steps.tag.outputs.tag }}
           keep_files: true
-          commit_message: "docs: archive stable edition ${{ steps.tag.outputs.tag }}"
+          commit_message: "docs: archive stable book ${{ steps.tag.outputs.tag }}"
 
-      - name: Regenerate archive index
+      - name: Deploy landing page and TDL (stable only)
         if: steps.tag.outputs.channel == 'stable'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          keep_files: true
+          commit_message: "docs: deploy landing page and TDL for ${{ steps.tag.outputs.tag }}"
+
+      # -- Post-deploy artifacts ------------------------------------------
+      #
+      # Regenerate /versions.json and /book/archive/index.html from the
+      # current gh-pages state. Runs on every deploy so version info is
+      # always current; also runs for non-stable channels so beta/dev
+      # tag pushes refresh the entry for their channel.
+
+      - name: Regenerate versions.json and archive index
         env:
           NEW_TAG: ${{ steps.tag.outputs.tag }}
+          NEW_CHANNEL: ${{ steps.tag.outputs.channel }}
         run: |
-          # Enumerate archive/v*/ on gh-pages, newest first by semver, and
-          # build a standalone HTML landing page that links to each frozen
-          # edition. Release date is the commit date of that edition's
-          # index.html on gh-pages.
+          set -e
           git fetch origin gh-pages --depth=50
           git worktree add /tmp/gh-pages origin/gh-pages
-          cd /tmp/gh-pages/archive
+          cd /tmp/gh-pages
+
+          # Extract a version from a given introduction.html, or print nothing.
+          extract_version() {
+            local f="$1"
+            [ -f "$f" ] || return 1
+            # Strip trailing period which is sentence punctuation, not version.
+            grep -oE 'Tela v[0-9][.0-9a-z-]+' "$f" | head -1 | sed 's|^Tela ||; s|\.$||' || true
+          }
+
+          STABLE_V=$(extract_version book/introduction.html || true)
+          BETA_V=$(extract_version book/beta/introduction.html || true)
+          DEV_V=$(extract_version book/dev/introduction.html || true)
+
+          # Last-commit dates for each edition, as YYYY-MM-DD.
+          date_for() {
+            local path="$1"
+            [ -f "$path" ] || { echo ""; return; }
+            git log -1 --format=%aI -- "$path" 2>/dev/null | cut -dT -f1 || echo ""
+          }
+
+          STABLE_D=$(date_for book/introduction.html)
+          BETA_D=$(date_for book/beta/introduction.html)
+          DEV_D=$(date_for book/dev/introduction.html)
+
+          GEN=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # Write versions.json via echo to avoid YAML/shell heredoc
+          # terminator indentation issues inside a run: | block. Archive
+          # items are emitted during the loop to avoid multi-line shell
+          # variable values (which also confuse the YAML parser).
+          {
+            echo '{'
+            echo "  \"generatedAt\": \"$GEN\","
+            echo '  "current": {'
+            echo "    \"stable\": { \"version\": \"$STABLE_V\", \"url\": \"/book/\",     \"releasedAt\": \"$STABLE_D\" },"
+            echo "    \"beta\":   { \"version\": \"$BETA_V\",   \"url\": \"/book/beta/\", \"releasedAt\": \"$BETA_D\" },"
+            echo "    \"dev\":    { \"version\": \"$DEV_V\",    \"url\": \"/book/dev/\",  \"releasedAt\": \"$DEV_D\" }"
+            echo '  },'
+            echo '  "archive": ['
+            if [ -d book/archive ]; then
+              FIRST=1
+              PREV=""
+              for dir in $(ls -1d book/archive/v*/ 2>/dev/null | sed 's|book/archive/||; s|/$||' | sort -V -r); do
+                d=$(date_for "book/archive/$dir/index.html")
+                if [ "$FIRST" = "0" ]; then
+                  echo "$PREV,"
+                fi
+                PREV="    {\"version\":\"$dir\",\"url\":\"/book/archive/$dir/\",\"releasedAt\":\"$d\"}"
+                FIRST=0
+              done
+              [ -n "$PREV" ] && echo "$PREV"
+            fi
+            echo '  ]'
+            echo '}'
+          } > versions.json
+
+          # Build a standalone archive index page under /book/archive/.
+          mkdir -p book/archive
           {
             echo '<!doctype html>'
-            echo '<html lang="en"><head><meta charset="utf-8">'
+            echo '<html lang="en" data-theme="dark"><head><meta charset="utf-8">'
             echo '<title>Tela documentation archive</title>'
             echo '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            echo '<link rel="stylesheet" href="/tdl.css">'
             echo '<style>'
-            echo 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:720px;margin:3em auto;padding:0 1em;color:#1a1a1a;background:#fafafa}'
-            echo 'h1{font-weight:600;font-size:1.6em;margin-bottom:0.2em}'
-            echo 'p.lede{color:#555;margin-top:0}'
-            echo 'ul{list-style:none;padding:0;margin-top:2em}'
-            echo 'li{padding:0.75em 1em;border-bottom:1px solid #e5e5e5}'
+            echo 'body{max-width:720px;margin:3em auto;padding:0 1em}'
+            echo 'h1{font-weight:700;font-size:1.6em;margin:0 0 8px;letter-spacing:-0.01em}'
+            echo 'p.lede{color:var(--text-muted);margin:0 0 2em}'
+            echo 'ul{list-style:none;padding:0}'
+            echo 'li{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}'
             echo 'li:last-child{border-bottom:none}'
-            echo 'a{color:#2a5db0;text-decoration:none;font-weight:500}'
+            echo 'a{color:var(--accent);text-decoration:none;font-weight:500;font-family:var(--mono);font-size:14px}'
             echo 'a:hover{text-decoration:underline}'
-            echo 'time{color:#777;font-size:0.9em;margin-left:0.5em}'
-            echo '.back{display:inline-block;margin-top:2em;color:#555;font-size:0.9em}'
+            echo 'time{color:var(--text-muted);font-size:12px}'
+            echo '.back{display:inline-block;margin-top:2em;color:var(--text-muted);font-size:13px}'
             echo '</style>'
             echo '</head><body>'
             echo '<h1>Tela documentation archive</h1>'
-            echo '<p class="lede">Frozen documentation for previous stable releases. The current stable release is at <a href="/tela/">paulmooreparks.github.io/tela</a>.</p>'
+            echo '<p class="lede">Frozen documentation for previous stable releases. The current stable release is at <a href="/book/">telaproject.org/book</a>.</p>'
             echo '<ul>'
-            for dir in $(ls -1d v*/ 2>/dev/null | sed 's|/$||' | sort -V -r); do
-              DATE=$(git log -1 --format=%aI -- "archive/$dir/index.html" 2>/dev/null | cut -dT -f1 || echo "")
-              if [ -n "$DATE" ]; then
-                echo "<li><a href=\"/tela/archive/$dir/\">$dir</a> <time>$DATE</time></li>"
-              else
-                echo "<li><a href=\"/tela/archive/$dir/\">$dir</a></li>"
-              fi
-            done
+            if [ -d book/archive ]; then
+              for dir in $(ls -1d book/archive/v*/ 2>/dev/null | sed 's|book/archive/||; s|/$||' | sort -V -r); do
+                d=$(date_for "book/archive/$dir/index.html")
+                if [ -n "$d" ]; then
+                  echo "<li><a href=\"/book/archive/$dir/\">$dir</a> <time>$d</time></li>"
+                else
+                  echo "<li><a href=\"/book/archive/$dir/\">$dir</a></li>"
+                fi
+              done
+            fi
             echo '</ul>'
-            echo '<a class="back" href="/tela/">&larr; Back to current stable documentation</a>'
+            echo '<a class="back" href="/">&larr; Back to telaproject.org</a>'
             echo '</body></html>'
-          } > index.html
-          cd /tmp/gh-pages
+          } > book/archive/index.html
+
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add archive/index.html
+          git add versions.json book/archive/index.html
           if git diff --cached --quiet; then
-            echo "Archive index unchanged."
+            echo "No changes to versions.json or archive index."
           else
-            git commit -m "docs: regenerate archive index after $NEW_TAG"
+            git commit -m "docs: regenerate versions.json and archive index after $NEW_TAG ($NEW_CHANNEL)"
             git push origin HEAD:gh-pages
           fi
