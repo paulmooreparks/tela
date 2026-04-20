@@ -163,12 +163,28 @@ jobs:
           mdbook build
           mv book ../_archive
 
-      - name: Deploy channel edition
+      # Deploy in two separate steps, one for stable (root) and one for
+      # beta/dev (subdirectory). A single step with a ternary
+      # `channel == 'stable' && '' || channel` does not work: GitHub
+      # Actions expressions treat empty string as falsy, so the ternary
+      # short-circuits and destination_dir ends up as 'stable' instead of
+      # empty. Splitting the step is the standard workaround.
+      - name: Deploy channel edition (stable, to root)
+        if: steps.tag.outputs.channel == 'stable'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./_edition
-          destination_dir: ${{ steps.tag.outputs.channel == 'stable' && '' || steps.tag.outputs.channel }}
+          keep_files: true
+          commit_message: "docs: deploy stable edition ${{ steps.tag.outputs.tag }}"
+
+      - name: Deploy channel edition (beta or dev, to subdirectory)
+        if: steps.tag.outputs.channel != 'stable'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_edition
+          destination_dir: ${{ steps.tag.outputs.channel }}
           keep_files: true
           commit_message: "docs: deploy ${{ steps.tag.outputs.channel }} edition ${{ steps.tag.outputs.tag }}"
 
