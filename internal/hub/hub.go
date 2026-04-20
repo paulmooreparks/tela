@@ -1957,6 +1957,7 @@ Commands:
   channel   Show or set the hub's release channel (dev, beta, stable, custom)
   channels  Manage a self-hosted release channel server (publish manifests)
   update    Self-update the telahubd binary from the configured release channel
+  health    Probe the local hub and exit 0 if healthy (Docker HEALTHCHECK)
   version   Print version and exit
   help      Show this help (also -h, -?, -help, --help)
 
@@ -2012,6 +2013,9 @@ func Main() {
 			return
 		case "update":
 			cmdSelfUpdate(os.Args[2:])
+			return
+		case "health":
+			cmdHealth(os.Args[2:])
 			return
 		case "version", "--version":
 			fmt.Printf("telahubd %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)

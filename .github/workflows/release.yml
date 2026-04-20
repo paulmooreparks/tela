@@ -43,6 +43,7 @@ on:
 
 permissions:
   contents: write  # needed to create releases and upload assets
+  packages: write  # needed to push telahubd images to ghcr.io
 
 env:
   GO_VERSION: "1.25.0"
@@ -577,3 +578,103 @@ jobs:
             --clobber
 
           echo "Updated ${CHANNEL}.json on the 'channels' release"
+
+  # Build and push the telahubd Docker image to ghcr.io. See DESIGN-docker.md
+  # for the tag strategy and the rationale behind not publishing dev-channel
+  # builds. The image is a source build of ./cmd/telahubd layered on
+  # gcr.io/distroless/static-debian12:nonroot (see Dockerfile.telahubd).
+  #
+  # Triggered on beta and stable tags only. Dev builds skip this job so
+  # ghcr.io does not accumulate short-lived tags. Operators who want to
+  # run a dev build via Docker rebuild Dockerfile.telahubd locally from
+  # the dev tag's source.
+  docker-publish:
+    needs: [compute-version, release]
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine channel from tag
+        id: channel
+        run: |
+          TAG="${{ needs.compute-version.outputs.tag }}"
+          if [[ "$TAG" =~ -dev\.[0-9]+$ ]]; then
+            CHANNEL="dev"
+          elif [[ "$TAG" =~ -beta\.[0-9]+$ ]]; then
+            CHANNEL="beta"
+          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            CHANNEL="stable"
+          else
+            CHANNEL="dev"
+          fi
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Skip dev builds
+        if: steps.channel.outputs.channel == 'dev'
+        run: |
+          echo "Channel is dev; skipping Docker publish (see DESIGN-docker.md section 12.1)."
+
+      - name: Checkout source
+        if: steps.channel.outputs.channel != 'dev'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Compute image tags
+        if: steps.channel.outputs.channel != 'dev'
+        id: tags
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/telahubd"
+          # Normalise the owner to lowercase; ghcr rejects mixed case.
+          IMAGE="${IMAGE,,}"
+          TAG="${{ steps.channel.outputs.tag }}"
+          CHANNEL="${{ steps.channel.outputs.channel }}"
+          TAGS="${IMAGE}:${TAG}"
+          case "$CHANNEL" in
+            beta)
+              TAGS="${TAGS},${IMAGE}:beta"
+              ;;
+            stable)
+              TAGS="${TAGS},${IMAGE}:stable,${IMAGE}:latest"
+              ;;
+          esac
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Tags to publish:"
+          echo "$TAGS" | tr ',' '\n' | sed 's/^/  /'
+
+      - name: Set up QEMU
+        if: steps.channel.outputs.channel != 'dev'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.channel.outputs.channel != 'dev'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        if: steps.channel.outputs.channel != 'dev'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.channel.outputs.channel != 'dev'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.telahubd
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            TELA_VERSION=${{ steps.channel.outputs.tag }}
+          tags: ${{ steps.tags.outputs.tags }}
+          push: true
+          cache-from: type=registry,ref=${{ steps.tags.outputs.image }}:buildcache
+          cache-to: type=registry,ref=${{ steps.tags.outputs.image }}:buildcache,mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.channel.outputs.tag }}

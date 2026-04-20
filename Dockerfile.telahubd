@@ -97,8 +97,16 @@ VOLUME ["/data"]
 EXPOSE 80
 EXPOSE 41820/udp
 
+# HEALTHCHECK uses the binary itself (the distroless base has no curl or
+# wget). `telahubd health` probes http://127.0.0.1:80/.well-known/tela
+# and exits 0 when the hub is serving. See DESIGN-docker.md section 12.2
+# for why we add a subcommand instead of baking in wget-static.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/telahubd", "health"]
+
 # Default command runs the hub. Override with subcommands as needed:
 #   docker run --rm telahubd user bootstrap
 #   docker run --rm telahubd channels publish -channel local -tag vX.Y.Z
+#   docker run --rm telahubd health
 ENTRYPOINT ["/usr/local/bin/telahubd"]
 CMD ["-config", "/data/telahubd.yaml"]
