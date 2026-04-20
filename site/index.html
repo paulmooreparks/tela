@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Tela: encrypted remote access from a single binary</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Tela is a FOSS encrypted remote-access fabric using WireGuard tunnels. Three small binaries. No root. No VPN client. No inbound ports.">
+    <meta property="og:title" content="Tela">
+    <meta property="og:description" content="Encrypted remote access from a single binary, on any network, without root, without a VPN client, without opening a port.">
+    <meta property="og:url" content="https://telaproject.org/">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://telaproject.org/assets/logo.png">
+    <meta property="og:image:alt" content="Tela logo">
+    <meta property="og:image:width" content="350">
+    <meta property="og:image:height" content="350">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Tela">
+    <meta name="twitter:description" content="Encrypted remote access from a single binary, on any network, without root, without a VPN client, without opening a port.">
+    <meta name="twitter:image" content="https://telaproject.org/assets/logo.png">
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="tdl.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar tb-dark site-topbar">
+    <div class="site-topbar-inner">
+        <div class="brand-group">
+            <a class="brand-link" href="/" aria-label="Tela home">
+                <span class="brand">
+                    <img class="brand-logo" src="assets/logo.png" alt="">
+                    Tela
+                </span>
+            </a>
+        </div>
+        <nav class="chrome-row" aria-label="Primary">
+            <a class="link site-nav-link" href="/book/">Docs</a>
+            <a class="link site-nav-link" href="#download">Download</a>
+            <a class="link site-nav-link" href="https://github.com/paulmooreparks/tela" rel="noopener">GitHub</a>
+            <a class="link site-nav-link" href="/book/ops/release-process.html">Releases</a>
+        </nav>
+    </div>
+</header>
+
+<main>
+
+    <!-- Hero -->
+    <section class="site-hero">
+        <img class="site-hero-logo" src="assets/logo.png" alt="Tela logo" width="220" height="220">
+        <h1 class="site-hero-title">
+            Tela
+        </h1>
+
+        <p class="site-section-body">
+            Tela is a connectivity fabric. Three small programs (a client, an agent, and
+            a hub) let one machine reach a TCP service on another through an encrypted
+            WireGuard tunnel, without either side opening an inbound port or running
+            anything as root. The same three binaries scale from a single laptop
+            reaching a single home server up to a fleet of machines managed by a team,
+            without switching tools.
+        </p>
+        <h3 class="site-subheading"><a class="link" href="/book/getting-started/first-connection.html">Solo Remote Access</a></h3>
+        <p class="site-section-body">One agent, one hub, one client. Minutes from download to first connection.</p>
+
+        <h3 class="site-subheading"><a class="link" href="/book/use-cases/personal-cloud.html">Personal Cloud</a></h3>
+        <p class="site-section-body">Several agents at home and work, file sharing, a desktop client.</p>
+
+        <h3 class="site-subheading"><a class="link" href="/book/use-cases/distributed-teams.html">Team Cloud</a></h3>
+        <p class="site-section-body">Named identities, per-machine permissions, pairing codes, audit history.</p>
+
+        <h3 class="site-subheading"><a class="link" href="/book/guide/directories.html">Fleet</a></h3>
+        <p class="site-section-body">Multiple hubs, centralized identities, agents self-updating via release channels.</p>
+    </section>
+
+    <!-- Three Components -->
+    <section class="site-section">
+        <h2 class="site-section-title">The Tela Components</h2>
+        <div class="site-binaries">
+            <article class="card site-binary-card">
+                <header class="card-header">
+                    <h3 class="card-title"><code>tela</code></h3>
+                    <h3 class="card-title">Client CLI</h3>
+                </header>
+                <p class="card-desc">Connects to machines via a hub, mounts file shares, and manages profiles.</p>
+                <a class="link" href="/book/guide/three-binaries.html#tela">Docs &rarr;</a>
+            </article>
+            <article class="card site-binary-card">
+                <header class="card-header">
+                    <h3 class="card-title"><code>telad</code></h3>
+                    <h3 class="card-title">Agent Daemon</h3>
+                </header>
+                <p class="card-desc">Registers a machine with a hub and exposes its services securely.</p>
+                <a class="link" href="/book/guide/three-binaries.html#telad">Docs &rarr;</a>
+            </article>
+            <article class="card site-binary-card">
+                <header class="card-header">
+                    <h3 class="card-title"><code>telahubd</code></h3>
+                    <h3 class="card-title">Hub Server</h3>
+                </header>
+                <p class="card-desc">Brokers connections between clients and agents on a single port.</p>
+                <a class="link" href="/book/guide/three-binaries.html#telahubd">Docs &rarr;</a>
+            </article>
+        </div>
+    </section>
+
+    <!-- TelaVisor -->
+    <section class="site-section">
+        <h2 class="site-section-title">TelaVisor</h2>
+        <p class="site-section-body">
+            TelaVisor is the desktop client for Tela. It wraps the CLI in a window
+            with menus, panels, and a file browser, so you can connect to machines,
+            manage hubs, browse shares, and administer remote agents without
+            opening a terminal. Runs on Windows, Linux, and macOS.
+        </p>
+
+        <figure class="site-screenshot">
+            <img src="/book/screens/telavisor-status-connected.png"
+                 alt="TelaVisor Status view showing an active connection to a remote machine, with services listed and their tunnel state.">
+            <figcaption>Status view with a live connection to a remote machine.</figcaption>
+        </figure>
+
+        <p class="site-section-body">
+            <a class="link" href="/book/guide/telavisor.html">Read the TelaVisor chapter &rarr;</a>
+        </p>
+    </section>
+
+    <!-- Version map -->
+    <section class="site-section">
+        <h2 class="site-section-title">Documentation</h2>
+        <p class="site-section-body">
+            Three editions of the tela book track the three release channels. Stable is the default;
+            beta and dev are rebuilt from each channel's tag and are labelled with
+            the version they document.
+        </p>
+
+        <div class="site-versions">
+            <div class="card site-version-card">
+                <div class="site-version-label">Stable</div>
+                <div class="site-version-number">__TELA_SITE_STABLE_VERSION__</div>
+                <div class="site-version-desc">The current stable release. Default for new installations.</div>
+                <a class="link site-version-link" href="/book/">Read the book &rarr;</a>
+            </div>
+            <div class="card site-version-card">
+                <div class="site-version-label">Beta</div>
+                <div class="site-version-desc">Candidate for promotion. Real bugs surface here first.</div>
+                <a class="link site-version-link" href="/book/beta/">Read the beta version &rarr;</a>
+            </div>
+            <div class="card site-version-card">
+                <div class="site-version-label">Dev</div>
+                <div class="site-version-desc">Tip of main. Every commit produces a build. May break.</div>
+                <a class="link site-version-link" href="/book/dev/">Read the dev version &rarr;</a>
+            </div>
+        </div>
+        <p class="site-section-body site-section-body-small">
+            <a class="link" href="/book/archive/">Archived stable releases &rarr;</a>
+        </p>
+    </section>
+
+    <!-- Download -->
+    <section class="site-section" id="download">
+        <h2 class="site-section-title">Download</h2>
+        <p class="site-section-body">
+            Prebuilt binaries for each supported platform. Every release is signed
+            and accompanied by SHA-256 checksums.
+        </p>
+
+
+        <div class="site-downloads">
+            <div class="card site-download-card" data-platform="windows">
+                <strong>Windows</strong>
+                <span>Signed binaries and the NSIS installer for amd64 and arm64.</span>
+                <a class="link site-download-link" href="https://github.com/paulmooreparks/tela/releases/latest" rel="noopener">Download for Windows &rarr;</a>
+            </div>
+            <div class="card site-download-card" data-platform="macos">
+                <strong>macOS</strong>
+                <span>Binaries for Apple Silicon (arm64) and Intel (amd64).</span>
+                <a class="link site-download-link" href="https://github.com/paulmooreparks/tela/releases/latest" rel="noopener">Download for macOS &rarr;</a>
+            </div>
+            <div class="card site-download-card" data-platform="linux">
+                <strong>Linux</strong>
+                <span>Binaries, .deb, and .rpm packages for amd64 and arm64.</span>
+                <a class="link site-download-link" href="https://github.com/paulmooreparks/tela/releases/latest" rel="noopener">Download for Linux &rarr;</a>
+            </div>
+            <div class="card site-download-card">
+                <strong>All Platforms</strong>
+                <span>Every binary, every package, every signed checksum for the current release.</span>
+                <a class="link site-download-link" href="https://github.com/paulmooreparks/tela/releases/latest" rel="noopener">See the full release &rarr;</a>
+            </div>
+        </div>
+
+        <p class="site-section-body site-section-body-small">
+            Package manager distribution (winget, choco, apt, brew) is on the 1.0 roadmap.
+        </p>
+    </section>
+
+    <!-- Community -->
+    <section class="site-section">
+        <h2 class="site-section-title">Source and Community</h2>
+        <div class="site-community">
+            <div class="card site-community-card">
+                <strong>GitHub</strong>
+                <span>Source, issues, pull requests. FOSS under GPL v3.</span>
+                <a class="link site-community-link" href="https://github.com/paulmooreparks/tela" rel="noopener">Open repository &rarr;</a>
+            </div>
+            <div class="card site-community-card">
+                <strong>Issues</strong>
+                <span>Bug reports, feature requests, design discussion.</span>
+                <a class="link site-community-link" href="https://github.com/paulmooreparks/tela/issues" rel="noopener">Open issues &rarr;</a>
+            </div>
+            <div class="card site-community-card">
+                <strong>Changelog</strong>
+                <span>What changed and when, release by release.</span>
+                <a class="link site-community-link" href="https://github.com/paulmooreparks/tela/blob/main/CHANGELOG.md" rel="noopener">Read changelog &rarr;</a>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <span>Tela is FOSS, licensed under GPL v3.</span>
+        <span>&copy; Paul Parks and contributors.</span>
+    </div>
+</footer>
+
+<script>
+// Platform detection for the download section. Marks the detected
+// platform's card as current via a modifier class so a visitor can
+// spot their platform at a glance. Silently no-ops on unknown or
+// unrecognized platforms; the cards still render normally.
+(function () {
+    var ua = (navigator.userAgent || '') + ' ' + (navigator.platform || '');
+    var p = ua.toLowerCase();
+    var platform;
+    if (p.indexOf('win') !== -1) platform = 'windows';
+    else if (p.indexOf('mac') !== -1 || p.indexOf('darwin') !== -1) platform = 'macos';
+    else if (p.indexOf('linux') !== -1) platform = 'linux';
+    if (!platform) return;
+
+    var card = document.querySelector('[data-platform="' + platform + '"]');
+    if (!card) return;
+    card.classList.add('site-download-card-current');
+})();
+</script>
+
+</body>
+</html>

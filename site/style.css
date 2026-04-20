@@ -1,0 +1,344 @@
+/* ==========================================================================
+   telaproject.org landing page: page-specific layout
+
+   This stylesheet is the landing page's own layout and composition.
+   Visual primitives (buttons, cards, status chips, topbar chrome,
+   typography tokens) come from tdl.css and are not redefined here.
+
+   Convention: every class in this file is prefixed with `site-` so it
+   does not collide with a TDL primitive if one gets added later.
+   ========================================================================== */
+
+/* --- Page chrome and layout -------------------------------------------- */
+
+body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+/* Override TDL's rounded-card topbar so the site header is flush with
+   the viewport top and spans its full width, matching the TelaVisor and
+   Awan Saya topbar presentation. The .site-topbar-inner child keeps the
+   brand and nav aligned with the page's 960px centered content column. */
+.site-topbar {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+}
+
+.site-topbar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 10px 24px;
+}
+
+/* Topbar nav items. These are plain links; the site-nav-link class only
+   adjusts spacing and font size. Underline comes from .link per TDL. */
+.site-nav-link {
+    padding: 4px 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* --- Hero -------------------------------------------------------------- */
+
+.site-hero {
+    padding: 18px 0 18px;
+    text-align: left;
+    display: flow-root; /* contains the floated logo */
+}
+
+.site-hero-logo {
+    float: right;
+    width: 220px;
+    max-width: 40%;
+    height: auto;
+    margin: 0 0 16px 24px;
+}
+
+.site-hero-title {
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    color: var(--text);
+}
+
+.site-hero-sub {
+    font-size: 18px;
+    color: var(--text-muted);
+    margin: 0 0 32px;
+}
+
+.site-hero-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.site-cta-primary,
+.site-cta-secondary {
+    font-size: 14px;
+    padding: 10px 22px;
+}
+
+/* --- Section -------------------------------------------------------- */
+
+.site-section {
+    padding: 24px 0 32px;
+    border-top: 1px solid var(--border);
+}
+
+.site-section-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    color: var(--text);
+}
+
+.site-section-body {
+    font-size: 15px;
+    color: var(--text);
+    margin: 0 0 20px;
+}
+
+.site-section-body-small {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 12px;
+}
+
+/* --- Screenshots ------------------------------------------------------ */
+
+.site-screenshot {
+    margin: 16px 0 20px;
+}
+
+.site-screenshot img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.site-screenshot figcaption {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* --- Subheadings within a section ------------------------------------- */
+
+.site-subheading {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    margin: 24px 0 6px;
+    color: var(--text);
+}
+
+/* --- Three binaries --------------------------------------------------- */
+
+.site-binaries {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.site-binary-card code {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    background: none;
+    padding: 0;
+}
+
+/* --- Version map ------------------------------------------------------ */
+
+.site-versions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+.site-version-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.site-version-link {
+    margin-top: 10px;
+    font-size: 13px;
+    align-self: flex-start;
+}
+
+.site-version-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.site-version-number {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 2px 0 4px;
+}
+
+.site-version-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* --- Download --------------------------------------------------------- */
+
+.site-downloads {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+.site-download-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.site-download-card strong {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.site-download-card span {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.site-download-link {
+    margin-top: 10px;
+    font-size: 13px;
+    align-self: flex-start;
+}
+
+/* The detected-platform card gets an accent border so the visitor's
+   own platform is visually emphasized. Set by the inline script at the
+   bottom of index.html. Falls back silently if JS is disabled. */
+.site-download-card-current {
+    border-color: var(--accent);
+}
+
+/* --- Community -------------------------------------------------------- */
+
+.site-community {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+.site-community-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.site-community-card strong {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.site-community-card span {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.site-community-link {
+    margin-top: 10px;
+    font-size: 13px;
+    align-self: flex-start;
+}
+
+/* --- Footer ----------------------------------------------------------- */
+
+.site-footer {
+    margin-top: 48px;
+    border-top: 1px solid var(--border);
+    padding: 20px 24px;
+}
+
+.site-footer-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* --- Responsive tweaks ------------------------------------------------ */
+
+@media (max-width: 600px) {
+    .site-topbar-inner {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .chrome-row {
+        flex-wrap: wrap;
+    }
+
+    .site-hero {
+        padding: 32px 0 40px;
+    }
+
+    /* Unfloat the hero logo on narrow viewports. Floating a 220px image
+       into a 360px column crushes the intro text into a narrow rag. */
+    .site-hero-logo {
+        float: none;
+        display: block;
+        margin: 0 auto 20px;
+        width: 160px;
+    }
+
+    .site-footer-inner {
+        flex-direction: column;
+    }
+}

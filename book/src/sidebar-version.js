@@ -32,10 +32,10 @@ document.addEventListener('DOMContentLoaded', function () {
     switcher.appendChild(label);
 
     var links = [
-        { name: 'stable',  href: '/tela/' },
-        { name: 'beta',    href: '/tela/beta/' },
-        { name: 'dev',     href: '/tela/dev/' },
-        { name: 'archive', href: '/tela/archive/' }
+        { name: 'stable',  href: '/book/' },
+        { name: 'beta',    href: '/book/beta/' },
+        { name: 'dev',     href: '/book/dev/' },
+        { name: 'archive', href: '/book/archive/' }
     ];
 
     var first = true;
