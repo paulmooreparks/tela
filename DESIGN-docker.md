@@ -166,7 +166,7 @@ TLS termination is the reverse proxy's job. `telahubd` does not terminate TLS it
 
 ## 9. Compose topology
 
-Three templates under `book/src/howto/hub-docker/`:
+Three templates under `deploy/docker/`. Placed outside `book/` because these are runtime deployment artifacts (YAML files an operator downloads and edits), not book chapters; the `book/` tree is reserved for documentation. The book chapter cross-links to the files from the repo root via `raw.githubusercontent.com` URLs (for `curl`) and to the tree for browsing.
 
 **`docker-compose.minimal.yml`** -- telahubd alone on port 80. For LAN-only dev or test deployments. Demonstrates env-var bootstrap, a named volume, and the UDP port mapping. No proxy, no TLS.
 
