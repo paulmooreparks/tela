@@ -1,0 +1,1266 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>D. Portal protocol - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html" class="active"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/architecture/portal-protocol.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="appendix-d-portal-protocol"><a class="header" href="#appendix-d-portal-protocol">Appendix D: Portal protocol</a></h1>
+<p>This appendix is the wire-level contract every Tela portal must implement. The <a href="../guide/directories.html">Hub directories and portals</a> chapter in the User Guide describes portals from a deployment perspective. This appendix specifies what makes something a conformant portal in protocol terms.</p>
+<p>This document is the wire-level contract every Tela portal must implement.
+Portals are independent processes that aggregate hubs into a directory and
+proxy authenticated administrative requests through to the hubs they list.
+Awan Saya is one implementation; the planned <code>internal/portal</code> Go package
+will be another. Both speak the protocol described here.</p>
+<p>The protocol carves out the <strong>portal contract</strong> from the <strong>identity
+implementation</strong>. The contract is small (about ten endpoints, two auth
+modes, a JSON shape per response) and stable enough to write down. The
+identity implementation -- accounts, organizations, teams, billing,
+self-service signup -- is out of scope and lives in whatever store an
+implementation chooses to pair with the protocol.</p>
+<p>Status: <strong>draft, version 1.1, identity amendment in flight</strong>. The
+four open questions in the first draft of this spec were resolved on
+2026-04-08 (see section 13). The decisions are baked into sections 2,
+4, 5, and 11. The <code>internal/portal</code> Go package, the file-backed store,
+the HTTP handlers, the spec-conformance test harness, the migration of
+Awan Saya and the <code>telahubd</code> outbound portal client to the new shape,
+and the <code>cmd/telaportal</code> single-user binary all landed in the six-commit
+extraction series ending in <code>a0677f6</code>. The amendment in section 6
+strengthens user-auth credentials to a single mandatory format (bearer
+token via the <code>Authorization</code> header) and standardizes the OAuth 2.0
+device code flow for desktop client onboarding; rationale in section
+13.6. The current amendment bumps the protocol from 1.0 to 1.1 to add
+stable UUIDs for hubs, agents, machine registrations, and portals. The
+identity model is documented in DESIGN-identity.md; section 1.1 below
+summarizes the wire shapes. Rationale and the negotiation break are in
+section 13.7. Pre-1.0 the spec is still mutable; post-1.0 it follows
+the version negotiation and backward-compatibility rules in section 2.</p>
+<p>Discussion of why a portal exists at all, the scaling story, and how
+TelaVisor is expected to host the protocol in personal-use mode lives in
+ROADMAP-1.0.md under "Portal architecture: one protocol, many hosts."
+This document is the contract; that document is the rationale.</p>
+<hr />
+<h2 id="1-roles"><a class="header" href="#1-roles">1. Roles</a></h2>
+<p>Three actors participate in the protocol:</p>
+<div class="table-wrapper"><table><thead><tr><th>Role</th><th>What it does</th><th>Example</th></tr></thead><tbody>
+<tr><td><strong>Portal</strong></td><td>The HTTP service that hosts the directory. Stores hub records, authenticates clients, and proxies admin requests through to the hubs it lists.</td><td>Awan Saya, <code>telaportal</code> (planned), TelaVisor in Portal mode (planned).</td></tr>
+<tr><td><strong>Hub</strong></td><td>A <code>telahubd</code> instance that registers itself with one or more portals so users can discover it without knowing its URL up front.</td><td>Any production hub.</td></tr>
+<tr><td><strong>Client</strong></td><td>Anything that talks to the portal as a user. Typically a browser running the portal's web UI, or TelaVisor in Infrastructure mode.</td><td>Awan Saya web UI, TelaVisor.</td></tr>
+</tbody></table>
+</div>
+<p>The portal speaks two distinct authentication modes for two distinct sets
+of endpoints:</p>
+<ul>
+<li><strong>User auth</strong> for the directory query endpoints. The user is whoever the
+portal's identity store says they are. The protocol does not prescribe
+how user auth works; sessions, cookies, OAuth, hardcoded admin -- all
+legal. The protocol only requires that "this request is from user X"
+is determinable.</li>
+<li><strong>Hub sync auth</strong> for the hub-driven <code>/api/hubs/sync</code> endpoint. The hub
+presents a sync token issued at registration time. This is an
+authentication mode independent of user auth.</li>
+</ul>
+<p>A portal MAY also serve unauthenticated discovery (<code>/.well-known/tela</code>)
+and any other endpoints it wants outside the protocol's scope.</p>
+<h3 id="11-entity-identity-11"><a class="header" href="#11-entity-identity-11">1.1 Entity identity (1.1)</a></h3>
+<p>Protocol 1.1 introduces stable UUIDs for every entity that needs
+identity in the fabric. The full model is in DESIGN-identity.md;
+this subsection summarizes the wire-level fields a portal sees.</p>
+<div class="table-wrapper"><table><thead><tr><th>Entity</th><th>Field</th><th>Generated by</th><th>Stored on</th></tr></thead><tbody>
+<tr><td>Portal</td><td><code>portalId</code></td><td>the portal, on first start</td><td>the portal's own store</td></tr>
+<tr><td>Hub</td><td><code>hubId</code></td><td><code>telahubd</code>, on first start</td><td>the hub's YAML config</td></tr>
+<tr><td>Agent install</td><td><code>agentId</code></td><td><code>telad</code>, on first start</td><td><code>telad.state</code></td></tr>
+<tr><td>Machine registration</td><td><code>machineRegistrationId</code></td><td>the hub, on first registration of a new <code>(agentId, machineName)</code> pair</td><td>the hub's machine record</td></tr>
+</tbody></table>
+</div>
+<p>Wire-level naming rules:</p>
+<ul>
+<li>All identity fields use camelCase (<code>hubId</code>, <code>agentId</code>,
+<code>machineRegistrationId</code>, <code>portalId</code>). There is no <code>_id</code> suffix and
+no all-caps <code>ID</code> form on the wire. Where context is unambiguous a
+field MAY be named simply <code>id</code> -- for example, a directory entry's
+<code>id</code> is its hub's <code>hubId</code>.</li>
+<li>UUIDs are random v4, formatted as the standard 36-character
+8-4-4-4-12 hex string with dashes.</li>
+<li>Identity fields are not credentials. Anyone who can read the
+endpoint can read the IDs. Authority is established by tokens, not
+by knowledge of an ID.</li>
+</ul>
+<p>A 1.1 portal MUST learn a hub's <code>hubId</code> before storing the hub in its
+directory (sections 3.2 and 3.6). A 1.1 portal MUST surface the
+<code>hubId</code>, <code>agentId</code>, and <code>machineRegistrationId</code> it learns from
+upstream hubs in its directory and fleet responses (sections 3.1 and
+5). A 1.1 portal MUST expose its own <code>portalId</code> on
+<code>/.well-known/tela</code> (section 2).</p>
+<hr />
+<h2 id="2-discovery-and-version-negotiation-well-knowntela"><a class="header" href="#2-discovery-and-version-negotiation-well-knowntela">2. Discovery and version negotiation: <code>/.well-known/tela</code></a></h2>
+<p>A portal MUST serve a JSON document at <code>/.well-known/tela</code> that names
+where the hub directory lives and which portal protocol versions the
+portal speaks. This is the only well-known endpoint Tela defines and
+is the entry point any client uses when given a portal URL. It serves
+two purposes: directory discovery and protocol version negotiation.</p>
+<h3 id="request"><a class="header" href="#request">Request</a></h3>
+<pre><code>GET /.well-known/tela HTTP/1.1
+Host: portal.example.com
+Accept: application/json
+</code></pre>
+<p>No authentication. Portals MAY serve this with <code>Cache-Control: public, max-age=86400</code> or similar long cache directives because the value rarely
+changes.</p>
+<h3 id="response"><a class="header" href="#response">Response</a></h3>
+<pre><code class="language-http">HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+{
+  "hub_directory": "/api/hubs",
+  "protocolVersion": "1.1",
+  "supportedVersions": ["1.1"],
+  "portalId": "770e8400-e29b-41d4-a716-446655440002"
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>hub_directory</code></td><td>string</td><td>yes</td><td>Path on the same origin where the portal serves the hub directory endpoints (section 3). MUST be a relative path beginning with <code>/</code>. Implementations SHOULD use <code>/api/hubs</code> as the conventional default; clients MUST honor whatever value the portal returns.</td></tr>
+<tr><td><code>protocolVersion</code></td><td>string</td><td>yes (post-1.0)</td><td>The portal protocol version the portal recommends clients use. Major.minor semver string. The portal MUST select this from its <code>supportedVersions</code> list. Pre-1.0 portals MAY ship <code>"0.x"</code> to mark themselves as in development.</td></tr>
+<tr><td><code>supportedVersions</code></td><td>array of strings</td><td>yes (post-1.0)</td><td>The full set of portal protocol versions this portal speaks. MUST be non-empty. MUST contain <code>protocolVersion</code>. Newer portals supporting older clients list multiple versions here.</td></tr>
+<tr><td><code>portalId</code></td><td>string</td><td>yes (1.1)</td><td>The portal's stable v4 UUID. Generated on the portal's first start, persisted in the portal's store, never rotated under normal operation. Identifies the portal across URL changes; see section 1.1 and DESIGN-identity.md.</td></tr>
+</tbody></table>
+</div>
+<h3 id="hub-well-knowntela"><a class="header" href="#hub-well-knowntela">Hub <code>/.well-known/tela</code></a></h3>
+<p>A <code>telahubd</code> instance running protocol 1.1 ALSO serves a separate
+<code>/.well-known/tela</code> document at its own origin. The shape is similar
+to the portal's but advertises a <code>hubId</code> instead of a <code>portalId</code>:</p>
+<pre><code class="language-http">HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+{
+  "protocolVersion": "1.1",
+  "supportedVersions": ["1.1"],
+  "hubId": "550e8400-e29b-41d4-a716-446655440000"
+}
+</code></pre>
+<p>This endpoint is unauthenticated. Portals call it during a
+user-initiated hub add (section 3.2 context 2) to learn the hub's
+<code>hubId</code> before storing the record. Hubs do not advertise
+<code>hub_directory</code> (the directory is a portal concept, not a hub one).</p>
+<h3 id="version-semantics"><a class="header" href="#version-semantics">Version semantics</a></h3>
+<p>Versions follow standard semver discipline applied to a wire protocol:</p>
+<ul>
+<li><strong>Major version bump</strong> (<code>1.x</code> → <code>2.x</code>) signals a breaking change.
+Clients written for major version N MUST refuse to operate against
+a portal whose <code>supportedVersions</code> does not include any <code>N.*</code> entry.</li>
+<li><strong>Minor version bump</strong> (<code>1.0</code> → <code>1.1</code>) signals an additive change:
+new optional fields, new endpoints, new optional query parameters.
+A client written against <code>1.0</code> MUST work against any <code>1.x</code> portal,
+ignoring fields and endpoints it does not understand.</li>
+<li><strong>Within a single major version, the portal protocol is strictly
+additive.</strong> Removing fields, renaming fields, changing field types,
+or changing the semantics of existing fields are all forbidden and
+require a major version bump. Adding new optional fields, adding
+new endpoints, and adding new optional query parameters are allowed
+in a minor version bump.</li>
+<li><strong>Pre-1.0 exception, used exactly once for 1.0 → 1.1.</strong> The
+identity amendment introduces required fields rather than optional
+ones, which violates the additive-only rule above. This is allowed
+pre-1.0 because Tela has no backward-compatibility burden yet (see
+CLAUDE.md "Pre-1.0: no cruft, no backward compatibility"), and
+documented here so the precedent is recorded. The negotiation rule
+is unchanged: a 1.0 client only understands <code>"1.0"</code> and refuses a
+portal advertising <code>["1.1"]</code>; a 1.1 client only understands
+<code>"1.1"</code> and refuses a portal advertising <code>["1.0"]</code>. The break is
+clean. Section 13.7 has the rationale.</li>
+</ul>
+<h3 id="negotiation-rule"><a class="header" href="#negotiation-rule">Negotiation rule</a></h3>
+<p>A client MUST:</p>
+<ol>
+<li>Fetch <code>/.well-known/tela</code> at session start.</li>
+<li>Read <code>supportedVersions</code> and select the <strong>highest</strong> version it
+understands (where "highest" is by semver ordering).</li>
+<li>Use that version's shapes and rules for the rest of the session.</li>
+<li>Refuse to operate (with a clear error to the user) if no version in
+<code>supportedVersions</code> matches a major version the client supports.</li>
+</ol>
+<p>A client SHOULD NOT re-fetch <code>/.well-known/tela</code> mid-session unless it
+has reason to believe the portal has been upgraded.</p>
+<h3 id="fallback"><a class="header" href="#fallback">Fallback</a></h3>
+<p>If <code>/.well-known/tela</code> is not served (HTTP 404, network error, malformed
+JSON), clients MUST fall back to:</p>
+<ul>
+<li><code>hub_directory: "/api/hubs"</code> (the conventional default)</li>
+<li><code>protocolVersion: "0"</code> (the unversioned legacy contract, equivalent to
+the shape this document describes minus the post-1.0 negotiation rules)</li>
+</ul>
+<p>This preserves compatibility with portals that predate this document.
+A client that has fallen back to <code>protocolVersion: "0"</code> MUST NOT assume
+any field beyond what was documented in the legacy contract. In
+particular, a client in legacy fallback mode MUST NOT assume any
+identity field defined in 1.1 is present.</p>
+<p><code>telahubd</code>'s reference client implements the discovery + fallback in
+<code>internal/hub/hub.go</code> <code>discoverHubDirectory()</code>.</p>
+<h3 id="parallel-with-the-hub-wire-format"><a class="header" href="#parallel-with-the-hub-wire-format">Parallel with the hub wire format</a></h3>
+<p>The same negotiation pattern is the obvious answer for the <strong>hub wire
+protocol</strong> (the WebSocket protocol between agents/clients and the hub).
+ROADMAP-1.0.md "Protocol freeze" calls this out as a 1.0 blocker for
+the hub side. The two protocols are independent and version
+independently, but they should share the same discipline: well-known
+discovery surface, additive-only minor versions, breaking changes
+require a major bump and a refusal-to-talk on mismatch.</p>
+<hr />
+<h2 id="3-hub-directory-hub_directory-endpoints"><a class="header" href="#3-hub-directory-hub_directory-endpoints">3. Hub directory: <code>{hub_directory}</code> endpoints</a></h2>
+<p>The hub directory is a small REST resource. The path prefix is whatever
+<code>/.well-known/tela</code> returns; in the conventional case that is <code>/api/hubs</code>,
+and the rest of this document uses that path for clarity. A portal that
+returns a different prefix MUST serve the same shapes under that prefix.</p>
+<h3 id="31-get-apihubs----list-visible-hubs"><a class="header" href="#31-get-apihubs----list-visible-hubs">3.1 GET /api/hubs -- list visible hubs</a></h3>
+<p>Returns the list of hubs the authenticated user can see. The portal
+applies whatever visibility rules its identity store dictates: in Awan
+Saya, that is org/team membership; in a single-user portal, the user
+sees every hub.</p>
+<p>Request:</p>
+<pre><code>GET /api/hubs HTTP/1.1
+Authorization: &lt;user auth, implementation-specific&gt;
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  "hubs": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "myhub",
+      "url": "https://hub.example.com",
+      "canManage": true,
+      "orgName": "acme"
+    }
+  ]
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>string</td><td>yes (1.1)</td><td>The hub's <code>hubId</code>. The portal learned this during the register flow (section 3.2) or via <code>/.well-known/tela</code> on the hub URL. Stable across <code>name</code> and <code>url</code> changes; clients SHOULD prefer it as the primary identity key when correlating hubs across portal sources. See section 1.1.</td></tr>
+<tr><td><code>name</code></td><td>string</td><td>yes</td><td>Short hub name. Unique within the portal. Used as the addressable identifier in proxy paths.</td></tr>
+<tr><td><code>url</code></td><td>string</td><td>yes</td><td>Public hub URL. Either <code>https://...</code> (HTTP+WSS) or <code>http://...</code> (HTTP+WS). The hub's own admin API and WebSocket endpoint live under this URL.</td></tr>
+<tr><td><code>canManage</code></td><td>bool</td><td>yes</td><td>True when the authenticated user has admin or owner permission on this hub. Drives whether the client surfaces management actions in its UI.</td></tr>
+<tr><td><code>orgName</code></td><td>string</td><td>no</td><td>Free-form display label for the organizational scope this hub belongs to, if the portal models orgs. May be <code>null</code> or omitted. Single-user portals can return <code>null</code> everywhere.</td></tr>
+</tbody></table>
+</div>
+<p>Authentication failures return <code>401 Unauthorized</code> with the standard error
+shape (section 7). An empty hub list is <code>200 OK</code> with <code>{"hubs": []}</code>, not
+an error.</p>
+<h3 id="32-post-apihubs----register-or-update-a-hub"><a class="header" href="#32-post-apihubs----register-or-update-a-hub">3.2 POST /api/hubs -- register or update a hub</a></h3>
+<p>Adds a new hub to the portal directory or updates an existing one with
+the same <code>name</code>. This endpoint is called from two distinct contexts:</p>
+<ol>
+<li><strong>Hub-initiated bootstrap.</strong> The hub itself runs <code>registerWithPortal</code>
+from <code>telahubd</code>, presenting an admin token issued by an out-of-band
+means (typically a portal admin paste). The portal verifies the
+admin token, creates a hub record, and returns a fresh sync token.</li>
+<li><strong>User-initiated add.</strong> A logged-in user adds a hub through the
+portal UI by entering its URL and a viewer token. No admin token is
+involved; the portal authenticates the user via its session.</li>
+</ol>
+<p>Request:</p>
+<pre><code class="language-http">POST /api/hubs HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer &lt;admin-token&gt;          # context 1
+Authorization: &lt;user session&gt;                # context 2
+
+{
+  "name": "myhub",
+  "url": "https://hub.example.com",
+  "hubId": "550e8400-e29b-41d4-a716-446655440000",
+  "viewerToken": "&lt;optional 64-char hex&gt;",
+  "adminToken": "&lt;optional, context 2 only&gt;"
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td>yes</td><td>Short hub name. Must be unique within the portal. Maximum length is implementation-defined (Awan Saya enforces 255).</td></tr>
+<tr><td><code>url</code></td><td>string</td><td>yes</td><td>Public hub URL. Maximum length is implementation-defined (Awan Saya enforces 2048).</td></tr>
+<tr><td><code>hubId</code></td><td>string</td><td>yes (1.1, context 1)</td><td>The hub's stable <code>hubId</code>. The hub presents its own <code>hubId</code> from <code>telahubd.yaml</code>. The portal stores it on the hub record; it is never updated by <code>PATCH /api/hubs</code>.</td></tr>
+<tr><td><code>viewerToken</code></td><td>string</td><td>no</td><td>The hub's <code>console-viewer</code> role token, if the portal will host a web console for the hub.</td></tr>
+<tr><td><code>adminToken</code></td><td>string</td><td>no</td><td>The hub's owner or admin token. The portal stores this so it can proxy admin requests later (section 4); the protocol does NOT echo it back in any response. Portals MUST treat stored admin tokens as secrets.</td></tr>
+</tbody></table>
+</div>
+<p>In <strong>context 2</strong> (user-initiated add), the request body MAY omit
+<code>hubId</code>. The portal MUST then call <code>GET /.well-known/tela</code> on the
+<code>url</code> and read <code>hubId</code> from the response. If that call fails, returns
+non-JSON, returns a 1.0 well-known document without <code>hubId</code>, or the
+hub is unreachable, the portal MUST refuse the registration with
+<code>502 Bad Gateway</code> and an error body explaining the discovery failure.
+A 1.1 portal MUST NOT store a hub record without a <code>hubId</code>.</p>
+<p>Response:</p>
+<pre><code class="language-json">{
+  "hubs": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "...",
+      "url": "...",
+      "canManage": true,
+      "orgName": null
+    }
+  ],
+  "syncToken": "hubsync_AbC123...",
+  "updated": false
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>hubs</code></td><td>array</td><td>yes</td><td>The user's full hub list after the registration, in the same shape as <code>GET /api/hubs</code> (including the <code>id</code> field per section 1.1).</td></tr>
+<tr><td><code>syncToken</code></td><td>string</td><td>when context 1</td><td>A fresh sync token the hub will use for <code>PATCH /api/hubs/sync</code> (section 3.3). MUST start with the prefix <code>hubsync_</code> so clients can distinguish it from other token classes. The portal stores its hash; the cleartext is returned exactly once. Portals MAY omit this field for context-2 calls (user-initiated adds).</td></tr>
+<tr><td><code>updated</code></td><td>bool</td><td>no</td><td>True when the registration upserted an existing record rather than creating a new one. Default false.</td></tr>
+</tbody></table>
+</div>
+<p>A hub that is registered a second time with the same <code>hubId</code> MUST be
+upserted (the portal updates <code>name</code>, <code>url</code>, <code>viewerToken</code>, and the
+stored admin token, and issues a new sync token). The hub then learns
+the new sync token from the response and persists it. This is how a
+hub recovers from losing its sync token: re-register with the same
+admin token. Identity matching by <code>hubId</code> is what makes a renamed hub
+upsert into the existing record rather than creating a duplicate; in
+1.0 the upsert was keyed on <code>name</code> and renaming a hub looked like a
+new registration.</p>
+<p>A portal MUST reject a context-1 registration whose <code>hubId</code> is missing
+or whose <code>hubId</code> matches an existing record but whose <code>name</code> collides
+with a different hub belonging to another user. The exact response
+shape on a name collision is implementation-defined; <code>409 Conflict</code>
+with the standard error body is recommended.</p>
+<p>Authorization failures: <code>401 Unauthorized</code> if no valid auth, <code>403 Forbidden</code> if the user is authenticated but not authorized to add a hub
+under the requested scope (e.g. organization quota reached).</p>
+<h3 id="33-patch-apihubssync----hub-pushes-its-viewer-token"><a class="header" href="#33-patch-apihubssync----hub-pushes-its-viewer-token">3.3 PATCH /api/hubs/sync -- hub pushes its viewer token</a></h3>
+<p>Authenticated by the per-hub <strong>sync token</strong>, not by user session. This
+endpoint is the only one in the protocol that uses sync auth; it exists
+so a hub can refresh its viewer token at the portal without involving a
+user.</p>
+<p>Request:</p>
+<pre><code class="language-http">PATCH /api/hubs/sync HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer hubsync_AbC123...
+
+{ "name": "myhub", "viewerToken": "&lt;new 64-char hex&gt;" }
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>yes</td><td>The hub name as registered.</td></tr>
+<tr><td><code>viewerToken</code></td><td>yes</td><td>The new console-viewer token the portal should store.</td></tr>
+</tbody></table>
+</div>
+<p>Response:</p>
+<pre><code class="language-json">{ "ok": true }
+</code></pre>
+<p>The portal MUST verify the sync token using a timing-safe comparison
+against the hash it stored during registration. Mismatched tokens
+return <code>401</code>. Unknown hub names return <code>404</code>.</p>
+<p>This endpoint MUST NOT accept user auth. A user wishing to update a
+hub's viewer token does so through <code>PATCH /api/hubs</code> (section 3.4),
+which is user-authenticated.</p>
+<h3 id="34-patch-apihubs----user-updates-a-hub-record"><a class="header" href="#34-patch-apihubs----user-updates-a-hub-record">3.4 PATCH /api/hubs -- user updates a hub record</a></h3>
+<p>User-authenticated update of any field on an existing hub the user can
+manage. The body is a partial update; only the fields present are
+changed.</p>
+<p>Request:</p>
+<pre><code class="language-http">PATCH /api/hubs HTTP/1.1
+Content-Type: application/json
+Authorization: &lt;user session&gt;
+
+{
+  "currentName": "myhub",
+  "name": "myhub-renamed",
+  "url": "https://hub.example.com",
+  "viewerToken": "...",
+  "adminToken": "..."
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>currentName</code></td><td>yes</td><td>The current name of the hub to update.</td></tr>
+<tr><td><code>name</code></td><td>no</td><td>New hub name.</td></tr>
+<tr><td><code>url</code></td><td>no</td><td>New hub URL.</td></tr>
+<tr><td><code>viewerToken</code></td><td>no</td><td>New viewer token.</td></tr>
+<tr><td><code>adminToken</code></td><td>no</td><td>New admin token (stored as a secret; never echoed back).</td></tr>
+</tbody></table>
+</div>
+<p><code>PATCH /api/hubs</code> MUST NOT change the stored <code>hubId</code>. A request body
+that includes a <code>hubId</code> field SHOULD be rejected with <code>400 Bad Request</code>; clients MUST NOT include it. Hub identity is set on
+registration and is not user-mutable.</p>
+<p>Response: same shape as <code>GET /api/hubs</code>, reflecting the post-update list.</p>
+<h3 id="35-delete-apihubs----user-removes-a-hub"><a class="header" href="#35-delete-apihubs----user-removes-a-hub">3.5 DELETE /api/hubs -- user removes a hub</a></h3>
+<pre><code class="language-http">DELETE /api/hubs?name=myhub HTTP/1.1
+Authorization: &lt;user session&gt;
+</code></pre>
+<p>The hub name is passed as a query parameter, not in the request body, so
+clients can use <code>DELETE</code> without a body. A portal MAY accept the name in
+a JSON body too, but the query-parameter form is normative.</p>
+<p>Authorization MUST be more restrictive than read access: only hub owners,
+organization owners, or platform admins can delete (in Awan Saya, hub
+admins explicitly cannot delete). The exact rule is implementation-
+defined; the protocol only requires that delete is gated tighter than
+read.</p>
+<p>Response: same shape as <code>GET /api/hubs</code>, reflecting the post-delete list.</p>
+<hr />
+<h2 id="4-admin-proxy-apihub-adminhubnameoperation"><a class="header" href="#4-admin-proxy-apihub-adminhubnameoperation">4. Admin proxy: <code>/api/hub-admin/{hubName}/{operation}</code></a></h2>
+<p>A portal MUST expose an HTTP proxy that lets authenticated users invoke
+the hub's admin API without having direct network reachability or
+needing the hub's admin token. The portal holds the admin token (stored
+during registration) and forwards the request on the user's behalf.</p>
+<p>The proxy URL is:</p>
+<pre><code>{portal-base-url}/api/hub-admin/{hubName}/{operation}
+</code></pre>
+<p>Where:</p>
+<ul>
+<li><code>{hubName}</code> is the short hub name (URL-encoded if it contains special
+characters).</li>
+<li><code>{operation}</code> is the hub admin path <strong>without</strong> the leading
+<code>/api/admin/</code> prefix. Examples: <code>access</code>, <code>agents/barn/logs</code>,
+<code>update</code>, <code>pair-code</code>, <code>tokens</code>, <code>restart</code>. The portal MUST internally
+prepend <code>/api/admin/</code> before forwarding to the hub.</li>
+</ul>
+<p>The portal MUST NOT accept the legacy double-prefix form
+<code>/api/hub-admin/{hubName}/api/admin/{operation}</code>. Clients MUST use the
+short form. This is the canonical shape for portal protocol version 1.0
+and onward; portals advertising <code>protocolVersion: "0"</code> (legacy fallback
+per section 2) used the double-prefix form.</p>
+<p>The reason: the portal's <code>/api/hub-admin/</code> namespace and the hub's
+<code>/api/admin/</code> namespace are unrelated paths that happened to share a
+prefix string. Carrying both in one URL was a coincidence of how the
+two projects independently organized their admin endpoints, not a
+structural relationship. The shorter form decouples the portal URL
+shape from the hub URL shape: if the hub ever moved its admin API to
+a different path, the portal proxy URL would not change.</p>
+<h3 id="41-method-passthrough"><a class="header" href="#41-method-passthrough">4.1 Method passthrough</a></h3>
+<p>The proxy MUST forward the original HTTP method unchanged. The Tela hub
+admin API uses real REST verbs (<code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>),
+and downgrading any of them collapses semantics. In particular,
+<code>PATCH /api/hub-admin/myhub/api/admin/update</code> is how a user changes a
+hub's release channel through the portal, and any portal that folds
+PATCH into POST breaks that path.</p>
+<h3 id="42-body-and-query-string-passthrough"><a class="header" href="#42-body-and-query-string-passthrough">4.2 Body and query string passthrough</a></h3>
+<p>The proxy MUST forward the original request body byte-for-byte for
+methods other than <code>GET</code> and <code>HEAD</code>. The proxy MUST also preserve the
+original query string. The portal MUST set <code>Authorization: Bearer &lt;storedAdminToken&gt;</code> on the outbound request and MUST NOT pass through
+the inbound <code>Authorization</code> header.</p>
+<h3 id="43-response-passthrough"><a class="header" href="#43-response-passthrough">4.3 Response passthrough</a></h3>
+<p>The proxy MUST return the upstream response status code and body
+unchanged. It SHOULD set <code>Content-Type: application/json</code> and
+<code>Cache-Control: no-cache</code> on the response.</p>
+<h3 id="44-authorization"><a class="header" href="#44-authorization">4.4 Authorization</a></h3>
+<p>A portal MUST require user auth on every proxy call and MUST verify that
+the user has <code>canManage</code> on the named hub before forwarding. A user
+without manage permission gets <code>403 Forbidden</code>. A user calling a hub
+they cannot see at all gets <code>404 Not Found</code>. The portal MUST NOT leak
+the existence of a hub to users who cannot see it.</p>
+<h3 id="45-failure-modes"><a class="header" href="#45-failure-modes">4.5 Failure modes</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Condition</th><th>Status</th></tr></thead><tbody>
+<tr><td>User not authenticated</td><td>401</td></tr>
+<tr><td>Hub does not exist OR user cannot see it</td><td>404</td></tr>
+<tr><td>User can see hub but lacks <code>canManage</code></td><td>403</td></tr>
+<tr><td>Portal has no admin token stored for this hub</td><td>400 with body <code>{"error":"no admin token stored for this hub"}</code></td></tr>
+<tr><td>Hub is unreachable / network error</td><td>502 with body <code>{"error":"hub unreachable"}</code></td></tr>
+<tr><td>Hub returned a status code</td><td>passthrough (the portal does not interpret the upstream response)</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="5-fleet-aggregation-get-apifleetagents"><a class="header" href="#5-fleet-aggregation-get-apifleetagents">5. Fleet aggregation: <code>GET /api/fleet/agents</code></a></h2>
+<p>A portal MUST expose an aggregated view of every agent across every hub
+the user can manage. This is the endpoint TelaVisor and the Awan Saya web
+UI use to populate the cross-hub Agents tab.</p>
+<p>This is the <strong>only</strong> aggregation endpoint in the protocol. Per-agent
+actions (restart, update, logs, config-get, config-set, update-status,
+update-channel, etc.) go through the generic admin proxy (section 4),
+not through a fleet-specific URL. The aggregation lives in the protocol
+because it does work no client can replicate efficiently in a single
+call: the portal already holds per-hub viewer tokens, already iterates
+the user's hubs to compute the directory list, and is the natural place
+to handle per-hub timeouts as a unit. Pushing that work to clients
+would force every client (TelaVisor, Awan Saya, future frontends) to
+reimplement iteration, token lookup, and timeout handling.</p>
+<h3 id="request-1"><a class="header" href="#request-1">Request</a></h3>
+<pre><code>GET /api/fleet/agents HTTP/1.1
+Authorization: &lt;user session&gt;
+</code></pre>
+<p>Optional query parameters:</p>
+<div class="table-wrapper"><table><thead><tr><th>Parameter</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>orgId</code></td><td>Restrict the response to hubs in the given org scope. Implementation-defined; portals that do not model orgs MAY ignore this parameter.</td></tr>
+</tbody></table>
+</div>
+<h3 id="response-1"><a class="header" href="#response-1">Response</a></h3>
+<pre><code class="language-json">{
+  "agents": [
+    {
+      "id": "barn",
+      "agentId": "660e8400-e29b-41d4-a716-446655440001",
+      "machineRegistrationId": "880e8400-e29b-41d4-a716-446655440003",
+      "hub": "myhub",
+      "hubId": "550e8400-e29b-41d4-a716-446655440000",
+      "hubUrl": "https://hub.example.com",
+      "online": true,
+      "version": "v0.6.0-dev.42",
+      "hostname": "barn.local",
+      "os": "linux",
+      "displayName": "Barn",
+      "tags": ["lab"],
+      "location": "garage",
+      "owner": null,
+      "lastSeen": "2026-04-08T03:14:00Z",
+      "sessionCount": 0,
+      "services": [{"port": 22, "name": "SSH"}],
+      "capabilities": {"fileShare": true}
+    }
+  ]
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>string</td><td>yes</td><td>The machine name (display label). Not stable across renames; use <code>agentId</code> or <code>machineRegistrationId</code> for identity.</td></tr>
+<tr><td><code>agentId</code></td><td>string</td><td>yes (1.1)</td><td>The <code>agentId</code> the agent presented on registration. Stable across machine renames and across hubs (the same telad install on two hubs reports the same <code>agentId</code> to both). The primary identity key for cross-hub correlation. See section 1.1.</td></tr>
+<tr><td><code>machineRegistrationId</code></td><td>string</td><td>yes (1.1)</td><td>The hub-local UUID generated when the hub first saw this <code>(agentId, machineName)</code> pair. Stable across reconnects on this hub but unique per hub: the same agent registered with two hubs gets two different <code>machineRegistrationId</code>s. Use it as the per-hub primary key.</td></tr>
+<tr><td><code>hub</code></td><td>string</td><td>yes</td><td>The hub's display name.</td></tr>
+<tr><td><code>hubId</code></td><td>string</td><td>yes (1.1)</td><td>The hub's <code>hubId</code>, mirrored from the hub's <code>/.well-known/tela</code> or its registration record. Identity for the containing hub.</td></tr>
+<tr><td><code>hubUrl</code></td><td>string</td><td>yes</td><td>The hub's URL.</td></tr>
+</tbody></table>
+</div>
+<p>The portal MUST iterate the user's manageable hubs, query each hub's
+<code>/api/status</code> endpoint with the stored viewer token, and merge the
+<code>machines</code> arrays into a flat list. Each agent record MUST include
+<code>hub</code>, <code>hubId</code>, and <code>hubUrl</code> for the hub the agent belongs to, and
+the <code>agentId</code> and <code>machineRegistrationId</code> learned from the hub's
+status response. The portal MUST NOT modify the identity fields; they
+are passthroughs from the hub's <code>/api/status</code> shape (DESIGN-identity.md
+section 6.2). If a hub is unreachable, the portal SHOULD log and skip
+it (returning agents from the reachable hubs rather than failing the
+whole request).</p>
+<p>A portal MAY encounter a 1.0 hub that does not yet expose <code>hubId</code>,
+<code>agentId</code>, and <code>machineRegistrationId</code> in its status response. The
+portal MUST omit those identity fields from the corresponding fleet
+entries rather than fabricating placeholder values. Clients reading
+fleet results MUST tolerate identity fields being absent on entries
+sourced from 1.0 hubs and SHOULD surface such hubs as "legacy hub --
+needs upgrade" in their UI. Per the destroy-and-rebuild policy in
+section 13.7, this case is transitional and not expected to persist
+beyond the rollout window.</p>
+<p>A portal MAY add additional fields to each agent record, but clients
+MUST tolerate unknown fields and MUST NOT break if a portal omits any
+optional field.</p>
+<h3 id="per-agent-actions-go-through-the-admin-proxy"><a class="header" href="#per-agent-actions-go-through-the-admin-proxy">Per-agent actions go through the admin proxy</a></h3>
+<p>To send a management action to a specific agent, use the admin proxy
+(section 4):</p>
+<pre><code class="language-http">POST /api/hub-admin/myhub/agents/barn/restart HTTP/1.1
+Content-Type: application/json
+Authorization: &lt;user session&gt;
+
+{}
+</code></pre>
+<p>This forwards to the hub's <code>POST /api/admin/agents/barn/restart</code>. Known
+actions include <code>config-get</code>, <code>config-set</code>, <code>logs</code>, <code>restart</code>, <code>update</code>,
+<code>update-status</code>, <code>update-channel</code>. Future actions added to the hub work
+without portal changes because the proxy is generic.</p>
+<hr />
+<h2 id="6-authentication"><a class="header" href="#6-authentication">6. Authentication</a></h2>
+<p>The protocol distinguishes three credential types. Each endpoint
+requires exactly one of them, listed in section 6.1.</p>
+<h3 id="61-auth-summary"><a class="header" href="#61-auth-summary">6.1 Auth summary</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Endpoint</th><th>Auth</th></tr></thead><tbody>
+<tr><td><code>/.well-known/tela</code></td><td>none</td></tr>
+<tr><td><code>POST /api/oauth/device</code> (section 6.3)</td><td>none</td></tr>
+<tr><td><code>POST /api/oauth/token</code> (section 6.3)</td><td>device code in body</td></tr>
+<tr><td><code>GET /device</code> (section 6.3)</td><td>user, browser session</td></tr>
+<tr><td><code>GET /api/hubs</code></td><td>user</td></tr>
+<tr><td><code>POST /api/hubs</code> (hub bootstrap)</td><td>hub admin token</td></tr>
+<tr><td><code>POST /api/hubs</code> (user add)</td><td>user</td></tr>
+<tr><td><code>PATCH /api/hubs/sync</code></td><td>hub sync token (<code>hubsync_*</code>)</td></tr>
+<tr><td><code>PATCH /api/hubs</code></td><td>user</td></tr>
+<tr><td><code>DELETE /api/hubs</code></td><td>user</td></tr>
+<tr><td><code>/api/hub-admin/{name}/...</code></td><td>user, gated on <code>canManage</code></td></tr>
+<tr><td><code>GET /api/fleet/agents</code></td><td>user</td></tr>
+</tbody></table>
+</div>
+<h3 id="62-user-auth-credentials"><a class="header" href="#62-user-auth-credentials">6.2 User auth credentials</a></h3>
+<p>Every endpoint marked "user" in section 6.1 MUST accept a bearer
+token in the <code>Authorization</code> header:</p>
+<pre><code>Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>The token format is implementation-defined; portals SHOULD use a long,
+opaque, cryptographically random string. The protocol does not
+prescribe how the portal validates the token (database lookup, JWT
+verification, signed cookie reuse, all are legal) nor where the token
+came from (see section 6.3 for the standard issuance flow).</p>
+<p>A portal MAY <em>additionally</em> accept other credential forms — session
+cookies for browser users, mTLS for service-to-service callers — but
+bearer-token auth on the <code>Authorization</code> header MUST work alongside
+whatever else the portal accepts. This guarantees that a desktop
+client written against this spec can reach any conformant portal
+without an embedded webview, a redirect URI, or knowledge of the
+portal's specific session implementation.</p>
+<p>Awan Saya implements both: a session cookie set by the web sign-in
+flow takes precedence, and a bearer token in the <code>Authorization</code>
+header is checked as a fallback. Both resolve to the same account.
+TelaVisor in Portal mode does the same thing for its embedded
+loopback portal: a bearer token is generated at process start and
+written to <code>~/.tela/run/portal-endpoint.json</code> alongside the loopback
+port; every portal call from TelaVisor uses that bearer token, and
+external local tools can read the file to authenticate.</p>
+<h3 id="63-device-code-flow-for-desktop-clients"><a class="header" href="#63-device-code-flow-for-desktop-clients">6.3 Device code flow for desktop clients</a></h3>
+<p>A portal SHOULD implement the OAuth 2.0 Device Authorization Grant
+(RFC 8628) so desktop clients can sign a user in without an embedded
+browser, a redirect URI, or a client secret. Single-user portals
+(file-backed, no account model) MAY skip this section because the
+operator configures the bearer token out of band.</p>
+<p>The flow has three machine-facing endpoints and one user-facing page:</p>
+<h4 id="post-apioauthdevice"><a class="header" href="#post-apioauthdevice"><code>POST /api/oauth/device</code></a></h4>
+<p>The desktop client initiates the flow. No auth required.</p>
+<p>Request body: empty or <code>{}</code>.</p>
+<p>Response (200):</p>
+<pre><code class="language-json">{
+  "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://portal.example.com/device",
+  "expires_in": 900,
+  "interval": 5
+}
+</code></pre>
+<p>The client displays the <code>user_code</code> and <code>verification_uri</code> to the
+user and starts polling.</p>
+<h4 id="post-apioauthtoken"><a class="header" href="#post-apioauthtoken"><code>POST /api/oauth/token</code></a></h4>
+<p>The desktop client polls for an access token. No auth required; the
+<code>device_code</code> is the credential.</p>
+<p>Request body:</p>
+<pre><code class="language-json">{
+  "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+  "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS"
+}
+</code></pre>
+<p>Response (200) when the user has approved on the verification page:</p>
+<pre><code class="language-json">{
+  "access_token": "&lt;bearer token to use on subsequent calls&gt;",
+  "token_type": "Bearer"
+}
+</code></pre>
+<p>Response (400) while waiting for approval:</p>
+<pre><code class="language-json">{ "error": "authorization_pending" }
+</code></pre>
+<p>Response (400) after <code>expires_in</code> elapses:</p>
+<pre><code class="language-json">{ "error": "expired_token" }
+</code></pre>
+<p>Response (400) when the device code is unknown, expired, or revoked:</p>
+<pre><code class="language-json">{ "error": "access_denied" }
+</code></pre>
+<p>Polling clients SHOULD honor the <code>interval</code> value from the device
+code response and SHOULD back off on <code>slow_down</code> errors per RFC 8628
+section 3.5.</p>
+<h4 id="get-device"><a class="header" href="#get-device"><code>GET /device</code></a></h4>
+<p>The user-facing approval page. The user opens it in a browser (the
+URL was returned as <code>verification_uri</code>), enters the <code>user_code</code>,
+signs into the portal if not already signed in, and approves the
+device. The page MAY accept the user code as a query parameter
+(<code>?user_code=WDJB-MJHT</code>) for convenience.</p>
+<p>The HTML and UX of this page are not specified. The only contract is
+that completing the approval flow MUST cause the next
+<code>POST /api/oauth/token</code> poll for that device code to return a
+successful access token response.</p>
+<h4 id="issuance-and-lifetime-notes"><a class="header" href="#issuance-and-lifetime-notes">Issuance and lifetime notes</a></h4>
+<ul>
+<li>The access token returned is a regular bearer token; section 6.2
+governs how it is used after issuance.</li>
+<li>Tokens issued via device code MAY have an expiration. The
+protocol does not prescribe a refresh-token mechanism. An expired
+token returns 401 to the client and the client restarts the
+device code flow.</li>
+<li>A portal MUST NOT reuse a <code>device_code</code> after a successful token
+exchange; each device code grants exactly one access token.</li>
+<li>A portal that does not implement device code MUST still accept
+bearer tokens issued by some other means (admin-configured static
+token, web UI personal access token, etc.). Device code is the
+standard <em>issuance</em> path for desktop clients, not the only legal
+credential.</li>
+</ul>
+<hr />
+<h2 id="7-error-shape"><a class="header" href="#7-error-shape">7. Error shape</a></h2>
+<p>All error responses MUST be JSON with at least an <code>error</code> field:</p>
+<pre><code class="language-json">{ "error": "human-readable message" }
+</code></pre>
+<p>Status codes follow standard REST conventions:</p>
+<div class="table-wrapper"><table><thead><tr><th>Code</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>400</td><td>Bad request (malformed body, missing required fields)</td></tr>
+<tr><td>401</td><td>Authentication required or failed</td></tr>
+<tr><td>403</td><td>Authenticated but not authorized for this operation</td></tr>
+<tr><td>404</td><td>Resource not found, OR resource exists but the user cannot see it (do not leak existence)</td></tr>
+<tr><td>409</td><td>Conflict (e.g. registering a hub name that already exists, in older portals that do not support upsert)</td></tr>
+<tr><td>502</td><td>Upstream hub unreachable</td></tr>
+<tr><td>5xx</td><td>Portal-side error</td></tr>
+</tbody></table>
+</div>
+<p>Portals MAY add additional fields to error responses (e.g. <code>code</code>,
+<code>details</code>) but MUST always include <code>error</code>.</p>
+<hr />
+<h2 id="8-sync-token-format"><a class="header" href="#8-sync-token-format">8. Sync token format</a></h2>
+<p>Sync tokens issued by <code>POST /api/hubs</code> (section 3.2) MUST start with the
+prefix <code>hubsync_</code> so clients can distinguish them from user session
+tokens, hub admin tokens, viewer tokens, and pair codes. The remainder
+SHOULD be at least 32 bytes of cryptographic randomness, encoded in a
+URL-safe alphabet.</p>
+<p>The portal MUST store only the SHA-256 hash of the sync token, not the
+cleartext. The cleartext is returned exactly once in the registration
+response and the hub MUST persist it to its <code>update.portals[name].syncToken</code>
+field for use in <code>PATCH /api/hubs/sync</code> (section 3.3).</p>
+<p>If a hub loses its sync token, the recovery procedure is to re-register
+with <code>POST /api/hubs</code> and a fresh admin token: the portal upserts the
+record and issues a new sync token, which the hub stores.</p>
+<hr />
+<h2 id="9-cors-and-origin-policy"><a class="header" href="#9-cors-and-origin-policy">9. CORS and origin policy</a></h2>
+<p>A portal SHOULD reject cross-origin state-changing requests (<code>POST</code>,
+<code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>) unless the request origin is on an explicit
+allowlist. Awan Saya does this via an <code>isOriginAllowed</code> check; the
+protocol does not prescribe the allowlist format.</p>
+<p><code>/.well-known/tela</code> and <code>GET /api/hubs</code> SHOULD be CORS-permissive
+(<code>Access-Control-Allow-Origin: *</code>) so any client can discover and read.</p>
+<hr />
+<h2 id="10-what-is-not-in-the-protocol"><a class="header" href="#10-what-is-not-in-the-protocol">10. What is <strong>not</strong> in the protocol</a></h2>
+<p>The following are explicitly NOT part of the portal protocol. They are
+SaaS concerns of specific implementations and have no place in any
+client that talks to the portal:</p>
+<ul>
+<li><strong>Account / user lifecycle.</strong> Sign up, password reset, email
+verification, MFA, account deletion. Awan Saya implements these under
+<code>/api/sign-up</code>, <code>/api/me/*</code>, <code>/api/forgot-password</code>, <code>/api/admin/*</code>.
+None of those routes are part of this spec; a single-user portal does
+not implement them.</li>
+<li><strong>Organization, team, and membership management.</strong> Inviting users to
+hubs, switching the active org, granting support access. Awan Saya
+implements <code>/api/hubs/{name}/invitations</code>, <code>/api/hubs/{name}/members</code>,
+<code>/api/me/organization</code>, etc. Out of scope.</li>
+<li><strong>Billing, plans, and tier limits.</strong> Awan Saya enforces a <code>max_hubs</code>
+per organization; that is policy on top of the protocol, not the
+protocol.</li>
+<li><strong>Audit logging.</strong> Portals MAY log activity, but no API surface for
+reading audit logs is part of the protocol.</li>
+<li><strong>The hub's own admin API.</strong> Portals proxy to it (section 4) but they
+do not extend or reinterpret it. Anything addressed in the hub's
+<code>internal/hub/admin_api.go</code> belongs to that surface, not this one.</li>
+</ul>
+<p>A portal that implements only the routes in this spec is a valid Tela
+portal. Awan Saya is a valid Tela portal that ALSO implements the SaaS
+surface above. A future TelaVisor Portal mode would be a valid Tela
+portal that omits the SaaS surface entirely.</p>
+<hr />
+<h2 id="11-conformance-checklist"><a class="header" href="#11-conformance-checklist">11. Conformance checklist</a></h2>
+<p>To call yourself a Tela portal, you must:</p>
+<ul>
+<li><input disabled="" type="checkbox"/>
+Serve <code>/.well-known/tela</code> (section 2) including <code>protocolVersion</code>
+and <code>supportedVersions</code> fields</li>
+<li><input disabled="" type="checkbox"/>
+Advertise <code>protocolVersion: "1.1"</code> and <code>supportedVersions: ["1.1"]</code>
+on <code>/.well-known/tela</code>, plus a stable <code>portalId</code> v4 UUID
+generated and persisted on first start (section 1.1)</li>
+<li><input disabled="" type="checkbox"/>
+Honor the version negotiation rule: refuse clients whose major
+version is not in <code>supportedVersions</code>, treat the protocol as
+strictly additive within a major version (with the documented
+pre-1.0 1.0→1.1 break in section 13.7)</li>
+<li><input disabled="" type="checkbox"/>
+Serve <code>GET /api/hubs</code> (section 3.1) returning the documented
+shape, including the <code>id</code> field carrying each hub's <code>hubId</code></li>
+<li><input disabled="" type="checkbox"/>
+Serve <code>POST /api/hubs</code> (section 3.2) supporting both hub-bootstrap
+and user-add contexts, returning a <code>hubsync_*</code> sync token in the
+bootstrap context. Require <code>hubId</code> in context-1 bodies; for
+context-2 bodies that omit <code>hubId</code>, discover the hub's <code>hubId</code>
+via <code>GET /.well-known/tela</code> on the hub URL before storing the
+record. Refuse the registration if no <code>hubId</code> can be obtained.</li>
+<li><input disabled="" type="checkbox"/>
+Treat <code>hubId</code> as immutable: <code>PATCH /api/hubs</code> MUST NOT change it
+(section 3.4)</li>
+<li><input disabled="" type="checkbox"/>
+Serve <code>PATCH /api/hubs/sync</code> (section 3.3) authenticated by sync
+token, with timing-safe comparison</li>
+<li><input disabled="" type="checkbox"/>
+Serve <code>PATCH /api/hubs</code> and <code>DELETE /api/hubs?name=</code> (sections 3.4,
+3.5)</li>
+<li><input disabled="" type="checkbox"/>
+Serve <code>/api/hub-admin/{hubName}/{operation}</code> (section 4) where
+<code>{operation}</code> is the hub admin path <strong>without</strong> the <code>/api/admin/</code>
+prefix, preserving method, body, and query string; gated on
+<code>canManage</code>. Refuse the legacy double-prefix form.</li>
+<li><input disabled="" type="checkbox"/>
+Serve <code>GET /api/fleet/agents</code> (section 5) returning the merged
+cross-hub agent list, including the <code>agentId</code>,
+<code>machineRegistrationId</code>, and <code>hubId</code> identity fields on every
+entry sourced from a 1.1 hub</li>
+<li><input disabled="" type="checkbox"/>
+Accept bearer-token user auth via <code>Authorization: Bearer &lt;token&gt;</code>
+on every endpoint marked "user" in section 6.1, alongside any
+other credential forms the portal supports (section 6.2)</li>
+<li><input disabled="" type="checkbox"/>
+(SHOULD, not MUST for single-user portals) Implement the OAuth
+2.0 device code flow at <code>POST /api/oauth/device</code>,
+<code>POST /api/oauth/token</code>, and <code>GET /device</code> (section 6.3) so
+desktop clients can sign users in without an embedded browser</li>
+<li><input disabled="" type="checkbox"/>
+Return errors in the documented JSON shape (section 7)</li>
+<li><input disabled="" type="checkbox"/>
+Store sync tokens as SHA-256 hashes only (section 8)</li>
+</ul>
+<p>You MAY implement additional endpoints, but a client written against
+this spec MUST work against your portal without knowing about them.</p>
+<p>You MUST NOT implement any of the following endpoints, which were
+considered and removed during the 1.0 spec finalization (see section
+13 for the rationale):</p>
+<ul>
+<li><code>POST /api/fleet/agents/{hub}/{machine}/{action}</code> -- use the admin
+proxy at <code>POST /api/hub-admin/{hub}/agents/{machine}/{action}</code> instead.</li>
+<li><code>POST /api/hubs/{hubName}/pair-code</code> -- use the admin proxy at
+<code>POST /api/hub-admin/{hubName}/pair-code</code> instead.</li>
+<li><code>POST /api/hub-admin/{hubName}/api/admin/{operation}</code> (the legacy
+double-prefix admin proxy form) -- use the short form
+<code>/api/hub-admin/{hubName}/{operation}</code> instead.</li>
+</ul>
+<hr />
+<h2 id="12-reference-implementations"><a class="header" href="#12-reference-implementations">12. Reference implementations</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Implementation</th><th>Status</th><th>Storage</th><th>Identity model</th></tr></thead><tbody>
+<tr><td>Awan Saya</td><td>Production</td><td>PostgreSQL</td><td>Multi-org with accounts, organizations, teams, and hub memberships.</td></tr>
+<tr><td><code>internal/portal</code> (Go)</td><td>Shipping</td><td>Pluggable (file-backed today; postgres adapter planned)</td><td>Single-user (file store) or multi-user via the same auth interface.</td></tr>
+<tr><td><code>cmd/telaportal</code></td><td>Shipping</td><td>File-backed (<code>internal/portal/store/file</code>)</td><td>Single-user, no account model.</td></tr>
+<tr><td>TelaVisor "Portal mode"</td><td>Shipping</td><td>Embedded <code>internal/portal</code> over the file store</td><td>Single-user, in-process, loopback only.</td></tr>
+</tbody></table>
+</div>
+<p>The <code>telahubd</code> outbound portal client lives in <code>internal/hub/hub.go</code>:</p>
+<ul>
+<li><code>discoverHubDirectory()</code> — reads <code>/.well-known/tela</code> (section 2)</li>
+<li><code>registerWithPortal()</code> — POST <code>/api/hubs</code> (section 3.2)</li>
+<li><code>syncViewerTokenToPortals()</code> — PATCH <code>/api/hubs/sync</code> (section 3.3)</li>
+</ul>
+<p>These functions are the canonical client and any new portal MUST keep
+them working.</p>
+<hr />
+<h2 id="13-resolved-decisions"><a class="header" href="#13-resolved-decisions">13. Resolved decisions</a></h2>
+<p>This section records the four open questions the first draft of this
+spec deferred and the decisions made before the <code>internal/portal</code>
+extraction was scheduled. The decisions are <em>baked into</em> the rest of
+this document; this section exists to document the rationale so the
+reasoning is preserved.</p>
+<h3 id="131-protocol-versioning-yes-on-well-knowntela"><a class="header" href="#131-protocol-versioning-yes-on-well-knowntela">13.1 Protocol versioning: yes, on <code>/.well-known/tela</code></a></h3>
+<p><strong>Decision.</strong> The portal protocol gains a version field on
+<code>/.well-known/tela</code> (section 2). Two new fields, <code>protocolVersion</code>
+and <code>supportedVersions</code>, are required post-1.0. Pre-1.0 fallback for
+portals that do not yet ship the fields is explicit and documented.</p>
+<p><strong>Why this and not the alternatives.</strong> Three options were on the
+table: (A) no version field, strict additive-only rule post-1.0; (B)
+version field on <code>/.well-known/tela</code> only, used for discovery-time
+negotiation; (C) version field on every response, plus discovery.</p>
+<p>Option B was chosen because <code>/.well-known/tela</code> is already the right
+place for capability discovery in any HTTP API (RFC 8615), the
+negotiation happens once per session rather than on every call, and
+it future-proofs the protocol without polluting every response shape.
+Option A leaves no graceful upgrade path for breaking changes; option
+C protects against a non-existent failure mode (a portal silently
+upgrading mid-session) at the cost of a field on every response.</p>
+<p>The same pattern is the obvious answer for the <strong>hub wire protocol</strong>
+under ROADMAP-1.0.md "Protocol freeze." The two protocols are
+independent and version independently, but they should share the same
+discipline.</p>
+<h3 id="132-admin-proxy-url-shape-short-form-only"><a class="header" href="#132-admin-proxy-url-shape-short-form-only">13.2 Admin proxy URL shape: short form only</a></h3>
+<p><strong>Decision.</strong> The proxy URL is
+<code>/api/hub-admin/{hubName}/{operation}</code> where <code>{operation}</code> is the hub
+admin path <strong>without</strong> the <code>/api/admin/</code> prefix. The legacy
+double-prefix form is forbidden in protocol version 1.0 and onward
+(section 4).</p>
+<p><strong>Why this and not the alternatives.</strong> Two options were on the table:
+(A) keep the double-prefix form as historical accident, document the
+duplication as incidental; (B) strip the prefix and forbid the legacy
+form pre-1.0.</p>
+<p>Option B was chosen because the no-cruft pre-1.0 policy in CLAUDE.md
+exists for exactly this kind of cleanup. The double-prefix form was a
+coincidence of how two projects independently organized their admin
+namespaces, not a structural relationship. Decoupling the portal URL
+shape from the hub URL shape now means the hub can move its admin API
+later without breaking portal clients. The migration cost is bounded
+and small (server, two frontends, two client shims, one commit).</p>
+<h3 id="133-fleet-aggregation-stays-its-own-endpoint-per-action-duplicate-goes"><a class="header" href="#133-fleet-aggregation-stays-its-own-endpoint-per-action-duplicate-goes">13.3 Fleet aggregation stays its own endpoint, per-action duplicate goes</a></h3>
+<p><strong>Decision.</strong> <code>GET /api/fleet/agents</code> (section 5) stays as the cross-
+hub aggregation endpoint. <code>POST /api/fleet/agents/{hub}/{m}/{action}</code>
+is <strong>deleted</strong> from the spec; per-agent actions go through the generic
+admin proxy at <code>POST /api/hub-admin/{hub}/agents/{m}/{action}</code>.</p>
+<p><strong>Why this and not the alternatives.</strong> Three options were on the
+table: (A) keep both families, delete the per-action duplicate; (B)
+fold everything under <code>/api/hub-admin/</code>, delete <code>/api/fleet/</code>; (C)
+promote fleet to a generalized <code>/api/aggregates/</code> namespace.</p>
+<p>Option A was chosen because the aggregation endpoint provides real
+value the admin proxy cannot match in a single call (server-side hub
+iteration, per-hub viewer-token lookup, per-hub timeout handling),
+and the per-action endpoint provides no value over the generic proxy.
+The "fleet vs hub-admin" split is a clean conceptual rule:
+<strong>aggregate = fleet, single = hub-admin</strong>. Option B would force every
+client (TelaVisor, Awan Saya, future frontends) to reimplement
+iteration and timeout handling. Option C is YAGNI -- one aggregation
+exists today, designing a namespace for hypothetical future
+aggregations is over-engineering.</p>
+<p>If a second aggregation appears (cross-hub session list, cross-hub
+history view, etc.), revisit whether <code>/api/fleet/</code> should be renamed
+to <code>/api/aggregates/</code> or whether the second aggregation gets its own
+family. Don't pre-decide that now.</p>
+<h3 id="134-pair-code-goes-through-the-generic-admin-proxy"><a class="header" href="#134-pair-code-goes-through-the-generic-admin-proxy">13.4 Pair code goes through the generic admin proxy</a></h3>
+<p><strong>Decision.</strong> The dedicated <code>POST /api/hubs/{hubName}/pair-code</code>
+endpoint is <strong>deleted</strong> from the spec. Pair-code generation is one
+instance of the generic admin proxy: clients call
+<code>POST /api/hub-admin/{hubName}/pair-code</code> and the portal forwards to
+the hub's <code>POST /api/admin/pair-code</code>.</p>
+<p><strong>Why this and not the alternatives.</strong> Three options were on the
+table: (A) keep the dedicated endpoint, document it as canonical,
+forbid pair-code through the proxy; (B) delete the dedicated endpoint,
+fold pair-code into the generic proxy like every other admin
+operation; (C) keep both as equivalent.</p>
+<p>Option B was chosen because the whole point of the generic admin
+proxy is that it's generic. Every hub admin endpoint should be
+reachable through it. The dedicated endpoint existed for historical
+reasons (pair-code shipped before the proxy was generalized) and the
+no-cruft policy says to clean that up before 1.0 freezes the surface.
+The "pair-code is special, it deserves its own URL" justification
+does not hold up: every hub admin endpoint is special to somebody;
+none of the others got promoted to dedicated portal URLs. If
+portal-side policy ever needs to be added (rate limits, TTL caps),
+the right place is middleware on the admin proxy that matches the
+specific path, not a parallel endpoint.</p>
+<h3 id="135-implementation-status-closed"><a class="header" href="#135-implementation-status-closed">13.5 Implementation status (closed)</a></h3>
+<p>Decisions 13.1-13.4 are baked into sections 2, 4, 5, and 11 of this
+spec and the migration work is complete. The <code>internal/portal</code> Go
+package, the file-backed store, the HTTP handlers, the spec-conformance
+test harness against <code>internal/teststack</code>, the migration of the
+<code>telahubd</code> outbound portal client and the Awan Saya server and
+frontend, and the standalone <code>cmd/telaportal</code> binary all landed in the
+six-commit extraction series ending in <code>a0677f6</code>. Pre-1.0 we did not
+carry both shapes; the legacy code paths were deleted in the same
+change that introduced the new ones, per the no-cruft policy.</p>
+<h3 id="136-portal-user-auth-bearer-mandatory--oauth-20-device-code"><a class="header" href="#136-portal-user-auth-bearer-mandatory--oauth-20-device-code">13.6 Portal user auth: bearer mandatory + OAuth 2.0 device code</a></h3>
+<p><strong>Decision.</strong> Section 6 is amended in two ways. First, every endpoint
+marked "user" MUST accept a bearer token in the <code>Authorization</code>
+header (section 6.2); portals MAY accept additional credential forms
+on top, but bearer-on-Authorization is the one credential format every
+1.0 portal is required to honor. Second, portals SHOULD implement the
+OAuth 2.0 Device Authorization Grant (RFC 8628) at the three endpoints
+in section 6.3 as the standard way for desktop clients to obtain a
+bearer token without an embedded browser or a redirect URI. Single-user
+portals MAY skip the device code flow because the operator configures
+the bearer token out of band.</p>
+<p><strong>Why this and not the alternatives.</strong> Three options were on the table.
+(A) Leave user auth implementation-defined, document a "bearer is one
+of several legal options" stance, let each portal choose. (B) Require
+bearer auth as a MUST, leave issuance implementation-defined. (C)
+Require bearer auth as a MUST and standardize an issuance flow that
+desktop clients can rely on without portal-specific code.</p>
+<p>Option C was chosen because the previous "implementation-defined"
+stance worked while every Tela client was either Awan Saya's web UI
+(cookies) or a hub registering itself (sync tokens). It does not work
+once TelaVisor becomes a portal client: TV needs a single credential
+format that does not require an embedded webview, a redirect URI, or
+a portal-specific session adapter. Bearer-on-Authorization is the only
+credential form every HTTP client supports natively, so bearer becomes
+the single mandatory format. Standardizing the issuance flow on top of
+that mandate (option C) means the desktop client onboarding UX is the
+same against every portal: device code prompt, browser approval, done.
+Without it, every portal would invent its own desktop sign-in story
+and the desktop client would need a switch statement per portal
+implementation, which defeats the point of having a wire spec.</p>
+<p>The OAuth 2.0 device code flow specifically (RFC 8628) was chosen
+over alternatives because (a) it is what <code>gh auth login</code>, the AWS
+CLI, the GCP CLI, the Atlassian CLI, and every other modern desktop
+sign-in flow uses; (b) it has zero embedded-browser requirements;
+(c) the server side is small (four endpoints, including the
+user-facing approval page); (d) it is well-specified, and an existing
+RFC means client and server libraries already exist in every language;
+(e) it does not require client secrets, which a desktop binary cannot
+keep secret anyway.</p>
+<p>Awan Saya already accepts bearer tokens (the <code>api_tokens</code> table and
+the cookie-then-bearer fallback in [server.js:1080-1104]) so the
+section 6.2 mandate is no-op for Awan Saya at the data model level.
+What Awan Saya needs to add is the section 6.3 device code endpoints
+and the user-facing approval page; the existing PAT-via-web-UI flow
+stays as a manual escape hatch for power users until device code
+lands. TelaVisor's embedded loopback portal (<code>internal/portal</code> over
+the file store) gets a generated bearer token written to
+<code>~/.tela/run/portal-endpoint.json</code> at process start, so the loopback
+case uses the same auth path as a remote portal — the file store's
+<code>Authenticator</code> already accepts bearer tokens and only needs the
+token to be set at startup rather than via <code>SetAdminToken</code>.</p>
+<p>The hub wire protocol is unaffected by this amendment. Sync tokens
+and hub admin tokens are not user credentials and continue to flow
+exactly as sections 3.2, 3.3, and 4 describe. This amendment is
+strictly about how <em>user</em> identity reaches the portal.</p>
+<h3 id="137-protocol-bump-to-11-stable-identity-for-every-entity"><a class="header" href="#137-protocol-bump-to-11-stable-identity-for-every-entity">13.7 Protocol bump to 1.1: stable identity for every entity</a></h3>
+<p><strong>Decision.</strong> The protocol is bumped from 1.0 to 1.1 to add stable
+v4 UUIDs for every entity that needs identity in the fabric: portals
+get <code>portalId</code>, hubs get <code>hubId</code>, agent installations get <code>agentId</code>,
+and per-(hub, machine) registrations get <code>machineRegistrationId</code>.
+The new fields are required, not optional. The wire-level shape of
+sections 1.1, 2, 3.1, 3.2, 3.4, and 5 is amended to carry them. The
+conformance checklist in section 11 gains the corresponding items.
+The full identity model lives in DESIGN-identity.md, which is the
+sibling document this amendment implements at the protocol layer.</p>
+<p><strong>Why this and not the alternatives.</strong> Three options were on the
+table. (A) Stay at 1.0, leave identity as a portal-internal concern,
+let each portal invent whatever IDs it wants and never expose them
+on the wire. (B) Add identity as optional fields in 1.0 itself, no
+version bump, treat the protocol as still 1.0 forever. (C) Bump to
+1.1, make the identity fields required, accept the clean break
+between 1.0 and 1.1 clients.</p>
+<p>Option C was chosen because URL-as-identity (the de facto 1.0 model)
+has produced multiple bugs in dogfooding: profile reconciliation
+broke when the portal returned <code>https://</code> while the profile YAML
+was keyed on <code>wss://</code>, and a stale Remotes entry on the
+awansatu/awansaya dual-domain went invisible because the directory
+key was the URL. Both bugs are fixed by giving every entity a stable
+ID that is not a URL. Option A leaves the bugs in place. Option B
+makes identity advisory: portals would still key on URL or name
+internally, clients would still have to handle missing IDs as a
+first-class case, and the cross-source aggregation TV needs (the
+whole point of the stretch) becomes impossible to write cleanly. The
+required-fields posture in option C is what makes downstream code
+simple.</p>
+<p><strong>On the version-negotiation break.</strong> The additive-only rule for
+minor version bumps (section 2 "Version semantics") forbids required
+new fields in a minor bump. 1.0 → 1.1 violates that rule on
+purpose, exactly once, under the pre-1.0 no-cruft policy in
+CLAUDE.md. The negotiation rule itself is not changed: a 1.0 client
+sees <code>supportedVersions: ["1.1"]</code> and refuses to talk; a 1.1 client
+sees <code>supportedVersions: ["1.0"]</code> and refuses to talk. The break is
+clean and machine-detectable. Post-1.0 the additive-only rule is
+restored to its full strength and any future identity changes will
+require a major version bump.</p>
+<p><strong>On migration.</strong> There is no migration code. Tela is pre-1.0 and
+the fabric is small enough that a destroy-and-rebuild migration is
+cheaper than a compatibility shim. DESIGN-identity.md section 9
+documents the interactive walkthrough; the operator destroys and
+recreates each portal, hub, agent, and profile after every binary
+in the fabric has been upgraded to 1.1. No <code>if id == ""</code> branches
+are introduced anywhere in the implementation; 1.0 hubs that show
+up in a fleet response are reported missing-identity to the client
+rather than being papered over.</p>
+<p><strong>On Awan Saya.</strong> Awan Saya gains a <code>hubs.hub_id</code> column carrying
+the hub's <code>hubId</code>, populated from the registration body in
+context-1 calls and from <code>/.well-known/tela</code> in context-2 calls.
+The existing <code>hubs.name</code> unique constraint stays in place; identity
+is <code>hub_id</code>, the directory key is still <code>name</code>. The fleet endpoint
+forwards the identity fields it learns from each hub's <code>/api/status</code>
+unmodified. The full Awan Saya migration is Phase 4 of Stretch B,
+documented in DESIGN-identity.md section 11.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/access-model.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/tdl.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/access-model.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/tdl.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>

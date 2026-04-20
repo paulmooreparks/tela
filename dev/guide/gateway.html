@@ -1,0 +1,370 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The path gateway - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html" class="active"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/guide/gateway.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="the-path-gateway"><a class="header" href="#the-path-gateway">The path gateway</a></h1>
+<p>The path gateway is a built-in HTTP reverse proxy inside <code>telad</code>. It exposes one tunnel port and routes incoming HTTP requests to different local services based on URL path prefix, eliminating the need for a separate nginx, Caddy, or Traefik instance for tunnel-internal routing.</p>
+<h2 id="when-to-use-a-gateway"><a class="header" href="#when-to-use-a-gateway">When to use a gateway</a></h2>
+<p>Use a gateway when you have several HTTP services on one machine and want to reach all of them through a single tunnel port. Common examples:</p>
+<ul>
+<li>A web frontend, a REST API, and a metrics endpoint running on the same host</li>
+<li>A multi-page web app with backend services on different ports</li>
+<li>A development stack you want accessible through one URL</li>
+</ul>
+<p>You do not need a gateway when you have only one HTTP service (just expose it as a normal service), when your services use TCP rather than HTTP (expose them as normal TCP services), or when you already use a reverse proxy in front of your services and want to keep it as the edge.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<p>Without a gateway, a client connecting to a multi-service application gets one binding per service port:</p>
+<pre><code>localhost:3000   → port 3000
+localhost:4000   → port 4000
+localhost:4100   → port 4100
+</code></pre>
+<p>The browser opens <code>http://localhost:3000</code> and calls the API on a different origin (<code>localhost:4000</code>). Same host, different port -- that is still a cross-origin request under browser CORS rules, which means either CORS headers on the API server, a hardcoded API URL in the UI code, or an extra proxy layer somewhere.</p>
+<p>With a gateway, the client gets one binding:</p>
+<pre><code>localhost:8080   → HTTP
+</code></pre>
+<p>The browser opens <code>http://localhost:8080/</code>. The UI calls <code>/api/users</code>. The gateway sees the <code>/api/</code> prefix and proxies the request to the local API service. Same origin. No CORS. No extra configuration.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>Gateway configuration lives in <code>telad.yaml</code> under each machine, alongside the <code>services:</code> list:</p>
+<pre><code class="language-yaml">hub: wss://your-hub.example.com
+token: "&lt;your-agent-token&gt;"
+
+machines:
+  - name: barn
+    services:
+      - port: 5432
+        name: postgres
+        proto: tcp
+    gateway:
+      port: 8080
+      routes:
+        - path: /api/
+          target: 4000
+        - path: /metrics/
+          target: 4100
+        - path: /
+          target: 3000
+</code></pre>
+<p>This declares one direct TCP service (PostgreSQL on port 5432, exposed through the tunnel as usual) and a gateway listening on port 8080 with three routes. The HTTP services on ports 3000, 4000, and 4100 are not in the <code>services:</code> list -- they are private to the machine and reachable only through the gateway. The tunnel exposes port 8080 and port 5432.</p>
+<h3 id="field-reference"><a class="header" href="#field-reference">Field reference</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>gateway.port</code></td><td>Yes</td><td>Port the gateway listens on inside the WireGuard tunnel. Does not need to match any local service port.</td></tr>
+<tr><td><code>gateway.routes</code></td><td>Yes</td><td>List of routes, each mapping a URL path prefix to a local target port.</td></tr>
+<tr><td><code>routes[].path</code></td><td>Yes</td><td>URL path prefix to match (e.g. <code>/api/</code>, <code>/admin/</code>, <code>/</code>).</td></tr>
+<tr><td><code>routes[].target</code></td><td>Yes</td><td>Local TCP port to proxy matched requests to.</td></tr>
+</tbody></table>
+</div>
+<h3 id="route-matching"><a class="header" href="#route-matching">Route matching</a></h3>
+<p>Routes are matched by longest path prefix first. The order in the YAML file does not matter; <code>telad</code> sorts them at startup. A route with <code>path: /</code> matches any request not claimed by a more specific route.</p>
+<p>With these routes:</p>
+<pre><code class="language-yaml">routes:
+  - path: /
+    target: 3000
+  - path: /api/v2/
+    target: 4002
+  - path: /api/
+    target: 4000
+</code></pre>
+<p>A request to <code>/api/v2/users</code> matches <code>/api/v2/</code> (target 4002). A request to <code>/api/health</code> matches <code>/api/</code> (target 4000). A request to <code>/about</code> matches <code>/</code> (target 3000).</p>
+<h2 id="connecting-through-a-gateway"><a class="header" href="#connecting-through-a-gateway">Connecting through a gateway</a></h2>
+<p>The gateway appears to clients as a service named <code>gateway</code>. Use it in a connection profile like any other service:</p>
+<pre><code class="language-yaml"># ~/.tela/profiles/barn.yaml
+connections:
+  - hub: wss://your-hub.example.com
+    machine: barn
+    services:
+      - name: gateway
+      - name: postgres
+</code></pre>
+<pre><code class="language-bash">tela connect -profile barn
+</code></pre>
+<p>Output:</p>
+<pre><code>Services available:
+  localhost:8080   → HTTP
+  localhost:5432   → port 5432
+</code></pre>
+<p>Port labels come from the well-known port table (22=SSH, 80/8080=HTTP, 3389=RDP, etc.). Ports not in the table show as <code>port N</code>.</p>
+<p>If port 8080 conflicts with something local, override it:</p>
+<pre><code class="language-yaml">services:
+  - name: gateway
+    local: 18080
+</code></pre>
+<h3 id="direct-access-alongside-the-gateway"><a class="header" href="#direct-access-alongside-the-gateway">Direct access alongside the gateway</a></h3>
+<p>You can expose a service both through the gateway (for browser access) and as a direct service (for tools like <code>curl</code> or Postman). Add it to the agent's <code>services:</code> list as well as the gateway routes, then include it in the profile:</p>
+<pre><code class="language-yaml"># telad.yaml
+machines:
+  - name: barn
+    services:
+      - port: 4000
+        name: api
+        proto: http
+    gateway:
+      port: 8080
+      routes:
+        - path: /api/
+          target: 4000
+        - path: /
+          target: 3000
+</code></pre>
+<pre><code class="language-yaml"># profile
+connections:
+  - hub: wss://your-hub.example.com
+    machine: barn
+    services:
+      - name: gateway
+      - name: api
+        local: 14000
+</code></pre>
+<p>Now <code>http://localhost:8080/api/...</code> reaches the API through the gateway, and <code>http://localhost:14000/...</code> reaches it directly.</p>
+<h2 id="cross-environment-use"><a class="header" href="#cross-environment-use">Cross-environment use</a></h2>
+<p>When you maintain the same application across several environments, each running its own <code>telad</code>, a profile can connect to multiple gateways simultaneously:</p>
+<pre><code class="language-yaml">connections:
+  - hub: wss://prod-hub.example.com
+    machine: app
+    services:
+      - name: gateway
+
+  - hub: wss://staging-hub.example.com
+    machine: app
+    services:
+      - name: gateway
+        local: 18080
+</code></pre>
+<p>When connecting to both environments simultaneously, use <code>local:</code> overrides to put them on different ports. Without an override, both gateways would try to bind <code>localhost:8080</code> and the second would fall back to <code>localhost:18080</code>. Making it explicit avoids relying on fallback behavior. The routing logic stays in each environment's <code>telad.yaml</code>, not in the client profile.</p>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<p>The gateway does not terminate TLS (the WireGuard tunnel already provides end-to-end encryption). It does not authenticate users (that is the hub's token and ACL layer). It does not load-balance across instances. It does not proxy WebSocket connections -- if you need WebSocket access to a service, expose it as a separate service alongside the gateway. It is not a replacement for an internet-facing reverse proxy with TLS termination, rate limiting, or WAF rules.</p>
+<p>For the design rationale and the relationship between the path gateway and the other gateway primitives in Tela, see <a href="../architecture/gateway.html">Gateways</a> in the Design Rationale section. For a step-by-step setup walkthrough and troubleshooting, see <a href="../howto/gateway.html">Set up a path-based gateway</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../guide/directories.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../guide/file-sharing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../guide/directories.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../guide/file-sharing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
