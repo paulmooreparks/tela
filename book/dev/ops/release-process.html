@@ -1,0 +1,574 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Release process - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html" class="active"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/ops/release-process.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="release-process"><a class="header" href="#release-process">Release process</a></h1>
+<p>Tela releases move through a three-channel pipeline: dev, beta, and stable. The <a href="../howto/channels.html">Self-update and release channels</a> chapter in the How-to Guide covers the user-facing side. The sections below cover the internal model for operators and maintainers who need to cut a release, promote a channel, or issue a hotfix.</p>
+<h2 id="channels"><a class="header" href="#channels">Channels</a></h2>
+<p>Tela ships through three release channels. A channel is a named pointer that resolves to a single tag. Self-update on every Tela binary follows its configured channel.</p>
+<div class="table-wrapper"><table><thead><tr><th>Channel</th><th>Purpose</th><th>Cadence</th><th>Audience</th><th>Risk</th></tr></thead><tbody>
+<tr><td><strong>dev</strong></td><td>Latest unstable build. Every push to <code>main</code> produces a new dev build.</td><td>Per commit</td><td>Maintainers, contributors, dogfood rigs</td><td>Highest. May break, may have half-finished features.</td></tr>
+<tr><td><strong>beta</strong></td><td>Promoted dev builds ready for wider exposure. Cut by hand when a dev build is ready for promotion.</td><td>Days to weeks</td><td>Early adopters, staging deployments, dev hubs</td><td>Moderate. Real bugs surface here.</td></tr>
+<tr><td><strong>stable</strong></td><td>Promoted beta builds that have been exercised in beta. The default for new installations after 1.0.</td><td>Weeks to months</td><td>Production deployments, public hubs, package managers</td><td>Low. Bug fixes only between minor versions.</td></tr>
+</tbody></table>
+</div>
+<p>Pre-1.0, every binary defaults to <code>dev</code>. The channel mechanism works for all three channels today, but <code>dev</code> is the appropriate default while the project is moving fast and <code>stable</code> is not yet the load-bearing public face it will be after 1.0.</p>
+<p>Post-1.0, TelaVisor and the Tela binaries default to <code>stable</code>. New installations get the conservative line by default; opting into beta or dev becomes a deliberate choice.</p>
+<p>What changes at 1.0 is the meaning of <code>stable</code>, not its existence. Pre-1.0, a stable tag is the build most ready for promotion, with no compatibility promise. Post-1.0 it carries the backward-compatibility guarantees described below.</p>
+<p>Users can change channel through TelaVisor's Application Settings, via the <code>channel set</code> subcommand of any binary (<code>tela channel set &lt;name&gt;</code>, <code>telad channel set &lt;name&gt;</code>, <code>telahubd channel set &lt;name&gt;</code>), or by editing the <code>update.channel</code> field in their hub or agent YAML config.</p>
+<h2 id="tag-naming"><a class="header" href="#tag-naming">Tag naming</a></h2>
+<p>Tela uses semantic versioning with prerelease suffixes for non-stable channels.</p>
+<div class="table-wrapper"><table><thead><tr><th>Channel</th><th>Tag form</th><th>Example</th></tr></thead><tbody>
+<tr><td>dev</td><td><code>vMAJOR.MINOR.0-dev.PATCH</code></td><td><code>v0.4.0-dev.42</code></td></tr>
+<tr><td>beta</td><td><code>vMAJOR.MINOR.0-beta.N</code></td><td><code>v0.4.0-beta.3</code></td></tr>
+<tr><td>stable</td><td><code>vMAJOR.MINOR.PATCH</code></td><td><code>v0.4.0</code>, <code>v0.4.1</code>, <code>v1.0.0</code></td></tr>
+</tbody></table>
+</div>
+<p>The <code>MAJOR.MINOR</code> portion comes from the <code>VERSION</code> file at the repository root. It is the next stable version that maintainers are working toward. When <code>VERSION</code> says <code>0.4</code>, dev builds are <code>v0.4.0-dev.N</code> and the next stable will be <code>v0.4.0</code>.</p>
+<p>After cutting a stable release, bump <code>VERSION</code> to the next minor (for example, <code>0.4</code> to <code>0.5</code>). This resets the dev counter for the next development cycle.</p>
+<p>Semver compares prerelease versions in the correct order:</p>
+<pre><code>v0.4.0-dev.5 &lt; v0.4.0-dev.42 &lt; v0.4.0-beta.1 &lt; v0.4.0-beta.3 &lt; v0.4.0 &lt; v0.4.1
+</code></pre>
+<h2 id="branches"><a class="header" href="#branches">Branches</a></h2>
+<p>Three branches mirror the three channels.</p>
+<div class="table-wrapper"><table><thead><tr><th>Branch</th><th>Channel</th><th>Who can push</th><th>Trigger</th></tr></thead><tbody>
+<tr><td><code>main</code></td><td>dev</td><td>Maintainers, contributors via PR</td><td>Auto-tag on every push, builds dev release</td></tr>
+<tr><td><code>beta</code></td><td>beta</td><td>Maintainers only, fast-forward only</td><td>Tag push triggers a beta release build</td></tr>
+<tr><td><code>release</code></td><td>stable</td><td>Maintainers only, fast-forward only</td><td>Tag push triggers a stable release build</td></tr>
+</tbody></table>
+</div>
+<p>Branches flow forward only: <code>main</code> to <code>beta</code> to <code>release</code>. A fix lands on <code>main</code> first, soaks, gets promoted to <code>beta</code>, soaks again, gets promoted to <code>release</code>. There is no shortcut.</p>
+<p>Hotfixes are the exception. If a critical bug is in a stable release, a fix can be cherry-picked from <code>main</code> directly to a <code>hotfix/v0.4.x</code> branch off the stable tag, tagged as <code>v0.4.1</code>, and immediately released. The same fix must then be merged forward into <code>beta</code> and <code>main</code> to prevent drift.</p>
+<p>The <code>beta</code> and <code>release</code> branches exist so anyone reading the GitHub branch list can see what is currently on each channel, but <code>promote.yml</code> does not require them: it tags commits directly. The forward-only flow is policy; the branches are bookkeeping.</p>
+<h2 id="promotion"><a class="header" href="#promotion">Promotion</a></h2>
+<p>Promotion is always manual. There is no automatic dev-to-beta or beta-to-stable. A maintainer reviews what is on the source channel, decides it is ready, and runs the promotion workflow.</p>
+<p>Promotion happens via <code>.github/workflows/promote.yml</code>, triggered manually with three inputs:</p>
+<ul>
+<li><strong><code>source_tag</code></strong> -- the existing tag being promoted (e.g. <code>v0.4.0-dev.42</code>)</li>
+<li><strong><code>target_channel</code></strong> -- <code>beta</code> or <code>stable</code></li>
+<li><strong><code>target_version</code></strong> -- required only for stable promotions (e.g. <code>v0.4.0</code>)</li>
+</ul>
+<p>The workflow validates the source tag, computes the new tag name (auto-incremented for beta, user-chosen for stable), creates the new tag pointing at the same commit, and pushes it. The tag push triggers <code>release.yml</code> to build and publish.</p>
+<h2 id="channel-manifests"><a class="header" href="#channel-manifests">Channel manifests</a></h2>
+<p>Each channel has a JSON manifest hosted as a release asset on a special <code>channels</code> GitHub Release. The manifest is the canonical answer to "what version is current on this channel?"</p>
+<pre><code>https://github.com/paulmooreparks/tela/releases/download/channels/dev.json
+https://github.com/paulmooreparks/tela/releases/download/channels/beta.json
+https://github.com/paulmooreparks/tela/releases/download/channels/stable.json
+</code></pre>
+<p>Schema:</p>
+<pre><code class="language-json">{
+  "channel": "dev",
+  "version": "v0.4.0-dev.42",
+  "tag": "v0.4.0-dev.42",
+  "publishedAt": "2026-04-08T12:00:00Z",
+  "downloadBase": "https://github.com/paulmooreparks/tela/releases/download/v0.4.0-dev.42/",
+  "binaries": {
+    "tela-linux-amd64":       { "sha256": "abc...", "size": 12345678 },
+    "tela-windows-amd64.exe": { "sha256": "def...", "size": 12345678 },
+    "telad-linux-amd64":      { "sha256": "ghi...", "size": 12345678 }
+  }
+}
+</code></pre>
+<p>The schema is part of Tela's public API after 1.0. Adding new optional fields is a minor-version change; renaming or removing existing fields is a major-version change.</p>
+<h2 id="what-releaseyml-does"><a class="header" href="#what-releaseyml-does">What <code>release.yml</code> does</a></h2>
+<p>The release workflow runs in three cases:</p>
+<ol>
+<li><strong>Push to <code>main</code></strong> -- produces a dev build, tagged <code>v{VERSION}.0-dev.{PATCH}</code>, and updates <code>dev.json</code>.</li>
+<li><strong>Push of a tag matching <code>v*-beta*</code></strong> -- produces a beta build and updates <code>beta.json</code>.</li>
+<li><strong>Push of a tag matching <code>v*</code> without a prerelease suffix</strong> -- produces a stable build and updates <code>stable.json</code>.</li>
+</ol>
+<p>In all three cases the workflow builds Linux, macOS, and Windows binaries for amd64 and arm64, generates SHA256 checksums and the per-release manifest, and creates or updates the GitHub Release for that tag. For TelaVisor specifically, the workflow also builds <code>.deb</code> and <code>.rpm</code> packages and a Windows NSIS installer; the CLI binaries (<code>tela</code>, <code>telad</code>, <code>telahubd</code>) are distributed as plain executables only.</p>
+<h2 id="cadence"><a class="header" href="#cadence">Cadence</a></h2>
+<p>Pre-1.0:</p>
+<ul>
+<li><strong>Dev</strong>: every commit. No promise of stability.</li>
+<li><strong>Beta</strong>: cut on demand when a dev build deserves wider exposure. No fixed cadence.</li>
+<li><strong>Stable</strong>: cut on demand when a beta is ready for promotion. Pre-1.0 stable releases carry no backward-compatibility promise -- that begins at <code>v1.0.0</code>. Use them as the build most ready for promotion, not as a long-term support line.</li>
+</ul>
+<p>Post-1.0:</p>
+<ul>
+<li><strong>Dev</strong>: every commit.</li>
+<li><strong>Beta</strong>: roughly every two weeks when there is meaningful work on <code>main</code>.</li>
+<li><strong>Stable</strong>: patch releases as needed for bug fixes; minor releases roughly monthly when there is enough new functionality; major releases rare, deliberate, with a long beta phase and an upgrade guide.</li>
+</ul>
+<p>These are guidelines, not promises.</p>
+<h2 id="backward-compatibility-commitments"><a class="header" href="#backward-compatibility-commitments">Backward-compatibility commitments</a></h2>
+<p>After 1.0:</p>
+<ul>
+<li>The wire protocol is frozen for <code>1.x</code>. Adding new optional fields is allowed; removing or renaming fields is a major-version change.</li>
+<li>The public CLI surface (command names, flag names, output formats) is frozen for <code>1.x</code>. Adding new commands or flags is allowed; removing them is a major-version change.</li>
+<li>The hub admin REST API is frozen for <code>1.x</code>. Adding new endpoints is allowed; removing or breaking existing ones is a major-version change.</li>
+<li>Config file schemas (<code>telahubd.yaml</code>, <code>telad.yaml</code>, <code>hubs.yaml</code>, profile YAML) are frozen for <code>1.x</code>. New optional fields are allowed; removing or renaming required fields is a major-version change.</li>
+<li>The channel manifest schema is frozen for <code>1.x</code>.</li>
+</ul>
+<p>A bug fix to a <code>1.x</code> line will never introduce a breaking change. If a fix requires breaking compatibility, it ships in <code>2.0</code>, not <code>1.x</code>.</p>
+<p>Pre-1.0: nothing is frozen. Cruft and broken shapes are removed aggressively.</p>
+<h2 id="deprecation-policy"><a class="header" href="#deprecation-policy">Deprecation policy</a></h2>
+<p>When a feature is deprecated in a <code>1.x</code> release:</p>
+<ol>
+<li>The feature continues to work unchanged in all subsequent <code>1.x</code> releases.</li>
+<li>The deprecation is announced in the release notes and marked in the relevant docs.</li>
+<li>The CLI emits a warning to stderr when the deprecated feature is used.</li>
+<li>The feature is removed in the next major release (<code>2.0</code>).</li>
+</ol>
+<p>A feature deprecated in <code>1.5</code> works in <code>1.5</code>, <code>1.6</code>, <code>1.7</code>, and is removed in <code>2.0</code>.</p>
+<h2 id="end-of-life-policy"><a class="header" href="#end-of-life-policy">End-of-life policy</a></h2>
+<p>Each major version is supported with security fixes and critical bug fixes for 12 months after the next major version ships. When <code>2.0</code> ships, <code>1.x</code> continues to receive fixes for 12 months, after which only <code>2.x</code> is supported. The end-of-life date for the previous major is announced in the release notes for the new major.</p>
+<h2 id="quick-reference-for-maintainers"><a class="header" href="#quick-reference-for-maintainers">Quick reference for maintainers</a></h2>
+<p><strong>Cut a beta from a dev build:</strong></p>
+<pre><code>GitHub -&gt; Actions -&gt; Promote -&gt; Run workflow
+  source_tag:     v0.4.0-dev.42
+  target_channel: beta
+  target_version: (leave empty)
+</code></pre>
+<p>This creates <code>v0.4.0-beta.{N+1}</code> and triggers the beta release build.</p>
+<p><strong>Cut a stable from a beta build:</strong></p>
+<pre><code>GitHub -&gt; Actions -&gt; Promote -&gt; Run workflow
+  source_tag:     v0.4.0-beta.3
+  target_channel: stable
+  target_version: v0.4.0
+</code></pre>
+<p>This creates <code>v0.4.0</code> and triggers the stable release build. After it completes, bump <code>VERSION</code> to <code>0.5</code> in a follow-up commit so dev builds start counting toward the next minor.</p>
+<p><strong>Cut a hotfix:</strong></p>
+<pre><code class="language-bash">git checkout v0.4.0
+git checkout -b hotfix/v0.4.x
+git cherry-pick &lt;fix-commit&gt;
+git tag v0.4.1
+git push origin hotfix/v0.4.x v0.4.1
+</code></pre>
+<p>The tag push triggers a stable release build for <code>v0.4.1</code>. Then merge the cherry-picked commit forward into <code>main</code> so it is not lost.</p>
+<h2 id="self-hosted-channels-on-telahubd"><a class="header" href="#self-hosted-channels-on-telahubd">Self-hosted channels on telahubd</a></h2>
+<p>Any <code>telahubd</code> hub can serve release channel manifests and binary
+downloads in-process. Enable the <code>channels:</code> block in <code>telahubd.yaml</code>
+and the hub will mount public <code>/channels/</code> routes alongside the rest
+of its HTTP surface. The wire format matches the GitHub-hosted
+channels exactly, so clients pointed at a self-hosted channel with
+<code>update.sources[&lt;name&gt;]</code> fetch and verify manifests through the same
+code path as they use for the public channel.</p>
+<p>Prior to 0.12 this was a separate binary named <code>telachand</code>. The
+standalone daemon has been retired; the channel-hosting code now
+lives inside telahubd.</p>
+<p>Use cases:</p>
+<ul>
+<li>Air-gapped or firewall-restricted networks where GitHub is unreachable</li>
+<li>Distributing custom or private builds that never enter the public pipeline</li>
+<li>Staging a release internally before pushing it to the public channel</li>
+<li>Developer workflows where every local build becomes immediately available for self-update across a local fleet</li>
+</ul>
+<h3 id="enable-the-channel-server"><a class="header" href="#enable-the-channel-server">Enable the channel server</a></h3>
+<p>Add a <code>channels:</code> block to <code>telahubd.yaml</code>:</p>
+<pre><code class="language-yaml"># telahubd.yaml
+channels:
+  enabled: true
+  data: /var/lib/telahubd/channels
+  publicURL: https://hub.example.net/channels
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>enabled</code></td><td>Mount <code>/channels/</code> routes when true</td></tr>
+<tr><td><code>data</code></td><td>Directory holding <code>{channel}.json</code> files at the root and binaries under <code>files/</code></td></tr>
+<tr><td><code>publicURL</code></td><td>External URL prefix written into generated manifests. Used by <code>telahubd channels publish</code> as the <code>downloadBase</code> source.</td></tr>
+</tbody></table>
+</div>
+<p>Restart the hub. The new routes are:</p>
+<ul>
+<li><code>GET /channels/{name}.json</code> -- channel manifest</li>
+<li><code>GET /channels/files/</code> -- directory listing of all channels</li>
+<li><code>GET /channels/files/{channel}/</code> -- directory listing of one channel</li>
+<li><code>GET /channels/files/{channel}/{binary}</code> -- binary download</li>
+<li><code>GET /channels/</code> -- health/status JSON</li>
+</ul>
+<p>Each channel has its own subdirectory under <code>files/</code> so parallel
+publishes to different channels do not overwrite each other.</p>
+<p>The endpoints are public (no auth, wildcard CORS) by design. Release
+manifests are world-readable. Do not place anything in <code>channels.data</code>
+that you would not want served.</p>
+<h3 id="populate-the-files-directory"><a class="header" href="#populate-the-files-directory">Populate the files directory</a></h3>
+<p>Drop binaries into <code>{data}/files/{channel}/</code> using the same naming convention as GitHub release assets:</p>
+<pre><code>{data}/files/
+  dev/
+    tela-linux-amd64
+    tela-windows-amd64.exe
+    telad-linux-amd64
+    ...
+  beta/
+    tela-linux-amd64
+    ...
+  local/
+    tela-linux-amd64
+    ...
+</code></pre>
+<p>Only include the binaries you want to distribute on each channel. The
+manifest lists whatever is present in that channel's directory;
+clients look up their own platform entry.</p>
+<h3 id="publish-a-manifest"><a class="header" href="#publish-a-manifest">Publish a manifest</a></h3>
+<p>After placing binaries, generate the manifest:</p>
+<pre><code class="language-bash">telahubd channels publish -channel dev -tag v0.12.0-dev.1
+</code></pre>
+<p>Output:</p>
+<pre><code>  tela-linux-amd64            a1b2c3d4e5f6...  12345678 bytes
+  tela-windows-amd64.exe      b2c3d4e5f6a1...  13456789 bytes
+  ...
+
+published dev channel manifest
+  tag:      v0.12.0-dev.1
+  binaries: 9
+  base:     https://hub.example.net/channels/files/
+  manifest: /var/lib/telahubd/channels/dev.json
+</code></pre>
+<p>The manifest is live immediately. The hub does not need to restart.
+Each channel has its own manifest; you can maintain all three
+(or any named custom channels) simultaneously.</p>
+<h3 id="publishing-from-a-separate-build-machine"><a class="header" href="#publishing-from-a-separate-build-machine">Publishing from a separate build machine</a></h3>
+<p>The CLI <code>telahubd channels publish</code> runs on the same host as the hub
+and reads <code>channels.data</code> from the hub's config file. When your build
+pipeline lives elsewhere, use the HTTPS admin API instead:</p>
+<ul>
+<li><code>PUT /api/admin/channels/files/{channel}/{binary}</code> uploads a file
+into <code>channels.data/files/{channel}/</code>. Request body is the file
+bytes. Owner or admin token required. 500 MiB max per file.</li>
+<li><code>POST /api/admin/channels/publish</code> with
+<code>{"channel":"...","tag":"..."}</code> hashes everything under
+<code>channels.data/files/{channel}/</code> and writes the manifest. Returns
+the manifest JSON for verification.</li>
+</ul>
+<p>Upload each binary, then call <code>/publish</code> once. No SSH, tunnel, or
+file-share mount is needed on the build host.</p>
+<p>Reference implementations live under <code>scripts/</code> in the tela repo.
+Pick the one for your host OS:</p>
+<ul>
+<li><code>scripts/publish-channel.ps1</code> -- PowerShell 5.1+ / PowerShell 7, for Windows</li>
+<li><code>scripts/publish-channel.sh</code> -- bash 4+, for Linux and macOS</li>
+</ul>
+<p>Both do the same job: cross-compile tela/telad/telahubd for Linux and
+Windows amd64, bundle TelaVisor via <code>wails build</code> (Windows binary on
+PowerShell, host-platform binary on bash), and run the upload + publish
+round-trip against any hub with channels hosting enabled.</p>
+<p>Configuration comes from <code>scripts/publish.env</code> (gitignored):</p>
+<pre><code>TELA_PUBLISH_HUB_URL=https://hub.example.net
+TELA_PUBLISH_TOKEN=&lt;owner-or-admin-token&gt;
+</code></pre>
+<p>Get the owner token with <code>telahubd user show-owner</code> on the hub (or
+<code>docker exec &lt;container&gt; telahubd user show-owner -config /app/data/telahubd.yaml</code> on a Dockerised hub). See
+<code>scripts/publish.env.example</code> for all supported keys.</p>
+<h4 id="bootstrapping-a-self-hosted-channel-pipeline"><a class="header" href="#bootstrapping-a-self-hosted-channel-pipeline">Bootstrapping a self-hosted channel pipeline</a></h4>
+<p>The HTTPS remote-publish endpoints shipped in Tela 0.12. A brand new
+self-hosted hub starts out with whichever telahubd binary the Docker
+image was built against; if that predates 0.12, it has no
+<code>/api/admin/channels/*</code> routes and <code>publish-channel.ps1</code> will 404.</p>
+<p>There is therefore a one-time chicken-and-egg for any hub that is
+itself the only place you have published to: you cannot upload the
+new telahubd binary through its own admin API until it already has
+the admin API. The workaround is a single manual hop:</p>
+<ol>
+<li>Build locally with <code>publish-channel.ps1</code> -- the build step succeeds
+even when the upload step fails, so your <code>dist/</code> directory ends up
+with a fresh Tela 0.12+ binary set.</li>
+<li>Get those binaries onto the hub by any out-of-band means you
+currently use: copy into an existing OneDrive/S3/nginx host that
+the hub's <code>CHANNEL_MANIFEST_URL</code> build arg points at, <code>docker cp</code>
+into the hub container, a temporary file mount, etc.</li>
+<li>Rebuild the hub image so it picks up the new binaries:
+<code>docker compose build &lt;hub-service&gt; &amp;&amp; docker compose up -d &lt;hub-service&gt;</code>.</li>
+<li>Verify the admin endpoint now exists. A POST without auth should
+return 401, not 404:
+<pre><code>curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  https://hub.example.net/api/admin/channels/publish
+</code></pre>
+</li>
+<li>Populate <code>scripts/publish.env</code> and run <code>publish-channel.ps1</code>
+again. From this point on every subsequent publish goes straight
+through the HTTPS admin API.</li>
+</ol>
+<p>The specific out-of-band hop in step 2 is unique to each operator's
+pre-0.12 topology. Once the hub has 0.12+ telahubd, the pipeline is
+self-sufficient and the workaround is never needed again.</p>
+<h4 id="common-pitfalls"><a class="header" href="#common-pitfalls">Common pitfalls</a></h4>
+<ul>
+<li><strong>Version string vs. code version.</strong> The binary's <code>main.version</code>
+string is set by ldflags at build time; it does not imply the code
+in that binary has any specific feature. If <code>publish-channel.ps1</code>
+404s against a hub whose banner reports a version tag that should
+have the admin API, you are probably running a binary whose
+<code>dist/</code> copy was built from an older commit. Re-run
+<code>publish-channel.ps1</code> to force a fresh build from the current tip
+and bootstrap through step 2 once more.</li>
+<li><strong>Token mismatch.</strong> <code>publish.env</code> holds a token per hub; if you
+have multiple hubs, you need one <code>publish.env</code> per deployment or a
+way to select between them. The simplest approach is one script
+working copy per hub.</li>
+<li><strong>Counter drift.</strong> The per-channel build counter lives in
+<code>scripts/{channel}-build-counter</code> and increments on every run,
+including failed runs. A failed publish still bumps the counter;
+subsequent successful publishes pick up from there. This is
+intentional -- version tags should never collide even across
+failed attempts.</li>
+</ul>
+<h3 id="point-binaries-at-the-self-hosted-channel"><a class="header" href="#point-binaries-at-the-self-hosted-channel">Point binaries at the self-hosted channel</a></h3>
+<p>Each binary has a <code>channel sources</code> subcommand that writes into its
+config's <code>update.sources</code> map:</p>
+<pre><code class="language-bash">telad channel sources set dev https://hub.example.net/channels/
+telahubd channel sources set dev https://hub.example.net/channels/
+tela channel sources set dev https://hub.example.net/channels/
+</code></pre>
+<p>Or edit the YAML directly:</p>
+<pre><code class="language-yaml"># telad.yaml, telahubd.yaml, or credentials.yaml
+update:
+  channel: dev
+  sources:
+    dev: https://hub.example.net/channels/
+</code></pre>
+<p>After this, <code>tela update</code>, <code>telad update</code>, <code>telahubd update</code>, and the
+TelaVisor Update buttons all pull from your hub.</p>
+<h3 id="verify"><a class="header" href="#verify">Verify</a></h3>
+<pre><code class="language-bash">tela channel
+</code></pre>
+<pre><code class="language-text">  channel:         dev
+  manifest:        https://hub.example.net/channels/dev.json
+  current version: dev
+  latest version:  v0.12.0-dev.1  (update available)
+</code></pre>
+<h3 id="publishing-new-builds"><a class="header" href="#publishing-new-builds">Publishing new builds</a></h3>
+<p>When you have new binaries:</p>
+<ol>
+<li>Copy them into <code>{data}/files/</code>, replacing the previous versions.</li>
+<li>Run <code>telahubd channels publish -channel &lt;name&gt; -tag &lt;new-tag&gt;</code>.</li>
+<li>Clients pull the update on their next <code>update</code> invocation.</li>
+</ol>
+<p>The manifest tag is arbitrary. For local dev builds, a short git hash
+or timestamp works well since <code>dev</code>-versioned binaries always update
+regardless of semver comparison.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../use-cases/iot-edge.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/design.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../use-cases/iot-edge.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/design.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
