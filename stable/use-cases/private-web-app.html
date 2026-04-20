@@ -1,0 +1,429 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Private web application - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First connection: hello, hub</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The three binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub directories and portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The path gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub web console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor desktop app</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-update and release channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a hub on the public internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set up a path-based gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html" class="active"><strong aria-hidden="true">21.</strong> Private web application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP / IT support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT / edge</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release process</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">28.</strong> Why a connectivity fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">29.</strong> Remote administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">30.</strong> File sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">31.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">32.</strong> A. CLI reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">33.</strong> B. Configuration file reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">34.</strong> C. Access model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">35.</strong> D. Portal protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">36.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">37.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/use-cases/private-web-app.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="private-web-application"><a class="header" href="#private-web-application">Private web application</a></h1>
+<h2 id="the-scenario"><a class="header" href="#the-scenario">The scenario</a></h2>
+<p>You are running a web application that should not be reachable from the open internet. It might be an internal admin panel, a staging environment, a team dashboard, or a self-hosted tool like Grafana, Gitea, or Outline. Right now it either lives behind a VPN (complex to onboard users), has IP allowlisting (fragile when team members work from different locations), or is simply exposed to the public internet with a long URL and a hope that nobody finds it.</p>
+<p>With Tela, the application server runs <code>telad</code> with a path gateway configured. The gateway exposes a single tunnel port that routes HTTP requests by URL prefix to the right local service. The server has no inbound firewall rule. Users who have been explicitly granted access connect through the hub and get a local address in their browser:</p>
+<pre><code>Services available:
+  localhost:8080   → HTTP
+</code></pre>
+<p>They open <code>http://localhost:8080/</code> in a browser. The connection travels through an end-to-end encrypted WireGuard tunnel to the application server. The hub relays ciphertext and cannot see request or response content. Users without a valid token cannot reach the machine at all -- there is nothing to find, because the server never accepted an inbound connection from them.</p>
+<p>If the application has multiple services (a frontend, an API, a metrics endpoint), the gateway routes each URL prefix to the right local port, so the browser sees everything as the same origin and Cross-Origin Resource Sharing (CORS) issues do not arise.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<p><code>telad</code> runs on the application server and registers the machine with the hub.
+It exposes the web application through its built-in path gateway -- a single
+tunnel port that routes HTTP requests to local services by URL prefix. Only
+users whose tokens have been granted <code>connect</code> permission on that machine can
+reach anything at all. The hub relays ciphertext; it cannot see request or
+response content.</p>
+<p>When a user connects, <code>tela</code> binds a local address (for example,
+<code>localhost:8080</code>). The user opens that address in a browser. The connection
+travels through the encrypted WireGuard tunnel to the application server, where
+<code>telad</code> forwards it to the local service. No inbound firewall rule is needed on
+the application server.</p>
+<hr />
+<h2 id="step-1---stand-up-a-hub"><a class="header" href="#step-1---stand-up-a-hub">Step 1 - Stand up a hub</a></h2>
+<p>See <a href="../howto/hub.html">Run a hub on the public internet</a> for the full
+deployment guide. For a quick start:</p>
+<pre><code class="language-bash">telahubd
+</code></pre>
+<p>The hub prints an owner token on first start. Save it. Publish the hub as
+<code>wss://hub.example.com</code>.</p>
+<hr />
+<h2 id="step-2---set-up-authentication"><a class="header" href="#step-2---set-up-authentication">Step 2 - Set up authentication</a></h2>
+<p>Create a token for the agent and one token per user:</p>
+<pre><code class="language-bash"># Create an agent token for the application server
+tela admin tokens add app-agent -hub wss://hub.example.com -token &lt;owner-token&gt;
+# Save the printed token -- this is &lt;app-agent-token&gt; used in telad.yaml (Step 3)
+
+# Grant the agent permission to register the machine
+tela admin access grant app-agent myapp register -hub wss://hub.example.com -token &lt;owner-token&gt;
+
+# Create user tokens (one per person)
+tela admin tokens add alice -hub wss://hub.example.com -token &lt;owner-token&gt;
+# Save Alice's printed token -- give it to Alice to use with tela connect or tela login
+tela admin tokens add bob -hub wss://hub.example.com -token &lt;owner-token&gt;
+# Save Bob's printed token -- give it to Bob
+
+# Grant each user connect access to the machine
+tela admin access grant alice myapp connect -hub wss://hub.example.com -token &lt;owner-token&gt;
+tela admin access grant bob myapp connect -hub wss://hub.example.com -token &lt;owner-token&gt;
+</code></pre>
+<p>Users without an explicit <code>connect</code> grant cannot reach the machine even if they
+hold a valid hub token.</p>
+<hr />
+<h2 id="step-3---configure-and-run-telad-on-the-application-server"><a class="header" href="#step-3---configure-and-run-telad-on-the-application-server">Step 3 - Configure and run <code>telad</code> on the application server</a></h2>
+<p>Because <code>telad</code> uses userspace networking, the gateway can listen on port 80
+inside the tunnel without elevated privileges on either the server or the
+user's machine. Users browse to <code>http://localhost/</code> with no port number.</p>
+<h3 id="single-service-application"><a class="header" href="#single-service-application">Single-service application</a></h3>
+<p>If the application runs on one local port (for example, port 3000), route
+it through the gateway on port 80:</p>
+<pre><code class="language-yaml"># telad.yaml
+hub: wss://hub.example.com
+token: "&lt;app-agent-token&gt;"
+
+machines:
+  - name: myapp
+    gateway:
+      port: 80
+      routes:
+        - path: /
+          target: 3000    # application's local port
+</code></pre>
+<pre><code class="language-bash">telad -config telad.yaml
+</code></pre>
+<p>Users connect and open <code>http://localhost/</code> in a browser.</p>
+<h3 id="multi-service-application"><a class="header" href="#multi-service-application">Multi-service application</a></h3>
+<p>If the application has separate frontend and backend processes -- a common
+arrangement for single-page applications -- route them by path:</p>
+<pre><code class="language-yaml"># telad.yaml
+hub: wss://hub.example.com
+token: "&lt;app-agent-token&gt;"
+
+machines:
+  - name: myapp
+    gateway:
+      port: 80
+      routes:
+        - path: /api/
+          target: 4000    # REST API
+        - path: /
+          target: 3000    # frontend (SPA or server-rendered)
+</code></pre>
+<p>Requests to <code>/api/...</code> are forwarded to the local API process on port 4000.
+Everything else goes to the frontend on port 3000. Both local ports are
+invisible outside the server. The browser sees a single origin, so no
+Cross-Origin Resource Sharing (CORS) configuration is needed.</p>
+<p>To add an admin panel at a separate path:</p>
+<pre><code class="language-yaml">gateway:
+  port: 80
+  routes:
+    - path: /admin/
+      target: 5000    # admin panel
+    - path: /api/
+      target: 4000    # REST API
+    - path: /
+      target: 3000    # frontend
+</code></pre>
+<p>Routes are matched by longest prefix first, regardless of their order in the
+file.</p>
+<p>For persistent operation, install <code>telad</code> as a service:</p>
+<pre><code class="language-bash">telad service install -config telad.yaml
+telad service start
+</code></pre>
+<p>See <a href="../howto/services.html">Run Tela as an OS service</a> for platform-specific
+details.</p>
+<hr />
+<h2 id="step-4---user-workflow"><a class="header" href="#step-4---user-workflow">Step 4 - User workflow</a></h2>
+<p>On each user's machine:</p>
+<ol>
+<li>Download <code>tela</code>.</li>
+<li>Store the hub token so it does not need to be passed on every command:</li>
+</ol>
+<pre><code class="language-bash">tela login wss://hub.example.com
+# Prompts for token
+</code></pre>
+<ol start="3">
+<li>Connect:</li>
+</ol>
+<pre><code class="language-bash">tela connect -hub wss://hub.example.com -machine myapp
+</code></pre>
+<ol start="4">
+<li>Open the address shown in the output in a browser:</li>
+</ol>
+<pre><code>http://localhost/
+</code></pre>
+<h3 id="connection-profile-optional"><a class="header" href="#connection-profile-optional">Connection profile (optional)</a></h3>
+<p>If users connect to this application regularly, a profile avoids repeating
+flags:</p>
+<pre><code class="language-yaml"># ~/.tela/profiles/myapp.yaml
+connections:
+  - hub: wss://hub.example.com
+    token: ${MYAPP_TOKEN}
+    machine: myapp
+    services:
+      - name: gateway
+</code></pre>
+<pre><code class="language-bash">tela connect -profile myapp
+</code></pre>
+<p>Set <code>MYAPP_TOKEN</code> in the environment, or omit the <code>token</code> field if the token
+is already in the credential store.</p>
+<hr />
+<h2 id="revoking-access"><a class="header" href="#revoking-access">Revoking access</a></h2>
+<p>To revoke a specific user's access:</p>
+<pre><code class="language-bash"># Remove connect permission for this machine only
+tela admin access revoke alice myapp -hub wss://hub.example.com -token &lt;owner-token&gt;
+
+# Or remove the identity entirely (disconnects immediately, deletes all permissions)
+tela admin access remove alice -hub wss://hub.example.com -token &lt;owner-token&gt;
+</code></pre>
+<p>Revocation takes effect immediately. Any active session from that token is
+terminated.</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="browser-shows-connection-refused"><a class="header" href="#browser-shows-connection-refused">Browser shows "connection refused"</a></h3>
+<ul>
+<li>Confirm the application is running on the server and listening on the
+expected local port.</li>
+<li>Confirm <code>telad</code> is running and the machine is online (<code>tela machines -hub wss://hub.example.com</code>).</li>
+<li>For gateway setups, confirm the <code>target</code> port in <code>telad.yaml</code> matches the
+port the application actually listens on.</li>
+</ul>
+<h3 id="user-can-connect-but-gets-a-404-on-all-paths"><a class="header" href="#user-can-connect-but-gets-a-404-on-all-paths">User can connect but gets a 404 on all paths</a></h3>
+<ul>
+<li>The gateway route for <code>/</code> may be missing. Add a catch-all route with
+<code>path: /</code> pointing at the frontend service.</li>
+<li>Confirm the frontend process is running and reachable from the server
+itself (for example, <code>curl http://localhost:3000/</code>).</li>
+</ul>
+<h3 id="browser-loads-the-page-but-api-calls-fail"><a class="header" href="#browser-loads-the-page-but-api-calls-fail">Browser loads the page but API calls fail</a></h3>
+<ul>
+<li>In a gateway setup, the API route path must match the path prefix the
+frontend uses for its requests. If the frontend calls <code>/api/v1/users</code>, the
+route must be <code>path: /api/</code> or <code>path: /api/v1/</code>.</li>
+<li>The gateway does not proxy WebSocket connections. If the application uses
+WebSockets for the API, expose the WebSocket service as a separate named
+service alongside the gateway.</li>
+</ul>
+<h3 id="tela-connect-is-refused-auth_required-or-403"><a class="header" href="#tela-connect-is-refused-auth_required-or-403"><code>tela connect</code> is refused ("auth_required" or 403)</a></h3>
+<ul>
+<li>Confirm the user's token has been granted <code>connect</code> access:
+<code>tela admin access -hub wss://hub.example.com -token &lt;owner-token&gt;</code></li>
+<li>Confirm the token is stored correctly: <code>tela login wss://hub.example.com</code>.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../use-cases/personal-cloud.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../use-cases/production-access.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../use-cases/personal-cloud.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../use-cases/production-access.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
