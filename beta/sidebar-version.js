@@ -3,6 +3,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!scrollbox) return;
     var footer = document.createElement('div');
     footer.className = 'sidebar-version-footer';
-    footer.textContent = 'v0.12.0';
+    footer.textContent = 'v0.13.0-beta.3';
     scrollbox.appendChild(footer);
 });
