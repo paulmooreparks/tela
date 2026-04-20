@@ -2045,10 +2045,20 @@ func Main() {
 		var err error
 		cfg, err = loadHubConfig(absPath)
 		if err != nil {
-			log.Fatalf("config: %v", err)
+			if errors.Is(err, os.ErrNotExist) {
+				// First-start bootstrap path: the operator pointed -config
+				// at a file that does not exist yet (e.g. a Docker run
+				// against an empty volume). Carry the path forward; the
+				// env-var or auto bootstrap below will create it.
+				log.Printf("[hub] -config %s does not exist; will create on bootstrap", absPath)
+				cfg = nil
+			} else {
+				log.Fatalf("config: %v", err)
+			}
+		} else {
+			log.Printf("[hub] loaded config from %s", absPath)
 		}
 		*configPath = absPath
-		log.Printf("[hub] loaded config from %s", absPath)
 	} else {
 		// Check for previously persisted config (from env bootstrap / admin API)
 		const defaultDataConfig = "data/telahubd.yaml"

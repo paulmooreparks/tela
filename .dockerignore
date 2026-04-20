@@ -1,0 +1,33 @@
+# Files excluded from the Docker build context for Dockerfile.telahubd.
+# Anything not needed by `go build ./cmd/telahubd` is excluded so the
+# context stays small and unrelated edits don't bust the build cache.
+
+# Local build output and binary debris.
+dist/
+*.exe
+*.exe.old
+*.exe~
+
+# Local VS Code workspace, scripts, and personal config.
+.vscode/
+scripts/
+
+# Documentation that is not consumed by the Go build.
+book/
+*.md
+
+# Other binary trees that don't ship in telahubd.
+cmd/telagui/
+cmd/telaportal/
+cmd/tela/
+cmd/telad/
+
+# Local service configs that may contain secrets.
+*-telahubd.yaml
+*-telad.yaml
+
+# Git metadata.
+.git/
+.github/
+.gitignore
+.gitattributes
