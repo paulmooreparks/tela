@@ -1,0 +1,63 @@
+# telahubd + nginx: for operators who already run nginx.
+#
+# Unlike the Caddy template, nginx does NOT issue its own TLS certs.
+# This compose file assumes certificates are provisioned separately
+# (typically via host-level certbot, cert-manager in Kubernetes, or
+# whatever your stack already does) and bind-mounted into nginx.
+#
+# The nginx.conf in this directory includes the correct WebSocket
+# upgrade-header incantations, which are easy to get wrong. Copy the
+# snippet into an existing nginx deployment if you'd rather integrate
+# than run nginx in a container.
+#
+# Usage:
+#   1. Provision TLS certs for your hub's domain. If you use
+#      certbot on the host:
+#        sudo certbot certonly --standalone -d hub.example.com
+#      and the certs end up at /etc/letsencrypt/live/hub.example.com/.
+#   2. Edit nginx.conf in this directory: replace
+#      `your-hub-domain.example.com` with your actual domain.
+#   3. Copy .env.example to .env and fill in TELA_OWNER_TOKEN.
+#   4. Open firewall ports 80/tcp, 443/tcp, 41820/udp.
+#   5. docker compose -f docker-compose.nginx.yml up -d
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Bring your own certs. Host path must contain
+      # live/<domain>/fullchain.pem and privkey.pem.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+    depends_on:
+      - telahubd
+
+  telahubd:
+    image: ghcr.io/paulmooreparks/telahubd:stable
+    container_name: telahubd
+    restart: unless-stopped
+
+    # Same shape as the Caddy template: nginx talks to telahubd:80
+    # over the internal network, UDP relay goes direct from the host.
+    # The /udp suffix is REQUIRED.
+    ports:
+      - "41820:41820/udp"
+
+    environment:
+      - TELA_OWNER_TOKEN=${TELA_OWNER_TOKEN:-}
+      - TELAHUBD_NAME=${TELAHUBD_NAME:-}
+      - TELAHUBD_UDP_HOST=${TELAHUBD_UDP_HOST:-}
+
+    volumes:
+      - telahubd-data:/data
+
+volumes:
+  telahubd-data:

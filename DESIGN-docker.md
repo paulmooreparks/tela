@@ -166,17 +166,17 @@ TLS termination is the reverse proxy's job. `telahubd` does not terminate TLS it
 
 ## 9. Compose topology
 
-Four templates under `book/src/howto/hub-docker/`:
+Three templates under `book/src/howto/hub-docker/`:
 
 **`docker-compose.minimal.yml`** -- telahubd alone on port 80. For LAN-only dev or test deployments. Demonstrates env-var bootstrap, a named volume, and the UDP port mapping. No proxy, no TLS.
 
-**`docker-compose.caddy.yml`** -- telahubd plus Caddy. Caddy's config is a three-line snippet that reverse-proxies `https://hub.example.com` to `telahubd:80` with automatic Let's Encrypt. Recommended for production deployments where the operator owns the domain and can point DNS at the Docker host. UDP port is published directly from telahubd to the host; Caddy only handles TCP.
+**`docker-compose.caddy.yml`** -- telahubd plus Caddy. Caddy's config reverse-proxies `https://hub.example.com` to `telahubd:80` with automatic Let's Encrypt. Recommended for production deployments where the operator owns the domain and can point DNS at the Docker host. UDP port is published directly from telahubd to the host; Caddy only handles TCP.
 
-**`docker-compose.nginx.yml`** -- telahubd plus nginx. For operators who already run nginx. Provides a ready-to-paste config with the WebSocket upgrade headers spelled out (`Connection: upgrade`, `Upgrade: $http_upgrade`, `proxy_read_timeout 86400s`). These are easy to get wrong, and the template removes the guesswork.
+**`docker-compose.nginx.yml`** -- telahubd plus nginx. For operators who already run nginx. Provides a ready-to-paste config with the WebSocket upgrade-header map and the idle-timeout bump that long-lived agent connections need. Certificates are brought by the operator (host-level certbot, cert-manager, etc.); nginx does not issue its own.
 
-**`docker-compose.full.yml`** -- telahubd plus Caddy plus Awan Saya portal. One-box deployment for operators who want the portal colocated with the hub. The AS service runs on its own domain; Caddy terminates both. Volume layout keeps the three services' state separate so any one of them can be rebuilt without touching the others.
+Each template is a working file: `docker compose up -d` against it, with a populated `.env`, produces a running hub.
 
-Each template is a working file: `docker compose up -d` against it, with a populated `.env`, produces a running hub. The book walks an operator through each of the four scenarios.
+A fourth template, `docker-compose.full.yml` -- telahubd plus Caddy plus Awan Saya portal as one-box deployment -- was originally planned and is filed as a follow-up. It waits on Awan Saya publishing an image to a container registry; today AS deploys via its own `docker-compose.yml` from the `awansaya` repo. Once an AS image lands on ghcr.io the fourth template becomes a 20-line addition to this directory.
 
 ## 10. Install-page rewrite
 

@@ -1,0 +1,31 @@
+# Caddyfile for the telahubd + Caddy docker-compose.
+#
+# Caddy auto-issues a Let's Encrypt certificate for HUB_DOMAIN on
+# first startup and renews it in the background. reverse_proxy
+# handles both plain HTTP requests and WebSocket upgrades without
+# any extra directives; Caddy detects the Upgrade header and swaps
+# to the WebSocket transport automatically.
+#
+# The one non-default worth knowing: idle WebSocket connections from
+# agents stay open indefinitely. Caddy's default read/write timeout
+# is one minute, which would cut off connected agents every minute.
+# `flush_interval -1` disables the response buffer so messages land
+# as soon as they arrive; more importantly the `transport http`
+# block raises the upstream idle timeout.
+
+{$HUB_DOMAIN} {
+    reverse_proxy telahubd:80 {
+        # Long-lived WebSocket connections from agents and clients
+        # should not be interrupted by Caddy's default timeouts.
+        flush_interval -1
+
+        transport http {
+            # Hub sends keepalive frames every 25 seconds; anything
+            # well above that keeps idle tunnels alive forever.
+            dial_timeout 5s
+            response_header_timeout 30s
+            read_timeout 1h
+            write_timeout 1h
+        }
+    }
+}
