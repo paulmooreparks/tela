@@ -11,6 +11,8 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-20
+
 ### Added
 - `telahubd channel` subcommand, bringing the hub into parity with `tela channel` and `telad channel`. Shows the current channel and latest version, switches the channel (`telahubd channel set <name>`), prints the full parsed manifest (`telahubd channel show`). The `-config` flag defaults to the platform-standard config path (`/etc/tela/telahubd.yaml` or `%ProgramData%\Tela\telahubd.yaml`).
 - `telad channel show [-channel <ch>]` prints the full parsed manifest for the agent, mirroring the client and hub.
