@@ -129,7 +129,8 @@ jobs:
   build:
     needs: promote
     permissions:
-      contents: write
+      contents: write  # create releases and upload assets
+      packages: write  # push telahubd images to ghcr.io (beta + stable only)
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ needs.promote.outputs.new_tag }}
