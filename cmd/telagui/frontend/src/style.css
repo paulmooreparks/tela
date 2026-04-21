@@ -2105,7 +2105,8 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .access-matrix-row-revoked { box-shadow: inset 3px 0 0 0 var(--danger); }
 .access-matrix-row-revoked .identity-name,
-.access-matrix-row-revoked .chip {
+.access-matrix-row-revoked .chip,
+.access-matrix-row-revoked .services-summary-muted {
   text-decoration: line-through; color: var(--text-muted);
 }
 .access-matrix-row-revoked .access-matrix-check input[type="checkbox"] { opacity: 0.3; }

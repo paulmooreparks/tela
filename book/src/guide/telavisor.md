@@ -1002,11 +1002,14 @@ header has an action cluster for identity-level operations:
 
 - **Rename.** Renames the identity. The token is unchanged; only the
   human-readable label moves.
-- **Change role...** Opens a role picker with *User*, *Admin*, and
-  *Viewer*. Owner is intentionally omitted from the picker; the CLI
-  is the way to transfer hub ownership. A last-owner guard on the
-  hub refuses to demote the only owner identity, so this action is
-  also disabled for the owner.
+- **Change role...** Opens a role picker with *User*, *Admin*,
+  *Viewer*, and *Owner*. Selecting *Owner* prompts a second
+  confirmation because owner confers full control of the hub,
+  including the power to demote or delete any other admin. A
+  last-owner guard on the hub refuses to demote the only owner
+  identity, so an operator who selects a different role for the
+  sole owner sees an error in the modal; the recovery is to
+  promote a peer to owner first, then try again.
 - **Rotate token.** Issues a new token for the identity and shows it
   once. The previous token stops working immediately.
 - **Delete identity.** Removes the identity and scrubs every ACL

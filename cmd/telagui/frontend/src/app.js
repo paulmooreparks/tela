@@ -4936,7 +4936,13 @@ function submitCreateToken(event) {
 function deleteToken(id) {
   showConfirmDialog('Delete Token', 'Delete identity "' + id + '"? This removes the token and all its ACL entries.', 'Delete').then(function (yes) {
     if (!yes) return;
-    goApp.AdminDeleteToken(currentAdminHub, id).then(function () {
+    goApp.AdminDeleteToken(currentAdminHub, id).then(function (raw) {
+      var data;
+      try { data = JSON.parse(raw || '{}'); } catch (e) { data = {}; }
+      if (data.error) {
+        showError('Delete failed: ' + data.error);
+        return;
+      }
       accessReload();
     });
   });
@@ -7670,7 +7676,20 @@ function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
 // with no disclosure (nothing to expand). An unexpanded filtered grant
 // defaults to open when the filter is small (<= 3 chips) so the common
 // case reads without interaction.
+//
+// Revoked rows show the baseline services (not the empty desired
+// state) so the operator can see what is about to be removed. The
+// row-level CSS on .access-matrix-row-revoked strikes the chips and
+// the "All services" label through.
 function renderAccessServicesCell(id, machineId, grant) {
+  if (accessIsRevoked(id, machineId)) {
+    var baseline = accessBaselineFor(id, machineId);
+    return renderAccessServicesCellInner(id, machineId, baseline, /*isRevoked*/ true);
+  }
+  return renderAccessServicesCellInner(id, machineId, grant, /*isRevoked*/ false);
+}
+
+function renderAccessServicesCellInner(id, machineId, grant, isRevoked) {
   if ((grant.permissions || []).indexOf('connect') === -1) {
     return '<span class="services-summary-muted">&mdash;</span>';
   }
@@ -7678,26 +7697,39 @@ function renderAccessServicesCell(id, machineId, grant) {
   if (services.length === 0) {
     return '<span class="services-summary-muted">All services</span>';
   }
+  // Revoked rows collapse the disclosure so the chip cloud is always
+  // visible: the operator needs to see what is being removed without
+  // clicking a button they can't un-stage via (the Undo action is in
+  // the actions column).
+  if (isRevoked) {
+    var html = '<div class="services-chips">';
+    services.forEach(function (svc) {
+      html += '<span class="chip">' + escHtml(svc) + '</span>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   var total = accessMachineServiceCount(machineId, services.length);
   var key = accessPendingKey(id, machineId);
   var expanded = accessState.expanded[key];
   if (expanded === undefined) expanded = services.length <= 3;
 
-  var html = '<div class="services-cell">';
-  html += '<button type="button" class="services-summary" aria-expanded="' + (expanded ? 'true' : 'false') +
+  var html2 = '<div class="services-cell">';
+  html2 += '<button type="button" class="services-summary" aria-expanded="' + (expanded ? 'true' : 'false') +
     '" onclick="accessToggleServicesExpand(\'' + escAttr(id) + '\',\'' + escAttr(machineId) + '\')">';
-  html += '<span class="services-summary-chevron">&#x25B8;</span>';
-  html += '<span>' + services.length + ' of ' + total + ' service' + (total === 1 ? '' : 's') + '</span>';
-  html += '</button>';
+  html2 += '<span class="services-summary-chevron">&#x25B8;</span>';
+  html2 += '<span>' + services.length + ' of ' + total + ' service' + (total === 1 ? '' : 's') + '</span>';
+  html2 += '</button>';
   if (expanded) {
-    html += '<div class="services-chips">';
+    html2 += '<div class="services-chips">';
     services.forEach(function (svc) {
-      html += '<span class="chip">' + escHtml(svc) + '</span>';
+      html2 += '<span class="chip">' + escHtml(svc) + '</span>';
     });
-    html += '</div>';
+    html2 += '</div>';
   }
-  html += '</div>';
-  return html;
+  html2 += '</div>';
+  return html2;
 }
 
 // accessMachineServiceCount returns the number of services the hub
@@ -8129,10 +8161,10 @@ function accessRenameIdentity(id) {
 function accessChangeRole(id) {
   var entry = accessEntryFor(id);
   if (!entry) return;
-  if (entry.role === 'owner') {
-    showError('Cannot change the role of the hub owner.');
-    return;
-  }
+  // Owner demotion is allowed at this layer; the backend's last-owner
+  // guard rejects the specific case of demoting the only owner and
+  // surfaces that as an error in the modal. Operators with multiple
+  // owner identities can freely rebalance.
   document.getElementById('crm-identity').textContent = id;
   document.getElementById('crm-role').value = (entry.role === '' || entry.role === 'user') ? '' : entry.role;
   var errEl = document.getElementById('crm-error');
@@ -8156,6 +8188,33 @@ function submitChangeRole() {
     closeModal('access-change-role-modal');
     return;
   }
+
+  // Owner promotion is a privilege escalation that confers full
+  // control of the hub including the power to demote or delete
+  // other admins. A second confirm forces the operator to
+  // acknowledge the severity. Owner demotion is already guarded on
+  // the server by the last-owner rule, so no extra confirm is needed
+  // when going owner -> admin (or any other role).
+  if (newRole === 'owner' && current !== 'owner') {
+    showConfirmDialog(
+      'Promote to Owner?',
+      'Promoting "' + id + '" to Owner grants full control of this hub, including the power to demote or remove any other admin. Continue?',
+      'Promote to Owner'
+    ).then(function (yes) {
+      if (!yes) return;
+      doChangeRole(id, newRole, entry);
+    });
+    return;
+  }
+
+  doChangeRole(id, newRole, entry);
+}
+
+// doChangeRole issues the PATCH. Factored out of submitChangeRole so
+// the owner-promotion confirm and the regular path share one code
+// path for the If-Match wiring, conflict handling, and error
+// surfacing.
+function doChangeRole(id, newRole, entry) {
   var ifMatch = entry ? String(entry.version || '') : '';
   goApp.AdminChangeRole(accessState.hub, id, newRole, ifMatch).then(function (raw) {
     var data = parseJSON(raw);
