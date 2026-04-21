@@ -37,7 +37,7 @@
             <a class="link site-nav-link" href="/book/">Docs</a>
             <a class="link site-nav-link" href="#download">Download</a>
             <a class="link site-nav-link" href="https://github.com/paulmooreparks/tela" rel="noopener">GitHub</a>
-            <a class="link site-nav-link" href="/book/ops/release-process.html">Releases</a>
+            <a class="link site-nav-link" href="https://github.com/paulmooreparks/tela/releases">Releases</a>
         </nav>
     </div>
 </header>
@@ -52,8 +52,13 @@
         </h1>
 
         <p class="site-section-body">
-            Tela is a connectivity fabric. Three small programs (a client, an agent, and
-            a hub) let one machine reach a TCP service on another through an encrypted
+            Tela is a free and open-source (FOSS) remote-access system that lets you reach TCP services on remote machines through an encrypted WireGuard tunnel.
+            It works through firewalls, NATs, and corporate proxies without requiring inbound ports, VPN software, kernel drivers, or administrator privileges on either end.
+        </p>
+
+        <p class="site-section-body">
+            Three small programs (a client, an agent, and
+            a hub) enable one machine to reach a TCP service on another mahcine through an encrypted
             WireGuard tunnel, without either side opening an inbound port or running
             anything as root. The same three binaries scale from a single laptop
             reaching a single home server up to a fleet of machines managed by a team,
@@ -128,9 +133,9 @@
     <section class="site-section">
         <h2 class="site-section-title">Documentation</h2>
         <p class="site-section-body">
-            Three editions of the tela book track the three release channels. Stable is the default;
-            beta and dev are rebuilt from each channel's tag and are labelled with
-            the version they document.
+            Three editions of the tela book track the three release channels. <a class="link" href="/book/">Stable</a> is the default;
+            <a class="link" href="/book/beta/">beta</a> and <a class="link" href="/book/dev">dev</a> are rebuilt from their respective
+            channel's tags and are labelled with the version they document.
         </p>
 
         <div class="site-versions">
@@ -142,18 +147,26 @@
             </div>
             <div class="card site-version-card">
                 <div class="site-version-label">Beta</div>
-                <div class="site-version-desc">Candidate for promotion. Real bugs surface here first.</div>
+                <div class="site-version-desc">Next candidate for promotion to stable.</div>
                 <a class="link site-version-link" href="/book/beta/">Read the beta version &rarr;</a>
             </div>
             <div class="card site-version-card">
                 <div class="site-version-label">Dev</div>
-                <div class="site-version-desc">Tip of main. Every commit produces a build. May break.</div>
+                <div class="site-version-desc">Active development branch.</div>
                 <a class="link site-version-link" href="/book/dev/">Read the dev version &rarr;</a>
             </div>
         </div>
-        <p class="site-section-body site-section-body-small">
-            <a class="link" href="/book/archive/">Archived stable releases &rarr;</a>
-        </p>
+
+        <section class="site-subsection">
+            <h3 class="site-section-title">Version Archive</h3>
+            <p class="site-section-body">
+                Older stable editions are archived so that they can be referenced by users who have chosen not to upgrade to the latest version.
+            </p>
+
+            <p class="site-section-body site-section-body-small">
+                <a class="link" href="/book/archive/">Archived stable releases &rarr;</a>
+            </p>
+        </section>
     </section>
 
     <!-- Download -->
