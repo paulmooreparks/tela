@@ -2,7 +2,7 @@
 
 This directory contains the [mdBook](https://rust-lang.github.io/mdBook/)
 source for the Tela documentation site published at
-<https://paulmooreparks.github.io/tela/>.
+<https://telaproject.org/book/>.
 
 ## Structure
 

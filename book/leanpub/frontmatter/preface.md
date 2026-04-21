@@ -31,7 +31,7 @@ specification, the security model, the deployment recipes, the
 troubleshooting playbook, and the roadmap. If you read this part, you
 should be able to debug, extend, or fork Tela.
 
-The book and the [documentation site](https://paulmooreparks.github.io/tela/)
+The book and the [documentation site](https://telaproject.org/book/)
 share source. When the docs change, the book updates automatically on the
 next Leanpub build. The book has more long-form material (design rationale,
 worked examples, opinionated advice) that does not belong in reference docs.

@@ -21,7 +21,7 @@ and configuration are interchangeable between the two.
 
 The complete TelaVisor reference (every tab, every panel, every dialog,
 every workflow, with screenshots for each) is in the book chapter at
-[guide/telavisor.html](https://paulmooreparks.github.io/tela/guide/telavisor.html).
+[guide/telavisor.html](https://telaproject.org/book/guide/telavisor.html).
 Read it there, not here. The book chapter is the canonical source.
 
 This file is a front-porch overview kept short on purpose so it stays in

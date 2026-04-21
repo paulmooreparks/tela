@@ -11,6 +11,6 @@ The Tela source code is licensed separately under the Apache License 2.0.
 See <https://github.com/paulmooreparks/tela/blob/main/LICENSE>.
 
 This book is a living document. The latest version always lives at
-<https://leanpub.com/tela> (paid) and <https://paulmooreparks.github.io/tela/>
+<https://leanpub.com/tela> (paid) and <https://telaproject.org/book/>
 (free, slightly lighter, lacks some long-form chapters). Bug reports and
 corrections are welcome at <https://github.com/paulmooreparks/tela/issues>.

@@ -15,7 +15,9 @@
 [![beta channel](https://img.shields.io/badge/dynamic/json?label=beta&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fbeta.json&color=yellow)](https://github.com/paulmooreparks/tela/releases/download/channels/beta.json)
 [![stable channel](https://img.shields.io/badge/dynamic/json?label=stable&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fstable.json&color=brightgreen)](https://github.com/paulmooreparks/tela/releases/download/channels/stable.json)
 
-**[Read the book](https://paulmooreparks.github.io/tela/)** for the full reference: getting started, configuration, deployment guides, use cases, and design rationale.
+Project home: **[telaproject.org](https://telaproject.org/)**. Landing page, download links, and version map.
+
+**[Read the book](https://telaproject.org/book/)** for the full reference: getting started, configuration, deployment guides, use cases, and design rationale.
 
 Tela is a free and open-source (FOSS) remote-access system that lets you reach TCP services on remote machines through an encrypted WireGuard tunnel. It works through firewalls, NATs, and corporate proxies without requiring inbound ports, VPN software, kernel drivers, or administrator privileges on either end.
 
@@ -103,7 +105,7 @@ The persistent log panel at the bottom of the window collects output from TelaVi
 
 ![TelaVisor log panel attach popover](book/src/screens/telavisor-log-attach-popover.png)
 
-See the [TelaVisor chapter in the book](https://paulmooreparks.github.io/tela/guide/telavisor.html) for the full reference, or [TelaVisor.md](TelaVisor.md) for a short overview.
+See the [TelaVisor chapter in the book](https://telaproject.org/book/guide/telavisor.html) for the full reference, or [TelaVisor.md](TelaVisor.md) for a short overview.
 
 ## Quick start
 
@@ -300,7 +302,7 @@ telahubd portal list
 telahubd portal remove awansaya
 ```
 
-The `portal add` command discovers the portal's hub directory endpoint via `/.well-known/tela` (RFC 8615), registers the hub via its API, and stores the association in the hub config. See [Hub directories and portals](https://paulmooreparks.github.io/tela/guide/directories.html) in the book for the full explanation.
+The `portal add` command discovers the portal's hub directory endpoint via `/.well-known/tela` (RFC 8615), registers the hub via its API, and stores the association in the hub config. See [Hub directories and portals](https://telaproject.org/book/guide/directories.html) in the book for the full explanation.
 
 ## Project structure
 
@@ -360,7 +362,7 @@ For confirmed bugs, open an [issue](https://github.com/paulmooreparks/tela/issue
 ## Documentation
 
 - [TELA-DESIGN-LANGUAGE.md](TELA-DESIGN-LANGUAGE.md) -- Tela Design Language (visual language specification)
-- [TelaVisor chapter](https://paulmooreparks.github.io/tela/guide/telavisor.html) -- Desktop client reference (canonical), with [TelaVisor.md](TelaVisor.md) as a short overview at the repo root
+- [TelaVisor chapter](https://telaproject.org/book/guide/telavisor.html) -- Desktop client reference (canonical), with [TelaVisor.md](TelaVisor.md) as a short overview at the repo root
 - [ACCESS-MODEL.md](ACCESS-MODEL.md) -- How tokens, roles, and machine permissions work together
 - [REFERENCE.md](REFERENCE.md) -- Comprehensive reference for all three CLIs, configuration, and APIs
 - [CONFIGURATION.md](CONFIGURATION.md) -- Configuration file schemas for hubs.yaml, telad.yaml, telahubd.yaml, and portal config
