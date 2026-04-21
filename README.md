@@ -1,5 +1,3 @@
-![Tela](https://raw.githubusercontent.com/paulmooreparks/tela/main/logo.png)
-
 # Tela
 
 [![CI](https://img.shields.io/github/actions/workflow/status/paulmooreparks/tela/ci.yml?branch=main&label=CI)](https://github.com/paulmooreparks/tela/actions/workflows/ci.yml)
@@ -14,6 +12,8 @@
 [![dev channel](https://img.shields.io/badge/dynamic/json?label=dev&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fdev.json&color=orange)](https://github.com/paulmooreparks/tela/releases/download/channels/dev.json)
 [![beta channel](https://img.shields.io/badge/dynamic/json?label=beta&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fbeta.json&color=yellow)](https://github.com/paulmooreparks/tela/releases/download/channels/beta.json)
 [![stable channel](https://img.shields.io/badge/dynamic/json?label=stable&query=%24.version&url=https%3A%2F%2Fgithub.com%2Fpaulmooreparks%2Ftela%2Freleases%2Fdownload%2Fchannels%2Fstable.json&color=brightgreen)](https://github.com/paulmooreparks/tela/releases/download/channels/stable.json)
+
+<img src="https://raw.githubusercontent.com/paulmooreparks/tela/main/logo.png" align="right" width="200" alt="Tela logo">
 
 Project home: **[telaproject.org](https://telaproject.org/)**. Landing page, download links, and version map.
 
