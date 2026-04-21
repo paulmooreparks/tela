@@ -129,11 +129,9 @@ type adminAddRequest struct {
 	Role string `json:"role,omitempty"` // "owner" | "admin" | "" (user)
 }
 
-type adminAddResponse struct {
-	ID    string `json:"id"`
-	Role  string `json:"role"`
-	Token string `json:"token"` // full token -- shown once
-}
+// adminAddToken returns an inline JSON map {id, role, token, version}
+// directly rather than a named struct; the token field is the full
+// secret value and is shown exactly once so the client can capture it.
 
 // ── handleAdminTokens dispatches GET (list) and POST (create).
 // Token deletion goes through DELETE /api/admin/access/{id}, which
@@ -235,15 +233,19 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
+	version := ensureAccessVersion(req.ID)
+
 	log.Printf("[hub] admin: added identity %q (role: %s)", req.ID, req.Role)
 
 	adminCorsHeaders(w, r)
+	setETag(w, version)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(adminAddResponse{
-		ID:    req.ID,
-		Role:  req.Role,
-		Token: token,
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":      req.ID,
+		"role":    req.Role,
+		"token":   token,
+		"version": version,
 	})
 }
 
@@ -286,6 +288,14 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
+	}
+
 	oldToken := entry.Token
 	newToken, err := generateToken()
 	if err != nil {
@@ -321,14 +331,18 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		go syncViewerTokenToPortals()
 	}
 
+	newVersion := bumpAccessVersion(id)
+
 	log.Printf("[hub] admin: rotated token for %q", id)
 
 	adminCorsHeaders(w, r)
+	setETag(w, newVersion)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"status": "rotated",
-		"id":     id,
-		"token":  newToken,
+		"status":  "rotated",
+		"id":      id,
+		"token":   newToken,
+		"version": newVersion,
 	})
 }
 
@@ -519,6 +533,10 @@ type accessEntry struct {
 	Role         string          `json:"role"`
 	TokenPreview string          `json:"tokenPreview"`
 	Machines     []machineAccess `json:"machines"`
+	// Version is the identity's current monotonic version counter. Clients
+	// echo it back as If-Match on mutating requests to detect drift. See
+	// internal/hub/access_version.go for lifecycle details.
+	Version uint64 `json:"version"`
 }
 
 type machineAccess struct {
@@ -611,6 +629,7 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 		Role:         role,
 		TokenPreview: preview,
 		Machines:     []machineAccess{},
+		Version:      ensureAccessVersion(t.ID),
 	}
 
 	// Owner/admin: implicit all-access
@@ -673,9 +692,11 @@ func adminGetAccess(w http.ResponseWriter, r *http.Request, id string) {
 
 	for _, t := range globalCfg.Auth.Tokens {
 		if t.ID == id {
+			entry := buildAccessEntry(t)
 			adminCorsHeaders(w, r)
+			setETag(w, entry.Version)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(buildAccessEntry(t))
+			json.NewEncoder(w).Encode(entry)
 			return
 		}
 	}
@@ -702,6 +723,16 @@ func adminPatchAccess(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
+	}
+
+	var resultID string
+	var resultVersion uint64
 	if patch.ID != id {
 		// Check for conflict
 		if findTokenEntryInCfg(patch.ID) != nil {
@@ -713,12 +744,23 @@ func adminPatchAccess(w http.ResponseWriter, r *http.Request, id string) {
 		if err := persistConfig(); err != nil {
 			log.Printf("[hub] admin: persist error: %v", err)
 		}
+		renameAccessVersion(oldID, patch.ID)
 		log.Printf("[hub] admin: renamed %q to %q", oldID, patch.ID)
+		resultID = patch.ID
+		resultVersion = currentAccessVersion(patch.ID)
+	} else {
+		resultID = id
+		resultVersion = bumpAccessVersion(id)
 	}
 
 	adminCorsHeaders(w, r)
+	setETag(w, resultVersion)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "updated", "id": patch.ID})
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":  "updated",
+		"id":      resultID,
+		"version": resultVersion,
+	})
 }
 
 func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
@@ -729,6 +771,14 @@ func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
 	if entry == nil {
 		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
 		return
+	}
+
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
 	}
 
 	token := entry.Token
@@ -755,6 +805,8 @@ func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
 	if err := persistConfig(); err != nil {
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
+
+	deleteAccessVersion(id)
 
 	log.Printf("[hub] admin: removed access entry %q", id)
 
@@ -785,6 +837,14 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 	if entry == nil {
 		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
 		return
+	}
+
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
 	}
 
 	if globalCfg.Auth.Machines == nil {
@@ -824,15 +884,19 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
+	newVersion := bumpAccessVersion(id)
+
 	log.Printf("[hub] admin: set %q permissions on %q to %v (services=%v)", id, machineID, req.Permissions, req.Services)
 
 	adminCorsHeaders(w, r)
+	setETag(w, newVersion)
 	w.Header().Set("Content-Type", "application/json")
 	resp := map[string]any{
 		"status":      "updated",
 		"id":          id,
 		"machineId":   machineID,
 		"permissions": req.Permissions,
+		"version":     newVersion,
 	}
 	if len(req.Services) > 0 {
 		resp["services"] = req.Services
@@ -848,6 +912,14 @@ func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machin
 	if entry == nil {
 		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
 		return
+	}
+
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
 	}
 
 	acl, exists := globalCfg.Auth.Machines[machineID]
@@ -868,11 +940,19 @@ func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machin
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
+	newVersion := bumpAccessVersion(id)
+
 	log.Printf("[hub] admin: revoked all %q permissions on %q", id, machineID)
 
 	adminCorsHeaders(w, r)
+	setETag(w, newVersion)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id, "machineId": machineID})
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":    "revoked",
+		"id":        id,
+		"machineId": machineID,
+		"version":   newVersion,
+	})
 }
 
 // removeToken returns a new slice with all occurrences of tok removed.
