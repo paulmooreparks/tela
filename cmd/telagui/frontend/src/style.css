@@ -2054,6 +2054,89 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   left: 0; right: 0; bottom: 0; height: 3px;
   background: var(--accent);
 }
+
+/* Access detail header: identity or machine name, status/meta, and
+   optional per-identity action cluster. Mirrors the mockup. */
+.access-detail-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 4px; gap: 16px; flex-wrap: wrap;
+}
+.access-detail-header h2 {
+  margin: 0; font-size: 20px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+.access-detail-meta {
+  font-size: 12px; color: var(--text-muted); margin-top: 6px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.access-detail-meta .status { margin-right: 4px; }
+.access-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.access-service-list { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+.access-token-preview {
+  color: var(--text-muted); font-size: 11px; font-family: var(--mono); margin-top: 4px;
+}
+
+/* Access matrix: identity x permission x service filter table. Used by
+   both By machine and By identity views; they swap the row identity
+   between "identity on this machine" and "machine for this identity". */
+.access-matrix { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+.access-matrix th {
+  text-align: left; padding: 10px 12px; font-weight: 600;
+  color: var(--text-muted); border-bottom: 1px solid var(--border);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.access-matrix th.access-col-check { width: 72px; text-align: center; }
+.access-matrix-row td {
+  padding: 14px 12px; border-bottom: 1px solid var(--border); vertical-align: top;
+}
+.access-matrix-row:hover:not(.access-matrix-row-implicit) { background: var(--surface-alt); }
+
+/* Implicit-role rows (owner, admin, viewer) are rendered at full
+   weight with disabled checkboxes so the operator can see the role's
+   effective access without being tempted to toggle it per-machine. */
+.access-matrix-row-implicit td { background: rgba(59,130,246,0.06); }
+.access-matrix-row-implicit .implicit-note {
+  font-size: 11px; color: var(--text-muted); margin-top: 2px;
+}
+
+.access-matrix-row-dirty {
+  background: rgba(243,156,18,0.08);
+  box-shadow: inset 3px 0 0 0 var(--warn);
+}
+.access-matrix-row-revoked { box-shadow: inset 3px 0 0 0 var(--danger); }
+.access-matrix-row-revoked .identity-name,
+.access-matrix-row-revoked .chip {
+  text-decoration: line-through; color: var(--text-muted);
+}
+.access-matrix-row-revoked .access-matrix-check input[type="checkbox"] { opacity: 0.3; }
+
+.access-matrix-row-offline { opacity: 0.65; }
+.access-matrix-row-wildcard { background: rgba(26,35,50,0.4); font-style: italic; }
+
+.access-matrix-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-style: normal; }
+.access-matrix-check { text-align: center; }
+.access-matrix-check input[type="checkbox"] {
+  accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+}
+.access-matrix-check input[type="checkbox"]:disabled { cursor: not-allowed; }
+.access-matrix-na { color: var(--text-muted); text-align: center; }
+.access-matrix-actions { text-align: left; white-space: nowrap; }
+.access-matrix-actions .btn + .btn { margin-left: 6px; }
+
+.services-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px; }
+.services-summary-muted { color: var(--text-muted); font-size: 12px; font-style: italic; }
+
+.dirty-indicator {
+  display: inline-block; margin-left: 6px;
+  color: var(--warn); font-size: 11px; font-weight: 600;
+}
+
+/* Conflict modal: reuses the TDL modal primitives, with a danger-tinted
+   title and a muted "force overwrite" escape hatch link in the body. */
+.access-conflict-title { color: var(--danger); display: flex; align-items: center; gap: 8px; }
+.access-conflict-title::before { content: '\26A0'; font-size: 16px; }
+
+
 .acl-perm-row {
   display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
   font-size: 13px;

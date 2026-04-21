@@ -6952,21 +6952,185 @@ function toWSURL(url) {
 // ── Access tab ───────────────────────────────────────────────────────
 //
 // Consolidated identity + ACL management, a peer of Hubs and Agents.
-// This is the shell only: hub selector, toolbar, sidebar, detail, and
-// view toggle. Data loading, matrix rendering, pending-change state,
-// and save/conflict handling land in subsequent commits.
+// Two projections of the same data:
+//   - By machine:  machine rail + identity matrix for the selected machine
+//   - By identity: identity rail + machine matrix for the selected identity
+//
+// Pending changes live in accessState.pending, keyed by "id|machineId".
+// Both views read and write the same pending set, so toggling between
+// views never loses staged work. Save fires per-identity PUTs in
+// parallel with If-Match; a 412 on any identity opens the conflict
+// modal listing the affected rows.
 
 var accessState = {
-  hub: '',         // currently selected hub name
-  view: 'by-machine', // 'by-machine' | 'by-identity'
+  hub: '',             // currently selected hub name
+  view: 'by-machine',  // 'by-machine' | 'by-identity'
+  loaded: false,
+  loadError: '',
+  entries: [],         // accessEntry[] from AdminListAccess (role, version, machines)
+  machines: [],        // MachineStatus[] from GetHubStatus (id, services, online)
+  capabilities: [],    // hub capabilities array (e.g. per-service-access-control)
+  selection: {
+    machineId: '',     // selected machine in by-machine view; "*" = wildcard
+    identityId: '',    // selected identity in by-identity view
+  },
+  pending: {},         // "id|machineId" -> pendingEntry
+  expanded: {},        // "id|machineId" -> bool, services-cell disclosure state
+  lastSaveConflict: null, // [{id, current: accessEntry}] populated on 412 save
 };
+
+// Pending entry shape:
+//   {
+//     id:         string     // identity ID
+//     machineId:  string     // target machine (or "*")
+//     baseline:  {permissions: [], services: []} // state loaded from server
+//     desired:   {permissions: [], services: []} // state after staged edits
+//     revoke:    bool                             // stage a DELETE on save
+//     version:   number                           // identity version at load
+//   }
+
+// accessPendingKey builds the pending-map key for an (id, machineId)
+// pair. Machine "*" is the wildcard ACL, stored the same way as any
+// specific machine.
+function accessPendingKey(id, machineId) { return id + '|' + machineId; }
+
+// accessEntryFor returns the accessEntry with the given id, or null.
+function accessEntryFor(id) {
+  for (var i = 0; i < accessState.entries.length; i++) {
+    if (accessState.entries[i].id === id) return accessState.entries[i];
+  }
+  return null;
+}
+
+// accessMachineFor returns the MachineStatus with the given id, or null.
+function accessMachineFor(machineId) {
+  for (var i = 0; i < accessState.machines.length; i++) {
+    if (accessState.machines[i].id === machineId) return accessState.machines[i];
+  }
+  return null;
+}
+
+// accessBaselineFor returns the {permissions, services} grant an
+// identity has on a machine according to the server's view (no pending
+// changes applied). An absent grant yields empty arrays.
+function accessBaselineFor(id, machineId) {
+  var entry = accessEntryFor(id);
+  if (!entry) return { permissions: [], services: [] };
+  for (var i = 0; i < (entry.machines || []).length; i++) {
+    var m = entry.machines[i];
+    if (m.machineId === machineId) {
+      return {
+        permissions: (m.permissions || []).slice(),
+        services: (m.services || []).slice(),
+      };
+    }
+  }
+  return { permissions: [], services: [] };
+}
+
+// accessEffectiveGrant returns the grant that should be rendered for
+// (id, machineId): the pending desired state if a pending entry exists,
+// otherwise the baseline. Revoke-staged rows return empty permissions
+// but retain the baseline's services so the operator can see what is
+// about to be removed.
+function accessEffectiveGrant(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  var p = accessState.pending[key];
+  if (!p) return accessBaselineFor(id, machineId);
+  if (p.revoke) return { permissions: [], services: p.baseline.services.slice() };
+  return { permissions: p.desired.permissions.slice(), services: p.desired.services.slice() };
+}
+
+function accessIsPending(id, machineId) {
+  return !!accessState.pending[accessPendingKey(id, machineId)];
+}
+
+function accessIsRevoked(id, machineId) {
+  var p = accessState.pending[accessPendingKey(id, machineId)];
+  return !!(p && p.revoke);
+}
+
+// accessArraysEqual compares two string arrays as sets (order-insensitive).
+function accessArraysEqual(a, b) {
+  if ((a || []).length !== (b || []).length) return false;
+  var s = {};
+  for (var i = 0; i < a.length; i++) s[a[i]] = true;
+  for (var j = 0; j < b.length; j++) if (!s[b[j]]) return false;
+  return true;
+}
+
+// accessPendingMatchesBaseline returns true if a pending entry's
+// desired state equals its baseline (i.e. the row is no longer dirty
+// and the entry can be removed).
+function accessPendingMatchesBaseline(p) {
+  if (!p) return true;
+  if (p.revoke) return false; // revoke is always a change
+  return accessArraysEqual(p.desired.permissions, p.baseline.permissions) &&
+         accessArraysEqual(p.desired.services, p.baseline.services);
+}
+
+function accessIdentityDirty(id) {
+  for (var k in accessState.pending) {
+    if (Object.prototype.hasOwnProperty.call(accessState.pending, k)) {
+      if (accessState.pending[k].id === id) return true;
+    }
+  }
+  return false;
+}
+
+function accessMachineDirty(machineId) {
+  for (var k in accessState.pending) {
+    if (Object.prototype.hasOwnProperty.call(accessState.pending, k)) {
+      if (accessState.pending[k].machineId === machineId) return true;
+    }
+  }
+  return false;
+}
+
+function accessAnyDirty() {
+  for (var k in accessState.pending) {
+    if (Object.prototype.hasOwnProperty.call(accessState.pending, k)) return true;
+  }
+  return false;
+}
+
+// accessEnsurePending returns the pending entry for (id, machineId),
+// creating one seeded from the baseline if none exists.
+function accessEnsurePending(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  if (accessState.pending[key]) return accessState.pending[key];
+  var baseline = accessBaselineFor(id, machineId);
+  var entry = accessEntryFor(id);
+  accessState.pending[key] = {
+    id: id,
+    machineId: machineId,
+    baseline: baseline,
+    desired: {
+      permissions: baseline.permissions.slice(),
+      services: baseline.services.slice(),
+    },
+    revoke: false,
+    version: entry ? (entry.version || 0) : 0,
+  };
+  return accessState.pending[key];
+}
+
+// accessDropPending removes the entry for (id, machineId) when it has
+// converged back to the baseline, so the row stops rendering dirty.
+function accessDropIfClean(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  var p = accessState.pending[key];
+  if (p && accessPendingMatchesBaseline(p)) {
+    delete accessState.pending[key];
+  }
+}
+
+// ── Data loading ───────────────────────────────────────────────────
 
 function refreshAccessTab() {
   var select = document.getElementById('access-hub-select');
   if (!select) return;
 
-  // Restore last-selected view from settings (persists across sessions).
-  // Falls back to the in-session value if settings fail or are absent.
   Promise.all([goApp.GetKnownHubs(), goApp.GetSettings()]).then(function (results) {
     var hubs = (results[0] || []).slice();
     hubs.sort(function (a, b) {
@@ -6987,6 +7151,7 @@ function refreshAccessTab() {
     if (hubs.length === 0) {
       select.innerHTML = '<option value="">No hubs configured</option>';
       accessState.hub = '';
+      accessState.loaded = false;
       renderAccessEmpty('Add a hub to manage access.');
       return;
     }
@@ -7005,33 +7170,123 @@ function refreshAccessTab() {
       accessState.view = settings.lastAccessView;
     }
     accessApplyViewToggle();
-    renderAccessPane();
+    accessLoadData();
   });
 }
 
 function onAccessHubChange() {
   var select = document.getElementById('access-hub-select');
-  accessState.hub = select ? select.value : '';
-  // Persist the hub choice as the application-wide "last hub" so the
-  // Hubs tab and the Access tab stay in sync when the operator jumps
-  // between them.
+  var newHub = select ? select.value : '';
+  if (accessAnyDirty()) {
+    // Switching hubs abandons pending changes on the old hub; warn the
+    // operator before dropping their work.
+    showConfirmDialog(
+      'Discard staged changes?',
+      'You have unsaved access changes on ' + accessState.hub + '. Switching hubs discards them.',
+      'Discard'
+    ).then(function (yes) {
+      if (!yes) {
+        // Restore the dropdown to the previous hub.
+        if (select) select.value = accessState.hub;
+        return;
+      }
+      accessState.hub = newHub;
+      accessState.pending = {};
+      if (newHub) goApp.SaveLastSelectedHub(newHub).catch(function () { /* best effort */ });
+      accessLoadData();
+    });
+    return;
+  }
+  accessState.hub = newHub;
+  accessState.pending = {};
   if (accessState.hub) {
     goApp.SaveLastSelectedHub(accessState.hub).catch(function () { /* best effort */ });
   }
-  renderAccessPane();
+  accessLoadData();
 }
+
+// accessLoadData fetches identities + machines + capabilities for the
+// selected hub and re-renders. Pending changes are cleared on a fresh
+// load; callers that want to preserve pending state should not call
+// this (use incremental updates instead).
+function accessLoadData() {
+  if (!accessState.hub) {
+    accessState.loaded = false;
+    renderAccessEmpty('Select a hub to view access.');
+    return;
+  }
+  var hub = accessState.hub;
+  accessState.loaded = false;
+  accessState.loadError = '';
+  accessState.pending = {};
+  accessState.lastSaveConflict = null;
+  renderAccessLoading();
+
+  Promise.all([
+    goApp.AdminListAccess(hub),
+    goApp.GetHubStatus(hub),
+    goApp.HubCapabilities(hub),
+  ]).then(function (results) {
+    if (accessState.hub !== hub) return; // raced with another hub switch
+    var access = {};
+    try { access = JSON.parse(results[0] || '{}'); } catch (e) { access = { error: 'invalid response' }; }
+    if (access.error) {
+      accessState.loaded = false;
+      accessState.loadError = access.error;
+      renderAccessError('Could not load access for ' + hub + ': ' + access.error);
+      return;
+    }
+    var status = results[1] || {};
+    var caps = {};
+    try { caps = JSON.parse(results[2] || '{}'); } catch (e) { caps = {}; }
+
+    accessState.entries = access.access || [];
+    accessState.machines = status.machines || [];
+    accessState.capabilities = caps.capabilities || [];
+    accessState.loaded = true;
+    hubCapabilitiesCache[hub] = accessState.capabilities;
+
+    // Resolve selection against the freshly loaded data. If the
+    // previously selected machine or identity no longer exists (it was
+    // deleted out-of-band), fall back to the first available entry of
+    // the relevant kind so the detail pane is never stranded.
+    if (accessState.view === 'by-machine') {
+      if (!accessMachineFor(accessState.selection.machineId) &&
+          accessState.selection.machineId !== '*') {
+        accessState.selection.machineId = accessState.machines.length ? accessState.machines[0].id : '*';
+      }
+    } else {
+      if (!accessEntryFor(accessState.selection.identityId)) {
+        accessState.selection.identityId = accessState.entries.length ? accessState.entries[0].id : '';
+      }
+    }
+    accessUpdateToolbar();
+    renderAccessPane();
+  });
+}
+
+// ── Selection + toolbar state ─────────────────────────────────────
 
 function accessSetView(view) {
   if (view !== 'by-machine' && view !== 'by-identity') return;
   if (accessState.view === view) return;
   accessState.view = view;
   accessApplyViewToggle();
-  // Persist the choice so it survives app restarts.
   goApp.GetSettings().then(function (s) {
     s = s || {};
     s.lastAccessView = view;
     goApp.SaveSettings(JSON.stringify(s));
   }).catch(function () { /* best effort */ });
+  // Populate a default selection for the new view so the detail pane
+  // shows something useful straight away.
+  if (accessState.loaded) {
+    if (view === 'by-machine' && !accessState.selection.machineId) {
+      accessState.selection.machineId = accessState.machines.length ? accessState.machines[0].id : '*';
+    }
+    if (view === 'by-identity' && !accessState.selection.identityId) {
+      accessState.selection.identityId = accessState.entries.length ? accessState.entries[0].id : '';
+    }
+  }
   renderAccessPane();
 }
 
@@ -7050,26 +7305,58 @@ function accessApplyViewToggle() {
   }
 }
 
+// accessUpdateToolbar enables/disables Undo and Save based on the
+// pending set.
+function accessUpdateToolbar() {
+  var dirty = accessAnyDirty();
+  var undo = document.getElementById('access-undo-btn');
+  var save = document.getElementById('access-save-btn');
+  if (undo) undo.disabled = !dirty;
+  if (save) save.disabled = !dirty;
+}
+
+function accessSelectMachine(machineId) {
+  accessState.selection.machineId = machineId;
+  renderAccessPane();
+}
+
+function accessSelectIdentity(id) {
+  accessState.selection.identityId = id;
+  renderAccessPane();
+}
+
+// ── Rendering ─────────────────────────────────────────────────────
+
 function renderAccessPane() {
   if (!accessState.hub) {
     renderAccessEmpty('Select a hub to view access.');
     return;
   }
-  // Data loading + matrix rendering lands in a subsequent commit. For
-  // now, the sidebar shows a placeholder so the layout is testable.
+  if (!accessState.loaded) {
+    if (accessState.loadError) {
+      renderAccessError(accessState.loadError);
+    } else {
+      renderAccessLoading();
+    }
+    return;
+  }
+  renderAccessSidebar();
+  renderAccessDetail();
+  accessUpdateToolbar();
+}
+
+function renderAccessLoading() {
   var list = document.getElementById('access-sidebar-list');
   var detail = document.getElementById('access-detail');
-  if (list) {
-    list.innerHTML = '<p class="empty-hint">Loading ' +
-      (accessState.view === 'by-identity' ? 'identities' : 'machines') +
-      ' for <strong>' + escHtml(accessState.hub) + '</strong>&hellip;</p>';
-  }
-  if (detail) {
-    detail.innerHTML = '<div class="access-detail-empty">' +
-      (accessState.view === 'by-identity' ? 'Select an identity to view access.'
-                                          : 'Select a machine to view access.') +
-      '</div>';
-  }
+  if (list) list.innerHTML = '<p class="empty-hint">Loading access for <strong>' + escHtml(accessState.hub) + '</strong>&hellip;</p>';
+  if (detail) detail.innerHTML = '<div class="access-detail-empty">Loading&hellip;</div>';
+}
+
+function renderAccessError(msg) {
+  var list = document.getElementById('access-sidebar-list');
+  var detail = document.getElementById('access-detail');
+  if (list) list.innerHTML = '<p class="empty-hint">' + escHtml(msg) + '</p>';
+  if (detail) detail.innerHTML = '<div class="access-detail-empty">' + escHtml(msg) + '</div>';
 }
 
 function renderAccessEmpty(msg) {
@@ -7077,6 +7364,590 @@ function renderAccessEmpty(msg) {
   var detail = document.getElementById('access-detail');
   if (list) list.innerHTML = '<p class="empty-hint">' + escHtml(msg) + '</p>';
   if (detail) detail.innerHTML = '<div class="access-detail-empty">' + escHtml(msg) + '</div>';
+}
+
+function renderAccessSidebar() {
+  var list = document.getElementById('access-sidebar-list');
+  if (!list) return;
+  if (accessState.view === 'by-machine') {
+    renderAccessSidebarMachines(list);
+  } else {
+    renderAccessSidebarIdentities(list);
+  }
+}
+
+function renderAccessSidebarMachines(list) {
+  var machines = accessState.machines.slice();
+  machines.sort(function (a, b) { return (a.id || '').localeCompare(b.id || ''); });
+  var html = '';
+  machines.forEach(function (m) {
+    var isActive = (m.id === accessState.selection.machineId);
+    var dirty = accessMachineDirty(m.id);
+    var statusClass = m.agentConnected ? 'dot-online' : 'dot-offline';
+    var statusLabel = m.agentConnected ? 'Online' : 'Offline';
+    html += '<div class="access-sidebar-item' + (isActive ? ' active' : '') +
+      '" onclick="accessSelectMachine(\'' + escAttr(m.id) + '\')">'
+      + '<div class="access-sidebar-primary">'
+      + '<span class="dot ' + statusClass + '" title="' + statusLabel + '"></span>'
+      + escHtml(m.id)
+      + (dirty ? '<span class="access-sidebar-dirty">&bull; unsaved</span>' : '')
+      + '</div>'
+      + '<div class="access-sidebar-secondary">'
+      + ((m.services || []).length + ' service' + ((m.services || []).length === 1 ? '' : 's'))
+      + '</div>'
+      + '</div>';
+  });
+  // Wildcard entry: ACL that applies to any machine not listed.
+  var wildDirty = accessMachineDirty('*');
+  html += '<div class="access-sidebar-item' + (accessState.selection.machineId === '*' ? ' active' : '') +
+    '" onclick="accessSelectMachine(\'*\')">'
+    + '<div class="access-sidebar-primary">'
+    + '<span class="chip">Wildcard</span> all machines'
+    + (wildDirty ? '<span class="access-sidebar-dirty">&bull; unsaved</span>' : '')
+    + '</div>'
+    + '<div class="access-sidebar-secondary">Fallback rule</div>'
+    + '</div>';
+  list.innerHTML = html || '<p class="empty-hint">No machines registered.</p>';
+}
+
+function renderAccessSidebarIdentities(list) {
+  var entries = accessState.entries.slice();
+  entries.sort(function (a, b) {
+    // Sort implicit roles (owner/admin/viewer) before user so operators
+    // see the built-in identities first. Then by id within role group.
+    var roleOrder = { owner: 0, admin: 1, viewer: 2, user: 3 };
+    var ra = roleOrder[a.role] != null ? roleOrder[a.role] : 4;
+    var rb = roleOrder[b.role] != null ? roleOrder[b.role] : 4;
+    if (ra !== rb) return ra - rb;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+  var html = '';
+  entries.forEach(function (e) {
+    var isActive = (e.id === accessState.selection.identityId);
+    var dirty = accessIdentityDirty(e.id);
+    var roleLabel = formatRole(e.role);
+    var summary = accessIdentitySummary(e);
+    html += '<div class="access-sidebar-item' + (isActive ? ' active' : '') +
+      '" onclick="accessSelectIdentity(\'' + escAttr(e.id) + '\')">'
+      + '<div class="access-sidebar-primary">'
+      + escHtml(e.id)
+      + ' <span class="chip">' + escHtml(roleLabel) + '</span>'
+      + (dirty ? '<span class="access-sidebar-dirty">&bull; unsaved</span>' : '')
+      + '</div>'
+      + '<div class="access-sidebar-secondary">' + escHtml(summary) + '</div>'
+      + '</div>';
+  });
+  list.innerHTML = html || '<p class="empty-hint">No identities on this hub.</p>';
+}
+
+// accessIdentitySummary produces the secondary-line text in the
+// by-identity rail: a short description of what the identity can do.
+function accessIdentitySummary(e) {
+  if (e.role === 'owner' || e.role === 'admin') return 'All machines (implicit)';
+  if (e.role === 'viewer') return 'Read-only console';
+  var n = (e.machines || []).length;
+  if (n === 0) return 'No grants';
+  return n + ' machine' + (n === 1 ? '' : 's');
+}
+
+function renderAccessDetail() {
+  var detail = document.getElementById('access-detail');
+  if (!detail) return;
+  if (accessState.view === 'by-machine') {
+    renderAccessDetailByMachine(detail);
+  } else {
+    renderAccessDetailByIdentity(detail);
+  }
+}
+
+// ── By-machine detail ─────────────────────────────────────────────
+
+function renderAccessDetailByMachine(pane) {
+  var machineId = accessState.selection.machineId;
+  if (!machineId) {
+    pane.innerHTML = '<div class="access-detail-empty">Select a machine to view access.</div>';
+    return;
+  }
+  var m = accessMachineFor(machineId);
+  var isWildcard = (machineId === '*');
+  var title = isWildcard ? '* (all machines)' : machineId;
+
+  var html = '<header class="access-detail-header">';
+  html += '<div><h2>' + escHtml(title) + '</h2>';
+  if (isWildcard) {
+    html += '<div class="access-detail-meta">Wildcard fallback. Applies to any machine not listed above.</div>';
+  } else if (m) {
+    var statusBadge = m.agentConnected
+      ? '<span class="status status-online"><span class="status-dot"></span>Online</span>'
+      : '<span class="status status-offline"><span class="status-dot"></span>Offline</span>';
+    html += '<div class="access-detail-meta">' + statusBadge;
+    if (m.os) html += ' &middot; <span>' + escHtml(m.os) + '</span>';
+    html += '</div>';
+    if ((m.services || []).length > 0) {
+      html += '<div class="access-service-list">';
+      m.services.forEach(function (svc) {
+        var name = svc.name || ('port-' + svc.port);
+        html += '<span class="chip">' + escHtml(name + ' · ' + svc.port) + '</span>';
+      });
+      html += '</div>';
+    }
+  } else {
+    html += '<div class="access-detail-meta">Unknown machine.</div>';
+  }
+  html += '</div></header>';
+
+  html += '<p class="hint">Every identity on this hub. Toggle permissions to stage changes; press <strong>Save</strong> in the toolbar to commit. Owner and admin roles have implicit all-access; their checkboxes are locked.</p>';
+
+  html += '<table class="access-matrix"><thead><tr>'
+    + '<th>Identity</th>'
+    + '<th class="access-col-check">Connect</th>'
+    + '<th class="access-col-check">Register</th>'
+    + '<th class="access-col-check">Manage</th>'
+    + '<th>Connect services</th>'
+    + '<th class="access-matrix-actions">Actions</th>'
+    + '</tr></thead><tbody>';
+
+  // Implicit-role rows first: owner, admin(s), viewer(s). Full weight,
+  // disabled checkboxes; no revoke (role is the source of truth, not
+  // the per-machine ACL).
+  var entries = accessState.entries.slice();
+  entries.sort(function (a, b) {
+    var roleOrder = { owner: 0, admin: 1, viewer: 2, user: 3 };
+    var ra = roleOrder[a.role] != null ? roleOrder[a.role] : 4;
+    var rb = roleOrder[b.role] != null ? roleOrder[b.role] : 4;
+    if (ra !== rb) return ra - rb;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+  entries.forEach(function (e) {
+    if (e.role === 'owner' || e.role === 'admin' || e.role === 'viewer') {
+      html += renderAccessMatrixRow_Implicit(e, machineId, isWildcard);
+    }
+  });
+  // Explicit (user) rows: interactive.
+  entries.forEach(function (e) {
+    if (e.role === 'owner' || e.role === 'admin' || e.role === 'viewer') return;
+    html += renderAccessMatrixRow_Explicit(e, machineId, isWildcard);
+  });
+
+  html += '</tbody></table>';
+  pane.innerHTML = html;
+}
+
+function renderAccessMatrixRow_Implicit(e, machineId, isWildcard) {
+  var roleLabel = formatRole(e.role);
+  var allChecked = (e.role === 'owner' || e.role === 'admin');
+  var checkConnect = allChecked ? 'checked' : '';
+  var checkRegister = allChecked ? 'checked' : '';
+  var checkManage = allChecked ? 'checked' : '';
+  var note;
+  if (e.role === 'owner') {
+    note = 'Implicit all-access &middot; cannot be filtered or revoked';
+  } else if (e.role === 'admin') {
+    note = 'Implicit all-access';
+  } else {
+    note = 'Read-only console access (no connect)';
+  }
+  var services = allChecked ? '<span class="services-summary-muted">All services</span>'
+                           : '<span class="services-summary-muted">&mdash;</span>';
+  return '<tr class="access-matrix-row access-matrix-row-implicit">'
+    + '<td><strong>' + escHtml(e.id) + '</strong> <span class="chip">' + escHtml(roleLabel) + '</span>'
+    +   '<div class="implicit-note">' + note + '</div></td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + checkConnect + ' disabled></td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + checkRegister + ' disabled></td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + checkManage + ' disabled></td>'
+    + '<td>' + services + '</td>'
+    + '<td class="access-matrix-actions"></td>'
+    + '</tr>';
+}
+
+function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
+  var grant = accessEffectiveGrant(e.id, machineId);
+  var pending = accessIsPending(e.id, machineId);
+  var revoked = accessIsRevoked(e.id, machineId);
+  var rowClass = 'access-matrix-row';
+  if (revoked) rowClass += ' access-matrix-row-revoked';
+  else if (pending) rowClass += ' access-matrix-row-dirty';
+
+  var perms = grant.permissions;
+  var hasConnect = perms.indexOf('connect') !== -1;
+  var hasRegister = perms.indexOf('register') !== -1;
+  var hasManage = perms.indexOf('manage') !== -1;
+  // Register is not meaningful on the wildcard row; hubs never register
+  // against "*". Render a muted em-dash instead of a checkbox.
+  var registerCell = isWildcard
+    ? '<td class="access-matrix-na">&mdash;</td>'
+    : '<td class="access-matrix-check"><input type="checkbox" ' + (hasRegister ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\',\'register\',this.checked)"></td>';
+
+  var dirtyInd = '';
+  if (revoked) dirtyInd = '<span class="dirty-indicator">&bull; will be revoked</span>';
+  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; unsaved</span>';
+
+  var actions;
+  if (revoked) {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessUndoRevokeRow(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\')">Undo</button>';
+  } else {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessEditServices(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\')">Edit&hellip;</button>'
+      + '<button type="button" class="btn btn-sm btn-danger" onclick="accessStageRevoke(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\')">Revoke</button>';
+  }
+
+  return '<tr class="' + rowClass + '">'
+    + '<td><strong class="identity-name">' + escHtml(e.id) + '</strong> <span class="chip">' + escHtml(formatRole(e.role)) + '</span>' + dirtyInd + '</td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasConnect ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\',\'connect\',this.checked)"></td>'
+    + registerCell
+    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasManage ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\',\'manage\',this.checked)"></td>'
+    + '<td>' + renderAccessServicesCell(e.id, machineId, grant) + '</td>'
+    + '<td class="access-matrix-actions">' + actions + '</td>'
+    + '</tr>';
+}
+
+// renderAccessServicesCell renders the Connect services column for an
+// explicit row. An unfiltered grant shows "All services" in muted
+// italics; a filtered grant lists the chip cloud. The per-row edit
+// button in the actions column is the entry point for modifying the
+// filter; the cell itself is read-only.
+function renderAccessServicesCell(id, machineId, grant) {
+  if ((grant.permissions || []).indexOf('connect') === -1) {
+    return '<span class="services-summary-muted">&mdash;</span>';
+  }
+  var services = grant.services || [];
+  if (services.length === 0) {
+    return '<span class="services-summary-muted">All services</span>';
+  }
+  var html = '<div class="services-chips">';
+  services.forEach(function (svc) {
+    html += '<span class="chip">' + escHtml(svc) + '</span>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// ── By-identity detail ────────────────────────────────────────────
+
+function renderAccessDetailByIdentity(pane) {
+  var id = accessState.selection.identityId;
+  if (!id) {
+    pane.innerHTML = '<div class="access-detail-empty">Select an identity to view access.</div>';
+    return;
+  }
+  var entry = accessEntryFor(id);
+  if (!entry) {
+    pane.innerHTML = '<div class="access-detail-empty">Identity ' + escHtml(id) + ' not found.</div>';
+    return;
+  }
+  var html = '<header class="access-detail-header">';
+  html += '<div><h2>' + escHtml(entry.id) + ' <span class="chip">' + escHtml(formatRole(entry.role)) + '</span></h2>';
+  html += '<div class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</div>';
+  html += '</div>';
+  html += '<div class="access-detail-actions">'
+    + '<button type="button" class="btn btn-sm" onclick="accessRenameIdentity(\'' + escAttr(entry.id) + '\')">Rename</button>'
+    + '<button type="button" class="btn btn-sm" onclick="accessChangeRole(\'' + escAttr(entry.id) + '\')">Change role&hellip;</button>'
+    + '<button type="button" class="btn btn-sm" onclick="accessRotateIdentityToken(\'' + escAttr(entry.id) + '\')">Rotate token</button>';
+  if (entry.role !== 'owner') {
+    html += '<button type="button" class="btn btn-sm btn-danger" onclick="accessDeleteIdentity(\'' + escAttr(entry.id) + '\')">Delete identity</button>';
+  }
+  html += '</div></header>';
+
+  if (entry.role === 'owner' || entry.role === 'admin') {
+    html += '<p class="hint">Implicit all-access. ' + escHtml(formatRole(entry.role)) +
+      ' tokens can register, connect, and manage every machine on this hub without per-machine ACL entries. Demote to User in Change role to restrict.</p>';
+    pane.innerHTML = html;
+    return;
+  }
+  if (entry.role === 'viewer') {
+    html += '<p class="hint">Read-only console access. Viewer tokens see the built-in hub console; they cannot open sessions or manage agents.</p>';
+    pane.innerHTML = html;
+    return;
+  }
+
+  html += '<p class="hint">Per-machine permissions for this identity. Toggle to stage changes; press <strong>Save</strong> in the toolbar to commit.</p>';
+
+  html += '<table class="access-matrix"><thead><tr>'
+    + '<th>Machine</th>'
+    + '<th class="access-col-check">Connect</th>'
+    + '<th class="access-col-check">Register</th>'
+    + '<th class="access-col-check">Manage</th>'
+    + '<th>Connect services</th>'
+    + '<th class="access-matrix-actions">Actions</th>'
+    + '</tr></thead><tbody>';
+
+  // Render a row for every known machine plus a wildcard fallback. The
+  // operator can grant from here even if the identity has no existing
+  // grant on that machine.
+  var machines = accessState.machines.slice();
+  machines.sort(function (a, b) { return (a.id || '').localeCompare(b.id || ''); });
+  machines.forEach(function (m) {
+    html += renderAccessMatrixRow_ByIdentity(entry, m, false);
+  });
+  html += renderAccessMatrixRow_ByIdentity(entry, { id: '*' }, true);
+
+  html += '</tbody></table>';
+  pane.innerHTML = html;
+}
+
+function renderAccessMatrixRow_ByIdentity(entry, m, isWildcard) {
+  var machineId = m.id;
+  var grant = accessEffectiveGrant(entry.id, machineId);
+  var pending = accessIsPending(entry.id, machineId);
+  var revoked = accessIsRevoked(entry.id, machineId);
+  var rowClass = 'access-matrix-row';
+  if (revoked) rowClass += ' access-matrix-row-revoked';
+  else if (pending) rowClass += ' access-matrix-row-dirty';
+  if (!isWildcard && m.agentConnected === false) rowClass += ' access-matrix-row-offline';
+  if (isWildcard) rowClass += ' access-matrix-row-wildcard';
+
+  var perms = grant.permissions;
+  var hasConnect = perms.indexOf('connect') !== -1;
+  var hasRegister = perms.indexOf('register') !== -1;
+  var hasManage = perms.indexOf('manage') !== -1;
+
+  var registerCell = isWildcard
+    ? '<td class="access-matrix-na">&mdash;</td>'
+    : '<td class="access-matrix-check"><input type="checkbox" ' + (hasRegister ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\',\'register\',this.checked)"></td>';
+
+  var dirtyInd = '';
+  if (revoked) dirtyInd = '<span class="dirty-indicator">&bull; will be revoked</span>';
+  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; unsaved</span>';
+
+  var meta;
+  if (isWildcard) {
+    meta = '<div class="access-matrix-meta">Applies to any machine not listed</div>';
+  } else {
+    var svcCount = (m.services || []).length;
+    var statusBadge = m.agentConnected
+      ? '<span class="status status-online"><span class="status-dot"></span>Online</span>'
+      : '<span class="status status-offline"><span class="status-dot"></span>Offline</span>';
+    meta = '<div class="access-matrix-meta">' + statusBadge + ' &middot; ' +
+      svcCount + ' service' + (svcCount === 1 ? '' : 's') + '</div>';
+  }
+
+  var label = isWildcard ? '<strong>* (all machines)</strong>' : '<strong>' + escHtml(machineId) + '</strong>';
+
+  var actions;
+  if (revoked) {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessUndoRevokeRow(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\')">Undo</button>';
+  } else if (perms.length === 0 && !pending) {
+    // No grant yet; Revoke is meaningless. Edit... still makes sense
+    // once the connect box is ticked, but before that it's not useful.
+    actions = '';
+  } else {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessEditServices(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\')">Edit&hellip;</button>'
+      + '<button type="button" class="btn btn-sm btn-danger" onclick="accessStageRevoke(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\')">Revoke</button>';
+  }
+
+  return '<tr class="' + rowClass + '">'
+    + '<td>' + label + meta + dirtyInd + '</td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasConnect ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\',\'connect\',this.checked)"></td>'
+    + registerCell
+    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasManage ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\',\'manage\',this.checked)"></td>'
+    + '<td>' + renderAccessServicesCell(entry.id, machineId, grant) + '</td>'
+    + '<td class="access-matrix-actions">' + actions + '</td>'
+    + '</tr>';
+}
+
+// ── Interaction handlers ──────────────────────────────────────────
+
+function accessToggleCheck(id, machineId, perm, checked) {
+  var p = accessEnsurePending(id, machineId);
+  if (p.revoke) {
+    // Toggling a checkbox on a revoke-staged row clears the revoke and
+    // treats the click as a normal edit on top of the baseline.
+    p.revoke = false;
+  }
+  var perms = p.desired.permissions.slice();
+  var idx = perms.indexOf(perm);
+  if (checked && idx === -1) perms.push(perm);
+  if (!checked && idx !== -1) perms.splice(idx, 1);
+  p.desired.permissions = perms;
+  // Services filter only makes sense when connect is granted. Clear
+  // it when connect is removed so we don't send a stale filter on
+  // save; the server ignores services without connect anyway but the
+  // UI would still render chips, which is confusing.
+  if (perms.indexOf('connect') === -1) {
+    p.desired.services = [];
+  }
+  accessDropIfClean(id, machineId);
+  renderAccessPane();
+}
+
+function accessStageRevoke(id, machineId) {
+  var baseline = accessBaselineFor(id, machineId);
+  if ((baseline.permissions || []).length === 0 && !accessIsPending(id, machineId)) {
+    // Nothing to revoke.
+    return;
+  }
+  var p = accessEnsurePending(id, machineId);
+  p.revoke = true;
+  p.desired.permissions = [];
+  p.desired.services = [];
+  renderAccessPane();
+}
+
+function accessUndoRevokeRow(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  var p = accessState.pending[key];
+  if (!p) return;
+  p.revoke = false;
+  p.desired.permissions = p.baseline.permissions.slice();
+  p.desired.services = p.baseline.services.slice();
+  accessDropIfClean(id, machineId);
+  renderAccessPane();
+}
+
+function accessUndo() {
+  // Simple global undo: drop every pending change. A per-row stack
+  // would be nicer but this matches Profiles / Agents' Undo semantics
+  // (the whole pending batch is rolled back).
+  accessState.pending = {};
+  renderAccessPane();
+}
+
+// ── Save ──────────────────────────────────────────────────────────
+
+function accessSave() {
+  var pending = accessState.pending;
+  var keys = [];
+  for (var k in pending) {
+    if (Object.prototype.hasOwnProperty.call(pending, k)) keys.push(k);
+  }
+  if (keys.length === 0) return;
+
+  var hub = accessState.hub;
+  var saveBtn = document.getElementById('access-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
+
+  var promises = keys.map(function (k) {
+    var p = pending[k];
+    var ifMatch = p.version > 0 ? String(p.version) : '';
+    if (p.revoke) {
+      return goApp.AdminRevokeMachineAccess(hub, p.id, p.machineId, ifMatch).then(function (raw) {
+        return { key: k, pending: p, result: parseJSON(raw) };
+      });
+    }
+    var perms = p.desired.permissions.join(',');
+    var services = p.desired.services.join(',');
+    return goApp.AdminSetMachineAccess(hub, p.id, p.machineId, perms, services, ifMatch).then(function (raw) {
+      return { key: k, pending: p, result: parseJSON(raw) };
+    });
+  });
+
+  Promise.all(promises).then(function (results) {
+    if (accessState.hub !== hub) return; // user switched hubs mid-save
+    var conflicts = [];
+    var errors = [];
+    results.forEach(function (r) {
+      if (r.result.conflict) {
+        conflicts.push({ key: r.key, pending: r.pending, current: r.result.current, version: r.result.version });
+      } else if (r.result.error) {
+        errors.push({ key: r.key, pending: r.pending, message: r.result.error });
+      }
+    });
+
+    if (errors.length > 0 && conflicts.length === 0) {
+      // No conflicts, just other errors: show them and keep pending
+      // state so the operator can retry.
+      var msg = errors.map(function (e) { return e.pending.id + '/' + e.pending.machineId + ': ' + e.message; }).join('\n');
+      showError('Save failed:\n' + msg);
+      accessLoadData(); // reload so successful writes are reflected
+      return;
+    }
+
+    if (conflicts.length > 0) {
+      accessState.lastSaveConflict = conflicts;
+      openAccessConflictModal(conflicts);
+      return;
+    }
+
+    // All writes succeeded: clear pending and reload from server so
+    // the new versions and any server-side derived changes (e.g.,
+    // normalized service names) show up.
+    accessState.pending = {};
+    accessLoadData();
+  }).catch(function (err) {
+    showError('Save failed: ' + (err && err.message ? err.message : err));
+    accessUpdateToolbar();
+  });
+}
+
+function parseJSON(raw) {
+  try { return JSON.parse(raw || '{}'); } catch (e) { return { error: 'invalid server response' }; }
+}
+
+// ── Conflict modal ────────────────────────────────────────────────
+
+function openAccessConflictModal(conflicts) {
+  var listHtml = '';
+  conflicts.forEach(function (c) {
+    listHtml += '<li><strong>' + escHtml(c.pending.id) + '</strong> on <strong>' + escHtml(c.pending.machineId) + '</strong></li>';
+  });
+  var html = '<div class="modal-overlay" id="access-conflict-modal" role="dialog" aria-modal="true" aria-labelledby="access-conflict-title">'
+    + '<div class="modal-dialog"><div class="modal-header">'
+    + '<h3 id="access-conflict-title" class="access-conflict-title">Server state changed</h3>'
+    + '<button type="button" class="modal-close" onclick="closeAccessConflictModal()" aria-label="Close">&times;</button>'
+    + '</div><div class="modal-body">'
+    + '<p>Another operator modified access on <strong>' + escHtml(accessState.hub) + '</strong> since you loaded this view. The following rows were affected:</p>'
+    + '<ul>' + listHtml + '</ul>'
+    + '<p>Reload to see the current server state, then re-apply your staged changes.</p>'
+    + '<p>If you prefer to commit your batch as-is and overwrite the other operator\'s edits on those rows, you can <button type="button" class="link" onclick="accessForceOverwriteConflicts()">force overwrite instead</button>. That path requires a second confirmation.</p>'
+    + '</div><div class="modal-actions">'
+    + '<button type="button" class="btn" onclick="closeAccessConflictModal()">Cancel</button>'
+    + '<button type="button" class="btn btn-primary" onclick="accessReloadAfterConflict()">Reload</button>'
+    + '</div></div></div>';
+  var host = document.getElementById('access-conflict-modal-host') || (function () {
+    var el = document.createElement('div');
+    el.id = 'access-conflict-modal-host';
+    document.body.appendChild(el);
+    return el;
+  })();
+  host.innerHTML = html;
+  accessUpdateToolbar();
+}
+
+function closeAccessConflictModal() {
+  var host = document.getElementById('access-conflict-modal-host');
+  if (host) host.innerHTML = '';
+}
+
+function accessReloadAfterConflict() {
+  closeAccessConflictModal();
+  accessState.pending = {};
+  accessLoadData();
+}
+
+function accessForceOverwriteConflicts() {
+  var conflicts = accessState.lastSaveConflict || [];
+  if (conflicts.length === 0) { closeAccessConflictModal(); return; }
+  showConfirmDialog(
+    'Force overwrite?',
+    'Commit your staged changes without the concurrency check. The other operator\'s edits on the conflicting rows will be lost.',
+    'Force overwrite'
+  ).then(function (yes) {
+    if (!yes) return;
+    closeAccessConflictModal();
+    var hub = accessState.hub;
+    // Retry the conflicting writes with no If-Match. Non-conflicting
+    // rows have already been committed and can be ignored.
+    var promises = conflicts.map(function (c) {
+      var p = c.pending;
+      if (p.revoke) {
+        return goApp.AdminRevokeMachineAccess(hub, p.id, p.machineId, '').then(parseJSON);
+      }
+      return goApp.AdminSetMachineAccess(hub, p.id, p.machineId,
+        p.desired.permissions.join(','), p.desired.services.join(','), '').then(parseJSON);
+    });
+    Promise.all(promises).then(function () {
+      accessState.pending = {};
+      accessState.lastSaveConflict = null;
+      accessLoadData();
+    }).catch(function (err) {
+      showError('Force overwrite failed: ' + (err && err.message ? err.message : err));
+    });
+  });
 }
 
 // accessReload re-renders the Access page after a successful mutation
@@ -7089,12 +7960,74 @@ function accessReload() {
   refreshAccessTab();
 }
 
-// Toolbar action stubs. Full behavior lands in the actions commit; the
-// stubs exist now so the button bar is wired up and clicking them does
-// not throw.
-function accessUndo() { /* TODO: unstage last pending change */ }
-function accessSave() { /* TODO: batched save with If-Match */ }
-function accessAddUser() { /* TODO: new identity modal */ }
-function accessPairCode() { /* TODO: pair code modal */ }
-function accessRescanServices() { /* TODO: rescan agent services */ }
-function accessExportAudit() { /* TODO: export ACL as YAML */ }
+// Toolbar action stubs for wiring still being built. Full behavior
+// lands in the toolbar-actions commit; the stubs keep clicks from
+// throwing while the rest of the surface is under construction.
+function accessAddUser() {
+  // Reuse the existing create-token modal; the modal's submit path
+  // now calls accessReload() which refreshes the Access page in place.
+  if (typeof promptCreateToken === 'function') {
+    // The old flow expected currentAdminHub to be set; the new flow
+    // uses accessState.hub. Bridge them for reuse.
+    currentAdminHub = accessState.hub;
+    promptCreateToken();
+  }
+}
+function accessPairCode() {
+  if (typeof promptPairCode === 'function') {
+    currentAdminHub = accessState.hub;
+    promptPairCode();
+  }
+}
+function accessRescanServices() { accessLoadData(); }
+function accessExportAudit() { showError('Export audit is not implemented yet.'); }
+
+// ── By-identity detail header actions ─────────────────────────────
+//
+// These wrappers glue the Access page to the existing confirm-modal
+// helpers and the admin bridge. They currently share currentAdminHub
+// with the (dead) legacy Hubs admin plumbing so the helper functions
+// keep working without a bigger refactor.
+
+function accessRenameIdentity(id) {
+  currentAdminHub = accessState.hub;
+  showPromptDialog('Rename Identity', 'Enter a new name for "' + id + '":', id, 'Rename').then(function (newId) {
+    if (!newId || newId === id) return;
+    var entry = accessEntryFor(id);
+    var ifMatch = entry ? String(entry.version || '') : '';
+    goApp.AdminRenameAccess(accessState.hub, id, newId, ifMatch).then(function (raw) {
+      var data = parseJSON(raw);
+      if (data.conflict) {
+        showError('Identity "' + id + '" was modified by another operator. Reload and try again.');
+        accessLoadData();
+        return;
+      }
+      if (data.error) { showError('Rename failed: ' + data.error); return; }
+      if (accessState.selection.identityId === id) accessState.selection.identityId = newId;
+      accessLoadData();
+    });
+  });
+}
+
+function accessChangeRole(id) {
+  // Role changes land with the toolbar-actions commit; needs a role
+  // picker modal and a new bridge endpoint. Stub for now.
+  showError('Change role is not implemented yet.');
+}
+
+function accessRotateIdentityToken(id) {
+  currentAdminHub = accessState.hub;
+  if (typeof rotateToken === 'function') rotateToken(id);
+}
+
+function accessDeleteIdentity(id) {
+  currentAdminHub = accessState.hub;
+  if (typeof deleteToken === 'function') deleteToken(id);
+}
+
+function accessEditServices(id, machineId) {
+  // Edit services modal lands with the services-disclosure commit.
+  // For now, show a dialog explaining the placeholder so click-through
+  // is obvious.
+  showError('Edit services filter is not implemented yet. Toggle Connect to grant all services for now.');
+}
