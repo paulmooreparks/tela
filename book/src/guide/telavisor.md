@@ -497,18 +497,20 @@ a systemd user unit. On macOS, it installs a LaunchAgent.
 ## Infrastructure mode
 
 Switching the mode toggle in the title bar to *Infrastructure* changes
-the tab bar to the four administration tabs: Hubs, Agents, Remotes, and
-Credentials. Infrastructure mode is for operators. None of the features
-in this mode are required for a user who only wants to make a connection.
+the tab bar to the five administration tabs: Hubs, Agents, Access,
+Remotes, and Credentials. Infrastructure mode is for operators. None of
+the features in this mode are required for a user who only wants to
+make a connection.
 All of them become important the moment you start running hubs or agents
 on behalf of yourself or others.
 
 ### Hubs
 
-The Hubs tab is the centre of operator workflows. It is where you
-administer any hub you have credentials for: viewing settings, managing
-machines, granting and revoking access, issuing tokens, viewing
-connection history, and updating or restarting the hub binary.
+The Hubs tab is where you administer any hub you have credentials for:
+viewing settings, managing machines, viewing connection history, and
+updating or restarting the hub binary. Identity and per-machine access
+management live in a peer tab of their own, [Access](#access); the
+Hubs tab no longer carries a Tokens or Access sub-view.
 
 The tab is laid out with a sidebar on the left containing a hub picker
 dropdown, a navigation list of views, and an *Add Hub* button at the
@@ -523,8 +525,9 @@ credentials for. Clicking it opens a dropdown of hub URLs.
 ![Hub picker, open](../screens/telavisor-hub-picker.png)
 
 Selecting a hub from the dropdown loads its data into the views below.
-All five views (Hub Settings, Machines, Access, Tokens, History) are
-scoped to the currently selected hub.
+All three views (Hub Settings, Machines, History) are scoped to the
+currently selected hub. Identity and access management have their own
+peer tab; see [Access](#access).
 
 If you do not have credentials for any hub yet, the dropdown is empty
 and the *Add Hub* button at the bottom of the sidebar is the only way
@@ -643,79 +646,10 @@ the agent in the [Agents tab](#agents) and use the agent detail panel.
 To remove a machine from a hub, use the Danger Zone in the agent
 detail.
 
-#### Access
-
-The Access view shows the unified per-identity, per-machine permission
-model. Each identity is a card showing its role pill, token preview, and the
-machines it has permissions on.
-
-![Access view](../screens/telavisor-hub-access.png)
-
-For each identity card you see:
-
-- **Identity name.** The name the token was issued under.
-- **Role pill.** Owner, admin, user, or viewer. Owner and admin roles
-  have implicit access to all machines, so their cards do not list
-  per-machine permissions; the absence of a list is the
-  whole-permission grant.
-- **Token preview.** The first 8 characters of the token, followed by
-  an ellipsis. Full tokens are only visible at creation time.
-- **Per-machine permissions.** A list of machines this identity has
-  explicit permissions on, each with a comma-separated list of the
-  granted permissions (`register`, `connect`, `manage`).
-- **Rename button.** Renames the identity. Tokens are not affected by
-  the rename.
-
-The *Grant Access* button at the bottom of the page opens a dialog that
-lets you grant permissions to any identity on any machine. The dialog
-asks you to choose an identity, choose a machine (or the wildcard `*`
-which applies to all machines), and choose which of the three
-permissions to grant: *Connect* lets the identity open a tunnel to the
-machine; *Register* lets the identity register the machine (single
-assignment, only one identity can be the registrant); *Manage* lets the
-identity view and edit the agent's configuration, view its logs, and
-restart or update it remotely.
-
-The Access view is the canonical place to answer the question *who can
-do what to which machine on this hub*. It is the visual equivalent of
-the unified `/api/admin/access` API endpoint.
-
-#### Tokens
-
-The Tokens view manages authentication tokens for the selected hub. You
-can create new identities, rotate tokens, delete identities, and
-generate one-time pairing codes.
-
-![Tokens view](../screens/telavisor-hub-tokens.png)
-
-The token table shows every identity on the hub, with columns for:
-
-- **Identity.** The identity name.
-- **Role.** A coloured role pill.
-- **Token preview.** The first 8 characters of the token. Full tokens
-  are only visible immediately after creation or rotation, never again.
-- **Actions.** *Rotate* (issues a new token for the identity, showing
-  the new token in a one-time dialog) and *Delete* (removes the
-  identity, with confirmation).
-
-The *Add Token* button at the top creates a new identity. The dialog
-asks for an identity name and a role (owner, admin, user, or viewer)
-and shows the new token in a one-time display after creation. Save the
-token immediately; you will not see it again.
-
-The *Generate Pairing Code* button issues a short-lived, single-use
-code (for example, `ABCD-1234`) that can be exchanged for a permanent
-token by running `tela pair` from the command line or by pasting the
-code into TelaVisor's pairing flow on another machine. The dialog lets
-you choose the role of the resulting token and the expiration window
-(10 minutes to 7 days). Pairing codes are the recommended way to
-onboard a user or an agent, because they avoid copying 64-character
-hex tokens by hand.
-
-To change a token's role, delete the identity and create a new one with
-the desired role. Roles are immutable on existing tokens by design;
-changing the role would invalidate the principle that the token at a
-given hash always confers a known set of permissions.
+Identity and per-machine access management used to live in separate
+Access and Tokens sub-views on this tab; both are now folded into the
+top-level [Access](#access) peer tab, which is the canonical place
+to answer *who can do what to which machine on this hub*.
 
 #### History
 
@@ -771,8 +705,9 @@ Each entry in the agent sidebar shows:
 
 A *Pair Agent* button at the bottom of the sidebar opens the same
 pairing flow used for users: it asks for a pairing code generated by
-the [Tokens view](#tokens) and exchanges it for a permanent agent
-token, then registers the agent with the hub the code was issued from.
+the [Access](#access) tab's *Pair Code...* toolbar button and
+exchanges it for a permanent agent token, then registers the agent
+with the hub the code was issued from.
 
 #### Agent detail
 
@@ -842,7 +777,7 @@ that fail validation are rejected with an error message.
 The manage permission is required to edit any of these fields. Owner
 and admin roles have it implicitly. User-role tokens need an explicit
 manage grant on the relevant machine, issued through the
-[Access view](#access).
+[Access](#access) tab.
 
 #### Management and Danger Zone
 
@@ -918,6 +853,171 @@ detects that it is running under a process manager and exits cleanly,
 letting the manager restart the binary. This avoids leaving orphan
 processes from a self-spawned restart.
 
+### Access
+
+The Access tab is the consolidated home for identity and per-machine
+access management. Every operator task that involves "who can do what
+to which machine" lives here: creating and deleting identities,
+rotating tokens, changing roles, granting and revoking per-machine
+permissions, narrowing a grant to a specific set of services, and
+generating one-time pairing codes.
+
+The tab replaces two older Hubs sub-views: the Access panel that
+listed identities as cards, and the Tokens panel that managed
+authentication tokens as a table. Both are gone; this tab is the
+single place to go.
+
+#### Two views of the same data
+
+Access opens on one of two projections of the same underlying data:
+
+- **By machine.** The sidebar lists every machine the selected hub
+  has registered, plus a wildcard `*` entry for the cross-machine
+  fallback ACL. The detail pane shows an identity-vs-permission
+  matrix for the selected machine: every identity on the hub gets a
+  row, with *Connect*, *Register*, and *Manage* checkboxes and an
+  optional services filter.
+- **By identity.** The sidebar lists every identity on the hub. The
+  detail pane shows a machine-vs-permission matrix for the selected
+  identity, with a row for every registered machine plus the
+  wildcard `*` fallback.
+
+The view toggle is in the right side of the toolbar. Switching
+between the two views does not lose staged work; both views read and
+write the same pending-change set, so a permission checkbox ticked in
+By machine is the same edit visible in By identity.
+
+The selected view is persisted to TelaVisor's settings, so reopening
+the tab returns to whichever view the operator last used.
+
+#### The toolbar
+
+The toolbar across the top of the tab holds the Hub selector and
+every action that operates on the current hub:
+
+- **Hub.** A dropdown of every hub the operator has credentials for.
+  Switching hubs discards any pending changes on the previous hub
+  (after a confirmation).
+- **Undo.** Drops every pending change in one go. Enabled only when
+  there is pending work.
+- **Save.** Commits every pending change in parallel. Enabled only
+  when there is pending work. See *Save and conflicts* below.
+- **+ Add User.** Creates a new token-backed identity. Opens a
+  dialog asking for a name and a role; the new token is shown once
+  in a follow-up dialog so the operator can copy it.
+- **Pair Code...** Generates a one-time pairing code for onboarding a
+  new identity or agent.
+- **Rescan services.** Reloads access data and machine services from
+  the hub. Use after changing an agent's `telad.yaml` so newly
+  advertised services show up in the matrix.
+- **Export audit...** Downloads a JSON snapshot of the hub's access
+  state: every identity, their grants, the machines they apply to,
+  and the services each grant allows. Useful for compliance and
+  for diffing access state over time.
+
+#### The matrix
+
+The matrix is the main working area. Rows are identities (in By
+machine) or machines (in By identity); columns are the three
+permission flags and a *Connect services* column.
+
+Implicit-role rows (owner, admin, viewer) render at full visual weight
+with locked checkboxes. An owner or admin row has every permission
+ticked because the role confers implicit all-access; the locked state
+makes it clear this is a property of the role, not a per-machine
+grant. A viewer row has all checkboxes unticked because viewer is
+read-only console access with no session privileges. These rows do
+not have Revoke actions, because the role is the source of truth;
+changing it goes through *Change role...* on the By identity detail
+header.
+
+Explicit (user-role) rows are interactive. Ticking a checkbox stages
+a grant; unticking one stages its removal. A per-row **Revoke**
+button stages the removal of every permission for that identity on
+that machine in one click; once staged, the row shows the pending
+revoke with a strikethrough and a red left border, and the Revoke
+button flips to **Undo** so the operator can back out.
+
+Every staged change is marked in two ways: the affected row picks up
+an amber left border and a *pending* label next to its name, and the
+sidebar item for that row's machine (or identity) picks up the same
+*pending* indicator. Save and Undo in the toolbar are both enabled
+whenever the pending set is non-empty.
+
+#### The Connect services column
+
+The *Connect services* column shows which services the identity can
+reach on the machine when the Connect permission is granted. An
+unfiltered grant reads *All services* in muted italics. A filtered
+grant renders as a disclosure widget: a *N of M services* summary
+button with a chevron that toggles a chip cloud below. Small filters
+(three or fewer chips) auto-expand so the common case reads without
+interaction.
+
+The per-row **Edit...** button opens a dialog to narrow or widen the
+filter. The dialog offers two scopes:
+
+- **Allow all services.** Removes any filter. The identity can reach
+  every service the agent advertises.
+- **Restrict to specific services.** For a specific machine, shows a
+  checkbox list of the services the machine advertises, pre-ticked
+  to match the current filter. For the wildcard `*` machine, shows a
+  free-text comma-separated input because there is no concrete
+  service list to enumerate.
+
+Applying a restricted filter stages the change; Save commits it.
+Per-service access control is a v0.15 feature; on older hubs the
+dialog opens in a disabled state with a note explaining that the hub
+must be upgraded before the filter can be used.
+
+#### Save and conflicts
+
+Save fires one write per staged change, in parallel. Each write
+carries the target identity's version as an `If-Match` precondition,
+which the hub checks before applying the change. If another operator
+modified any of those identities between load and save, the affected
+writes return `412 Precondition Failed` and a conflict dialog opens
+listing the rows that drifted.
+
+The dialog offers three recovery paths:
+
+- **Reload.** Discards pending changes and reloads the server state.
+  Re-apply the changes you still want; this time the writes will
+  carry fresh versions.
+- **Discard my changes.** Drops the pending batch and closes the
+  dialog without reloading. Use when you realize the batch is no
+  longer what you want.
+- **Force overwrite instead.** A muted link in the dialog body that
+  retries the conflicting writes with no `If-Match`, overwriting the
+  other operator's edits on those rows. A second confirmation is
+  required because this is destructive.
+
+Writes that did not conflict are already committed by the time the
+dialog opens; only the conflicting rows are still pending.
+
+#### The By identity detail header
+
+When a user-role identity is selected in By identity, the detail
+header has an action cluster for identity-level operations:
+
+- **Rename.** Renames the identity. The token is unchanged; only the
+  human-readable label moves.
+- **Change role...** Opens a role picker with *User*, *Admin*, and
+  *Viewer*. Owner is intentionally omitted from the picker; the CLI
+  is the way to transfer hub ownership. A last-owner guard on the
+  hub refuses to demote the only owner identity, so this action is
+  also disabled for the owner.
+- **Rotate token.** Issues a new token for the identity and shows it
+  once. The previous token stops working immediately.
+- **Delete identity.** Removes the identity and scrubs every ACL
+  entry that referenced its token. Owner identities cannot be
+  deleted.
+
+For owner, admin, and viewer rows, the detail pane shows an
+explanatory card instead of a matrix. Owner and admin have implicit
+all-machine access that is not manageable per-machine; viewer is
+read-only console access with no machine permissions at all.
+
 ### Remotes
 
 The Remotes tab manages hub directory endpoints for short name
@@ -966,7 +1066,8 @@ stored credential. Both actions ask for confirmation.
 
 Removing a credential entry does not invalidate the token on the hub.
 It only removes the local copy. To revoke a token on the hub, use the
-[Tokens view](#tokens) on the hub itself.
+[Access](#access) tab and either delete the identity or rotate its
+token.
 
 The credentials file is stored at:
 
