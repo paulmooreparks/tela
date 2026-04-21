@@ -414,6 +414,20 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   padding: 6px 16px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+/* Subtle "Hub:" / "Profile:" label that precedes a pane-toolbar select.
+   Smaller than body text so the select dominates visually, matching the
+   Profiles toolbar where the select carries the weight on its own. */
+.pane-toolbar-label {
+  font-size: 12px; color: var(--text-muted); font-weight: 500;
+  margin-right: 2px;
+}
+/* Shared select style for pane toolbars. Identical to .profile-toolbar-select
+   so the Profile picker and the Access hub picker render the same. */
+.pane-toolbar-select {
+  padding: 4px 8px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font); background: var(--surface); min-width: 160px;
+}
 /* Profile toolbar */
 .profile-toolbar {}
 .profile-toolbar-select {
@@ -2000,6 +2014,79 @@ label.grant-access-service-row {
 }
 .access-machine-row:last-child { border-bottom: none; }
 .access-machine-row .btn-danger { margin-left: auto; }
+
+/* ─── Access page (peer tab) ─────────────────────────────────────────
+   Consolidated identity + ACL surface. Layout mirrors the Agents tab
+   (sidebar + detail) so it reads as a member of the same family. The
+   sidebar uses the same solid right-border pattern, never card chrome. */
+
+.access-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+.access-sidebar {
+  width: 280px; min-width: 240px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+}
+.access-sidebar-header {
+  padding: 10px 16px 8px; font-size: 11px; text-transform: uppercase;
+  color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.access-sidebar-list { flex: 1; overflow-y: auto; }
+/* Placeholder / loading messages that sit inside the list share the
+   same left inset as real items so the column reads as one. */
+.access-sidebar-list > .empty-hint { padding: 12px 16px; }
+.access-sidebar-item {
+  display: block; padding: 10px 16px; cursor: pointer; color: var(--text-muted);
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.access-sidebar-item:hover { background: var(--surface-alt); color: var(--text); }
+.access-sidebar-item.active {
+  background: var(--surface-alt); color: var(--text);
+  border-left-color: var(--accent);
+}
+.access-sidebar-primary {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.access-sidebar-secondary { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.access-sidebar-dirty {
+  color: var(--warn); font-size: 10px; font-weight: 700; margin-left: auto;
+}
+
+.access-detail { flex: 1; overflow-y: auto; padding: 20px 24px; min-width: 0; }
+.access-detail-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-muted); font-size: 13px;
+}
+
+/* View toggle (By machine / By identity): TDL mode-bar vocabulary. The
+   active segment is bold with a 3px accent underline; inactive segments
+   are hoverable. Active is cursor:default so it reads as "you are here"
+   rather than "click me." */
+.access-view-toggle {
+  display: inline-flex; align-items: stretch;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); overflow: hidden;
+}
+.access-view-btn {
+  position: relative;
+  padding: 4px 14px; background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  font-size: 12px; font-weight: 500; font-family: var(--font);
+}
+.access-view-btn + .access-view-btn { border-left: 1px solid var(--border); }
+.access-view-btn:hover:not(.active) { background: var(--surface-alt); color: var(--text); }
+.access-view-btn.active {
+  color: var(--text); font-weight: 700; cursor: default;
+}
+.access-view-btn.active::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--accent);
+}
 .acl-perm-row {
   display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
   font-size: 13px;

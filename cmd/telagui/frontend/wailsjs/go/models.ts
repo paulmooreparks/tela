@@ -492,6 +492,7 @@ export namespace main {
 	    windowHeight: number;
 	    openLogTabs: LogTabInfo[];
 	    lastSelectedHub: string;
+	    lastAccessView: string;
 	    customChannels: ChannelSource[];
 	
 	    static createFrom(source: any = {}) {
@@ -525,6 +526,7 @@ export namespace main {
 	        this.windowHeight = source["windowHeight"];
 	        this.openLogTabs = this.convertValues(source["openLogTabs"], LogTabInfo);
 	        this.lastSelectedHub = source["lastSelectedHub"];
+	        this.lastAccessView = source["lastAccessView"];
 	        this.customChannels = this.convertValues(source["customChannels"], ChannelSource);
 	    }
 	

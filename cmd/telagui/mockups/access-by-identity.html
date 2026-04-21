@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Access redesign: by identity (peer page, Profiles-style layout)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+    /* TDL tokens (dark theme), inline so the mockup stands alone. */
+    :root {
+        --bg: #111827;
+        --surface: #1f2937;
+        --surface-alt: #1a2332;
+        --text: #e5e7eb;
+        --text-muted: #9ca3af;
+        --border: #4b5668;
+        --accent: #2ecc71;
+        --accent-hover: #27ae60;
+        --warn: #f39c12;
+        --danger: #e74c3c;
+        --radius: 8px;
+        --radius-sm: 4px;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+    body { min-height: 100vh; }
+
+    .chrome { max-width: 1280px; margin: 0 auto; padding: 16px 24px 24px; }
+
+    .tv-mode-row { display: flex; gap: 0; margin-bottom: 8px; font-size: 13px; color: var(--text-muted); }
+    .tv-mode { padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; }
+    .tv-mode.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+
+    .tv-tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .tv-tab { padding: 10px 18px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-muted); }
+    .tv-tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+
+    /* Pane toolbar: shared Profiles / Agents / Files pattern. Tinted surface
+       band with compact select, .tb-sep separators, plain .btn.btn-sm buttons. */
+    .pane-toolbar {
+        display: flex; align-items: center; gap: 6px;
+        padding: 6px 16px; background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        margin: 0 -24px 16px;
+        flex-wrap: wrap;
+    }
+    .pane-toolbar-label {
+        font-size: 13px; color: var(--text-muted); font-weight: 500;
+    }
+    .pane-toolbar-select {
+        padding: 4px 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+        font-family: var(--font); background: var(--surface);
+        color: var(--text); min-width: 220px;
+    }
+    .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+    .tb-sep-spacer { flex: 1; }
+
+    /* View toggle, right-aligned. Uses the TDL mode-bar vocabulary:
+       outlined container, bold label on active, 3px accent bar flush
+       against the bottom edge. Active is cursor:default with no fill
+       so it reads as "you are here". */
+    .view-toggle {
+        display: inline-flex; align-items: stretch;
+        border: 1px solid var(--border); border-radius: 6px;
+        background: var(--surface); overflow: hidden;
+    }
+    .view-toggle-btn {
+        position: relative;
+        padding: 6px 16px; background: none; border: none;
+        color: var(--text-muted); cursor: pointer;
+        font-size: 13px; font-weight: 500; font-family: var(--font);
+    }
+    .view-toggle-btn + .view-toggle-btn { border-left: 1px solid var(--border); }
+    .view-toggle-btn:hover:not(.active) { background: var(--surface-alt); color: var(--text); }
+    .view-toggle-btn.active {
+        color: var(--text); font-weight: 700; cursor: default;
+    }
+    .view-toggle-btn.active::after {
+        content: ''; position: absolute;
+        left: 0; right: 0; bottom: 0; height: 3px;
+        background: var(--accent);
+    }
+
+.btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border-radius: 6px;
+        font-size: 13px; font-weight: 500; font-family: var(--font);
+        color: var(--text); cursor: pointer;
+        border: 1px solid var(--border); background: #2a3545;
+    }
+    .btn:hover { background: #3a465c; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #1f2937; border-color: var(--accent-hover); font-weight: 600; }
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    /* TDL .btn-danger: reversible-destructive initiator. Automatic ⚠ prefix
+       via ::before so the glyph is guaranteed regardless of markup. */
+    .btn-danger { background: #2a3545; color: var(--danger); border-color: var(--border); }
+    .btn-danger::before { content: '\26A0'; font-size: 13px; line-height: 1; }
+    .btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* TDL .chip: flat filled pill, muted text, NO border. Used for neutral
+       metadata tags (roles, service names, counts). Non-interactive. */
+    .chip {
+        display: inline-flex; align-items: center;
+        padding: 1px 7px; border-radius: 3px;
+        font-size: 10px; font-weight: 600;
+        color: var(--text-muted); background: var(--surface-alt);
+        border: none; cursor: default;
+        -webkit-user-select: none; user-select: none;
+    }
+
+    /* TDL .dot: raw colored-dot primitive. */
+    .dot {
+        display: inline-block; width: 8px; height: 8px;
+        border-radius: 50%; flex-shrink: 0;
+    }
+    .dot-online  { background: var(--accent); }
+    .dot-offline { background: var(--text-muted); }
+
+    /* TDL .status: flat inline state badge. */
+    .status {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        background: none; border: none; padding: 0;
+        cursor: default;
+    }
+    .status-dot {
+        display: inline-block; width: 7px; height: 7px;
+        border-radius: 50%; background: currentColor;
+        flex-shrink: 0;
+    }
+    .status-online  { color: var(--accent); }
+    .status-offline { color: var(--text-muted); }
+
+    .hint { font-size: 12px; color: var(--text-muted); margin: 10px 0 4px; }
+
+    .access-split { display: flex; gap: 16px; min-height: 620px; }
+
+    .access-rail {
+        flex: 0 0 280px; display: flex; flex-direction: column;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface); overflow: hidden;
+    }
+    .access-rail-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--text-muted);
+    }
+    .access-rail-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .access-rail-item:hover { background: var(--surface-alt); }
+    .access-rail-item.active { background: var(--surface-alt); border-left: 3px solid var(--accent); padding-left: 11px; }
+    .access-rail-primary { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+    .access-rail-secondary { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .access-rail-dirty { color: var(--warn); font-size: 11px; font-weight: 600; margin-left: auto; }
+
+    .access-detail {
+        flex: 1; display: flex; flex-direction: column;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface); padding: 20px 24px; overflow-y: auto;
+    }
+    .access-detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+    .access-detail-header h2 { margin: 0; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+    .access-detail-actions { display: flex; gap: 6px; }
+    .access-token-preview { font-family: var(--mono); font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+    .access-matrix { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+    .access-matrix th {
+        text-align: left; padding: 10px 12px; font-weight: 600;
+        color: var(--text-muted); border-bottom: 1px solid var(--border);
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .access-matrix th.access-col-check { width: 72px; text-align: center; }
+    .access-matrix-row td { padding: 14px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .access-matrix-row:hover { background: var(--surface-alt); }
+    .access-matrix-row-offline { opacity: 0.65; }
+    .access-matrix-row-wildcard { background: rgba(26,35,50,0.4); font-style: italic; }
+    .access-matrix-row-dirty { background: rgba(243,156,18,0.08); box-shadow: inset 3px 0 0 0 var(--warn); }
+    .access-matrix-row-revoked { box-shadow: inset 3px 0 0 0 var(--danger); }
+    .access-matrix-row-revoked .machine-name,
+    .access-matrix-row-revoked .chip { text-decoration: line-through; color: var(--text-muted); }
+    .access-matrix-row-revoked .access-matrix-check input[type="checkbox"] { opacity: 0.3; }
+    .access-matrix-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-weight: 400; font-style: normal; }
+    .access-matrix-na { color: var(--text-muted); text-align: center; }
+    .access-matrix-check { text-align: center; }
+    .access-matrix-check input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+    /* Actions column is left-aligned so the first button's left edge lines
+       up with the left edge of the column (and with the header label). */
+    .access-matrix-actions { text-align: left; white-space: nowrap; }
+    .access-matrix-actions .btn + .btn { margin-left: 6px; }
+
+    /* Services cell: disclosure widget. Collapsed shows a summary count
+       or "All services"; expanded shows the chip cloud. */
+    .services-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+    .services-summary {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: none; border: none; padding: 0;
+        color: var(--text); font-size: 12px; font-family: var(--font);
+        cursor: pointer;
+    }
+    .services-summary:hover { color: var(--accent); }
+    .services-summary-chevron {
+        display: inline-block; width: 10px; transition: transform 0.12s;
+        color: var(--text-muted); font-size: 10px; line-height: 1;
+    }
+    .services-summary[aria-expanded="true"] .services-summary-chevron {
+        transform: rotate(90deg); color: var(--text);
+    }
+    .services-summary-muted { color: var(--text-muted); font-size: 12px; font-style: italic; }
+    .services-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; max-width: 320px; }
+
+    .dirty-indicator { display: inline-block; margin-left: 6px; color: var(--warn); font-size: 11px; font-weight: 600; }
+
+    /* TDL modal primitives, used by the pre-save conflict dialog. The
+       conflict dialog opens only when the operator clicks Save and the
+       pre-save diff detects drift. That is the deterministic trigger. */
+    .modal-overlay {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 1000;
+    }
+    .modal-dialog {
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.45), 0 0 0 1px var(--border);
+        width: 540px; max-width: 90vw;
+        overflow: hidden;
+    }
+    .modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .modal-header h3 {
+        margin: 0; font-size: 15px; font-weight: 700;
+        color: var(--danger);
+        display: flex; align-items: center; gap: 8px;
+    }
+    .modal-header h3::before { content: '\26A0'; font-size: 16px; }
+    .modal-close {
+        background: none; border: none; font-size: 18px;
+        color: var(--text-muted); cursor: pointer; padding: 0 4px;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 20px; font-size: 13px; line-height: 1.5; }
+    .modal-body ul { margin: 8px 0 12px 20px; padding: 0; }
+    .modal-body p { margin: 0 0 10px; }
+    .modal-body p:last-child { margin-bottom: 0; }
+    .modal-actions {
+        display: flex; justify-content: flex-end; gap: 8px;
+        padding: 14px 20px; background: var(--surface-alt);
+        border-top: 1px solid var(--border);
+    }
+
+    .link {
+        color: var(--accent); text-decoration: underline;
+        text-decoration-thickness: 1px; text-underline-offset: 2px;
+        cursor: pointer; background: none; border: none; padding: 0;
+        font: inherit;
+    }
+    .link:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
+
+    .mockup-annotation {
+        position: fixed; left: 20px; bottom: 20px;
+        max-width: 320px; padding: 10px 12px;
+        background: var(--surface-alt); border: 1px dashed var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 12px; color: var(--text-muted); z-index: 1001;
+    }
+    .mockup-annotation strong { color: var(--text); }
+    </style>
+</head>
+<body>
+
+<div class="chrome">
+    <div class="tv-mode-row">
+        <div class="tv-mode">Clients</div>
+        <div class="tv-mode active">Infrastructure</div>
+    </div>
+
+    <!-- Peer tabs. Tokens is folded into Access; identity-level ops
+         (create, rotate, rename, delete, pair code) live in this page's
+         toolbar and the detail header below. -->
+    <div class="tv-tabs">
+        <div class="tv-tab">Hubs</div>
+        <div class="tv-tab">Agents</div>
+        <div class="tv-tab active">Access</div>
+        <div class="tv-tab">Remotes</div>
+        <div class="tv-tab">Credentials</div>
+    </div>
+
+    <!-- Pane toolbar. Matches the Profiles / Agents / Files toolbar pattern:
+         tinted surface band with compact select, .tb-sep separators, plain
+         .btn.btn-sm buttons. View toggle right-aligned via flex spacer. -->
+    <div class="pane-toolbar">
+        <span class="pane-toolbar-label">Hub:</span>
+        <select class="pane-toolbar-select" title="Current hub">
+            <option>owlsnest.parkscomputing.com</option>
+            <option>devhub.awansaya.net</option>
+        </select>
+
+        <span class="tb-sep"></span>
+
+        <button type="button" class="btn btn-sm" title="Undo the last staged change">&#x21B6; Undo</button>
+        <button type="button" class="btn btn-sm btn-primary" title="Commit all staged changes">Save</button>
+
+        <span class="tb-sep"></span>
+
+        <button type="button" class="btn btn-sm" title="Create a new token identity">+ Add User</button>
+        <button type="button" class="btn btn-sm" title="Generate a one-time pair code for onboarding">Pair Code&hellip;</button>
+        <button type="button" class="btn btn-sm" title="Refresh the service list from agents">&#x21BB; Rescan services</button>
+        <button type="button" class="btn btn-sm" title="Export the current ACL state as YAML">Export audit&hellip;</button>
+
+        <span class="tb-sep-spacer"></span>
+
+        <div class="view-toggle" role="tablist" aria-label="Access view">
+            <button type="button" class="view-toggle-btn" role="tab" aria-selected="false"
+                    onclick="location.href='access-by-machine.html'">By machine</button>
+            <button type="button" class="view-toggle-btn active" role="tab" aria-selected="true">By identity</button>
+        </div>
+    </div>
+
+    <div class="access-split">
+        <aside class="access-rail">
+            <div class="access-rail-header">
+                <span>Identities</span>
+            </div>
+
+            <div class="access-rail-item">
+                <div class="access-rail-primary">owner <span class="chip">Owner</span></div>
+                <div class="access-rail-secondary">All machines (implicit)</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">console-viewer <span class="chip">Viewer</span></div>
+                <div class="access-rail-secondary">Read-only console</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">paired user <span class="chip">Admin</span></div>
+                <div class="access-rail-secondary">All machines (implicit)</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">paul <span class="chip">Admin</span></div>
+                <div class="access-rail-secondary">All machines (implicit)</div>
+            </div>
+            <div class="access-rail-item active">
+                <div class="access-rail-primary">
+                    alice <span class="chip">User</span>
+                    <span class="access-rail-dirty">&bull; unsaved</span>
+                </div>
+                <div class="access-rail-secondary">1 machine &middot; 1 service &middot; 1 pending</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">bob <span class="chip">User</span></div>
+                <div class="access-rail-secondary">No grants</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">charlie <span class="chip">User</span></div>
+                <div class="access-rail-secondary">No grants</div>
+            </div>
+        </aside>
+
+        <section class="access-detail">
+            <header class="access-detail-header">
+                <div>
+                    <h2>alice <span class="chip">User</span></h2>
+                    <div class="access-token-preview">fb6d71c6&hellip;</div>
+                </div>
+                <div class="access-detail-actions">
+                    <button type="button" class="btn btn-sm">Rename</button>
+                    <button type="button" class="btn btn-sm">Change role&hellip;</button>
+                    <button type="button" class="btn btn-sm">Rotate token</button>
+                    <button type="button" class="btn btn-sm btn-danger">Delete identity</button>
+                </div>
+            </header>
+
+            <p class="hint">
+                Toggle a permission to stage a change; nothing is sent to the hub until you press
+                <strong>Save</strong> in the toolbar. Owner and admin roles are implicit for all
+                machines and are not listed.
+            </p>
+
+            <table class="access-matrix">
+                <thead>
+                    <tr>
+                        <th>Machine</th>
+                        <th class="access-col-check">Connect</th>
+                        <th class="access-col-check">Register</th>
+                        <th class="access-col-check">Manage</th>
+                        <th>Connect services</th>
+                        <th class="access-matrix-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="access-matrix-row">
+                        <td>
+                            <strong>work-laptop</strong>
+                            <div class="access-matrix-meta">
+                                <span class="status status-online"><span class="status-dot"></span>Online</span>
+                                &middot; 3 services
+                            </div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td>
+                            <div class="services-cell">
+                                <button type="button" class="services-summary" aria-expanded="true">
+                                    <span class="services-summary-chevron">&#x25B8;</span>
+                                    <span>1 of 3 services</span>
+                                </button>
+                                <div class="services-chips">
+                                    <span class="chip">git</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm">Edit&hellip;</button>
+                            <button type="button" class="btn btn-sm btn-danger">Revoke</button>
+                        </td>
+                    </tr>
+
+                    <tr class="access-matrix-row access-matrix-row-dirty">
+                        <td>
+                            <strong>dev-vm</strong>
+                            <div class="access-matrix-meta">
+                                <span class="status status-online"><span class="status-dot"></span>Online</span>
+                                &middot; 4 services
+                            </div>
+                            <span class="dirty-indicator">&bull; unsaved</span>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td>
+                            <div class="services-cell">
+                                <button type="button" class="services-summary" aria-expanded="true">
+                                    <span class="services-summary-chevron">&#x25B8;</span>
+                                    <span>1 of 4 services</span>
+                                </button>
+                                <div class="services-chips">
+                                    <span class="chip">RDP</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm">Edit&hellip;</button>
+                            <button type="button" class="btn btn-sm btn-danger">Revoke</button>
+                        </td>
+                    </tr>
+
+                    <tr class="access-matrix-row access-matrix-row-offline">
+                        <td>
+                            <strong>BARN</strong>
+                            <div class="access-matrix-meta">
+                                <span class="status status-offline"><span class="status-dot"></span>Offline</span>
+                                &middot; services unknown
+                            </div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td><span class="services-summary-muted">All services</span></td>
+                        <td class="access-matrix-actions"></td>
+                    </tr>
+
+                    <tr class="access-matrix-row">
+                        <td>
+                            <strong>owlsnest-agent</strong>
+                            <div class="access-matrix-meta">
+                                <span class="status status-online"><span class="status-dot"></span>Online</span>
+                                &middot; 1 service
+                            </div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td><span class="services-summary-muted">All services</span></td>
+                        <td class="access-matrix-actions"></td>
+                    </tr>
+
+                    <tr class="access-matrix-row access-matrix-row-wildcard">
+                        <td>
+                            <strong>* (all machines)</strong>
+                            <div class="access-matrix-meta">Applies to any machine not listed above</div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-na">&mdash;</td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td><span class="services-summary-muted">All services</span></td>
+                        <td class="access-matrix-actions"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </div>
+</div>
+
+<!-- Pre-save conflict modal. Opens ONLY when the operator clicks Save in
+     the toolbar AND the pre-save diff detects that the server state has
+     moved since the view was loaded. Never shown at random. Built on the
+     TDL .modal-overlay / .modal-dialog primitives. Footer follows the TDL
+     two-button rule (Cancel + primary Reload); the destructive force-
+     overwrite path is a muted link in the body that opens a nested
+     confirmation modal per TDL rules. -->
+<div class="modal-overlay" id="conflict-modal" role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <h3 id="conflict-title">Server state changed</h3>
+            <button type="button" class="modal-close" aria-label="Close"
+                    onclick="document.getElementById('conflict-modal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Another operator modified alice's access on this hub since you opened this view:</p>
+            <ul>
+                <li><strong>work-laptop</strong> &mdash; services filter changed from <code>git</code> to <code>git, RDP</code></li>
+                <li><strong>dev-vm</strong> &mdash; connect permission granted</li>
+            </ul>
+            <p>Reload to see the current server state, then re-apply your staged changes.</p>
+            <p>
+                If you prefer to discard the other operator's edits on those rows and
+                commit your batch as-is, you can
+                <button type="button" class="link"
+                        onclick="document.getElementById('conflict-modal').style.display='none'">force overwrite instead</button>.
+                That path requires a second confirmation.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn"
+                    onclick="document.getElementById('conflict-modal').style.display='none'">Cancel</button>
+            <button type="button" class="btn btn-primary"
+                    onclick="document.getElementById('conflict-modal').style.display='none'">Reload</button>
+        </div>
+    </div>
+</div>
+
+<div class="mockup-annotation">
+    <strong>Mockup note.</strong> This modal opens only when the operator
+    clicks <strong>Save</strong> in the toolbar and the pre-save diff
+    detects drift. It is never shown spontaneously.
+</div>
+
+</body>
+</html>

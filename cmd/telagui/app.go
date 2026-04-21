@@ -4446,6 +4446,7 @@ type Settings struct {
 	WindowHeight            int             `yaml:"windowHeight" json:"windowHeight"`
 	OpenLogTabs             []LogTabInfo    `yaml:"openLogTabs,omitempty" json:"openLogTabs"`
 	LastSelectedHub         string          `yaml:"lastSelectedHub,omitempty" json:"lastSelectedHub"`
+	LastAccessView          string          `yaml:"lastAccessView,omitempty" json:"lastAccessView"`
 	CustomChannels          []ChannelSource `yaml:"customChannels,omitempty" json:"customChannels"`
 }
 

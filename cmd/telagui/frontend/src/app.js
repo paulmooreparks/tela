@@ -71,6 +71,7 @@ function switchTab(name, btn) {
   if (name === 'files') refreshFilesTab();
   if (name === 'agents') agentsRefresh();
   if (name === 'hubs') refreshHubsTab();
+  if (name === 'access') refreshAccessTab();
   if (name === 'remotes') refreshRemotesList();
   if (name === 'credentials') refreshCredentialsList();
   if (name === 'client-settings') refreshClientSettings();
@@ -7350,3 +7351,143 @@ function toWSURL(url) {
   if (url.indexOf('wss://') !== 0 && url.indexOf('ws://') !== 0) return 'wss://' + url;
   return url;
 }
+
+// ── Access tab ───────────────────────────────────────────────────────
+//
+// Consolidated identity + ACL management, a peer of Hubs and Agents.
+// This is the shell only: hub selector, toolbar, sidebar, detail, and
+// view toggle. Data loading, matrix rendering, pending-change state,
+// and save/conflict handling land in subsequent commits.
+
+var accessState = {
+  hub: '',         // currently selected hub name
+  view: 'by-machine', // 'by-machine' | 'by-identity'
+};
+
+function refreshAccessTab() {
+  var select = document.getElementById('access-hub-select');
+  if (!select) return;
+
+  // Restore last-selected view from settings (persists across sessions).
+  // Falls back to the in-session value if settings fail or are absent.
+  Promise.all([goApp.GetKnownHubs(), goApp.GetSettings()]).then(function (results) {
+    var hubs = (results[0] || []).slice();
+    hubs.sort(function (a, b) {
+      var an = (a.name || '').toLowerCase();
+      var bn = (b.name || '').toLowerCase();
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return 0;
+    });
+    // Keep the shared cache in sync so hubURLFor() works for callers
+    // outside the Hubs tab.
+    knownHubsData = hubs;
+
+    var settings = results[1] || {};
+    var prev = accessState.hub || settings.lastSelectedHub || '';
+
+    select.innerHTML = '';
+    if (hubs.length === 0) {
+      select.innerHTML = '<option value="">No hubs configured</option>';
+      accessState.hub = '';
+      renderAccessEmpty('Add a hub to manage access.');
+      return;
+    }
+    hubs.forEach(function (hub) {
+      var opt = document.createElement('option');
+      opt.value = hub.name;
+      opt.textContent = hub.name;
+      select.appendChild(opt);
+    });
+    if (prev && hubs.some(function (h) { return h.name === prev; })) {
+      select.value = prev;
+    }
+    accessState.hub = select.value;
+
+    if (settings.lastAccessView === 'by-identity' || settings.lastAccessView === 'by-machine') {
+      accessState.view = settings.lastAccessView;
+    }
+    accessApplyViewToggle();
+    renderAccessPane();
+  });
+}
+
+function onAccessHubChange() {
+  var select = document.getElementById('access-hub-select');
+  accessState.hub = select ? select.value : '';
+  // Persist the hub choice as the application-wide "last hub" so the
+  // Hubs tab and the Access tab stay in sync when the operator jumps
+  // between them.
+  if (accessState.hub) {
+    goApp.SaveLastSelectedHub(accessState.hub).catch(function () { /* best effort */ });
+  }
+  renderAccessPane();
+}
+
+function accessSetView(view) {
+  if (view !== 'by-machine' && view !== 'by-identity') return;
+  if (accessState.view === view) return;
+  accessState.view = view;
+  accessApplyViewToggle();
+  // Persist the choice so it survives app restarts.
+  goApp.GetSettings().then(function (s) {
+    s = s || {};
+    s.lastAccessView = view;
+    goApp.SaveSettings(JSON.stringify(s));
+  }).catch(function () { /* best effort */ });
+  renderAccessPane();
+}
+
+function accessApplyViewToggle() {
+  var bm = document.getElementById('access-view-by-machine');
+  var bi = document.getElementById('access-view-by-identity');
+  if (!bm || !bi) return;
+  bm.classList.toggle('active', accessState.view === 'by-machine');
+  bm.setAttribute('aria-selected', accessState.view === 'by-machine' ? 'true' : 'false');
+  bi.classList.toggle('active', accessState.view === 'by-identity');
+  bi.setAttribute('aria-selected', accessState.view === 'by-identity' ? 'true' : 'false');
+
+  var hdr = document.getElementById('access-sidebar-header');
+  if (hdr) {
+    hdr.textContent = accessState.view === 'by-identity' ? 'Identities' : 'Machines';
+  }
+}
+
+function renderAccessPane() {
+  if (!accessState.hub) {
+    renderAccessEmpty('Select a hub to view access.');
+    return;
+  }
+  // Data loading + matrix rendering lands in a subsequent commit. For
+  // now, the sidebar shows a placeholder so the layout is testable.
+  var list = document.getElementById('access-sidebar-list');
+  var detail = document.getElementById('access-detail');
+  if (list) {
+    list.innerHTML = '<p class="empty-hint">Loading ' +
+      (accessState.view === 'by-identity' ? 'identities' : 'machines') +
+      ' for <strong>' + escHtml(accessState.hub) + '</strong>&hellip;</p>';
+  }
+  if (detail) {
+    detail.innerHTML = '<div class="access-detail-empty">' +
+      (accessState.view === 'by-identity' ? 'Select an identity to view access.'
+                                          : 'Select a machine to view access.') +
+      '</div>';
+  }
+}
+
+function renderAccessEmpty(msg) {
+  var list = document.getElementById('access-sidebar-list');
+  var detail = document.getElementById('access-detail');
+  if (list) list.innerHTML = '<p class="empty-hint">' + escHtml(msg) + '</p>';
+  if (detail) detail.innerHTML = '<div class="access-detail-empty">' + escHtml(msg) + '</div>';
+}
+
+// Toolbar action stubs. Full behavior lands in the actions commit; the
+// stubs exist now so the button bar is wired up and clicking them does
+// not throw.
+function accessUndo() { /* TODO: unstage last pending change */ }
+function accessSave() { /* TODO: batched save with If-Match */ }
+function accessAddUser() { /* TODO: new identity modal */ }
+function accessPairCode() { /* TODO: pair code modal */ }
+function accessRescanServices() { /* TODO: rescan agent services */ }
+function accessExportAudit() { /* TODO: export ACL as YAML */ }

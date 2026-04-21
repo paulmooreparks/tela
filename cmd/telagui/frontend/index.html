@@ -69,6 +69,7 @@
     <div class="main-tab-bar hidden" role="tablist" id="tabbar-infra">
       <button class="main-tab active" role="tab" onclick="switchTab('hubs', this)">Hubs</button>
       <button class="main-tab" role="tab" onclick="switchTab('agents', this)">Agents</button>
+      <button class="main-tab" role="tab" onclick="switchTab('access', this)">Access</button>
       <button class="main-tab" role="tab" onclick="switchTab('remotes', this)">Remotes</button>
       <button class="main-tab" role="tab" onclick="switchTab('credentials', this)">Credentials</button>
     </div>
@@ -168,6 +169,40 @@
       </div>
     </div>
 
+    <!-- Access tab (peer of Hubs / Agents). Consolidated identity + ACL
+         surface: replaces the old Tokens and Access sub-views under
+         Hubs' admin panel. Toolbar pattern matches Profiles / Agents. -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-access">
+      <div class="pane-toolbar" id="access-toolbar">
+        <span class="pane-toolbar-label">Hub:</span>
+        <select id="access-hub-select" class="pane-toolbar-select" title="Current hub" onchange="onAccessHubChange()"></select>
+        <span class="tb-sep"></span>
+        <button type="button" class="btn btn-sm" id="access-undo-btn" onclick="accessUndo()" title="Undo the last staged change" disabled>&#x21B6; Undo</button>
+        <button type="button" class="btn btn-sm btn-primary" id="access-save-btn" onclick="accessSave()" title="Commit all staged changes" disabled>Save</button>
+        <span class="tb-sep"></span>
+        <button type="button" class="btn btn-sm" id="access-add-user-btn" onclick="accessAddUser()" title="Create a new token identity">+ Add User</button>
+        <button type="button" class="btn btn-sm" id="access-pair-code-btn" onclick="accessPairCode()" title="Generate a one-time pair code for agent onboarding">Pair Code&hellip;</button>
+        <button type="button" class="btn btn-sm" id="access-rescan-btn" onclick="accessRescanServices()" title="Refresh the service list from agents">&#x21BB; Rescan services</button>
+        <button type="button" class="btn btn-sm" id="access-export-btn" onclick="accessExportAudit()" title="Export the current ACL state as YAML">Export audit&hellip;</button>
+        <div class="tab-bar-spacer"></div>
+        <div class="access-view-toggle" role="tablist" aria-label="Access view">
+          <button type="button" class="access-view-btn active" id="access-view-by-machine" role="tab" aria-selected="true" onclick="accessSetView('by-machine')">By machine</button>
+          <button type="button" class="access-view-btn" id="access-view-by-identity" role="tab" aria-selected="false" onclick="accessSetView('by-identity')">By identity</button>
+        </div>
+      </div>
+      <div class="access-layout">
+        <div class="access-sidebar" id="access-sidebar">
+          <div class="access-sidebar-header" id="access-sidebar-header">Machines</div>
+          <div class="access-sidebar-list" id="access-sidebar-list">
+            <p class="empty-hint">Select a hub to view access.</p>
+          </div>
+        </div>
+        <div class="access-detail" id="access-detail">
+          <div class="access-detail-empty">Select a hub to view access.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Hubs tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-hubs">
       <div class="hubs-admin-layout">
@@ -180,8 +215,6 @@
           <div class="hubs-admin-nav" id="hubs-admin-nav">
             <div class="hubs-admin-nav-item active" data-view="hub-settings" onclick="showHubAdminView('hub-settings')">Hub Settings</div>
             <div class="hubs-admin-nav-item" data-view="machines" onclick="showHubAdminView('machines')">Machines</div>
-            <div class="hubs-admin-nav-item" data-view="tokens" onclick="showHubAdminView('tokens')">Tokens</div>
-            <div class="hubs-admin-nav-item" data-view="access" onclick="showHubAdminView('access')">Access</div>
             <div class="hubs-admin-nav-item" data-view="history" onclick="showHubAdminView('history')">History</div>
           </div>
           <div class="hubs-admin-sidebar-footer">
