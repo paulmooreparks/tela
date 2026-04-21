@@ -202,15 +202,16 @@ func (s *authStore) canConnect(token, machineID string) bool {
 //     filter); an empty list in config means "all services."
 //
 // When both a machine-specific grant and a wildcard grant match, the
-// machine-specific grant wins. Owner/admin tokens are always
-// unfiltered.
+// machine-specific grant wins. Owner, admin, and viewer tokens are
+// always unfiltered; viewers are read-only console observers and
+// filtering their service view would silently break monitoring.
 func (s *authStore) connectServicesFilter(token, machineID string) (names []string, filtered bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if !s.enabled {
 		return nil, false
 	}
-	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
+	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin" || e.HubRole == "viewer") {
 		return nil, false
 	}
 	if g, ok := findConnectGrant(s.machines[machineID].ConnectTokens, token); ok {

@@ -583,6 +583,39 @@ func portLabel(p int) string {
 	return fmt.Sprintf("port %d", p)
 }
 
+// serviceFilterName returns the name used for per-service access
+// filtering. A service with a non-empty Name matches that string; an
+// unnamed service matches "port-<N>" (a stable, operator-specifiable
+// token that survives telad config reformatting).
+func serviceFilterName(s serviceDesc) string {
+	if s.Name != "" {
+		return s.Name
+	}
+	return fmt.Sprintf("port-%d", s.Port)
+}
+
+// filterServicesByName returns only the services whose filter name is
+// present in allowed. An empty allowed list returns an empty result;
+// callers that want "no filter" behavior should not call this helper
+// (see connectServicesFilter for the distinction). Matching is exact
+// and case-sensitive.
+func filterServicesByName(services []serviceDesc, allowed []string) []serviceDesc {
+	if len(allowed) == 0 {
+		return []serviceDesc{}
+	}
+	allowSet := make(map[string]struct{}, len(allowed))
+	for _, name := range allowed {
+		allowSet[name] = struct{}{}
+	}
+	out := make([]serviceDesc, 0, len(services))
+	for _, s := range services {
+		if _, ok := allowSet[serviceFilterName(s)]; ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // normalizeServices converts ports[] / services[] into a consistent
 // list of serviceDesc, matching hub.js behavior exactly.
 func normalizeServices(ports []int, services []serviceDesc) []serviceDesc {
@@ -720,6 +753,17 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 			AgentConnected:        entry.ControlWS != nil,
 			SessionCount:          len(entry.Sessions),
 			Services:              normalizeServices(entry.Ports, entry.Services),
+		}
+		// Apply per-token service filter. Owner/admin/viewer and
+		// unfiltered grants return filtered=false, leaving sm.Services
+		// untouched. A filtered grant restricts the list to the named
+		// services (other services are invisible, not blocked; a client
+		// who knows the port and has canConnect can still dial through
+		// the WG tunnel).
+		if globalAuth.isEnabled() {
+			if allowed, filtered := globalAuth.connectServicesFilter(callerToken, entry.MachineName); filtered {
+				sm.Services = filterServicesByName(sm.Services, allowed)
+			}
 		}
 		if entry.DisplayName != "" {
 			sm.DisplayName = &entry.DisplayName

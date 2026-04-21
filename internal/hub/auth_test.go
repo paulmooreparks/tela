@@ -674,22 +674,25 @@ func TestConnectServicesFilter_MachineSpecificBeatsWildcard(t *testing.T) {
 	}
 }
 
-func TestConnectServicesFilter_OwnerAdminBypassesFilter(t *testing.T) {
-	// Owner and admin roles must not be filterable. Hub operators need
-	// to be able to see every service for diagnostics regardless of a
-	// stray services entry on their own token (which should never
-	// exist in practice but must not lock anyone out if it does).
+func TestConnectServicesFilter_OwnerAdminViewerBypassesFilter(t *testing.T) {
+	// Owner, admin, and viewer roles must not be filterable. Operators
+	// need to see every service for diagnostics regardless of a stray
+	// services entry on their token (which should never exist in
+	// practice but must not lock anyone out if it does). Viewers are
+	// read-only console observers; filtering their view would silently
+	// break monitoring dashboards.
 	acls := map[string]machineACL{
 		"barn": {ConnectTokens: []connectGrant{
 			{Token: tokenOwner, Services: []string{"not-a-real-service"}},
 			{Token: tokenAdmin, Services: []string{"not-a-real-service"}},
+			{Token: tokenViewer, Services: []string{"not-a-real-service"}},
 		}},
 	}
 	s := makeStore(stdTokens(), acls)
-	for _, tok := range []string{tokenOwner, tokenAdmin} {
+	for _, tok := range []string{tokenOwner, tokenAdmin, tokenViewer} {
 		_, filtered := s.connectServicesFilter(tok, "barn")
 		if filtered {
-			t.Errorf("owner/admin bypass broken: token %q returned filtered=true", tok)
+			t.Errorf("owner/admin/viewer bypass broken: token %q returned filtered=true", tok)
 		}
 	}
 }
