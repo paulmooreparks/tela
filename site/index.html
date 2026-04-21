@@ -56,8 +56,17 @@
             It works through firewalls, NATs, and corporate proxies without requiring inbound ports, VPN software, kernel drivers, or administrator privileges on either end.
         </p>
 
+        <h3 class="site-section-title">Why I Wrote Tela</h3>
         <p class="site-section-body">
-            Three small programs (a client, an agent, and
+            I wanted my own way of connecting to machines, and to the TCP services on those machines, without having to install Tailscale, which was not allowed on a locked-down corporate PC,
+            and without having to pay for a VM to use as a jump host. I have 10gbps fibre and a huge workstation at home, and I've got lots of laptops and VMs and other outboard stuff
+            that I want to work with remotely in concert with that workstation, so I started building Tela to be able to remotely, securely, and reliably access those machines.
+        </p>
+
+        <h3 class="site-section-title">What Tela Enables</h3>
+
+        <p class="site-section-body">
+            The word "tela" is Spanish for fabric, and Tela is implemented as a network fabric. Three small programs (a client, an agent, and
             a hub) enable one machine to reach a TCP service on another machine through an encrypted
             WireGuard tunnel, without either side opening an inbound port or running
             anything as root. The same three binaries scale from a single laptop
@@ -157,7 +166,6 @@
             </div>
         </div>
 
-        <section class="site-subsection">
             <h3 class="site-section-title">Version Archive</h3>
             <p class="site-section-body">
                 Older stable editions are archived so that they can be referenced by users who have chosen not to upgrade to the latest version.
@@ -166,7 +174,6 @@
             <p class="site-section-body site-section-body-small">
                 <a class="link" href="/book/archive/">Archived stable releases &rarr;</a>
             </p>
-        </section>
     </section>
 
     <!-- Download -->
