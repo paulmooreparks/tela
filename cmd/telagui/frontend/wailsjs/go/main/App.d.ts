@@ -28,8 +28,6 @@ export function AdminRotateToken(arg1:string,arg2:string):Promise<string>;
 
 export function AdminSetMachineAccess(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
-export function HubCapabilities(arg1:string):Promise<string>;
-
 export function AssignLocalPort(arg1:number):Promise<number>;
 
 export function AttachToExisting():Promise<boolean>;
@@ -153,6 +151,8 @@ export function GetUpdateVersion():Promise<string>;
 export function GetVersion():Promise<string>;
 
 export function HasUpdate():Promise<boolean>;
+
+export function HubCapabilities(arg1:string):Promise<string>;
 
 export function ImportProfile():Promise<void>;
 

@@ -1502,6 +1502,27 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .setting-check:last-child { margin-bottom: 0; }
 .setting-check input { accent-color: var(--accent); margin: 0; }
+
+/* Grant Access modal: scrollable service checkbox list rendered when a
+   specific machine is selected. Falls back to display:none when the
+   wildcard machine is picked (see populateGrantAccessServices in app.js). */
+.grant-access-services-list {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  background: var(--surface-alt);
+}
+.grant-access-service-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; padding: 4px 0;
+  cursor: pointer;
+}
+.grant-access-service-row:hover { color: var(--text); }
+.grant-access-service-row input { accent-color: var(--accent); margin: 0; }
+.grant-access-service-row strong { font-weight: 600; color: var(--text); }
+.grant-access-service-meta { color: var(--text-muted); font-size: 12px; }
 .kv-table { width: 100%; border-collapse: collapse; }
 .kv-table td { padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .kv-table tr:last-child td { border-bottom: none; }

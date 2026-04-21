@@ -4950,6 +4950,10 @@ function submitCreateToken(event) {
   var id = document.getElementById('new-token-id').value.trim();
   var role = document.getElementById('new-token-role').value;
   if (!id) return;
+  // Backend treats an empty role as "user" (the default). The dropdown
+  // shows "User" for clarity but we must normalize to "" on the wire,
+  // otherwise the backend's role validation rejects the request.
+  if (role === 'user') role = '';
 
   goApp.AdminCreateToken(currentAdminHub, id, role).then(function (raw) {
     var data;
@@ -5146,15 +5150,35 @@ function refreshHubCapabilities() {
   });
 }
 
-// updateGrantServicesVisibility toggles the services input in the
-// Grant Access modal. The input is visible when "connect" is checked
-// AND the hub supports per-service-access-control; otherwise it is
-// hidden (connect unchecked) or disabled with a hint (hub too old).
-function updateGrantServicesVisibility() {
+// grantAccessMachinesSnapshot caches the machines array from the hub
+// status fetched when the Grant Access modal opens. Used to populate
+// the services checkbox list when the machine selection changes, so
+// the operator picks from real services instead of typing raw names.
+var grantAccessMachinesSnapshot = [];
+
+// serviceFilterName mirrors the hub's serviceFilterName helper:
+// the explicit Name field if set, else "port-<Port>". Operators
+// match service filters against this token.
+function grantAccessServiceFilterName(svc) {
+  if (svc && typeof svc.name === 'string' && svc.name !== '') return svc.name;
+  return 'port-' + (svc && svc.port ? svc.port : '?');
+}
+
+// populateGrantAccessServices renders the services UI based on the
+// current machine selection and hub capability.
+//   - Hub doesn't support the feature: hide everything, show warning.
+//   - Connect unchecked: hide the whole group.
+//   - Machine "*": use the free-text input (wildcards span machines,
+//     so there is no fixed service list to enumerate).
+//   - Specific machine: render a scrollable checkbox list of that
+//     machine's services, or a hint when the machine has none.
+function populateGrantAccessServices() {
   var group = document.getElementById('grant-access-services-group');
+  var list = document.getElementById('grant-access-services-list');
   var input = document.getElementById('grant-access-services');
-  var hint = document.getElementById('grant-access-services-disabled-hint');
-  if (!group || !input || !hint) return;
+  var hint = document.getElementById('grant-access-services-hint');
+  var disabledHint = document.getElementById('grant-access-services-disabled-hint');
+  if (!group || !list || !input || !hint || !disabledHint) return;
 
   var connectChecked = document.getElementById('grant-access-connect').checked;
   if (!connectChecked) {
@@ -5163,14 +5187,72 @@ function updateGrantServicesVisibility() {
   }
   group.style.display = '';
 
-  if (hubSupportsPerServiceACL()) {
-    input.disabled = false;
+  if (!hubSupportsPerServiceACL()) {
+    list.style.display = 'none';
+    list.innerHTML = '';
+    input.style.display = 'none';
     hint.style.display = 'none';
-  } else {
-    input.disabled = true;
-    input.value = '';
-    hint.style.display = '';
+    disabledHint.style.display = '';
+    return;
   }
+  disabledHint.style.display = 'none';
+
+  var machine = document.getElementById('grant-access-machine').value;
+  if (machine === '*') {
+    // Wildcard: fall back to free text. The operator may legitimately
+    // want a cross-machine filter (e.g., "jellyfin on any machine"),
+    // and there is no canonical service list to render.
+    list.style.display = 'none';
+    list.innerHTML = '';
+    input.style.display = '';
+    input.disabled = false;
+    hint.style.display = '';
+    hint.textContent = 'Comma-separated list of service names. Applies across every machine; services absent on a given machine are simply ignored for that machine. Leave blank to allow all services.';
+    return;
+  }
+
+  // Specific machine: build a checkbox list from its services.
+  input.style.display = 'none';
+  input.value = '';
+  hint.style.display = '';
+
+  var found = null;
+  for (var i = 0; i < grantAccessMachinesSnapshot.length; i++) {
+    if (grantAccessMachinesSnapshot[i].id === machine) {
+      found = grantAccessMachinesSnapshot[i];
+      break;
+    }
+  }
+  var services = (found && found.services) || [];
+
+  if (services.length === 0) {
+    list.style.display = 'none';
+    list.innerHTML = '';
+    hint.textContent = 'This machine has no registered services. A connect grant will have nothing to filter; leave this section empty.';
+    return;
+  }
+
+  hint.textContent = 'Leave every box unchecked to allow all services on this machine.';
+  var html = '';
+  services.forEach(function (svc, idx) {
+    var name = grantAccessServiceFilterName(svc);
+    var desc = svc.description ? ' (' + escHtml(svc.description) + ')' : '';
+    var portLabel = svc.port ? ' \u2014 port ' + svc.port : '';
+    html += '<label class="grant-access-service-row">'
+      + '<input type="checkbox" class="grant-access-service-cb" value="' + escAttr(name) + '" data-idx="' + idx + '">'
+      + ' <strong>' + escHtml(name) + '</strong>'
+      + '<span class="grant-access-service-meta">' + escHtml(portLabel) + desc + '</span>'
+      + '</label>';
+  });
+  list.innerHTML = html;
+  list.style.display = '';
+}
+
+// updateGrantServicesVisibility is the event-handler entry point; it
+// forwards to populateGrantAccessServices. The name is preserved for
+// the index.html onchange binding on the connect checkbox.
+function updateGrantServicesVisibility() {
+  populateGrantAccessServices();
 }
 
 function accessGrantModal() {
@@ -5183,7 +5265,10 @@ function accessGrantModal() {
     var tokenData = results[0];
     var statusData = results[1];
     var tokens = (tokenData.tokens || []).filter(function (t) { return t.role !== 'owner' && t.role !== 'admin'; });
-    var machines = (statusData.machines || []).map(function (m) { return m.id; });
+    // Cache the full machine entries (with services) so changes to
+    // the machine dropdown can render the right checkbox list without
+    // another round trip to GetHubStatus.
+    grantAccessMachinesSnapshot = statusData.machines || [];
 
     var identityOpts = '<option value="">Select identity...</option>';
     tokens.forEach(function (t) {
@@ -5191,17 +5276,19 @@ function accessGrantModal() {
     });
 
     var machineOpts = '<option value="*">* (all machines)</option>';
-    machines.forEach(function (m) {
-      machineOpts += '<option value="' + escAttr(m) + '">' + escHtml(m) + '</option>';
+    grantAccessMachinesSnapshot.forEach(function (m) {
+      machineOpts += '<option value="' + escAttr(m.id) + '">' + escHtml(m.id) + '</option>';
     });
 
     document.getElementById('grant-access-identity').innerHTML = identityOpts;
-    document.getElementById('grant-access-machine').innerHTML = machineOpts;
+    var machineSel = document.getElementById('grant-access-machine');
+    machineSel.innerHTML = machineOpts;
+    machineSel.onchange = populateGrantAccessServices;
     document.getElementById('grant-access-connect').checked = true;
     document.getElementById('grant-access-register').checked = false;
     document.getElementById('grant-access-manage').checked = false;
     document.getElementById('grant-access-services').value = '';
-    updateGrantServicesVisibility();
+    populateGrantAccessServices();
     document.getElementById('grant-access-modal').classList.remove('hidden');
   });
 }
@@ -5221,9 +5308,22 @@ function submitAccessGrant(event) {
   // Collect services filter. Only meaningful when connect is in perms
   // and the hub supports the feature; otherwise send empty to match
   // pre-0.15 behavior.
+  //
+  // Two sources in this order:
+  //   * machine: free-text input (operator types names)
+  //   specific machine: checkbox list built from the machine's services
   var servicesRaw = '';
   if (perms.indexOf('connect') !== -1 && hubSupportsPerServiceACL()) {
-    servicesRaw = (document.getElementById('grant-access-services').value || '').trim();
+    if (machine === '*') {
+      servicesRaw = (document.getElementById('grant-access-services').value || '').trim();
+    } else {
+      var picked = [];
+      var boxes = document.querySelectorAll('.grant-access-service-cb:checked');
+      for (var i = 0; i < boxes.length; i++) {
+        picked.push(boxes[i].value);
+      }
+      servicesRaw = picked.join(',');
+    }
   }
 
   goApp.AdminSetMachineAccess(currentAdminHub, id, machine, perms.join(','), servicesRaw).then(function (raw) {

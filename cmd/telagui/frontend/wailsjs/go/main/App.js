@@ -54,10 +54,6 @@ export function AdminSetMachineAccess(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AdminSetMachineAccess'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function HubCapabilities(arg1) {
-  return window['go']['main']['App']['HubCapabilities'](arg1);
-}
-
 export function AssignLocalPort(arg1) {
   return window['go']['main']['App']['AssignLocalPort'](arg1);
 }
@@ -304,6 +300,10 @@ export function GetVersion() {
 
 export function HasUpdate() {
   return window['go']['main']['App']['HasUpdate']();
+}
+
+export function HubCapabilities(arg1) {
+  return window['go']['main']['App']['HubCapabilities'](arg1);
 }
 
 export function ImportProfile() {
