@@ -2882,7 +2882,50 @@ func saveTelaConfig(cfg *telaConfig) error {
 
 // telaWellKnown is the JSON shape returned by /.well-known/tela (RFC 8615).
 type telaWellKnown struct {
-	HubDirectory string `json:"hub_directory"`
+	HubDirectory string   `json:"hub_directory"`
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// fetchHubCapabilities returns the capabilities list advertised by the
+// hub at baseURL, or an error if the endpoint is unreachable or returns
+// invalid JSON. An empty list is returned when the hub responds 200
+// but does not advertise any capabilities (a pre-0.15 hub). Callers
+// use this for client-side capability checks before sending requests
+// that depend on newer hub behavior.
+func fetchHubCapabilities(baseURL, token string) ([]string, error) {
+	wkURL := strings.TrimRight(baseURL, "/") + "/.well-known/tela"
+	req, err := http.NewRequest("GET", wkURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s: %w", wkURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("fetch %s: HTTP %d", wkURL, resp.StatusCode)
+	}
+	var wk telaWellKnown
+	if err := json.NewDecoder(resp.Body).Decode(&wk); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", wkURL, err)
+	}
+	return wk.Capabilities, nil
+}
+
+// hubHasCapability reports whether caps contains the named token.
+// Intended for reading the return of fetchHubCapabilities.
+func hubHasCapability(caps []string, name string) bool {
+	for _, c := range caps {
+		if c == name {
+			return true
+		}
+	}
+	return false
 }
 
 // discoverHubDirectory queries /.well-known/tela to discover the hub directory

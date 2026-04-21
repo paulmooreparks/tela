@@ -850,6 +850,26 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(payload)
 }
 
+// hubCapabilities returns the opt-in feature tokens this hub advertises
+// on /.well-known/tela. Clients negotiate optional behavior by testing
+// for a capability token before sending a request that depends on it.
+// The returned slice is a fresh copy on each call; callers may sort or
+// mutate it without affecting other callers.
+//
+// Capability tokens are short kebab-case strings. Adding a token is
+// a non-breaking change; removing one is a major-version bump because
+// clients may gate functionality on its presence.
+func hubCapabilities() []string {
+	return []string{
+		// per-service-access-control: the hub understands the Services
+		// field on connectGrant (in config), on PUT /api/admin/access
+		// request bodies, and enforces per-service visibility on
+		// /api/status. Clients use this to decide whether sending a
+		// filtered grant is safe (see issue #27).
+		"per-service-access-control",
+	}
+}
+
 // handleWellKnown serves GET /.well-known/tela on the hub. It is
 // unauthenticated so that portals can discover the hub's identity
 // without needing a token. See DESIGN-identity.md section 6.1.
@@ -866,6 +886,13 @@ func handleWellKnown(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{
 		"protocolVersion":   "1.1",
 		"supportedVersions": []string{"1.1"},
+		// capabilities is an unordered set of opt-in feature tokens
+		// clients use to negotiate optional behavior. Unknown tokens
+		// are ignored by both sides. Each token is a short string
+		// naming a specific capability; see DESIGN-remote-admin.md
+		// for the registry. Adding a capability is a non-breaking
+		// change; removing one is a major-version bump.
+		"capabilities": hubCapabilities(),
 	}
 	if hubID != "" {
 		payload["hubId"] = hubID
@@ -2843,11 +2870,14 @@ func runAsWindowsService() {
 // telaWellKnown is the JSON shape returned by /.well-known/tela. The
 // fields match DESIGN-portal.md section 2: hub_directory points at the
 // directory base path; protocolVersion + supportedVersions carry the
-// 1.0 version-negotiation handshake.
+// 1.0 version-negotiation handshake; capabilities is an opt-in feature
+// token list that clients check before sending requests that depend on
+// newer hub behavior.
 type telaWellKnown struct {
 	HubDirectory      string   `json:"hub_directory"`
 	ProtocolVersion   string   `json:"protocolVersion,omitempty"`
 	SupportedVersions []string `json:"supportedVersions,omitempty"`
+	Capabilities      []string `json:"capabilities,omitempty"`
 }
 
 // discoverHubDirectory queries /.well-known/tela to discover the hub
