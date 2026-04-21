@@ -4892,7 +4892,7 @@ function renderHubTokens(pane) {
     tokens.forEach(function (t) {
       var isOwner = t.role === 'owner';
       html += '<tr><td><strong>' + escHtml(t.id) + '</strong></td>'
-        + '<td><span class="chip chip-role-' + t.role + '">' + t.role + '</span></td>'
+        + '<td><span class="chip chip-role-' + t.role + '">' + formatRole(t.role) + '</span></td>'
         + '<td><span class="token-preview">' + escHtml(t.tokenPreview) + '</span></td>'
         + '<td><div class="action-btns">'
         + '<button class="btn btn-sm" onclick="rotateToken(\'' + escAttr(t.id) + '\')">Rotate</button>';
@@ -4945,16 +4945,28 @@ function promptCreateToken() {
   document.getElementById('new-token-id').focus();
 }
 
+// formatRole converts a wire-level role value (lowercase, possibly
+// empty) into the capitalized label the UI shows everywhere:
+//   ""       -> "User"   (empty is the default user role)
+//   "user"   -> "User"
+//   "admin"  -> "Admin"
+//   "owner"  -> "Owner"
+//   "viewer" -> "Viewer"
+// Unknown values are passed through with the first letter capitalized
+// so future roles display sanely without a code change.
+function formatRole(r) {
+  if (!r) return 'User';
+  return r.charAt(0).toUpperCase() + r.slice(1);
+}
+
 function submitCreateToken(event) {
   event.preventDefault();
   var id = document.getElementById('new-token-id').value.trim();
-  var selectedRole = document.getElementById('new-token-role').value; // for display
+  var selectedRole = document.getElementById('new-token-role').value;
   if (!id) return;
   // Backend treats an empty role as "user" (the default). The dropdown
-  // shows "User" for clarity but we must normalize to "" on the wire,
-  // otherwise the backend's role validation rejects the request. The
-  // display string keeps the dropdown label so the Token Created modal
-  // matches what the operator just selected.
+  // shows "User" for clarity; we normalize to "" on the wire because
+  // the backend's role validation rejects the literal "user".
   var wireRole = (selectedRole === 'user') ? '' : selectedRole;
 
   goApp.AdminCreateToken(currentAdminHub, id, wireRole).then(function (raw) {
@@ -4968,7 +4980,7 @@ function submitCreateToken(event) {
     }
     closeModal('create-token-modal');
     if (data.token) {
-      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + selectedRole);
+      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + formatRole(selectedRole));
     }
     renderHubTokens(document.getElementById('hubs-admin-detail'));
   });
@@ -5057,7 +5069,7 @@ function renderHubAccess(pane) {
         var roleClass = entry.role === 'owner' ? 'owner' : entry.role === 'admin' ? 'admin' : '';
         html += '<div class="setting-card"><div class="setting-card-title-row">'
           + '<div><strong>' + escHtml(entry.id) + '</strong>'
-          + ' <span class="pill ' + roleClass + '">' + escHtml(entry.role) + '</span>'
+          + ' <span class="pill ' + roleClass + '">' + escHtml(formatRole(entry.role)) + '</span>'
           + ' <span class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</span></div>';
 
         if (entry.role !== 'owner') {
@@ -5274,7 +5286,7 @@ function accessGrantModal() {
 
     var identityOpts = '<option value="">Select identity...</option>';
     tokens.forEach(function (t) {
-      identityOpts += '<option value="' + escAttr(t.id) + '">' + escHtml(t.id) + ' (' + escHtml(t.role) + ')</option>';
+      identityOpts += '<option value="' + escAttr(t.id) + '">' + escHtml(t.id) + ' (' + escHtml(formatRole(t.role)) + ')</option>';
     });
 
     var machineOpts = '<option value="*">* (all machines)</option>';
