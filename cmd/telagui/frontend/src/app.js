@@ -4948,14 +4948,16 @@ function promptCreateToken() {
 function submitCreateToken(event) {
   event.preventDefault();
   var id = document.getElementById('new-token-id').value.trim();
-  var role = document.getElementById('new-token-role').value;
+  var selectedRole = document.getElementById('new-token-role').value; // for display
   if (!id) return;
   // Backend treats an empty role as "user" (the default). The dropdown
   // shows "User" for clarity but we must normalize to "" on the wire,
-  // otherwise the backend's role validation rejects the request.
-  if (role === 'user') role = '';
+  // otherwise the backend's role validation rejects the request. The
+  // display string keeps the dropdown label so the Token Created modal
+  // matches what the operator just selected.
+  var wireRole = (selectedRole === 'user') ? '' : selectedRole;
 
-  goApp.AdminCreateToken(currentAdminHub, id, role).then(function (raw) {
+  goApp.AdminCreateToken(currentAdminHub, id, wireRole).then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { data = {}; }
     if (data.error) {
@@ -4966,7 +4968,7 @@ function submitCreateToken(event) {
     }
     closeModal('create-token-modal');
     if (data.token) {
-      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + role);
+      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + selectedRole);
     }
     renderHubTokens(document.getElementById('hubs-admin-detail'));
   });
