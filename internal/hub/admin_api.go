@@ -304,11 +304,8 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 			acl.RegisterToken = newToken
 			changed = true
 		}
-		for i, ct := range acl.ConnectTokens {
-			if ct == oldToken {
-				acl.ConnectTokens[i] = newToken
-				changed = true
-			}
+		if replaceConnectGrantToken(acl.ConnectTokens, oldToken, newToken) {
+			changed = true
 		}
 		if changed {
 			globalCfg.Auth.Machines[name] = acl
@@ -626,11 +623,8 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 		if acl.RegisterToken == t.Token {
 			perms = append(perms, "register")
 		}
-		for _, ct := range acl.ConnectTokens {
-			if ct == t.Token {
-				perms = append(perms, "connect")
-				break
-			}
+		if hasConnectGrant(acl.ConnectTokens, t.Token) {
+			perms = append(perms, "connect")
 		}
 		for _, mt := range acl.ManageTokens {
 			if mt == t.Token {
@@ -743,7 +737,7 @@ func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
 		if acl.RegisterToken == token {
 			acl.RegisterToken = ""
 		}
-		acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+		acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, token)
 		acl.ManageTokens = removeToken(acl.ManageTokens, token)
 		globalCfg.Auth.Machines[machineID] = acl
 	}
@@ -788,16 +782,18 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 	if acl.RegisterToken == token {
 		acl.RegisterToken = ""
 	}
-	acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+	acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, token)
 	acl.ManageTokens = removeToken(acl.ManageTokens, token)
 
-	// Apply requested permissions
+	// Apply requested permissions. The connect grant inherits the
+	// services filter from the request body (Phase 3 wires this up);
+	// for now, every connect grant is unfiltered.
 	for _, perm := range req.Permissions {
 		switch perm {
 		case "register":
 			acl.RegisterToken = token
 		case "connect":
-			acl.ConnectTokens = append(acl.ConnectTokens, token)
+			acl.ConnectTokens = append(acl.ConnectTokens, connectGrant{Token: token})
 		case "manage":
 			acl.ManageTokens = append(acl.ManageTokens, token)
 		}
@@ -841,7 +837,7 @@ func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machin
 	if acl.RegisterToken == token {
 		acl.RegisterToken = ""
 	}
-	acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+	acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, token)
 	acl.ManageTokens = removeToken(acl.ManageTokens, token)
 	globalCfg.Auth.Machines[machineID] = acl
 

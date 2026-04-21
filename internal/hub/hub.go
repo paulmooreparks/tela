@@ -3530,7 +3530,7 @@ func cmdUserBootstrap() {
 		cfg.Auth.Machines = make(map[string]machineACL)
 	}
 	cfg.Auth.Machines["*"] = machineACL{
-		ConnectTokens: []string{token},
+		ConnectTokens: []connectGrant{{Token: token}},
 	}
 
 	if err := saveUserConfig(cfgPath, cfg); err != nil {
@@ -3762,16 +3762,11 @@ func cmdUserRemove() {
 			acl.RegisterToken = ""
 			changed = true
 		}
-		newCT := make([]string, 0, len(acl.ConnectTokens))
-		for _, ct := range acl.ConnectTokens {
-			if ct == removedToken {
-				changed = true
-				continue
-			}
-			newCT = append(newCT, ct)
+		if hasConnectGrant(acl.ConnectTokens, removedToken) {
+			acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, removedToken)
+			changed = true
 		}
 		if changed {
-			acl.ConnectTokens = newCT
 			cfg.Auth.Machines[name] = acl
 		}
 	}
@@ -3819,13 +3814,11 @@ func cmdUserGrant() {
 	acl := cfg.Auth.Machines[machineID]
 
 	// Check if already granted
-	for _, ct := range acl.ConnectTokens {
-		if ct == entry.Token {
-			fmt.Printf("Identity '%s' already has connect access to '%s'.\n", id, machineID)
-			return
-		}
+	if hasConnectGrant(acl.ConnectTokens, entry.Token) {
+		fmt.Printf("Identity '%s' already has connect access to '%s'.\n", id, machineID)
+		return
 	}
-	acl.ConnectTokens = append(acl.ConnectTokens, entry.Token)
+	acl.ConnectTokens = append(acl.ConnectTokens, connectGrant{Token: entry.Token})
 	cfg.Auth.Machines[machineID] = acl
 
 	if err := saveUserConfig(cfgPath, cfg); err != nil {
@@ -3871,20 +3864,11 @@ func cmdUserRevoke() {
 		os.Exit(1)
 	}
 
-	found := false
-	newCT := make([]string, 0, len(acl.ConnectTokens))
-	for _, ct := range acl.ConnectTokens {
-		if ct == entry.Token {
-			found = true
-			continue
-		}
-		newCT = append(newCT, ct)
-	}
-	if !found {
+	if !hasConnectGrant(acl.ConnectTokens, entry.Token) {
 		fmt.Fprintf(os.Stderr, "error: identity '%s' does not have connect access to '%s'\n", id, machineID)
 		os.Exit(1)
 	}
-	acl.ConnectTokens = newCT
+	acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, entry.Token)
 	cfg.Auth.Machines[machineID] = acl
 
 	if err := saveUserConfig(cfgPath, cfg); err != nil {
@@ -3938,11 +3922,8 @@ func cmdUserRotate() {
 			acl.RegisterToken = newToken
 			changed = true
 		}
-		for i, ct := range acl.ConnectTokens {
-			if ct == oldToken {
-				acl.ConnectTokens[i] = newToken
-				changed = true
-			}
+		if replaceConnectGrantToken(acl.ConnectTokens, oldToken, newToken) {
+			changed = true
 		}
 		if changed {
 			cfg.Auth.Machines[name] = acl
