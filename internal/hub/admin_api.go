@@ -524,6 +524,11 @@ type accessEntry struct {
 type machineAccess struct {
 	MachineID   string   `json:"machineId"`
 	Permissions []string `json:"permissions"`
+	// Services, when non-empty, restricts the connect grant on this
+	// machine to the named services. Omitted (nil/absent in JSON) or
+	// empty means "all services" (the 0.14 behavior). Applies only to
+	// the connect permission; register and manage are unaffected.
+	Services []string `json:"services,omitempty"`
 }
 
 // handleAdminAccess dispatches /api/admin/access and /api/admin/access/{id}...
@@ -620,11 +625,15 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 	// Scan all machine ACLs for this token
 	for machineID, acl := range globalCfg.Auth.Machines {
 		var perms []string
+		var services []string
 		if acl.RegisterToken == t.Token {
 			perms = append(perms, "register")
 		}
-		if hasConnectGrant(acl.ConnectTokens, t.Token) {
+		if grant, ok := findConnectGrant(acl.ConnectTokens, t.Token); ok {
 			perms = append(perms, "connect")
+			if len(grant.Services) > 0 {
+				services = append([]string(nil), grant.Services...)
+			}
 		}
 		for _, mt := range acl.ManageTokens {
 			if mt == t.Token {
@@ -636,6 +645,7 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 			entry.Machines = append(entry.Machines, machineAccess{
 				MachineID:   machineID,
 				Permissions: perms,
+				Services:    services,
 			})
 		}
 	}
@@ -757,6 +767,11 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var req struct {
 		Permissions []string `json:"permissions"`
+		// Services, when present and non-empty, attaches a per-service
+		// filter to the connect permission. nil / absent / empty means
+		// "all services" (the pre-0.15 behavior). Ignored when connect
+		// is not in Permissions.
+		Services []string `json:"services,omitempty"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid body"})
@@ -785,15 +800,19 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 	acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, token)
 	acl.ManageTokens = removeToken(acl.ManageTokens, token)
 
-	// Apply requested permissions. The connect grant inherits the
-	// services filter from the request body (Phase 3 wires this up);
-	// for now, every connect grant is unfiltered.
+	// Apply requested permissions. The connect grant carries the
+	// services filter (if any) from the request body; register and
+	// manage are unaffected by Services.
 	for _, perm := range req.Permissions {
 		switch perm {
 		case "register":
 			acl.RegisterToken = token
 		case "connect":
-			acl.ConnectTokens = append(acl.ConnectTokens, connectGrant{Token: token})
+			grant := connectGrant{Token: token}
+			if len(req.Services) > 0 {
+				grant.Services = append([]string(nil), req.Services...)
+			}
+			acl.ConnectTokens = append(acl.ConnectTokens, grant)
 		case "manage":
 			acl.ManageTokens = append(acl.ManageTokens, token)
 		}
@@ -805,16 +824,20 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
-	log.Printf("[hub] admin: set %q permissions on %q to %v", id, machineID, req.Permissions)
+	log.Printf("[hub] admin: set %q permissions on %q to %v (services=%v)", id, machineID, req.Permissions, req.Services)
 
 	adminCorsHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	resp := map[string]any{
 		"status":      "updated",
 		"id":          id,
 		"machineId":   machineID,
 		"permissions": req.Permissions,
-	})
+	}
+	if len(req.Services) > 0 {
+		resp["services"] = req.Services
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID string) {
