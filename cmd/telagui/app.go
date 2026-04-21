@@ -1465,8 +1465,32 @@ func maskToken(token string) string {
 // is the default on a fresh launch, so this path is friction-free for
 // users who never sign into a remote portal.
 func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]byte, error) {
+	respBody, status, _, err := a.adminProxyCallRich(hubName, method, operation, body, nil)
+	if err != nil {
+		return nil, err
+	}
+	if status >= 400 {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("HTTP %d", status)
+	}
+	return respBody, nil
+}
+
+// adminProxyCallRich is the same as adminProxyCall but surfaces the
+// full response body, HTTP status code, and ETag header regardless of
+// status. Call sites that need to distinguish between semantically
+// different 4xx responses (412 Precondition Failed vs 409 Conflict
+// vs 404) use this variant; classic "success or error" call sites
+// use adminProxyCall. The extraHeaders map threads request headers
+// (If-Match, ...) through to the upstream hub.
+func (a *App) adminProxyCallRich(hubName, method, operation string, body []byte, extraHeaders map[string]string) ([]byte, int, string, error) {
 	if hubName == "" {
-		return nil, fmt.Errorf("adminProxyCall: hubName is required")
+		return nil, 0, "", fmt.Errorf("adminProxyCall: hubName is required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1474,7 +1498,7 @@ func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]
 	sourceName, _, _ := a.sourceForHub(ctx, hubName)
 	client, err := a.portalClientForSource(sourceName)
 	if err != nil {
-		return nil, err
+		return nil, 0, "", err
 	}
 
 	operation = strings.TrimPrefix(operation, "/api/admin/")
@@ -1485,26 +1509,21 @@ func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]
 		bodyAny = json.RawMessage(body)
 	}
 
-	resp, err := client.HubAdmin(ctx, hubName, operation, method, bodyAny)
+	var headerArgs []map[string]string
+	if len(extraHeaders) > 0 {
+		headerArgs = append(headerArgs, extraHeaders)
+	}
+	resp, err := client.HubAdmin(ctx, hubName, operation, method, bodyAny, headerArgs...)
 	if err != nil {
-		return nil, err
+		return nil, 0, "", err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, 0, "", fmt.Errorf("read response: %w", err)
 	}
-	if resp.StatusCode >= 400 {
-		var errResp struct {
-			Error string `json:"error"`
-		}
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("%s", errResp.Error)
-		}
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	return respBody, nil
+	return respBody, resp.StatusCode, resp.Header.Get("ETag"), nil
 }
 
 // LogAdminGET is a no-op retained for frontend compatibility.
@@ -1560,11 +1579,15 @@ func (a *App) AdminListAccess(hubName string) string {
 }
 
 // AdminSetMachineAccess sets permissions for an identity on a machine.
-// The services argument is a comma-separated list of service names that
-// scopes the connect permission; pass "" for an unfiltered grant (the
-// pre-0.15 behavior). services is ignored when "connect" is not in
-// permissions.
-func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions, services string) string {
+// services is a comma-separated list of service names that scopes the
+// connect permission; pass "" for an unfiltered grant (the pre-0.15
+// behavior). services is ignored when "connect" is not in permissions.
+// ifMatch, when non-empty, is the expected version of the identity
+// (e.g. "42"); the wrapper wraps it in the strong-ETag form the server
+// expects and surfaces a {"conflict": true, ...} response body to JS
+// callers when the precondition fails (HTTP 412). Pass "" to skip the
+// precondition (force overwrite).
+func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions, services, ifMatch string) string {
 	perms := strings.Split(permissions, ",")
 	body := map[string]any{"permissions": perms}
 	if strings.TrimSpace(services) != "" {
@@ -1580,11 +1603,7 @@ func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions, service
 		}
 	}
 	bodyBytes, _ := json.Marshal(body)
-	data, err := a.adminProxyCall(hubName, "PUT", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), bodyBytes)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
+	return a.adminMutateAccess(hubName, "PUT", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), bodyBytes, ifMatch, id)
 }
 
 // HubCapabilities fetches /.well-known/tela on the named hub and
@@ -1627,23 +1646,63 @@ func (a *App) HubCapabilities(hubName string) string {
 	return string(out)
 }
 
-// AdminRevokeMachineAccess revokes all permissions for an identity on a machine.
-func (a *App) AdminRevokeMachineAccess(hubName, id, machineId string) string {
-	data, err := a.adminProxyCall(hubName, "DELETE", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), nil)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
-	}
-	return string(data)
+// AdminRevokeMachineAccess revokes all permissions for an identity on a
+// machine. ifMatch is the expected version; pass "" to skip the
+// precondition. On 412 the return is a {"conflict": true, ...} JSON
+// body the JS side uses to drive the conflict modal.
+func (a *App) AdminRevokeMachineAccess(hubName, id, machineId, ifMatch string) string {
+	return a.adminMutateAccess(hubName, "DELETE", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), nil, ifMatch, id)
 }
 
-// AdminRenameAccess renames a token identity.
-func (a *App) AdminRenameAccess(hubName, id, newId string) string {
+// AdminRenameAccess renames a token identity. ifMatch is optional.
+func (a *App) AdminRenameAccess(hubName, id, newId, ifMatch string) string {
 	body, _ := json.Marshal(map[string]string{"id": newId})
-	data, err := a.adminProxyCall(hubName, "PATCH", "access/"+url.PathEscape(id), body)
+	return a.adminMutateAccess(hubName, "PATCH", "access/"+url.PathEscape(id), body, ifMatch, id)
+}
+
+// adminMutateAccess is the shared helper for access-resource mutations
+// that honor the per-identity optimistic-concurrency contract. It
+// threads the If-Match header, preserves the response body on 412 so
+// the caller can present a conflict dialog, and annotates the returned
+// JSON with a conflict:true marker when the server rejects on
+// precondition. On non-conflict failures the hub's standard
+// {"error": "..."} body is returned. On success, the hub's success
+// body (which already carries a "version" field) is returned as-is.
+func (a *App) adminMutateAccess(hubName, method, operation string, body []byte, ifMatch, id string) string {
+	var headers map[string]string
+	if ifMatch != "" {
+		headers = map[string]string{"If-Match": `"` + ifMatch + `"`}
+	}
+	respBody, status, _, err := a.adminProxyCallRich(hubName, method, operation, body, headers)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
-	return string(data)
+	if status == http.StatusPreconditionFailed {
+		// Keep the full hub response intact (which carries id, version,
+		// and the current server-side accessEntry) and tack on a
+		// conflict:true marker so JS call sites can branch cheaply
+		// without inspecting status codes.
+		var payload map[string]any
+		if err := json.Unmarshal(respBody, &payload); err != nil || payload == nil {
+			payload = map[string]any{"error": "access entry has been modified since last read"}
+		}
+		payload["conflict"] = true
+		if _, ok := payload["id"]; !ok && id != "" {
+			payload["id"] = id
+		}
+		out, _ := json.Marshal(payload)
+		return string(out)
+	}
+	if status >= 400 {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
+			return `{"error":"` + errResp.Error + `"}`
+		}
+		return fmt.Sprintf(`{"error":"HTTP %d"}`, status)
+	}
+	return string(respBody)
 }
 
 // AdminListPortals returns the portal registrations from a hub's admin API.

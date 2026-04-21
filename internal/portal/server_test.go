@@ -465,9 +465,13 @@ func newProxyTestStack(t *testing.T) (portalBase string, store *filestore.Store,
 		recorder.query = r.URL.RawQuery
 		recorder.authHeader = r.Header.Get("Authorization")
 		recorder.contentType = r.Header.Get("Content-Type")
+		recorder.ifMatch = r.Header.Get("If-Match")
 		body, _ := io.ReadAll(r.Body)
 		recorder.body = body
 		w.Header().Set("Content-Type", "application/json")
+		if recorder.respondETag != "" {
+			w.Header().Set("ETag", recorder.respondETag)
+		}
 		w.WriteHeader(recorder.respondStatus)
 		w.Write(recorder.respondBody)
 	}))
@@ -489,12 +493,14 @@ func newProxyTestStack(t *testing.T) (portalBase string, store *filestore.Store,
 type hubRecorder struct {
 	respondStatus int
 	respondBody   []byte
+	respondETag   string
 
 	method      string
 	path        string
 	query       string
 	authHeader  string
 	contentType string
+	ifMatch     string
 	body        []byte
 }
 
@@ -552,6 +558,51 @@ func TestAdminProxy_PreservesPATCHVerb(t *testing.T) {
 	}
 	if !bytes.Contains(rec.body, []byte(`"channel":"beta"`)) {
 		t.Errorf("upstream did not receive PATCH body: %q", rec.body)
+	}
+}
+
+func TestAdminProxy_ForwardsIfMatchToUpstream(t *testing.T) {
+	// Optimistic-concurrency contract: a client's If-Match header on a
+	// mutating request must arrive at the upstream hub intact so the
+	// hub can evaluate the precondition. Without this the new Access
+	// page's batched-save flow cannot detect drift.
+	base, _, rec := newProxyTestStack(t)
+
+	req, _ := http.NewRequest(http.MethodPut,
+		base+"/api/hub-admin/myhub/access/alice/machines/work-laptop",
+		strings.NewReader(`{"permissions":["connect"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-Match", `"42"`)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if rec.ifMatch != `"42"` {
+		t.Errorf("upstream If-Match = %q, want \"42\"", rec.ifMatch)
+	}
+}
+
+func TestAdminProxy_ExposesETagToClient(t *testing.T) {
+	// The upstream hub's ETag carries the identity's new version after
+	// a mutation. The proxy must forward it so the client can pin its
+	// next conditional request to the just-returned value.
+	base, _, rec := newProxyTestStack(t)
+	rec.respondETag = `"43"`
+
+	req, _ := http.NewRequest(http.MethodPut,
+		base+"/api/hub-admin/myhub/access/alice/machines/work-laptop",
+		strings.NewReader(`{"permissions":["connect"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("ETag"); got != `"43"` {
+		t.Errorf("client ETag = %q, want \"43\"", got)
 	}
 }
 

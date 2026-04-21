@@ -38,20 +38,20 @@ export function AdminListTokens(arg1) {
   return window['go']['main']['App']['AdminListTokens'](arg1);
 }
 
-export function AdminRenameAccess(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminRenameAccess'](arg1, arg2, arg3);
+export function AdminRenameAccess(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AdminRenameAccess'](arg1, arg2, arg3, arg4);
 }
 
-export function AdminRevokeMachineAccess(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminRevokeMachineAccess'](arg1, arg2, arg3);
+export function AdminRevokeMachineAccess(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AdminRevokeMachineAccess'](arg1, arg2, arg3, arg4);
 }
 
 export function AdminRotateToken(arg1, arg2) {
   return window['go']['main']['App']['AdminRotateToken'](arg1, arg2);
 }
 
-export function AdminSetMachineAccess(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['AdminSetMachineAccess'](arg1, arg2, arg3, arg4, arg5);
+export function AdminSetMachineAccess(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['AdminSetMachineAccess'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function AssignLocalPort(arg1) {
