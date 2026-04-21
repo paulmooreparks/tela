@@ -6962,6 +6962,21 @@ function toWSURL(url) {
 // parallel with If-Match; a 412 on any identity opens the conflict
 // modal listing the affected rows.
 
+// Cached hub capabilities keyed by hub name. Populated on Access page
+// open; a stale entry is acceptable because capabilities only grow.
+// Used by the services filter UI to decide whether to expose the
+// per-service-access-control feature.
+var hubCapabilitiesCache = {};
+
+// hubSupportsPerServiceACL reads the capabilities cache and returns
+// true when the named hub advertises per-service-access-control.
+// Defaults to false when the cache has no entry, keeping the filter UI
+// hidden on pre-0.15 hubs.
+function hubSupportsPerServiceACL(hubName) {
+  var caps = hubCapabilitiesCache[hubName] || [];
+  return caps.indexOf('per-service-access-control') !== -1;
+}
+
 var accessState = {
   hub: '',             // currently selected hub name
   view: 'by-machine',  // 'by-machine' | 'by-identity'
