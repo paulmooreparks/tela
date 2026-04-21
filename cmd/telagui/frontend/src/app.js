@@ -5179,20 +5179,32 @@ function grantAccessServiceFilterName(svc) {
 }
 
 // populateGrantAccessServices renders the services UI based on the
-// current machine selection and hub capability.
-//   - Hub doesn't support the feature: hide everything, show warning.
-//   - Connect unchecked: hide the whole group.
-//   - Machine "*": use the free-text input (wildcards span machines,
-//     so there is no fixed service list to enumerate).
-//   - Specific machine: render a scrollable checkbox list of that
-//     machine's services, or a hint when the machine has none.
+// current state of the scope radios, the machine selection, and the
+// hub's capability. The logic unfolds as a cascade:
+//
+//   Connect unchecked             -> hide the whole group
+//   Hub lacks the feature         -> hide everything, show warning
+//   Scope radio = "all"           -> hide picker, show a plain hint
+//   Scope radio = "restricted":
+//     Machine is "*"              -> free-text input (wildcard case)
+//     Machine is specific:
+//       Services list is empty    -> hint explaining there's nothing
+//                                    to restrict to
+//       Otherwise                 -> scrollable checkbox list
 function populateGrantAccessServices() {
   var group = document.getElementById('grant-access-services-group');
   var list = document.getElementById('grant-access-services-list');
   var input = document.getElementById('grant-access-services');
   var hint = document.getElementById('grant-access-services-hint');
   var disabledHint = document.getElementById('grant-access-services-disabled-hint');
-  if (!group || !list || !input || !hint || !disabledHint) return;
+  var scopeAll = document.getElementById('grant-access-scope-all');
+  var scopeRestricted = document.getElementById('grant-access-scope-restricted');
+  if (!group || !list || !input || !hint || !disabledHint || !scopeAll || !scopeRestricted) return;
+
+  function hideAllPickers() {
+    list.style.display = 'none';
+    input.style.display = 'none';
+  }
 
   var connectChecked = document.getElementById('grant-access-connect').checked;
   if (!connectChecked) {
@@ -5202,16 +5214,29 @@ function populateGrantAccessServices() {
   group.style.display = '';
 
   if (!hubSupportsPerServiceACL()) {
-    list.style.display = 'none';
+    hideAllPickers();
     list.innerHTML = '';
-    input.style.display = 'none';
     hint.style.display = 'none';
+    scopeAll.disabled = true;
+    scopeRestricted.disabled = true;
     disabledHint.style.display = '';
     return;
   }
   disabledHint.style.display = 'none';
+  scopeAll.disabled = false;
+  scopeRestricted.disabled = false;
 
+  if (scopeAll.checked) {
+    hideAllPickers();
+    list.innerHTML = '';
+    hint.style.display = '';
+    hint.textContent = 'Every service the agent advertises on this machine will be reachable through this grant.';
+    return;
+  }
+
+  // Restricted scope from here on.
   var machine = document.getElementById('grant-access-machine').value;
+
   if (machine === '*') {
     // Wildcard: fall back to free text. The operator may legitimately
     // want a cross-machine filter (e.g., "jellyfin on any machine"),
@@ -5221,7 +5246,7 @@ function populateGrantAccessServices() {
     input.style.display = '';
     input.disabled = false;
     hint.style.display = '';
-    hint.textContent = 'Comma-separated list of service names. Applies across every machine; services absent on a given machine are simply ignored for that machine. Leave blank to allow all services.';
+    hint.textContent = 'Comma-separated list of service names. Applies across every machine; services absent on a given machine are simply ignored for that machine. At least one name is required.';
     return;
   }
 
@@ -5242,11 +5267,11 @@ function populateGrantAccessServices() {
   if (services.length === 0) {
     list.style.display = 'none';
     list.innerHTML = '';
-    hint.textContent = 'This machine has no registered services. A connect grant will have nothing to filter; leave this section empty.';
+    hint.textContent = 'This machine has no registered services to restrict to. Switch back to "Allow all services" or select a different machine.';
     return;
   }
 
-  hint.textContent = 'Leave every box unchecked to allow all services on this machine.';
+  hint.textContent = 'Check at least one service. The grant will cover only the checked services on this machine.';
   var html = '';
   services.forEach(function (svc, idx) {
     var name = grantAccessServiceFilterName(svc);
@@ -5301,6 +5326,8 @@ function accessGrantModal() {
     document.getElementById('grant-access-connect').checked = true;
     document.getElementById('grant-access-register').checked = false;
     document.getElementById('grant-access-manage').checked = false;
+    document.getElementById('grant-access-scope-all').checked = true;
+    document.getElementById('grant-access-scope-restricted').checked = false;
     document.getElementById('grant-access-services').value = '';
     populateGrantAccessServices();
     document.getElementById('grant-access-modal').classList.remove('hidden');
@@ -5319,24 +5346,39 @@ function submitAccessGrant(event) {
   if (document.getElementById('grant-access-manage').checked) perms.push('manage');
   if (perms.length === 0) return;
 
-  // Collect services filter. Only meaningful when connect is in perms
-  // and the hub supports the feature; otherwise send empty to match
-  // pre-0.15 behavior.
+  // Collect services filter based on the scope radio. The filter is
+  // only meaningful when connect is in perms AND the hub supports the
+  // feature AND the operator chose "restricted" scope. Otherwise we
+  // send empty (matching pre-0.15 all-services behavior).
   //
-  // Two sources in this order:
-  //   * machine: free-text input (operator types names)
-  //   specific machine: checkbox list built from the machine's services
+  // In restricted mode the input source depends on the machine:
+  //   - wildcard (*): free-text input with comma-separated names
+  //   - specific:     checkbox list built from the machine's services
+  //
+  // Restricted mode with zero selected services is a user error; we
+  // refuse to submit rather than silently falling back to all-services.
   var servicesRaw = '';
   if (perms.indexOf('connect') !== -1 && hubSupportsPerServiceACL()) {
-    if (machine === '*') {
-      servicesRaw = (document.getElementById('grant-access-services').value || '').trim();
-    } else {
-      var picked = [];
-      var boxes = document.querySelectorAll('.grant-access-service-cb:checked');
-      for (var i = 0; i < boxes.length; i++) {
-        picked.push(boxes[i].value);
+    var scopeRestricted = document.getElementById('grant-access-scope-restricted').checked;
+    if (scopeRestricted) {
+      if (machine === '*') {
+        servicesRaw = (document.getElementById('grant-access-services').value || '').trim();
+        if (!servicesRaw) {
+          showError('Pick at least one service name, or switch back to "Allow all services".');
+          return;
+        }
+      } else {
+        var picked = [];
+        var boxes = document.querySelectorAll('.grant-access-service-cb:checked');
+        for (var i = 0; i < boxes.length; i++) {
+          picked.push(boxes[i].value);
+        }
+        if (picked.length === 0) {
+          showError('Check at least one service, or switch back to "Allow all services".');
+          return;
+        }
+        servicesRaw = picked.join(',');
       }
-      servicesRaw = picked.join(',');
     }
   }
 
