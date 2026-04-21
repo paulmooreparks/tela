@@ -1560,14 +1560,71 @@ func (a *App) AdminListAccess(hubName string) string {
 }
 
 // AdminSetMachineAccess sets permissions for an identity on a machine.
-func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions string) string {
+// The services argument is a comma-separated list of service names that
+// scopes the connect permission; pass "" for an unfiltered grant (the
+// pre-0.15 behavior). services is ignored when "connect" is not in
+// permissions.
+func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions, services string) string {
 	perms := strings.Split(permissions, ",")
-	body, _ := json.Marshal(map[string]any{"permissions": perms})
-	data, err := a.adminProxyCall(hubName, "PUT", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), body)
+	body := map[string]any{"permissions": perms}
+	if strings.TrimSpace(services) != "" {
+		var svc []string
+		for _, s := range strings.Split(services, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				svc = append(svc, s)
+			}
+		}
+		if len(svc) > 0 {
+			body["services"] = svc
+		}
+	}
+	bodyBytes, _ := json.Marshal(body)
+	data, err := a.adminProxyCall(hubName, "PUT", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), bodyBytes)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
 	return string(data)
+}
+
+// HubCapabilities fetches /.well-known/tela on the named hub and
+// returns the capabilities list as a JSON-encoded string:
+//
+//	{"capabilities": ["per-service-access-control", ...]}
+//
+// The frontend uses this to decide whether to expose per-service
+// access control UI. On any error (unreachable hub, non-200, bad
+// JSON), the response contains an "error" field and an empty
+// capabilities list, so the frontend can render as pre-0.15.
+func (a *App) HubCapabilities(hubName string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, hubURL, err := a.sourceForHub(ctx, hubName)
+	if err != nil || hubURL == "" {
+		return `{"error":"unknown hub","capabilities":[]}`
+	}
+	wkURL := strings.TrimRight(hubURL, "/") + "/.well-known/tela"
+	req, err := http.NewRequestWithContext(ctx, "GET", wkURL, nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `","capabilities":[]}`
+	}
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return `{"error":"` + err.Error() + `","capabilities":[]}`
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Sprintf(`{"error":"HTTP %d","capabilities":[]}`, resp.StatusCode)
+	}
+	var wk struct {
+		Capabilities []string `json:"capabilities"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&wk); err != nil {
+		return `{"error":"parse response","capabilities":[]}`
+	}
+	out, _ := json.Marshal(map[string]any{"capabilities": wk.Capabilities})
+	return string(out)
 }
 
 // AdminRevokeMachineAccess revokes all permissions for an identity on a machine.

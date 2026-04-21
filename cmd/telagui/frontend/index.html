@@ -744,9 +744,15 @@
           </div>
           <div class="form-group">
             <label>Permissions</label>
-            <div class="setting-check"><input type="checkbox" id="grant-access-connect" checked> Connect</div>
+            <div class="setting-check"><input type="checkbox" id="grant-access-connect" checked onchange="updateGrantServicesVisibility()"> Connect</div>
             <div class="setting-check"><input type="checkbox" id="grant-access-register"> Register</div>
             <div class="setting-check"><input type="checkbox" id="grant-access-manage"> Manage</div>
+          </div>
+          <div class="form-group" id="grant-access-services-group">
+            <label for="grant-access-services">Restrict to services (optional)</label>
+            <input type="text" id="grant-access-services" placeholder="Jellyfin, SSH, port-8080">
+            <div class="hint">Comma-separated list of service names. Leave blank to allow all services on this machine. Unnamed services use <code>port-&lt;N&gt;</code> (e.g., <code>port-22</code>).</div>
+            <div class="hint" id="grant-access-services-disabled-hint" style="display:none; color:var(--warn);">This hub does not support per-service access control. Upgrade the hub to v0.15.0 or later to use this filter.</div>
           </div>
           <div class="modal-actions">
             <button type="button" class="btn" onclick="closeModal('grant-access-modal')">Cancel</button>

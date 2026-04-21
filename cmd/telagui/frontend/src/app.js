@@ -5029,6 +5029,11 @@ function renderHubAccess(pane) {
   var hub = currentAdminHub;
   pane.innerHTML = '<h2>Access</h2><p class="empty-hint">Loading...</p>';
 
+  // Refresh the capability cache opportunistically. The access list
+  // itself doesn't depend on it, but the Grant Access modal and the
+  // per-machine services-filter display do.
+  refreshHubCapabilities();
+
   goApp.AdminListAccess(hub).then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { pane.innerHTML = '<p class="empty-hint">Invalid response.</p>'; return; }
@@ -5068,6 +5073,15 @@ function renderHubAccess(pane) {
             (m.permissions || []).forEach(function (p) {
               html += '<span class="pill">' + escHtml(p) + '</span> ';
             });
+            // Services filter (0.15+) scopes the connect permission.
+            // Displayed as a separate run of pills so operators can
+            // see at a glance that the grant is narrowed.
+            if (Array.isArray(m.services) && m.services.length > 0) {
+              html += '<span class="access-services-label">services:</span> ';
+              m.services.forEach(function (svc) {
+                html += '<span class="pill pill-service">' + escHtml(svc) + '</span> ';
+              });
+            }
             html += '<button type="button" class="btn btn-sm btn-danger" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
             html += '</div>';
           });
@@ -5105,11 +5119,66 @@ function accessRevokeMachine(id, machineId) {
   });
 }
 
+// Cached hub capabilities keyed by hub name. Populated on access-page
+// open and the Grant Access modal open; a stale entry is acceptable
+// because capabilities only grow. Reset when the active hub changes.
+var hubCapabilitiesCache = {};
+
+// hubSupportsPerServiceACL reads the cached capabilities list and
+// returns true when the current admin hub advertises the
+// per-service-access-control feature. Defaults to false when the
+// capability list is unknown, which is the safe choice: it keeps the
+// filter UI hidden on pre-0.15 hubs.
+function hubSupportsPerServiceACL() {
+  var caps = hubCapabilitiesCache[currentAdminHub] || [];
+  return caps.indexOf('per-service-access-control') !== -1;
+}
+
+// refreshHubCapabilities refetches /.well-known/tela on the current
+// admin hub and caches the capabilities list. Returns a promise.
+function refreshHubCapabilities() {
+  if (!currentAdminHub) return Promise.resolve();
+  return goApp.HubCapabilities(currentAdminHub).then(function (raw) {
+    var data; try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    hubCapabilitiesCache[currentAdminHub] = Array.isArray(data.capabilities) ? data.capabilities : [];
+  }).catch(function () {
+    hubCapabilitiesCache[currentAdminHub] = [];
+  });
+}
+
+// updateGrantServicesVisibility toggles the services input in the
+// Grant Access modal. The input is visible when "connect" is checked
+// AND the hub supports per-service-access-control; otherwise it is
+// hidden (connect unchecked) or disabled with a hint (hub too old).
+function updateGrantServicesVisibility() {
+  var group = document.getElementById('grant-access-services-group');
+  var input = document.getElementById('grant-access-services');
+  var hint = document.getElementById('grant-access-services-disabled-hint');
+  if (!group || !input || !hint) return;
+
+  var connectChecked = document.getElementById('grant-access-connect').checked;
+  if (!connectChecked) {
+    group.style.display = 'none';
+    return;
+  }
+  group.style.display = '';
+
+  if (hubSupportsPerServiceACL()) {
+    input.disabled = false;
+    hint.style.display = 'none';
+  } else {
+    input.disabled = true;
+    input.value = '';
+    hint.style.display = '';
+  }
+}
+
 function accessGrantModal() {
-  // Load tokens and machines for dropdowns
+  // Load tokens, machines, and capabilities in parallel.
   Promise.all([
     goApp.AdminListTokens(currentAdminHub).then(function (r) { try { return JSON.parse(r); } catch (e) { return {}; } }),
-    goApp.GetHubStatus(currentAdminHub).then(function (s) { return s; })
+    goApp.GetHubStatus(currentAdminHub).then(function (s) { return s; }),
+    refreshHubCapabilities()
   ]).then(function (results) {
     var tokenData = results[0];
     var statusData = results[1];
@@ -5131,6 +5200,8 @@ function accessGrantModal() {
     document.getElementById('grant-access-connect').checked = true;
     document.getElementById('grant-access-register').checked = false;
     document.getElementById('grant-access-manage').checked = false;
+    document.getElementById('grant-access-services').value = '';
+    updateGrantServicesVisibility();
     document.getElementById('grant-access-modal').classList.remove('hidden');
   });
 }
@@ -5147,7 +5218,15 @@ function submitAccessGrant(event) {
   if (document.getElementById('grant-access-manage').checked) perms.push('manage');
   if (perms.length === 0) return;
 
-  goApp.AdminSetMachineAccess(currentAdminHub, id, machine, perms.join(',')).then(function (raw) {
+  // Collect services filter. Only meaningful when connect is in perms
+  // and the hub supports the feature; otherwise send empty to match
+  // pre-0.15 behavior.
+  var servicesRaw = '';
+  if (perms.indexOf('connect') !== -1 && hubSupportsPerServiceACL()) {
+    servicesRaw = (document.getElementById('grant-access-services').value || '').trim();
+  }
+
+  goApp.AdminSetMachineAccess(currentAdminHub, id, machine, perms.join(','), servicesRaw).then(function (raw) {
     var data; try { data = JSON.parse(raw); } catch (e) {}
     if (data && data.error) { showError('Grant failed: ' + data.error); return; }
     closeModal('grant-access-modal');

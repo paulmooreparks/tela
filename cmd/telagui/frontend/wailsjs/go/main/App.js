@@ -50,8 +50,12 @@ export function AdminRotateToken(arg1, arg2) {
   return window['go']['main']['App']['AdminRotateToken'](arg1, arg2);
 }
 
-export function AdminSetMachineAccess(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['AdminSetMachineAccess'](arg1, arg2, arg3, arg4);
+export function AdminSetMachineAccess(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['AdminSetMachineAccess'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function HubCapabilities(arg1) {
+  return window['go']['main']['App']['HubCapabilities'](arg1);
 }
 
 export function AssignLocalPort(arg1) {
