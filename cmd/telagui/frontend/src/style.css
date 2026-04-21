@@ -968,6 +968,18 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   font-size: 14px;
   font-family: var(--font);
 }
+/* Overrides so checkboxes and radios inside a form-group do not inherit
+   the text-input styling (full-row width, padding, border). Without
+   this, every checkbox/radio stretches to 100% of its container and
+   the visible control drifts to the right edge. */
+.form-group input[type="checkbox"],
+.form-group input[type="radio"] {
+  width: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  accent-color: var(--accent);
+}
 .form-group input:focus, .form-group select:focus {
   outline: none;
   border-color: var(--accent);
