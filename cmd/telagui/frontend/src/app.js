@@ -7984,14 +7984,14 @@ function openAccessConflictModal(conflicts) {
   var html = '<div class="modal-overlay" id="access-conflict-modal" role="dialog" aria-modal="true" aria-labelledby="access-conflict-title">'
     + '<div class="modal-dialog"><div class="modal-header">'
     + '<h3 id="access-conflict-title" class="access-conflict-title">Server state changed</h3>'
-    + '<button type="button" class="modal-close" onclick="closeAccessConflictModal()" aria-label="Close">&times;</button>'
+    + '<button type="button" class="modal-close" onclick="accessDiscardAfterConflict()" aria-label="Close">&times;</button>'
     + '</div><div class="modal-body">'
     + '<p>Another operator modified access on <strong>' + escHtml(accessState.hub) + '</strong> since you loaded this view. The following rows were affected:</p>'
     + '<ul>' + listHtml + '</ul>'
     + '<p>Reload to see the current server state, then re-apply your staged changes.</p>'
     + '<p>If you prefer to commit your batch as-is and overwrite the other operator\'s edits on those rows, you can <button type="button" class="link" onclick="accessForceOverwriteConflicts()">force overwrite instead</button>. That path requires a second confirmation.</p>'
     + '</div><div class="modal-actions">'
-    + '<button type="button" class="btn" onclick="closeAccessConflictModal()">Cancel</button>'
+    + '<button type="button" class="btn" onclick="accessDiscardAfterConflict()">Discard my changes</button>'
     + '<button type="button" class="btn btn-primary" onclick="accessReloadAfterConflict()">Reload</button>'
     + '</div></div></div>';
   var host = document.getElementById('access-conflict-modal-host') || (function () {
@@ -8004,15 +8004,37 @@ function openAccessConflictModal(conflicts) {
   accessUpdateToolbar();
 }
 
+// closeAccessConflictModal tears down the modal's DOM without touching
+// pending state. Callers must pair it with one of the three recovery
+// actions below; otherwise pending state would carry stale If-Match
+// values that guarantee 412 on the next Save. This function is kept
+// internal on purpose — the modal's buttons drive the recovery paths.
 function closeAccessConflictModal() {
   var host = document.getElementById('access-conflict-modal-host');
   if (host) host.innerHTML = '';
 }
 
+// accessReloadAfterConflict abandons pending changes and reloads the
+// server state. The operator can re-stage any changes they still want
+// to make against the fresh baseline. This is the safe default.
 function accessReloadAfterConflict() {
   closeAccessConflictModal();
   accessState.pending = {};
+  accessState.lastSaveConflict = null;
   accessLoadData();
+}
+
+// accessDiscardAfterConflict throws away pending changes and closes
+// the modal without reloading. Use when the operator realizes their
+// batch was wrong and wants to walk away from it. Wired to the Cancel
+// button and the X close button so there is no path where the operator
+// can linger with stale If-Match values in pending state.
+function accessDiscardAfterConflict() {
+  closeAccessConflictModal();
+  accessState.pending = {};
+  accessState.lastSaveConflict = null;
+  accessUpdateToolbar();
+  renderAccessPane();
 }
 
 function accessForceOverwriteConflicts() {
@@ -8271,6 +8293,15 @@ function aesApply() {
       var boxes = document.querySelectorAll('#aes-services-list input[type="checkbox"]:checked');
       for (var i = 0; i < boxes.length; i++) services.push(boxes[i].value);
     }
+    // Deduplicate. The free-text path can produce duplicates ("git, git");
+    // the checkbox path cannot, but dedup is free and keeps the server
+    // view tidy.
+    var seen = {};
+    services = services.filter(function (s) {
+      if (seen[s]) return false;
+      seen[s] = true;
+      return true;
+    });
     if (services.length === 0) {
       showError('Pick at least one service, or switch back to "Allow all services".');
       return;
@@ -8278,18 +8309,26 @@ function aesApply() {
   }
 
   var p = accessEnsurePending(aesState.id, aesState.machineId);
-  // Editing the services filter implies granting connect: a filter is
-  // meaningless without it, and the backend ignores services when
-  // connect is absent. Clear any pending revoke too, since editing
-  // is the opposite of revoking.
+  // Editing the services filter is a positive action, so it clears any
+  // pending revoke on the same row.
   if (p.revoke) {
     p.revoke = false;
     p.desired.permissions = p.baseline.permissions.slice();
   }
-  if (p.desired.permissions.indexOf('connect') === -1) {
-    p.desired.permissions.push('connect');
+  if (scope === 'restrict') {
+    // A services filter without connect is meaningless; the backend
+    // would ignore it. Force connect on when the operator is
+    // explicitly restricting.
+    if (p.desired.permissions.indexOf('connect') === -1) {
+      p.desired.permissions.push('connect');
+    }
+    p.desired.services = services;
+  } else {
+    // "Allow all services" just clears the filter. It does not touch
+    // the connect permission: if the operator unchecked connect a
+    // moment ago, the modal should not silently re-grant it.
+    p.desired.services = [];
   }
-  p.desired.services = services;
   accessDropIfClean(aesState.id, aesState.machineId);
   closeModal('access-edit-services-modal');
   renderAccessPane();
