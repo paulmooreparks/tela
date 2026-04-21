@@ -1660,6 +1660,15 @@ func (a *App) AdminRenameAccess(hubName, id, newId, ifMatch string) string {
 	return a.adminMutateAccess(hubName, "PATCH", "access/"+url.PathEscape(id), body, ifMatch, id)
 }
 
+// AdminChangeRole changes the HubRole of a token identity. Role must
+// be one of "owner", "admin", "viewer", or "" (user, the default).
+// ifMatch is optional; non-empty values become the strong-ETag-form
+// If-Match header the server checks against the identity's version.
+func (a *App) AdminChangeRole(hubName, id, role, ifMatch string) string {
+	body, _ := json.Marshal(map[string]string{"role": role})
+	return a.adminMutateAccess(hubName, "PATCH", "access/"+url.PathEscape(id), body, ifMatch, id)
+}
+
 // adminMutateAccess is the shared helper for access-resource mutations
 // that honor the per-identity optimistic-concurrency contract. It
 // threads the If-Match header, preserves the response body on 412 so

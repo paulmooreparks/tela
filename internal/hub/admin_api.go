@@ -704,13 +704,37 @@ func adminGetAccess(w http.ResponseWriter, r *http.Request, id string) {
 	writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
 }
 
+// adminPatchAccess applies partial updates to an identity. The patch
+// body may carry an `id` field (rename), a `role` field (role change),
+// or both. Empty body or neither field is a 400. Role must be one of
+// "owner", "admin", "viewer", or "" (user, the default). Demoting the
+// sole owner is rejected with 409 so the hub never ends up without an
+// owner identity.
 func adminPatchAccess(w http.ResponseWriter, r *http.Request, id string) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var patch struct {
-		ID string `json:"id"` // rename
+		ID   *string `json:"id,omitempty"`
+		Role *string `json:"role,omitempty"`
 	}
-	if err := json.Unmarshal(body, &patch); err != nil || patch.ID == "" {
-		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "id field required"})
+	if err := json.Unmarshal(body, &patch); err != nil {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	if patch.ID == nil && patch.Role == nil {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "specify at least one of id or role"})
+		return
+	}
+	if patch.Role != nil {
+		switch *patch.Role {
+		case "", "owner", "admin", "viewer":
+			// ok
+		default:
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "role must be one of owner, admin, viewer, or empty (user)"})
+			return
+		}
+	}
+	if patch.ID != nil && *patch.ID == "" {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "id cannot be empty"})
 		return
 	}
 
@@ -731,26 +755,52 @@ func adminPatchAccess(w http.ResponseWriter, r *http.Request, id string) {
 		}
 	}
 
-	var resultID string
-	var resultVersion uint64
-	if patch.ID != id {
-		// Check for conflict
-		if findTokenEntryInCfg(patch.ID) != nil {
-			writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "identity already exists: " + patch.ID})
+	resultID := id
+	renamed := false
+	if patch.ID != nil && *patch.ID != id {
+		if findTokenEntryInCfg(*patch.ID) != nil {
+			writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "identity already exists: " + *patch.ID})
 			return
 		}
-		oldID := entry.ID
-		entry.ID = patch.ID
-		if err := persistConfig(); err != nil {
-			log.Printf("[hub] admin: persist error: %v", err)
+		entry.ID = *patch.ID
+		resultID = *patch.ID
+		renamed = true
+	}
+
+	if patch.Role != nil && *patch.Role != entry.HubRole {
+		newRole := *patch.Role
+		// Refuse to demote the last owner. Iterating once is cheap
+		// given the number of identities a hub holds, and guarding
+		// here keeps the check colocated with the mutation.
+		if entry.HubRole == "owner" && newRole != "owner" {
+			owners := 0
+			for _, t := range globalCfg.Auth.Tokens {
+				if t.HubRole == "owner" {
+					owners++
+				}
+			}
+			if owners <= 1 {
+				writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "cannot demote the sole owner; promote another identity first"})
+				return
+			}
 		}
-		renameAccessVersion(oldID, patch.ID)
-		log.Printf("[hub] admin: renamed %q to %q", oldID, patch.ID)
-		resultID = patch.ID
-		resultVersion = currentAccessVersion(patch.ID)
+		entry.HubRole = newRole
+	}
+
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	var resultVersion uint64
+	if renamed {
+		renameAccessVersion(id, resultID)
+		resultVersion = currentAccessVersion(resultID)
+		log.Printf("[hub] admin: renamed %q to %q", id, resultID)
 	} else {
-		resultID = id
 		resultVersion = bumpAccessVersion(id)
+	}
+	if patch.Role != nil {
+		log.Printf("[hub] admin: set %q role to %q", resultID, *patch.Role)
 	}
 
 	adminCorsHeaders(w, r)

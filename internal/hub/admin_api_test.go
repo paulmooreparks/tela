@@ -1,7 +1,12 @@
 package hub
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -118,5 +123,120 @@ func TestBuildAccessEntry_OwnerAdminSkipsPerMachineServices(t *testing.T) {
 	}
 	if got.Services != nil {
 		t.Errorf("owner row should not carry Services, got %v", got.Services)
+	}
+}
+
+// withTestConfig swaps globalCfg with tc for the lifetime of the test
+// and always restores the previous value. The mutex is acquired around
+// both the install and the restore so tests can be run serially (our
+// test binary runs tests sequentially, which is fine; -parallel would
+// not be).
+func withTestConfig(t *testing.T, tc *hubConfig) func() {
+	t.Helper()
+	globalCfgMu.Lock()
+	prev := globalCfg
+	prevAuth := globalAuth
+	globalCfg = tc
+	globalAuth = newAuthStore(&tc.Auth)
+	globalCfgMu.Unlock()
+	return func() {
+		globalCfgMu.Lock()
+		globalCfg = prev
+		globalAuth = prevAuth
+		globalCfgMu.Unlock()
+	}
+}
+
+func TestAdminPatchAccess_RejectsDemotingLastOwner(t *testing.T) {
+	// The hub must always have at least one owner-role identity. The
+	// patch handler refuses to demote the last one (409) so the hub
+	// cannot be left in an unmanageable state. Promoting a peer first
+	// is the documented recovery path.
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+		},
+	})
+	defer restore()
+
+	body := strings.NewReader(`{"role":"admin"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/admin/access/owner", body)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	handleAdminAccess(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rr.Code)
+	}
+	respBody, _ := io.ReadAll(rr.Body)
+	var resp map[string]string
+	_ = json.Unmarshal(respBody, &resp)
+	if !strings.Contains(resp["error"], "sole owner") {
+		t.Errorf("error = %q, want one mentioning the sole owner guard", resp["error"])
+	}
+}
+
+func TestAdminPatchAccess_ChangesRole(t *testing.T) {
+	// Happy path: promoting a user to admin writes the new role,
+	// persists, bumps the version counter, and returns a 200 with
+	// an ETag the client can pin future requests to.
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+		},
+	})
+	defer restore()
+
+	body := strings.NewReader(`{"role":"admin"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/admin/access/alice", body)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	handleAdminAccess(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	// Alice's role must have been updated in the config.
+	for _, tkn := range globalCfg.Auth.Tokens {
+		if tkn.ID == "alice" && tkn.HubRole != "admin" {
+			t.Errorf("alice.HubRole = %q, want admin", tkn.HubRole)
+		}
+	}
+	if rr.Header().Get("ETag") == "" {
+		t.Error("expected ETag on successful PATCH")
+	}
+}
+
+func TestAdminPatchAccess_RejectsUnknownRole(t *testing.T) {
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+		},
+	})
+	defer restore()
+
+	body := strings.NewReader(`{"role":"superuser"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/admin/access/alice", body)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	handleAdminAccess(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
 	}
 }
