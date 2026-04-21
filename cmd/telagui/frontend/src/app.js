@@ -7210,6 +7210,8 @@ function onAccessHubChange() {
       }
       accessState.hub = newHub;
       accessState.pending = {};
+      accessState.expanded = {};
+      accessState.selection = { machineId: '', identityId: '' };
       if (newHub) goApp.SaveLastSelectedHub(newHub).catch(function () { /* best effort */ });
       accessLoadData();
     });
@@ -7217,6 +7219,8 @@ function onAccessHubChange() {
   }
   accessState.hub = newHub;
   accessState.pending = {};
+  accessState.expanded = {};
+  accessState.selection = { machineId: '', identityId: '' };
   if (accessState.hub) {
     goApp.SaveLastSelectedHub(accessState.hub).catch(function () { /* best effort */ });
   }
@@ -7660,10 +7664,12 @@ function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
 }
 
 // renderAccessServicesCell renders the Connect services column for an
-// explicit row. An unfiltered grant shows "All services" in muted
-// italics; a filtered grant lists the chip cloud. The per-row edit
-// button in the actions column is the entry point for modifying the
-// filter; the cell itself is read-only.
+// explicit row as a disclosure widget: a compact "N of M services"
+// summary button with a rotating chevron that toggles a chip cloud
+// below. An unfiltered grant shows "All services" in muted italics
+// with no disclosure (nothing to expand). An unexpanded filtered grant
+// defaults to open when the filter is small (<= 3 chips) so the common
+// case reads without interaction.
 function renderAccessServicesCell(id, machineId, grant) {
   if ((grant.permissions || []).indexOf('connect') === -1) {
     return '<span class="services-summary-muted">&mdash;</span>';
@@ -7672,12 +7678,46 @@ function renderAccessServicesCell(id, machineId, grant) {
   if (services.length === 0) {
     return '<span class="services-summary-muted">All services</span>';
   }
-  var html = '<div class="services-chips">';
-  services.forEach(function (svc) {
-    html += '<span class="chip">' + escHtml(svc) + '</span>';
-  });
+  var total = accessMachineServiceCount(machineId, services.length);
+  var key = accessPendingKey(id, machineId);
+  var expanded = accessState.expanded[key];
+  if (expanded === undefined) expanded = services.length <= 3;
+
+  var html = '<div class="services-cell">';
+  html += '<button type="button" class="services-summary" aria-expanded="' + (expanded ? 'true' : 'false') +
+    '" onclick="accessToggleServicesExpand(\'' + escAttr(id) + '\',\'' + escAttr(machineId) + '\')">';
+  html += '<span class="services-summary-chevron">&#x25B8;</span>';
+  html += '<span>' + services.length + ' of ' + total + ' service' + (total === 1 ? '' : 's') + '</span>';
+  html += '</button>';
+  if (expanded) {
+    html += '<div class="services-chips">';
+    services.forEach(function (svc) {
+      html += '<span class="chip">' + escHtml(svc) + '</span>';
+    });
+    html += '</div>';
+  }
   html += '</div>';
   return html;
+}
+
+// accessMachineServiceCount returns the number of services the hub
+// advertises for machineId, falling back to the granted count when the
+// machine is unknown (wildcard "*" or a machine whose agent is offline).
+function accessMachineServiceCount(machineId, fallback) {
+  if (machineId === '*') return fallback;
+  var m = accessMachineFor(machineId);
+  if (m && Array.isArray(m.services)) return m.services.length;
+  return fallback;
+}
+
+function accessToggleServicesExpand(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  // Flip undefined->true, anything else to its inverse. Preserves the
+  // auto-expand-small-lists default from renderAccessServicesCell.
+  var cur = accessState.expanded[key];
+  if (cur === undefined) cur = true; // was auto-expanded; collapse
+  accessState.expanded[key] = !cur;
+  renderAccessPane();
 }
 
 // ── By-identity detail ────────────────────────────────────────────
@@ -8036,7 +8076,6 @@ function accessPairCode() {
   }
 }
 function accessRescanServices() { accessLoadData(); }
-function accessExportAudit() { showError('Export audit is not implemented yet.'); }
 
 // ── By-identity detail header actions ─────────────────────────────
 //
@@ -8066,9 +8105,53 @@ function accessRenameIdentity(id) {
 }
 
 function accessChangeRole(id) {
-  // Role changes land with the toolbar-actions commit; needs a role
-  // picker modal and a new bridge endpoint. Stub for now.
-  showError('Change role is not implemented yet.');
+  var entry = accessEntryFor(id);
+  if (!entry) return;
+  if (entry.role === 'owner') {
+    showError('Cannot change the role of the hub owner.');
+    return;
+  }
+  document.getElementById('crm-identity').textContent = id;
+  document.getElementById('crm-role').value = (entry.role === '' || entry.role === 'user') ? '' : entry.role;
+  var errEl = document.getElementById('crm-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  // Stash the identity ID on the modal so submitChangeRole can read it.
+  document.getElementById('access-change-role-modal').setAttribute('data-identity', id);
+  document.getElementById('access-change-role-modal').classList.remove('hidden');
+}
+
+function submitChangeRole() {
+  var modal = document.getElementById('access-change-role-modal');
+  var id = modal.getAttribute('data-identity') || '';
+  if (!id) { closeModal('access-change-role-modal'); return; }
+  var newRole = document.getElementById('crm-role').value;
+  var entry = accessEntryFor(id);
+  var current = entry ? entry.role : '';
+  // Normalize current: the backend stores "" for user; the UI shows
+  // "" in the dropdown for the same value. If they match, bail
+  // silently so we don't emit a no-op PATCH.
+  if (current === newRole || (current === 'user' && newRole === '') || (current === '' && newRole === '')) {
+    closeModal('access-change-role-modal');
+    return;
+  }
+  var ifMatch = entry ? String(entry.version || '') : '';
+  goApp.AdminChangeRole(accessState.hub, id, newRole, ifMatch).then(function (raw) {
+    var data = parseJSON(raw);
+    if (data.conflict) {
+      var errEl = document.getElementById('crm-error');
+      errEl.textContent = 'This identity was modified by another operator. Close and reload, then try again.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (data.error) {
+      var errEl = document.getElementById('crm-error');
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('access-change-role-modal');
+    accessLoadData();
+  });
 }
 
 function accessRotateIdentityToken(id) {
@@ -8081,9 +8164,174 @@ function accessDeleteIdentity(id) {
   if (typeof deleteToken === 'function') deleteToken(id);
 }
 
+// ── Edit services modal ───────────────────────────────────────────
+
+// aesState pins the identity+machine currently being edited so the
+// modal's submit handler can reach them without re-parsing the DOM.
+var aesState = { id: '', machineId: '' };
+
 function accessEditServices(id, machineId) {
-  // Edit services modal lands with the services-disclosure commit.
-  // For now, show a dialog explaining the placeholder so click-through
-  // is obvious.
-  showError('Edit services filter is not implemented yet. Toggle Connect to grant all services for now.');
+  if (!hubSupportsPerServiceACL(accessState.hub)) {
+    // Expose the capability hint even on unsupported hubs so the
+    // operator understands why the filter is unavailable. Opening the
+    // modal in a disabled state is more informative than a toast.
+    aesOpenDisabled(id, machineId);
+    return;
+  }
+  aesState.id = id;
+  aesState.machineId = machineId;
+
+  var grant = accessEffectiveGrant(id, machineId);
+  var isRestricted = (grant.services || []).length > 0;
+
+  document.getElementById('aes-identity').textContent = id;
+  document.getElementById('aes-machine').textContent = machineId === '*' ? '* (all machines)' : machineId;
+  document.getElementById('aes-scope-all').checked = !isRestricted;
+  document.getElementById('aes-scope-restrict').checked = isRestricted;
+  document.getElementById('aes-disabled-hint').style.display = 'none';
+
+  aesPopulateServicesList(machineId, grant.services || []);
+  aesUpdateVisibility();
+  document.getElementById('access-edit-services-modal').classList.remove('hidden');
+}
+
+function aesOpenDisabled(id, machineId) {
+  aesState.id = id;
+  aesState.machineId = machineId;
+  document.getElementById('aes-identity').textContent = id;
+  document.getElementById('aes-machine').textContent = machineId === '*' ? '* (all machines)' : machineId;
+  document.getElementById('aes-scope-all').checked = true;
+  document.getElementById('aes-scope-restrict').checked = false;
+  document.getElementById('aes-scope-restrict').disabled = true;
+  document.getElementById('aes-services-group').style.display = 'none';
+  document.getElementById('aes-disabled-hint').style.display = '';
+  document.getElementById('access-edit-services-modal').classList.remove('hidden');
+}
+
+function aesPopulateServicesList(machineId, selected) {
+  var list = document.getElementById('aes-services-list');
+  var input = document.getElementById('aes-services-freetext');
+  var hint = document.getElementById('aes-services-hint');
+  document.getElementById('aes-scope-restrict').disabled = false;
+
+  // Wildcard machine: no concrete service list to enumerate, so fall
+  // back to free-text. Users may legitimately want a cross-machine
+  // filter like "jellyfin on any machine that exposes one."
+  if (machineId === '*') {
+    list.innerHTML = '';
+    list.style.display = 'none';
+    input.style.display = '';
+    input.value = (selected || []).join(', ');
+    hint.textContent = 'Wildcard machine: enter comma-separated service names.';
+    return;
+  }
+
+  var m = accessMachineFor(machineId);
+  var services = (m && m.services) ? m.services : [];
+  input.style.display = 'none';
+  if (services.length === 0) {
+    list.style.display = '';
+    list.innerHTML = '<p class="empty-hint">No services advertised by this machine.</p>';
+    hint.textContent = '';
+    return;
+  }
+
+  var selectedSet = {};
+  (selected || []).forEach(function (s) { selectedSet[s] = true; });
+
+  var html = '';
+  services.forEach(function (svc) {
+    var name = svc.name || ('port-' + svc.port);
+    html += '<label class="aes-service-row">';
+    html += '<input type="checkbox" value="' + escAttr(name) + '"' + (selectedSet[name] ? ' checked' : '') + '>';
+    html += '<span>' + escHtml(name) + '</span>';
+    html += '<span class="aes-service-port">port ' + escHtml(String(svc.port || '?')) + '</span>';
+    html += '</label>';
+  });
+  list.innerHTML = html;
+  list.style.display = '';
+  hint.textContent = 'Tick the services to include.';
+}
+
+function aesUpdateVisibility() {
+  var group = document.getElementById('aes-services-group');
+  var restrict = document.getElementById('aes-scope-restrict').checked;
+  group.style.display = restrict ? '' : 'none';
+}
+
+function aesApply() {
+  var scope = document.getElementById('aes-scope-all').checked ? 'all' : 'restrict';
+  var services = [];
+
+  if (scope === 'restrict') {
+    if (aesState.machineId === '*') {
+      var raw = document.getElementById('aes-services-freetext').value || '';
+      services = raw.split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+    } else {
+      var boxes = document.querySelectorAll('#aes-services-list input[type="checkbox"]:checked');
+      for (var i = 0; i < boxes.length; i++) services.push(boxes[i].value);
+    }
+    if (services.length === 0) {
+      showError('Pick at least one service, or switch back to "Allow all services".');
+      return;
+    }
+  }
+
+  var p = accessEnsurePending(aesState.id, aesState.machineId);
+  // Editing the services filter implies granting connect: a filter is
+  // meaningless without it, and the backend ignores services when
+  // connect is absent. Clear any pending revoke too, since editing
+  // is the opposite of revoking.
+  if (p.revoke) {
+    p.revoke = false;
+    p.desired.permissions = p.baseline.permissions.slice();
+  }
+  if (p.desired.permissions.indexOf('connect') === -1) {
+    p.desired.permissions.push('connect');
+  }
+  p.desired.services = services;
+  accessDropIfClean(aesState.id, aesState.machineId);
+  closeModal('access-edit-services-modal');
+  renderAccessPane();
+}
+
+// ── Export audit ──────────────────────────────────────────────────
+
+function accessExportAudit() {
+  if (!accessState.loaded) {
+    showError('Load a hub before exporting the audit.');
+    return;
+  }
+  // Trim the machines snapshot to just the identifying fields; the
+  // full MachineStatus carries transient runtime state (sessionCount,
+  // lastSeen) that would make diffs noisy. Services are retained in
+  // their full form since they drive the ACL semantics.
+  var audit = {
+    exportedAt: new Date().toISOString(),
+    hub: accessState.hub,
+    entries: accessState.entries,
+    machines: accessState.machines.map(function (m) {
+      return {
+        id: m.id,
+        agentConnected: m.agentConnected === true,
+        services: (m.services || []).map(function (s) {
+          return { name: s.name || '', port: s.port || 0, proto: s.proto || '' };
+        }),
+      };
+    }),
+  };
+  var json = JSON.stringify(audit, null, 2);
+  var blob = new Blob([json], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var safeHub = accessState.hub.replace(/[^\w.-]/g, '_');
+  var ts = new Date().toISOString().replace(/[:.]/g, '-');
+  a.href = url;
+  a.download = safeHub + '-access-' + ts + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Revoke the object URL on the next tick so the browser has had
+  // time to initiate the download first.
+  setTimeout(function () { URL.revokeObjectURL(url); }, 0);
 }

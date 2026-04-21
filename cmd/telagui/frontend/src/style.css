@@ -2136,6 +2136,28 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .access-conflict-title { color: var(--danger); display: flex; align-items: center; gap: 8px; }
 .access-conflict-title::before { content: '\26A0'; font-size: 16px; }
 
+/* Edit services modal: scrollable checkbox list rendered when a
+   specific machine's services-filter is being edited. The free-text
+   input takes over for the wildcard "*" machine. */
+.aes-services-list {
+  max-height: 180px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 10px; background: var(--surface-alt);
+}
+.aes-service-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; padding: 4px 0; margin: 0;
+  font-weight: 400; cursor: pointer; color: var(--text);
+}
+.aes-service-row:hover { color: var(--text); }
+.aes-service-row input[type="checkbox"] {
+  accent-color: var(--accent); margin: 0; width: auto; flex-shrink: 0;
+}
+.aes-service-row .aes-service-port {
+  color: var(--text-muted); font-size: 12px; margin-left: auto;
+  font-family: var(--mono);
+}
+
 
 .acl-perm-row {
   display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
