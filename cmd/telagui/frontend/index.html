@@ -754,59 +754,6 @@
     </div>
   </div>
 
-  <!-- Grant Access Modal -->
-  <div class="modal-overlay hidden" id="grant-access-modal">
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <h3>Grant Access</h3>
-        <button class="modal-close" onclick="closeModal('grant-access-modal')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <form onsubmit="submitAccessGrant(event)">
-          <div class="form-group">
-            <label for="grant-access-identity">Identity</label>
-            <select id="grant-access-identity" title="Identity to grant access to">
-              <option value="">Loading identities...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="grant-access-machine">Machine</label>
-            <select id="grant-access-machine" title="Target machine">
-              <option value="*">* (all machines)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Permissions</label>
-            <div class="setting-check"><input type="checkbox" id="grant-access-connect" checked onchange="updateGrantServicesVisibility()"> Connect</div>
-            <div class="setting-check"><input type="checkbox" id="grant-access-register"> Register</div>
-            <div class="setting-check"><input type="checkbox" id="grant-access-manage"> Manage</div>
-          </div>
-          <div class="form-group" id="grant-access-services-group">
-            <label>Service scope</label>
-            <!-- Mutually-exclusive scope choice. The default "all" matches
-                 the pre-0.15 behavior (connect grants every advertised
-                 service). "Restricted" reveals the checkbox list (or
-                 the free-text input for the wildcard machine). -->
-            <div class="setting-check"><input type="radio" name="grant-access-scope" id="grant-access-scope-all" value="all" checked onchange="populateGrantAccessServices()"> Allow all services on this machine</div>
-            <div class="setting-check"><input type="radio" name="grant-access-scope" id="grant-access-scope-restricted" value="restricted" onchange="populateGrantAccessServices()"> Restrict to specific services</div>
-            <!-- Checkbox list for a specific machine. Populated by
-                 populateGrantAccessServices() from /api/status services. -->
-            <div id="grant-access-services-list" class="grant-access-services-list" style="display:none;"></div>
-            <!-- Free-text fallback for the "*" wildcard machine, because
-                 a wildcard has no fixed service list to enumerate. -->
-            <input type="text" id="grant-access-services" placeholder="Jellyfin, SSH, port-8080" style="display:none;">
-            <div class="hint" id="grant-access-services-hint" style="display:none;"></div>
-            <div class="hint" id="grant-access-services-disabled-hint" style="display:none; color:var(--warn);">This hub does not support per-service access control. Upgrade the hub to v0.15.0 or later to use this filter.</div>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn" onclick="closeModal('grant-access-modal')">Cancel</button>
-            <button type="submit" class="btn btn-primary">Grant</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
   <!-- Result Modal (for showing tokens, pairing codes) -->
   <div class="modal-overlay hidden" id="result-modal">
     <div class="modal-dialog">

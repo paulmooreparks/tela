@@ -4642,8 +4642,6 @@ function renderHubAdminDetail() {
   switch (currentAdminView) {
     case 'hub-settings': renderHubSettings(pane); break;
     case 'machines': renderHubMachines(pane); break;
-    case 'access': renderHubAccess(pane); break;
-    case 'tokens': renderHubTokens(pane); break;
     case 'console': renderHubConsole(pane); break;
     case 'history': renderHubHistory(pane); break;
     default: pane.innerHTML = '';
@@ -4858,58 +4856,6 @@ function renderHubMachines(pane) {
   });
 }
 
-// --- Tokens View ---
-
-function renderHubTokens(pane) {
-  var hub = currentAdminHub;
-  pane.innerHTML = '<h2>Tokens</h2>'
-    + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hub) + '</strong></p>'
-    + '<p class="loading">Loading...</p>';
-
-
-  goApp.AdminListTokens(hub).then(function (raw) {
-    var data;
-    try { data = JSON.parse(raw); } catch (e) { data = {}; }
-    if (data.error) {
-      pane.innerHTML = '<h2>Tokens</h2><p class="section-desc">' + escHtml(data.error) + '</p>';
-      return;
-    }
-    var tokens = data.tokens || [];
-
-    var html = '<h2>Tokens</h2>'
-      + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hub) + '</strong></p>';
-
-    html += '<div class="toolbar">'
-      + '<button class="btn btn-sm btn-primary" onclick="promptCreateToken()">Add Token</button>'
-      + '<button class="btn btn-sm" onclick="promptPairCode()">Generate Pairing Code</button>'
-      + '</div>';
-
-    html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Full tokens are only shown at creation or after rotation.</p>';
-
-    html += '<table class="admin-table"><thead><tr>'
-      + '<th>Identity</th><th>Role</th><th>Token Preview</th><th>Actions</th>'
-      + '</tr></thead><tbody>';
-
-    tokens.forEach(function (t) {
-      var isOwner = t.role === 'owner';
-      html += '<tr><td><strong>' + escHtml(t.id) + '</strong></td>'
-        + '<td><span class="chip chip-role-' + t.role + '">' + formatRole(t.role) + '</span></td>'
-        + '<td><span class="token-preview">' + escHtml(t.tokenPreview) + '</span></td>'
-        + '<td><div class="action-btns">'
-        + '<button class="btn btn-sm" onclick="rotateToken(\'' + escAttr(t.id) + '\')">Rotate</button>';
-      if (!isOwner) {
-        html += '<button class="btn btn-sm btn-danger" onclick="deleteToken(\'' + escAttr(t.id) + '\')">Delete</button>';
-      }
-      html += '</div></td></tr>';
-    });
-
-    html += '</tbody></table>';
-    html += '<p style="font-size:11px;color:var(--text-muted);margin-top:8px;">To change a token\'s role, delete it and create a new one with the desired role.</p>';
-
-    pane.innerHTML = html;
-  });
-}
-
 // --- Modal Helpers ---
 
 function closeModal(id) {
@@ -4983,7 +4929,7 @@ function submitCreateToken(event) {
     if (data.token) {
       showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + formatRole(selectedRole));
     }
-    renderHubTokens(document.getElementById('hubs-admin-detail'));
+    accessReload();
   });
 }
 
@@ -4991,7 +4937,7 @@ function deleteToken(id) {
   showConfirmDialog('Delete Token', 'Delete identity "' + id + '"? This removes the token and all its ACL entries.', 'Delete').then(function (yes) {
     if (!yes) return;
     goApp.AdminDeleteToken(currentAdminHub, id).then(function () {
-      renderHubTokens(document.getElementById('hubs-admin-detail'));
+      accessReload();
     });
   });
 }
@@ -5009,7 +4955,7 @@ function rotateToken(id) {
       if (data.token) {
         showResultModal('Token Rotated', 'New token for "' + id + '". Copy now, it will not be shown again.', data.token);
       }
-      renderHubTokens(document.getElementById('hubs-admin-detail'));
+      accessReload();
     });
   });
 }
@@ -5039,355 +4985,6 @@ function submitPairCode(event) {
     }
     closeModal('pair-code-modal');
     showResultModal('Pairing Code', 'Share this code with the user. It can only be used once.', data.code, 'Expires: ' + (data.expiresAt || 'soon'));
-  });
-}
-
-// --- Access View (unified tokens + permissions) ---
-
-function renderHubAccess(pane) {
-  var hub = currentAdminHub;
-  pane.innerHTML = '<h2>Access</h2><p class="empty-hint">Loading...</p>';
-
-  // Refresh the capability cache opportunistically. The access list
-  // itself doesn't depend on it, but the Grant Access modal and the
-  // per-machine services-filter display do.
-  refreshHubCapabilities();
-
-  goApp.AdminListAccess(hub).then(function (raw) {
-    var data;
-    try { data = JSON.parse(raw); } catch (e) { pane.innerHTML = '<p class="empty-hint">Invalid response.</p>'; return; }
-    if (data.error) { pane.innerHTML = '<p class="empty-hint">' + escHtml(data.error) + '</p>'; return; }
-
-    var entries = data.access || [];
-
-    var html = '<h2>Access</h2>'
-      + '<p class="hint" style="margin-bottom:16px;">Each identity and its effective per-machine permissions. Owner and admin tokens have implicit access to all machines.</p>';
-
-    if (entries.length === 0) {
-      html += '<p class="empty-hint">No access entries.</p>';
-    } else {
-      entries.forEach(function (entry) {
-        var roleClass = entry.role === 'owner' ? 'owner' : entry.role === 'admin' ? 'admin' : '';
-        html += '<div class="setting-card"><div class="setting-card-title-row">'
-          + '<div><strong>' + escHtml(entry.id) + '</strong>'
-          + ' <span class="pill ' + roleClass + '">' + escHtml(formatRole(entry.role)) + '</span>'
-          + ' <span class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</span></div>';
-
-        if (entry.role !== 'owner') {
-          html += '<button type="button" class="btn btn-sm" onclick="accessRename(\'' + escAttr(entry.id) + '\')">Rename</button>';
-        }
-
-        html += '</div>';
-
-        if (entry.role === 'owner' || entry.role === 'admin') {
-          html += '<div class="setting-card-desc">All machines (implicit)</div>';
-        } else if (entry.role === 'viewer') {
-          html += '<div class="setting-card-desc">View-only (no machine permissions)</div>';
-        } else if (!entry.machines || entry.machines.length === 0) {
-          html += '<div class="setting-card-desc">No machine permissions granted.</div>';
-        } else {
-          entry.machines.forEach(function (m) {
-            html += '<div class="access-machine-row">'
-              + '<strong>' + escHtml(m.machineId) + '</strong> ';
-            (m.permissions || []).forEach(function (p) {
-              html += '<span class="pill">' + escHtml(p) + '</span> ';
-            });
-            // Services filter (0.15+) scopes the connect permission.
-            // Displayed as a separate run of pills so operators can
-            // see at a glance that the grant is narrowed.
-            if (Array.isArray(m.services) && m.services.length > 0) {
-              html += '<span class="access-services-label">services:</span> ';
-              m.services.forEach(function (svc) {
-                html += '<span class="pill pill-service">' + escHtml(svc) + '</span> ';
-              });
-            }
-            html += '<button type="button" class="btn btn-sm btn-danger" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
-            html += '</div>';
-          });
-        }
-
-        html += '</div>';
-      });
-    }
-
-    html += '<div style="margin-top:16px;">'
-      + '<button type="button" class="btn btn-sm btn-primary" onclick="accessGrantModal()">Grant Access</button>'
-      + '</div>';
-
-    pane.innerHTML = html;
-  });
-}
-
-function accessRename(id) {
-  showPromptDialog('Rename Identity', 'Enter a new name for "' + id + '":', id, 'Rename').then(function (newId) {
-    if (!newId || newId === id) return;
-    goApp.AdminRenameAccess(currentAdminHub, id, newId).then(function (raw) {
-      var data; try { data = JSON.parse(raw); } catch (e) {}
-      if (data && data.error) { showError('Rename failed: ' + data.error); return; }
-      renderHubAccess(document.getElementById('hubs-admin-detail'));
-    });
-  });
-}
-
-function accessRevokeMachine(id, machineId) {
-  showConfirmDialog('Revoke Access', 'Revoke all permissions for "' + id + '" on "' + machineId + '"?', 'Revoke').then(function (yes) {
-    if (!yes) return;
-    goApp.AdminRevokeMachineAccess(currentAdminHub, id, machineId).then(function () {
-      renderHubAccess(document.getElementById('hubs-admin-detail'));
-    });
-  });
-}
-
-// Cached hub capabilities keyed by hub name. Populated on access-page
-// open and the Grant Access modal open; a stale entry is acceptable
-// because capabilities only grow. Reset when the active hub changes.
-var hubCapabilitiesCache = {};
-
-// hubSupportsPerServiceACL reads the cached capabilities list and
-// returns true when the current admin hub advertises the
-// per-service-access-control feature. Defaults to false when the
-// capability list is unknown, which is the safe choice: it keeps the
-// filter UI hidden on pre-0.15 hubs.
-function hubSupportsPerServiceACL() {
-  var caps = hubCapabilitiesCache[currentAdminHub] || [];
-  return caps.indexOf('per-service-access-control') !== -1;
-}
-
-// refreshHubCapabilities refetches /.well-known/tela on the current
-// admin hub and caches the capabilities list. Returns a promise.
-function refreshHubCapabilities() {
-  if (!currentAdminHub) return Promise.resolve();
-  return goApp.HubCapabilities(currentAdminHub).then(function (raw) {
-    var data; try { data = JSON.parse(raw); } catch (e) { data = {}; }
-    hubCapabilitiesCache[currentAdminHub] = Array.isArray(data.capabilities) ? data.capabilities : [];
-  }).catch(function () {
-    hubCapabilitiesCache[currentAdminHub] = [];
-  });
-}
-
-// grantAccessMachinesSnapshot caches the machines array from the hub
-// status fetched when the Grant Access modal opens. Used to populate
-// the services checkbox list when the machine selection changes, so
-// the operator picks from real services instead of typing raw names.
-var grantAccessMachinesSnapshot = [];
-
-// serviceFilterName mirrors the hub's serviceFilterName helper:
-// the explicit Name field if set, else "port-<Port>". Operators
-// match service filters against this token.
-function grantAccessServiceFilterName(svc) {
-  if (svc && typeof svc.name === 'string' && svc.name !== '') return svc.name;
-  return 'port-' + (svc && svc.port ? svc.port : '?');
-}
-
-// populateGrantAccessServices renders the services UI based on the
-// current state of the scope radios, the machine selection, and the
-// hub's capability. The logic unfolds as a cascade:
-//
-//   Connect unchecked             -> hide the whole group
-//   Hub lacks the feature         -> hide everything, show warning
-//   Scope radio = "all"           -> hide picker, show a plain hint
-//   Scope radio = "restricted":
-//     Machine is "*"              -> free-text input (wildcard case)
-//     Machine is specific:
-//       Services list is empty    -> hint explaining there's nothing
-//                                    to restrict to
-//       Otherwise                 -> scrollable checkbox list
-function populateGrantAccessServices() {
-  var group = document.getElementById('grant-access-services-group');
-  var list = document.getElementById('grant-access-services-list');
-  var input = document.getElementById('grant-access-services');
-  var hint = document.getElementById('grant-access-services-hint');
-  var disabledHint = document.getElementById('grant-access-services-disabled-hint');
-  var scopeAll = document.getElementById('grant-access-scope-all');
-  var scopeRestricted = document.getElementById('grant-access-scope-restricted');
-  if (!group || !list || !input || !hint || !disabledHint || !scopeAll || !scopeRestricted) return;
-
-  function hideAllPickers() {
-    list.style.display = 'none';
-    input.style.display = 'none';
-  }
-
-  var connectChecked = document.getElementById('grant-access-connect').checked;
-  if (!connectChecked) {
-    group.style.display = 'none';
-    return;
-  }
-  group.style.display = '';
-
-  if (!hubSupportsPerServiceACL()) {
-    hideAllPickers();
-    list.innerHTML = '';
-    hint.style.display = 'none';
-    scopeAll.disabled = true;
-    scopeRestricted.disabled = true;
-    disabledHint.style.display = '';
-    return;
-  }
-  disabledHint.style.display = 'none';
-  scopeAll.disabled = false;
-  scopeRestricted.disabled = false;
-
-  if (scopeAll.checked) {
-    hideAllPickers();
-    list.innerHTML = '';
-    hint.style.display = '';
-    hint.textContent = 'Every service the agent advertises on this machine will be reachable through this grant.';
-    return;
-  }
-
-  // Restricted scope from here on.
-  var machine = document.getElementById('grant-access-machine').value;
-
-  if (machine === '*') {
-    // Wildcard: fall back to free text. The operator may legitimately
-    // want a cross-machine filter (e.g., "jellyfin on any machine"),
-    // and there is no canonical service list to render.
-    list.style.display = 'none';
-    list.innerHTML = '';
-    input.style.display = '';
-    input.disabled = false;
-    hint.style.display = '';
-    hint.textContent = 'Comma-separated list of service names. Applies across every machine; services absent on a given machine are simply ignored for that machine. At least one name is required.';
-    return;
-  }
-
-  // Specific machine: build a checkbox list from its services.
-  input.style.display = 'none';
-  input.value = '';
-  hint.style.display = '';
-
-  var found = null;
-  for (var i = 0; i < grantAccessMachinesSnapshot.length; i++) {
-    if (grantAccessMachinesSnapshot[i].id === machine) {
-      found = grantAccessMachinesSnapshot[i];
-      break;
-    }
-  }
-  var services = (found && found.services) || [];
-
-  if (services.length === 0) {
-    list.style.display = 'none';
-    list.innerHTML = '';
-    hint.textContent = 'This machine has no registered services to restrict to. Switch back to "Allow all services" or select a different machine.';
-    return;
-  }
-
-  hint.textContent = 'Check at least one service. The grant will cover only the checked services on this machine.';
-  var html = '';
-  services.forEach(function (svc, idx) {
-    var name = grantAccessServiceFilterName(svc);
-    var desc = svc.description ? ' (' + escHtml(svc.description) + ')' : '';
-    var portLabel = svc.port ? ' \u2014 port ' + svc.port : '';
-    html += '<label class="grant-access-service-row">'
-      + '<input type="checkbox" class="grant-access-service-cb" value="' + escAttr(name) + '" data-idx="' + idx + '">'
-      + ' <strong>' + escHtml(name) + '</strong>'
-      + '<span class="grant-access-service-meta">' + escHtml(portLabel) + desc + '</span>'
-      + '</label>';
-  });
-  list.innerHTML = html;
-  list.style.display = '';
-}
-
-// updateGrantServicesVisibility is the event-handler entry point; it
-// forwards to populateGrantAccessServices. The name is preserved for
-// the index.html onchange binding on the connect checkbox.
-function updateGrantServicesVisibility() {
-  populateGrantAccessServices();
-}
-
-function accessGrantModal() {
-  // Load tokens, machines, and capabilities in parallel.
-  Promise.all([
-    goApp.AdminListTokens(currentAdminHub).then(function (r) { try { return JSON.parse(r); } catch (e) { return {}; } }),
-    goApp.GetHubStatus(currentAdminHub).then(function (s) { return s; }),
-    refreshHubCapabilities()
-  ]).then(function (results) {
-    var tokenData = results[0];
-    var statusData = results[1];
-    var tokens = (tokenData.tokens || []).filter(function (t) { return t.role !== 'owner' && t.role !== 'admin'; });
-    // Cache the full machine entries (with services) so changes to
-    // the machine dropdown can render the right checkbox list without
-    // another round trip to GetHubStatus.
-    grantAccessMachinesSnapshot = statusData.machines || [];
-
-    var identityOpts = '<option value="">Select identity...</option>';
-    tokens.forEach(function (t) {
-      identityOpts += '<option value="' + escAttr(t.id) + '">' + escHtml(t.id) + ' (' + escHtml(formatRole(t.role)) + ')</option>';
-    });
-
-    var machineOpts = '<option value="*">* (all machines)</option>';
-    grantAccessMachinesSnapshot.forEach(function (m) {
-      machineOpts += '<option value="' + escAttr(m.id) + '">' + escHtml(m.id) + '</option>';
-    });
-
-    document.getElementById('grant-access-identity').innerHTML = identityOpts;
-    var machineSel = document.getElementById('grant-access-machine');
-    machineSel.innerHTML = machineOpts;
-    machineSel.onchange = populateGrantAccessServices;
-    document.getElementById('grant-access-connect').checked = true;
-    document.getElementById('grant-access-register').checked = false;
-    document.getElementById('grant-access-manage').checked = false;
-    document.getElementById('grant-access-scope-all').checked = true;
-    document.getElementById('grant-access-scope-restricted').checked = false;
-    document.getElementById('grant-access-services').value = '';
-    populateGrantAccessServices();
-    document.getElementById('grant-access-modal').classList.remove('hidden');
-  });
-}
-
-function submitAccessGrant(event) {
-  event.preventDefault();
-  var id = document.getElementById('grant-access-identity').value;
-  var machine = document.getElementById('grant-access-machine').value;
-  if (!id) return;
-
-  var perms = [];
-  if (document.getElementById('grant-access-connect').checked) perms.push('connect');
-  if (document.getElementById('grant-access-register').checked) perms.push('register');
-  if (document.getElementById('grant-access-manage').checked) perms.push('manage');
-  if (perms.length === 0) return;
-
-  // Collect services filter based on the scope radio. The filter is
-  // only meaningful when connect is in perms AND the hub supports the
-  // feature AND the operator chose "restricted" scope. Otherwise we
-  // send empty (matching pre-0.15 all-services behavior).
-  //
-  // In restricted mode the input source depends on the machine:
-  //   - wildcard (*): free-text input with comma-separated names
-  //   - specific:     checkbox list built from the machine's services
-  //
-  // Restricted mode with zero selected services is a user error; we
-  // refuse to submit rather than silently falling back to all-services.
-  var servicesRaw = '';
-  if (perms.indexOf('connect') !== -1 && hubSupportsPerServiceACL()) {
-    var scopeRestricted = document.getElementById('grant-access-scope-restricted').checked;
-    if (scopeRestricted) {
-      if (machine === '*') {
-        servicesRaw = (document.getElementById('grant-access-services').value || '').trim();
-        if (!servicesRaw) {
-          showError('Pick at least one service name, or switch back to "Allow all services".');
-          return;
-        }
-      } else {
-        var picked = [];
-        var boxes = document.querySelectorAll('.grant-access-service-cb:checked');
-        for (var i = 0; i < boxes.length; i++) {
-          picked.push(boxes[i].value);
-        }
-        if (picked.length === 0) {
-          showError('Check at least one service, or switch back to "Allow all services".');
-          return;
-        }
-        servicesRaw = picked.join(',');
-      }
-    }
-  }
-
-  goApp.AdminSetMachineAccess(currentAdminHub, id, machine, perms.join(','), servicesRaw).then(function (raw) {
-    var data; try { data = JSON.parse(raw); } catch (e) {}
-    if (data && data.error) { showError('Grant failed: ' + data.error); return; }
-    closeModal('grant-access-modal');
-    renderHubAccess(document.getElementById('hubs-admin-detail'));
   });
 }
 
@@ -7480,6 +7077,16 @@ function renderAccessEmpty(msg) {
   var detail = document.getElementById('access-detail');
   if (list) list.innerHTML = '<p class="empty-hint">' + escHtml(msg) + '</p>';
   if (detail) detail.innerHTML = '<div class="access-detail-empty">' + escHtml(msg) + '</div>';
+}
+
+// accessReload re-renders the Access page after a successful mutation
+// (token create / rotate / delete, etc.). When the Access tab is not
+// the active tab, it's a no-op; the next switchTab('access') does a
+// full refresh anyway. Placeholder until the full data layer lands.
+function accessReload() {
+  var pane = document.getElementById('tab-access');
+  if (!pane || pane.classList.contains('hidden')) return;
+  refreshAccessTab();
 }
 
 // Toolbar action stubs. Full behavior lands in the actions commit; the
