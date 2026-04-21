@@ -1501,11 +1501,15 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px;
 }
 .setting-check:last-child { margin-bottom: 0; }
-.setting-check input { accent-color: var(--accent); margin: 0; }
+/* Explicit width:auto is required because .form-group input { width: 100% }
+   would otherwise stretch these checkboxes across the whole row. */
+.setting-check input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: auto; }
 
 /* Grant Access modal: scrollable service checkbox list rendered when a
    specific machine is selected. Falls back to display:none when the
-   wildcard machine is picked (see populateGrantAccessServices in app.js). */
+   wildcard machine is picked (see populateGrantAccessServices in app.js).
+   Extra selector specificity (.form-group ... label) is needed to beat
+   the parent .form-group label { display: block } rule. */
 .grant-access-services-list {
   max-height: 160px;
   overflow-y: auto;
@@ -1514,15 +1518,18 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   padding: 6px 10px;
   background: var(--surface-alt);
 }
-.grant-access-service-row {
+.form-group .grant-access-services-list label.grant-access-service-row,
+label.grant-access-service-row {
   display: flex; align-items: center; gap: 8px;
-  font-size: 13px; padding: 4px 0;
-  cursor: pointer;
+  font-size: 13px; padding: 4px 0; margin: 0;
+  font-weight: 400; cursor: pointer;
 }
 .grant-access-service-row:hover { color: var(--text); }
-.grant-access-service-row input { accent-color: var(--accent); margin: 0; }
+.grant-access-service-row input[type="checkbox"] {
+  accent-color: var(--accent); margin: 0; width: auto;
+}
 .grant-access-service-row strong { font-weight: 600; color: var(--text); }
-.grant-access-service-meta { color: var(--text-muted); font-size: 12px; }
+.grant-access-service-meta { color: var(--text-muted); font-size: 12px; margin-left: 2px; }
 .kv-table { width: 100%; border-collapse: collapse; }
 .kv-table td { padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .kv-table tr:last-child td { border-bottom: none; }
