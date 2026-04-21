@@ -7171,6 +7171,9 @@ function refreshAccessTab() {
     }
     accessApplyViewToggle();
     accessLoadData();
+  }).catch(function (err) {
+    console.error('[access] refreshAccessTab failed:', err);
+    renderAccessError('Could not load hubs: ' + (err && err.message ? err.message : err));
   });
 }
 
@@ -7182,7 +7185,7 @@ function onAccessHubChange() {
     // operator before dropping their work.
     showConfirmDialog(
       'Discard staged changes?',
-      'You have unsaved access changes on ' + accessState.hub + '. Switching hubs discards them.',
+      'You have pending access changes on ' + accessState.hub + '. Switching hubs discards them.',
       'Discard'
     ).then(function (yes) {
       if (!yes) {
@@ -7209,6 +7212,13 @@ function onAccessHubChange() {
 // selected hub and re-renders. Pending changes are cleared on a fresh
 // load; callers that want to preserve pending state should not call
 // this (use incremental updates instead).
+//
+// Each bridge call is wrapped in Promise.resolve so a rejection from
+// one (e.g. a transient hub-unreachable error from GetHubStatus) does
+// not leave the whole pane stuck on the Loading placeholder. Any
+// non-access failure degrades gracefully with empty data; only a
+// failing AdminListAccess call triggers the error state, since
+// identities are the minimum viable payload for the page.
 function accessLoadData() {
   if (!accessState.hub) {
     accessState.loaded = false;
@@ -7222,14 +7232,26 @@ function accessLoadData() {
   accessState.lastSaveConflict = null;
   renderAccessLoading();
 
+  function safely(promise, label) {
+    return Promise.resolve(promise).catch(function (err) {
+      console.error('[access] ' + label + ' failed:', err);
+      return null;
+    });
+  }
+
   Promise.all([
-    goApp.AdminListAccess(hub),
-    goApp.GetHubStatus(hub),
-    goApp.HubCapabilities(hub),
+    safely(goApp.AdminListAccess(hub), 'AdminListAccess'),
+    safely(goApp.GetHubStatus(hub), 'GetHubStatus'),
+    safely(goApp.HubCapabilities(hub), 'HubCapabilities'),
   ]).then(function (results) {
     if (accessState.hub !== hub) return; // raced with another hub switch
+
     var access = {};
-    try { access = JSON.parse(results[0] || '{}'); } catch (e) { access = { error: 'invalid response' }; }
+    if (results[0]) {
+      try { access = JSON.parse(results[0] || '{}'); } catch (e) { access = { error: 'invalid response' }; }
+    } else {
+      access = { error: 'hub unreachable' };
+    }
     if (access.error) {
       accessState.loaded = false;
       accessState.loadError = access.error;
@@ -7238,7 +7260,9 @@ function accessLoadData() {
     }
     var status = results[1] || {};
     var caps = {};
-    try { caps = JSON.parse(results[2] || '{}'); } catch (e) { caps = {}; }
+    if (results[2]) {
+      try { caps = JSON.parse(results[2] || '{}'); } catch (e) { caps = {}; }
+    }
 
     accessState.entries = access.access || [];
     accessState.machines = status.machines || [];
@@ -7262,6 +7286,12 @@ function accessLoadData() {
     }
     accessUpdateToolbar();
     renderAccessPane();
+  }).catch(function (err) {
+    console.error('[access] accessLoadData post-resolve failed:', err);
+    if (accessState.hub !== hub) return;
+    accessState.loaded = false;
+    accessState.loadError = (err && err.message) ? err.message : String(err);
+    renderAccessError('Could not load access for ' + hub + ': ' + accessState.loadError);
   });
 }
 
@@ -7390,7 +7420,7 @@ function renderAccessSidebarMachines(list) {
       + '<div class="access-sidebar-primary">'
       + '<span class="dot ' + statusClass + '" title="' + statusLabel + '"></span>'
       + escHtml(m.id)
-      + (dirty ? '<span class="access-sidebar-dirty">&bull; unsaved</span>' : '')
+      + (dirty ? '<span class="access-sidebar-dirty">&bull; pending</span>' : '')
       + '</div>'
       + '<div class="access-sidebar-secondary">'
       + ((m.services || []).length + ' service' + ((m.services || []).length === 1 ? '' : 's'))
@@ -7403,7 +7433,7 @@ function renderAccessSidebarMachines(list) {
     '" onclick="accessSelectMachine(\'*\')">'
     + '<div class="access-sidebar-primary">'
     + '<span class="chip">Wildcard</span> all machines'
-    + (wildDirty ? '<span class="access-sidebar-dirty">&bull; unsaved</span>' : '')
+    + (wildDirty ? '<span class="access-sidebar-dirty">&bull; pending</span>' : '')
     + '</div>'
     + '<div class="access-sidebar-secondary">Fallback rule</div>'
     + '</div>';
@@ -7432,7 +7462,7 @@ function renderAccessSidebarIdentities(list) {
       + '<div class="access-sidebar-primary">'
       + escHtml(e.id)
       + ' <span class="chip">' + escHtml(roleLabel) + '</span>'
-      + (dirty ? '<span class="access-sidebar-dirty">&bull; unsaved</span>' : '')
+      + (dirty ? '<span class="access-sidebar-dirty">&bull; pending</span>' : '')
       + '</div>'
       + '<div class="access-sidebar-secondary">' + escHtml(summary) + '</div>'
       + '</div>';
@@ -7442,12 +7472,23 @@ function renderAccessSidebarIdentities(list) {
 
 // accessIdentitySummary produces the secondary-line text in the
 // by-identity rail: a short description of what the identity can do.
+// A wildcard ("*") grant is not counted as a machine; it expands to
+// every machine the hub has registered. We report it explicitly so
+// "1 machine" never means "all machines."
 function accessIdentitySummary(e) {
   if (e.role === 'owner' || e.role === 'admin') return 'All machines (implicit)';
   if (e.role === 'viewer') return 'Read-only console';
-  var n = (e.machines || []).length;
-  if (n === 0) return 'No grants';
-  return n + ' machine' + (n === 1 ? '' : 's');
+  var specific = 0;
+  var hasWildcard = false;
+  (e.machines || []).forEach(function (m) {
+    if (m.machineId === '*') hasWildcard = true;
+    else specific++;
+  });
+  if (specific === 0 && !hasWildcard) return 'No grants';
+  if (specific === 0 && hasWildcard) return 'All machines (wildcard)';
+  var label = specific + ' machine' + (specific === 1 ? '' : 's');
+  if (hasWildcard) label += ' + wildcard';
+  return label;
 }
 
 function renderAccessDetail() {
@@ -7581,7 +7622,7 @@ function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
 
   var dirtyInd = '';
   if (revoked) dirtyInd = '<span class="dirty-indicator">&bull; will be revoked</span>';
-  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; unsaved</span>';
+  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; pending</span>';
 
   var actions;
   if (revoked) {
@@ -7710,7 +7751,7 @@ function renderAccessMatrixRow_ByIdentity(entry, m, isWildcard) {
 
   var dirtyInd = '';
   if (revoked) dirtyInd = '<span class="dirty-indicator">&bull; will be revoked</span>';
-  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; unsaved</span>';
+  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; pending</span>';
 
   var meta;
   if (isWildcard) {
