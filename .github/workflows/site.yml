@@ -1,0 +1,82 @@
+# Deploy the telaproject.org landing page (site/*) on every main push
+# that touches it. Decoupled from the book release pipeline so typo fixes
+# and style tweaks don't need a version bump to go live.
+#
+# Layout preserved on gh-pages (via peaceiris keep_files: true):
+#   /                   <- landing page from site/*
+#   /tdl.css            <- TDL stylesheet (from site/tdl.css)
+#   /style.css, /404.html, /assets/*
+#   /book/...           <- owned by docs.yml (tag-triggered), untouched here
+#   /versions.json      <- owned by docs.yml, read here but not written
+#   /CNAME              <- owned by Pages, preserved
+#
+# The site's hero CTA and stable version card reference the stable
+# version via a __TELA_SITE_STABLE_VERSION__ placeholder. This workflow
+# substitutes it with whatever stable version is currently published
+# in gh-pages:/versions.json. On a new stable cut, docs.yml rewrites
+# versions.json AND redeploys the landing page with the new tag baked
+# in, so the site stays fresh even between site/* edits.
+#
+# See DESIGN-telaproject-site.md section 8 and the sibling docs.yml.
+
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # peaceiris/actions-gh-pages pushes to the gh-pages branch
+
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Look up current stable version from gh-pages versions.json
+        id: stable
+        run: |
+          set -e
+          # Fetch gh-pages without cloning its full history.
+          git fetch origin gh-pages --depth=1 || true
+          if git show origin/gh-pages:versions.json >/dev/null 2>&1; then
+            STABLE=$(git show origin/gh-pages:versions.json \
+              | jq -r '.current.stable.version // ""')
+          else
+            STABLE=""
+          fi
+          if [ -z "$STABLE" ]; then
+            echo "::warning::No current stable version in versions.json; placeholder will remain literal"
+            STABLE="__TELA_SITE_STABLE_VERSION__"
+          fi
+          echo "version=$STABLE" >> "$GITHUB_OUTPUT"
+          echo "Using stable version: $STABLE"
+
+      - name: Stage site assets
+        env:
+          STABLE: ${{ steps.stable.outputs.version }}
+        run: |
+          mkdir -p _site
+          cp -r site/. _site/
+          if [ -f _site/index.html ]; then
+            sed -i "s|__TELA_SITE_STABLE_VERSION__|$STABLE|g" _site/index.html
+          fi
+          ls -la _site/
+
+      - name: Deploy to gh-pages root
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          keep_files: true
+          commit_message: "site: deploy landing page from ${{ github.sha }}"
