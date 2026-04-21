@@ -15,7 +15,7 @@
 
 <img src="https://raw.githubusercontent.com/paulmooreparks/tela/main/logo.png" align="right" width="200" alt="Tela logo">
 
-Project home: **[telaproject.org](https://telaproject.org/)**. Landing page, download links, and version map.
+Project home: **[telaproject.org](https://telaproject.org/)**. 
 
 **[Read the book](https://telaproject.org/book/)** for the full reference: getting started, configuration, deployment guides, use cases, and design rationale.
 
