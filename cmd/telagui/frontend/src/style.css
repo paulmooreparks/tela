@@ -1531,6 +1531,27 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
    would otherwise stretch these checkboxes across the whole row. */
 .setting-check input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: auto; }
 
+/* Labels paired with a checkbox/radio inside .setting-check need to
+   opt out of the .form-group label defaults (display:block, 500-weight,
+   4px margin-bottom), which would otherwise force a full-row break
+   and over-emphasize the inline label text. Clicking the label still
+   forwards focus to its associated input because of the `for="..."`
+   binding. */
+.form-group .setting-check label,
+.setting-check label {
+  display: inline; font-weight: 400; margin: 0; cursor: pointer;
+  color: var(--text);
+}
+
+/* Introductory paragraph inside a modal body form. Replaces the
+   generic .hint with a rule that leaves enough room between the copy
+   and the first form control below, matching the gutter between
+   adjacent .form-group blocks (14px). */
+.modal-intro-hint {
+  font-size: 12px; color: var(--text-muted);
+  margin: 0 0 14px; line-height: 1.5;
+}
+
 .kv-table { width: 100%; border-collapse: collapse; }
 .kv-table td { padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .kv-table tr:last-child td { border-bottom: none; }

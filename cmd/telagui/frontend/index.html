@@ -767,10 +767,16 @@
       </div>
       <div class="modal-body">
         <form onsubmit="aesApply(); return false;">
-          <p class="hint">Choose which services <strong id="aes-identity"></strong> can reach on <strong id="aes-machine"></strong>.</p>
+          <p class="modal-intro-hint">Choose which services <strong id="aes-identity"></strong> can reach on <strong id="aes-machine"></strong>.</p>
           <div class="form-group">
-            <div class="setting-check"><input type="radio" name="aes-scope" id="aes-scope-all" value="all" onchange="aesUpdateVisibility()"> Allow all services</div>
-            <div class="setting-check"><input type="radio" name="aes-scope" id="aes-scope-restrict" value="restrict" onchange="aesUpdateVisibility()"> Restrict to specific services</div>
+            <div class="setting-check">
+              <input type="radio" name="aes-scope" id="aes-scope-all" value="all" onchange="aesUpdateVisibility()">
+              <label for="aes-scope-all">Allow all services</label>
+            </div>
+            <div class="setting-check">
+              <input type="radio" name="aes-scope" id="aes-scope-restrict" value="restrict" onchange="aesUpdateVisibility()">
+              <label for="aes-scope-restrict">Restrict to specific services</label>
+            </div>
           </div>
           <div class="form-group" id="aes-services-group">
             <div id="aes-services-list" class="aes-services-list"></div>
@@ -797,7 +803,7 @@
       </div>
       <div class="modal-body">
         <form onsubmit="submitChangeRole(); return false;">
-          <p class="hint">Change role for <strong id="crm-identity"></strong>.</p>
+          <p class="modal-intro-hint">Change role for <strong id="crm-identity"></strong>.</p>
           <div class="form-group">
             <label for="crm-role">New role</label>
             <select id="crm-role" title="New role">
