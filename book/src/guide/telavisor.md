@@ -395,11 +395,14 @@ agent updates belong to the hub or the agent and are driven from the
 *Hubs* and *Agents* tabs in Infrastructure mode; the Updates tab
 does not touch them.
 
-The tab has a *Check Now* button in the top-right that re-fetches
-the channel manifest and re-scans the local binary directory. Two
-cards fill the page:
+The tab header carries two controls in the top-right: a
+*Check automatically* checkbox and a *Check Now* button. The
+checkbox toggles the periodic background check (the same check
+that drives the topbar update indicator) and persists immediately
+to the credential store. *Check Now* fires the check on demand and
+re-scans the local binary directory. Two cards fill the page:
 
-**Release channel** names the channel TelaVisor and the `tela` CLI
+**Release Channel** names the channel TelaVisor and the `tela` CLI
 follow on this machine. They share a single preference stored in
 `~/.tela/credentials.yaml` under `update.channel`, so switching the
 dropdown reconfigures both binaries at once. The dropdown lists the
@@ -976,10 +979,22 @@ whenever the pending set is non-empty.
 The *Connect services* column shows which services the identity can
 reach on the machine when the Connect permission is granted. An
 unfiltered grant reads *All services* in muted italics. A filtered
-grant renders as a disclosure widget: a *N of M services* summary
-button with a chevron that toggles a chip cloud below. Small filters
-(three or fewer chips) auto-expand so the common case reads without
-interaction.
+grant renders the first three service chips inline; longer filters
+collapse the remainder into a `+N more` link that opens a small
+read-only popover listing every service in the filter. The popover
+never edits; it dismisses on outside click, Escape, scroll inside
+the detail pane, or a re-click on the trigger. Edit and view paths
+are kept separate by design so an operator scanning a filter for a
+specific service cannot wander into the edit flow by mistake.
+
+When the row's connect permission is inherited from the wildcard
+`*` ACL (the hub cascades connect and manage from the wildcard
+entry to every machine that has no explicit grant), the cell shows
+a `via *` marker followed by the wildcard's services. The connect
+checkbox in that case is checked and disabled with a tooltip that
+points the operator at the wildcard row in the rail; per-machine
+overrides are not possible because the underlying ACL model has no
+deny semantic.
 
 The per-row **Edit...** button opens a dialog to narrow or widen the
 filter. The dialog offers two scopes:
@@ -1228,24 +1243,6 @@ The settings are organized into sections.
   application remains running in the background and can be restored
   by clicking the tray icon. Without this setting, closing the window
   quits the application.
-
-### Updates
-
-- **Check for updates automatically.** When checked, TelaVisor checks
-  for new versions at startup against the configured release channel.
-- **Release channel.** A dropdown that selects which release channel
-  TelaVisor and the `tela` CLI follow for self-update: `dev`, `beta`,
-  `stable`, or any custom channel you have configured. The preference
-  is stored in the user credential store (`~/.tela/credentials.yaml`
-  on Unix, `%APPDATA%\tela\credentials.yaml` on Windows) and shared
-  with the `tela` CLI; running `tela channel set <name>` from a shell
-  and changing this dropdown are equivalent. Hubs and agents have
-  their own release channels, configured separately in their YAML
-  files, through the *Release channel* controls in
-  [Hub Settings](#hub-settings) and the agent
-  [Management](#management-and-danger-zone) card, or from a shell via
-  `telahubd channel set <name>` and `telad channel set <name>`
-  directly on those machines.
 
 ![Application Settings, scrolled](../screens/telavisor-app-settings2.png)
 

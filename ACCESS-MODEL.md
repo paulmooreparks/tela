@@ -140,7 +140,8 @@ GET /api/admin/access
       "tokenPreview": "abc123...",
       "machines": [
         {"machineId": "*", "permissions": ["register", "connect", "manage"]}
-      ]
+      ],
+      "version": 1
     },
     {
       "id": "alice",
@@ -149,7 +150,9 @@ GET /api/admin/access
       "machines": [
         {"machineId": "*", "permissions": ["connect"]},
         {"machineId": "barn", "permissions": ["manage"]}
-      ]
+      ],
+      "version": 7,
+      "wildcardInherited": ["connect"]
     },
     {
       "id": "barn-agent",
@@ -157,11 +160,16 @@ GET /api/admin/access
       "tokenPreview": "ghi789...",
       "machines": [
         {"machineId": "barn", "permissions": ["register"]}
-      ]
+      ],
+      "version": 1
     }
   ]
 }
 ```
+
+`version` is a per-identity monotonic counter the hub bumps on every mutation. Clients pass it back as `If-Match: "<version>"` on subsequent mutations; the hub returns `412 Precondition Failed` when the value is stale, with the current entry in the response body so the caller can diff. The same value also rides on the `ETag` response header. Clients that omit `If-Match` skip the check (force overwrite).
+
+`wildcardInherited` (and the optional `wildcardInheritedServices`) report which permissions the wildcard `*` ACL cascades to every machine that has no explicit grant. The hub's `canConnect` and `canManage` check the wildcard as a fallback; surfacing the cascade here lets clients render the effective per-machine state without re-implementing the cascade rules. Owner, admin, and viewer identities receive role-based implicit access rather than ACL-based cascade; for them the field is empty and the implicit grant is represented by a synthetic `*` entry in `machines`.
 
 The CLI equivalent:
 
@@ -178,11 +186,11 @@ The unified access API is the recommended way to view and modify permissions. Th
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/admin/access` | List all access entries |
-| GET | `/api/admin/access/{id}` | Get one entry |
-| PATCH | `/api/admin/access/{id}` | Rename identity |
-| DELETE | `/api/admin/access/{id}` | Remove identity and all permissions |
-| PUT | `/api/admin/access/{id}/machines/{m}` | Set permissions on a machine |
-| DELETE | `/api/admin/access/{id}/machines/{m}` | Revoke all permissions on a machine |
+| GET | `/api/admin/access/{id}` | Get one entry (with `ETag`) |
+| PATCH | `/api/admin/access/{id}` | Rename identity (`id`) and/or change role (`role`); honors `If-Match`. A last-owner guard returns `409 Conflict` on any attempt to demote the sole owner. |
+| DELETE | `/api/admin/access/{id}` | Remove identity and all permissions; honors `If-Match` |
+| PUT | `/api/admin/access/{id}/machines/{m}` | Set permissions on a machine; honors `If-Match` |
+| DELETE | `/api/admin/access/{id}/machines/{m}` | Revoke all permissions on a machine; honors `If-Match` |
 
 ## Common tasks
 

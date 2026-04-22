@@ -74,7 +74,7 @@ Client pairing command:
   tela pair -hub wss://hub.example.com -code ABCD-1234
 ```
 
-Codes can also be generated from TelaVisor's Tokens view for administrators who prefer a graphical interface.
+Codes can also be generated from TelaVisor's Access tab, using the *Pair Code...* button in the toolbar, for administrators who prefer a graphical interface.
 
 ### Redeeming a code (user)
 
