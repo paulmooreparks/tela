@@ -8489,17 +8489,13 @@ function accessExportAudit() {
     }),
   };
   var json = JSON.stringify(audit, null, 2);
-  var blob = new Blob([json], { type: 'application/json' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  var safeHub = accessState.hub.replace(/[^\w.-]/g, '_');
-  var ts = new Date().toISOString().replace(/[:.]/g, '-');
-  a.href = url;
-  a.download = safeHub + '-access-' + ts + '.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Revoke the object URL on the next tick so the browser has had
-  // time to initiate the download first.
-  setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+  // Route through the native OS save dialog, not a browser download,
+  // so the operator picks a real filesystem location the same way
+  // they do from the log pane's Save button. See SaveAccessAudit in
+  // app.go for the Wails-bound dialog + writer.
+  goApp.SaveAccessAudit(accessState.hub, json).then(function (path) {
+    if (path) tvLog('Exported access audit to ' + path);
+  }).catch(function (err) {
+    showError('Export failed: ' + (err && err.message ? err.message : err));
+  });
 }

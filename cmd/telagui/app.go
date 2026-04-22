@@ -2485,6 +2485,61 @@ func (a *App) SaveTerminalOutput(content string) (string, error) {
 	return dialog, nil
 }
 
+// SaveAccessAudit writes the Access page's audit export JSON to a
+// location the operator picks via a native save dialog. Mirrors
+// SaveTerminalOutput so the Export audit... button on the Access
+// page behaves like Save in the log pane rather than triggering a
+// browser download. The default filename embeds the hub name
+// (sanitized to a filesystem-safe form) and an ISO 8601 UTC
+// timestamp so multiple exports sort chronologically in a folder.
+func (a *App) SaveAccessAudit(hubName, content string) (string, error) {
+	safeHub := sanitizeFilenameComponent(hubName)
+	if safeHub == "" {
+		safeHub = "hub"
+	}
+	filename := fmt.Sprintf("%s-access-%s.json", safeHub, time.Now().UTC().Format("2006-01-02T150405Z"))
+
+	dialog, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		DefaultFilename: filename,
+		Title:           "Export Access Audit",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "JSON Files", Pattern: "*.json"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("dialog failed: %w", err)
+	}
+	if dialog == "" {
+		return "", nil // user cancelled
+	}
+
+	if err := os.WriteFile(dialog, []byte(content), 0600); err != nil {
+		return "", fmt.Errorf("save failed: %w", err)
+	}
+	return dialog, nil
+}
+
+// sanitizeFilenameComponent strips characters that are reserved or
+// problematic on common filesystems. Kept deliberately narrow: only
+// ASCII letters, digits, dot, dash, and underscore survive; anything
+// else becomes an underscore. Consecutive underscores are not
+// collapsed because the output is purely a default filename the user
+// can still edit in the save dialog.
+func sanitizeFilenameComponent(s string) string {
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '.', c == '-', c == '_':
+			b = append(b, c)
+		default:
+			b = append(b, '_')
+		}
+	}
+	return string(b)
+}
+
 // PairWithCode exchanges a pairing code for a connect token via the tela CLI.
 func (a *App) PairWithCode(hubURL, code string) error {
 	telaPath := a.findTool("tela")

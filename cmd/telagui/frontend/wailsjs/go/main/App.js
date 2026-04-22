@@ -470,6 +470,10 @@ export function RestartToUpdate() {
   return window['go']['main']['App']['RestartToUpdate']();
 }
 
+export function SaveAccessAudit(arg1, arg2) {
+  return window['go']['main']['App']['SaveAccessAudit'](arg1, arg2);
+}
+
 export function SaveFileDialog(arg1) {
   return window['go']['main']['App']['SaveFileDialog'](arg1);
 }

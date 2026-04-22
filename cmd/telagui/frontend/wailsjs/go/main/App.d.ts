@@ -236,6 +236,8 @@ export function RestartHub(arg1:string):Promise<string>;
 
 export function RestartToUpdate():Promise<void>;
 
+export function SaveAccessAudit(arg1:string,arg2:string):Promise<string>;
+
 export function SaveFileDialog(arg1:string):Promise<string>;
 
 export function SaveHubsSidebarWidth(arg1:number):Promise<void>;
