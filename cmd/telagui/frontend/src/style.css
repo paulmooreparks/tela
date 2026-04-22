@@ -1205,27 +1205,46 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   overflow-y: auto;
   padding: 8px 16px;
 }
+/* ─── TDL annotation text primitives ─────────────────────────────────
+   Every text class that exists to sit *next to* a control or *below*
+   a heading lives in this block. They share a muted color, smaller
+   font, and consistent line-height so the surface reads as one thing.
+
+   IMPORTANT to future contributors: any new annotation-style class
+   used in markup MUST have a top-level rule here. A class that lives
+   only as a scoped descendant rule (".some-pane .my-class") inherits
+   default body styling outside its scope and renders inconsistently
+   the moment another pane uses it. Several painful regressions traced
+   to exactly this gap; do not reintroduce it. The shorthand: if you
+   add `class="something-desc"` or `class="something-hint"` in markup,
+   add a global CSS rule for it before committing. */
 .empty-hint { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
 
-/* TDL .loading: transient placeholder text shown while a pane is
-   waiting on data ("Loading hubs...", "Checking for updates..."). The
-   sidebar adds left-padding to align with sidebar items via the
-   .sidebar .loading rule below; outside that scope this base rule
-   gives every loading line the same subordinate appearance so the
-   flash of placeholder content reads as part of the surrounding
-   surface rather than as a foreign body-text paragraph. */
+/* .loading: transient placeholder text shown while a pane waits on
+   data ("Loading hubs...", "Checking for updates..."). */
 .loading { color: var(--text-muted); font-size: 13px; }
 
-/* TDL .hint: annotation text that sits next to or below a control.
-   Smaller than body copy and muted so it reads as subordinate.
-   Every other hint class in the app (modal-intro-hint, setting-card-
-   desc, settings-group-desc) matches these metrics so the styling
-   stays consistent across forms, modals, and setting cards. */
+/* .hint: annotation text that sits next to or below a control.
+   Used inside form groups, modals, and setting cards. */
 .hint {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.5;
   margin: 10px 0 4px;
+}
+
+/* .section-desc: descriptive paragraph below an h1/h2 page heading.
+   Replaces the previous .hubs-admin-detail .section-desc scoped rule
+   that left every other usage at default body styling. */
+.section-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.section-desc code {
+  font-family: var(--mono); font-size: 0.82rem;
+  background: var(--surface-alt); padding: 1px 6px; border-radius: 3px;
 }
 
 /* TDL .link: inline underlined accent text used for every clickable
@@ -1465,7 +1484,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   flex: 1; overflow-y: auto; padding: 24px 32px;
 }
 .hubs-admin-detail h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-.hubs-admin-detail .section-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+/* .section-desc rule moved to the global annotation primitives block. */
 .hubs-admin-detail .toolbar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
 
 /* Admin tables */
@@ -1760,7 +1779,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .tools-action-btn { padding: 2px 8px; font-size: 11px; }
 .tools-service-row td { border-bottom: 1px solid var(--surface-alt); padding-top: 0; }
 .tools-service-label { font-size: 11px; color: var(--text-muted); font-style: italic; }
-.section-desc code { font-family: var(--mono); font-size: 0.82rem; background: var(--surface-alt); padding: 1px 6px; border-radius: 3px; }
+/* .section-desc code rule moved to the global annotation primitives block. */
 .history-item { padding: 6px 0; border-bottom: 1px solid var(--surface-alt); font-size: 13px; }
 .history-item:last-child { border-bottom: none; }
 .history-time { color: var(--text-muted); font-family: var(--mono); font-size: 12px; margin-right: 8px; }
