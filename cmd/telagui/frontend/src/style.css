@@ -2153,8 +2153,51 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .access-matrix-actions { text-align: left; white-space: nowrap; }
 .access-matrix-actions .btn + .btn { margin-left: 6px; }
 
-.services-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px; }
+/* Services cell: compact one-line display in the matrix.
+   - Unfiltered grants show "All services" (services-summary-muted).
+   - Filtered grants render up to N chips inline; longer filters
+     collapse to a "+N more" affordance that opens a read-only
+     popover listing every service. The popover never edits;
+     Edit... in the actions column is the dedicated edit path. */
+.services-cell {
+  display: flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; overflow: hidden;
+}
 .services-summary-muted { color: var(--text-muted); font-size: 12px; font-style: italic; }
+.services-chips {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; overflow: hidden; min-width: 0;
+}
+.services-more {
+  color: var(--accent); font-size: 11px; font-weight: 600;
+  background: none; border: none; padding: 0 2px;
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  font-family: var(--font);
+}
+.services-more:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
+.services-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Services popover: anchored to the body and positioned absolutely
+   relative to the trigger by the JS that opens it. Read-only by
+   design; no form controls live inside. Dismiss via outside click,
+   Esc, or trigger re-click. */
+.services-popover {
+  position: absolute; z-index: 50;
+  min-width: 220px; max-width: 360px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px var(--border);
+}
+.services-popover-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 600; margin-bottom: 6px;
+}
+.services-popover-chips {
+  display: flex; flex-wrap: wrap; gap: 4px;
+}
 
 .dirty-indicator {
   display: inline-block; margin-left: 6px;

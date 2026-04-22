@@ -198,23 +198,54 @@
 
     /* Services cell: disclosure widget. Collapsed shows a summary count
        or "All services"; expanded shows the chip cloud. */
-    .services-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-    .services-summary {
-        display: inline-flex; align-items: center; gap: 6px;
-        background: none; border: none; padding: 0;
-        color: var(--text); font-size: 12px; font-family: var(--font);
-        cursor: pointer;
-    }
-    .services-summary:hover { color: var(--accent); }
-    .services-summary-chevron {
-        display: inline-block; width: 10px; transition: transform 0.12s;
-        color: var(--text-muted); font-size: 10px; line-height: 1;
-    }
-    .services-summary[aria-expanded="true"] .services-summary-chevron {
-        transform: rotate(90deg); color: var(--text);
+    /* Services cell: compact one-line display. Unfiltered grants show
+       "All services" in muted italics. Filtered grants show the first
+       few service chips inline; longer filters collapse to a "+N more"
+       affordance that opens a read-only popover listing every service.
+       The popover is strictly view: it does not offer edit actions.
+       Edit... in the actions column is the dedicated edit path so an
+       operator who is only trying to read the filter cannot
+       accidentally change it. */
+    .services-cell {
+        display: flex; align-items: center; gap: 4px;
+        flex-wrap: nowrap; overflow: hidden;
     }
     .services-summary-muted { color: var(--text-muted); font-size: 12px; font-style: italic; }
-    .services-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; max-width: 320px; }
+    .services-chips {
+        display: inline-flex; align-items: center; gap: 4px;
+        flex-wrap: nowrap; overflow: hidden; min-width: 0;
+    }
+    .services-more {
+        color: var(--accent); font-size: 11px; font-weight: 600;
+        background: none; border: none; padding: 0 2px;
+        cursor: pointer; white-space: nowrap; flex-shrink: 0;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+    }
+    .services-more:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
+
+    /* Services popover: a small floating panel anchored near the
+       "+N more" trigger. Read-only: header + chip cloud only. No
+       actions inside. Dismiss on outside click, Esc, or trigger
+       re-click. */
+    .services-popover {
+        position: absolute; z-index: 50;
+        min-width: 220px; max-width: 360px;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 6px; padding: 10px 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px var(--border);
+    }
+    .services-popover-title {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--text-muted); font-weight: 600; margin-bottom: 6px;
+    }
+    .services-popover-chips {
+        display: flex; flex-wrap: wrap; gap: 4px;
+    }
+    .services-popover-hint {
+        font-size: 11px; color: var(--text-muted); margin-top: 8px;
+    }
 
     .dirty-indicator { display: inline-block; margin-left: 6px; color: var(--warn); font-size: 11px; font-weight: 600; }
 
@@ -398,6 +429,7 @@
                     </tr>
                 </thead>
                 <tbody>
+                    <!-- Small filter: chips fit inline, no overflow. -->
                     <tr class="access-matrix-row">
                         <td>
                             <strong>work-laptop</strong>
@@ -411,10 +443,6 @@
                         <td class="access-matrix-check"><input type="checkbox"></td>
                         <td>
                             <div class="services-cell">
-                                <button type="button" class="services-summary" aria-expanded="true">
-                                    <span class="services-summary-chevron">&#x25B8;</span>
-                                    <span>1 of 3 services</span>
-                                </button>
                                 <div class="services-chips">
                                     <span class="chip">git</span>
                                 </div>
@@ -426,6 +454,7 @@
                         </td>
                     </tr>
 
+                    <!-- Staged change, small filter -->
                     <tr class="access-matrix-row access-matrix-row-dirty">
                         <td>
                             <strong>dev-vm</strong>
@@ -433,19 +462,64 @@
                                 <span class="status status-online"><span class="status-dot"></span>Online</span>
                                 &middot; 4 services
                             </div>
-                            <span class="dirty-indicator">&bull; unsaved</span>
+                            <span class="dirty-indicator">&bull; pending</span>
                         </td>
                         <td class="access-matrix-check"><input type="checkbox" checked></td>
                         <td class="access-matrix-check"><input type="checkbox"></td>
                         <td class="access-matrix-check"><input type="checkbox"></td>
                         <td>
                             <div class="services-cell">
-                                <button type="button" class="services-summary" aria-expanded="true">
-                                    <span class="services-summary-chevron">&#x25B8;</span>
-                                    <span>1 of 4 services</span>
-                                </button>
                                 <div class="services-chips">
                                     <span class="chip">RDP</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm">Edit&hellip;</button>
+                            <button type="button" class="btn btn-sm btn-danger">Revoke</button>
+                        </td>
+                    </tr>
+
+                    <!-- Large filter: first 3 chips inline + "+N more"
+                         clickable marker opens a read-only popover (shown
+                         below in its open state). Edit... stays as the
+                         dedicated edit path; the popover never edits. -->
+                    <tr class="access-matrix-row">
+                        <td>
+                            <strong>owlsnest</strong>
+                            <div class="access-matrix-meta">
+                                <span class="status status-online"><span class="status-dot"></span>Online</span>
+                                &middot; 12 services
+                            </div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td style="position: relative;">
+                            <div class="services-cell">
+                                <div class="services-chips">
+                                    <span class="chip">SSH</span>
+                                    <span class="chip">Jellyfin</span>
+                                    <span class="chip">Grafana</span>
+                                </div>
+                                <button type="button" class="services-more"
+                                    title="Show all services in this filter">+9 more</button>
+                            </div>
+                            <div class="services-popover" style="top: 100%; left: 12px; margin-top: 4px;">
+                                <div class="services-popover-title">All 12 services in this filter</div>
+                                <div class="services-popover-chips">
+                                    <span class="chip">SSH</span>
+                                    <span class="chip">Jellyfin</span>
+                                    <span class="chip">Grafana</span>
+                                    <span class="chip">Prometheus</span>
+                                    <span class="chip">Vault</span>
+                                    <span class="chip">Consul</span>
+                                    <span class="chip">Plex</span>
+                                    <span class="chip">git</span>
+                                    <span class="chip">RDP</span>
+                                    <span class="chip">port-8080</span>
+                                    <span class="chip">port-8443</span>
+                                    <span class="chip">port-9090</span>
                                 </div>
                             </div>
                         </td>

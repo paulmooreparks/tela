@@ -6924,6 +6924,32 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') { e.preventDefault(); genericDialogCancel(); }
 });
 
+// Dismiss the Access page's services popover on Escape, on any click
+// outside the popover and its trigger, and on any scroll inside the
+// Access detail pane. Capture-phase on the click listener so a click
+// on the trigger is counted as "re-click" (the trigger's own handler
+// runs first and handles toggle-off) without this handler closing
+// the panel prematurely.
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && accessState && accessState.servicesPopoverKey) {
+    accessCloseServicesPopover();
+  }
+});
+document.addEventListener('mousedown', function (e) {
+  if (!accessState || !accessState.servicesPopoverKey) return;
+  if (e.target.closest && e.target.closest('.services-popover')) return;
+  if (e.target.closest && e.target.closest('.services-more')) return;
+  accessCloseServicesPopover();
+}, true);
+// Scrolling the access-detail pane re-positions the trigger but not
+// the absolute-positioned popover; close instead of trying to track.
+document.addEventListener('scroll', function (e) {
+  if (!accessState || !accessState.servicesPopoverKey) return;
+  if (e.target && e.target.closest && e.target.closest('.access-detail')) {
+    accessCloseServicesPopover();
+  }
+}, true);
+
 // Enter/Escape for all other modal overlays that are NOT form-based.
 // Form-based modals (create-token, pair-code, grant-access, add-hub)
 // already submit on Enter via their <form onsubmit> handler.
@@ -7029,8 +7055,8 @@ var accessState = {
     identityId: '',    // selected identity in by-identity view
   },
   pending: {},         // "id|machineId" -> pendingEntry
-  expanded: {},        // "id|machineId" -> bool, services-cell disclosure state
   lastSaveConflict: null, // [{id, current: accessEntry}] populated on 412 save
+  servicesPopoverKey: '', // currently-open services popover trigger key, "" if none
 };
 
 // Pending entry shape:
@@ -7270,8 +7296,8 @@ function onAccessHubChange() {
       }
       accessState.hub = newHub;
       accessState.pending = {};
-      accessState.expanded = {};
       accessState.selection = { machineId: '', identityId: '' };
+      accessCloseServicesPopover();
       if (newHub) goApp.SaveLastSelectedHub(newHub).catch(function () { /* best effort */ });
       accessLoadData();
     });
@@ -7279,8 +7305,8 @@ function onAccessHubChange() {
   }
   accessState.hub = newHub;
   accessState.pending = {};
-  accessState.expanded = {};
   accessState.selection = { machineId: '', identityId: '' };
+  accessCloseServicesPopover();
   if (accessState.hub) {
     goApp.SaveLastSelectedHub(accessState.hub).catch(function () { /* best effort */ });
   }
@@ -7437,6 +7463,10 @@ function accessSelectIdentity(id) {
 // ── Rendering ─────────────────────────────────────────────────────
 
 function renderAccessPane() {
+  // Any open services popover is anchored to a trigger node that is
+  // about to be replaced by the re-render. Tear it down first so the
+  // panel never lingers on top of stale content.
+  accessCloseServicesPopover();
   if (!accessState.hub) {
     renderAccessEmpty('Select a hub to view access.');
     return;
@@ -7760,99 +7790,164 @@ function renderAccessServicesCellWithInheritance(id, machineId, grant, inherited
     if (svc.length === 0) {
       return '<span class="services-summary-muted" title="Inherited from wildcard">All services (via *)</span>';
     }
-    var html = '<div class="services-cell" title="Inherited from wildcard">'
+    return '<div class="services-cell" title="Inherited from wildcard">'
       + '<span class="services-summary-muted">via *</span>'
-      + '<div class="services-chips">';
-    svc.forEach(function (s) {
-      html += '<span class="chip">' + escHtml(s) + '</span>';
-    });
-    html += '</div></div>';
-    return html;
+      + renderServicesChipRun(id, machineId + '|inh', svc, /*titlePrefix*/ 'All ' + svc.length + ' services inherited from wildcard')
+      + '</div>';
   }
   return renderAccessServicesCell(id, machineId, grant);
 }
 
 // renderAccessServicesCell renders the Connect services column for an
-// explicit row as a disclosure widget: a compact "N of M services"
-// summary button with a rotating chevron that toggles a chip cloud
-// below. An unfiltered grant shows "All services" in muted italics
-// with no disclosure (nothing to expand). An unexpanded filtered grant
-// defaults to open when the filter is small (<= 3 chips) so the common
-// case reads without interaction.
+// explicit row. The cell is always one line tall: unfiltered grants
+// show "All services" in muted italics; filtered grants render up to
+// the first three service chips inline and collapse any overflow into
+// a "+N more" button that opens a read-only popover with the full
+// list. Edit... in the actions column is the only path that mutates
+// the filter, so an operator who is only trying to read the list
+// cannot wander into edit by mistake.
 //
 // Revoked rows show the baseline services (not the empty desired
 // state) so the operator can see what is about to be removed. The
 // row-level CSS on .access-matrix-row-revoked strikes the chips and
 // the "All services" label through.
 function renderAccessServicesCell(id, machineId, grant) {
+  var src = grant;
   if (accessIsRevoked(id, machineId)) {
-    var baseline = accessBaselineFor(id, machineId);
-    return renderAccessServicesCellInner(id, machineId, baseline, /*isRevoked*/ true);
+    src = accessBaselineFor(id, machineId);
   }
-  return renderAccessServicesCellInner(id, machineId, grant, /*isRevoked*/ false);
-}
-
-function renderAccessServicesCellInner(id, machineId, grant, isRevoked) {
-  if ((grant.permissions || []).indexOf('connect') === -1) {
+  if ((src.permissions || []).indexOf('connect') === -1) {
     return '<span class="services-summary-muted">&mdash;</span>';
   }
-  var services = grant.services || [];
+  var services = src.services || [];
   if (services.length === 0) {
     return '<span class="services-summary-muted">All services</span>';
   }
-  // Revoked rows collapse the disclosure so the chip cloud is always
-  // visible: the operator needs to see what is being removed without
-  // clicking a button they can't un-stage via (the Undo action is in
-  // the actions column).
-  if (isRevoked) {
-    var html = '<div class="services-chips">';
-    services.forEach(function (svc) {
-      html += '<span class="chip">' + escHtml(svc) + '</span>';
-    });
-    html += '</div>';
-    return html;
-  }
-
-  var total = accessMachineServiceCount(machineId, services.length);
-  var key = accessPendingKey(id, machineId);
-  var expanded = accessState.expanded[key];
-  if (expanded === undefined) expanded = services.length <= 3;
-
-  var html2 = '<div class="services-cell">';
-  html2 += '<button type="button" class="services-summary" aria-expanded="' + (expanded ? 'true' : 'false') +
-    '" onclick="accessToggleServicesExpand(\'' + escAttr(id) + '\',\'' + escAttr(machineId) + '\')">';
-  html2 += '<span class="services-summary-chevron">&#x25B8;</span>';
-  html2 += '<span>' + services.length + ' of ' + total + ' service' + (total === 1 ? '' : 's') + '</span>';
-  html2 += '</button>';
-  if (expanded) {
-    html2 += '<div class="services-chips">';
-    services.forEach(function (svc) {
-      html2 += '<span class="chip">' + escHtml(svc) + '</span>';
-    });
-    html2 += '</div>';
-  }
-  html2 += '</div>';
-  return html2;
+  return '<div class="services-cell">'
+    + renderServicesChipRun(id, machineId, services, null)
+    + '</div>';
 }
 
-// accessMachineServiceCount returns the number of services the hub
-// advertises for machineId, falling back to the granted count when the
-// machine is unknown (wildcard "*" or a machine whose agent is offline).
-function accessMachineServiceCount(machineId, fallback) {
-  if (machineId === '*') return fallback;
-  var m = accessMachineFor(machineId);
-  if (m && Array.isArray(m.services)) return m.services.length;
-  return fallback;
+// SERVICES_INLINE_LIMIT controls how many chips the cell shows before
+// collapsing the rest into the "+N more" popover trigger. Three is a
+// good balance: short common-case filters fit, long lists stay on one
+// line.
+var SERVICES_INLINE_LIMIT = 3;
+
+// ── Services popover ─────────────────────────────────────────────
+//
+// Clicking "+N more" in a services cell opens a small floating panel
+// listing every service in the filter. The panel is strictly read-
+// only; Edit... in the actions column is the only mutation path, so
+// an operator scanning for "is SSH in this filter?" cannot
+// accidentally change the filter while looking at the answer.
+//
+// Only one popover is open at a time. Toggling the same trigger
+// twice closes it. Clicking anywhere outside it, pressing Escape,
+// scrolling the detail pane, or re-rendering the matrix all close
+// it too. Outside-click is bound once per page via the
+// DOMContentLoaded block below, using a capture-phase listener so it
+// runs before the trigger's own click handler and never sees the
+// trigger's own event as "outside."
+
+function accessToggleServicesPopover(trigger, id, popoverKey) {
+  var fullKey = id + '|' + popoverKey;
+  // Close on re-click of the same trigger.
+  if (accessState.servicesPopoverKey === fullKey) {
+    accessCloseServicesPopover();
+    return;
+  }
+  // Drop any previously-open popover before placing the new one.
+  accessCloseServicesPopover();
+
+  // The service list to display is re-derived from current state at
+  // open time rather than captured at render time; a save or reload
+  // between matrix paint and click would otherwise produce stale
+  // content.
+  var services = accessServicesForPopover(id, popoverKey);
+  if (!services || services.length === 0) return;
+
+  var el = document.createElement('div');
+  el.className = 'services-popover';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', 'Services filter');
+  var html = '<div class="services-popover-title">All ' + services.length +
+    ' services in this filter</div>'
+    + '<div class="services-popover-chips">';
+  services.forEach(function (svc) {
+    html += '<span class="chip">' + escHtml(svc) + '</span>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+  document.body.appendChild(el);
+
+  // Anchor the popover under the trigger. document.body positioning
+  // (not trigger's parent) means the panel is never clipped by a
+  // table row's overflow:hidden; that keeps long lists legible.
+  var rect = trigger.getBoundingClientRect();
+  el.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+  el.style.left = (window.scrollX + rect.left) + 'px';
+
+  // If the panel would overflow the right edge of the viewport,
+  // re-anchor to the trigger's right edge.
+  var panelRect = el.getBoundingClientRect();
+  var vw = document.documentElement.clientWidth;
+  if (panelRect.right > vw - 8) {
+    el.style.left = (window.scrollX + rect.right - panelRect.width) + 'px';
+  }
+
+  accessState.servicesPopoverKey = fullKey;
 }
 
-function accessToggleServicesExpand(id, machineId) {
-  var key = accessPendingKey(id, machineId);
-  // Flip undefined->true, anything else to its inverse. Preserves the
-  // auto-expand-small-lists default from renderAccessServicesCell.
-  var cur = accessState.expanded[key];
-  if (cur === undefined) cur = true; // was auto-expanded; collapse
-  accessState.expanded[key] = !cur;
-  renderAccessPane();
+// accessServicesForPopover returns the service list to display for a
+// popover keyed on (id, popoverKey). popoverKey is either a machine
+// id (for a specific-machine row) or "<machineId>|inh" (for a cell
+// showing wildcard-inherited access). The switch picks the right
+// source so the popover reflects what the cell was showing.
+function accessServicesForPopover(id, popoverKey) {
+  var parts = popoverKey.split('|');
+  var machineId = parts[0];
+  var sub = parts[1] || '';
+  if (sub === 'inh') {
+    var inherited = accessWildcardInherited(id);
+    return inherited.services || [];
+  }
+  var src = accessIsRevoked(id, machineId)
+    ? accessBaselineFor(id, machineId)
+    : accessEffectiveGrant(id, machineId);
+  return src.services || [];
+}
+
+function accessCloseServicesPopover() {
+  var existing = document.querySelectorAll('.services-popover');
+  for (var i = 0; i < existing.length; i++) {
+    existing[i].parentNode.removeChild(existing[i]);
+  }
+  accessState.servicesPopoverKey = '';
+}
+
+// renderServicesChipRun builds the chip strip (and "+N more" button
+// when needed) for a list of service names. popoverKey identifies the
+// popover that opens for this run; rows render their own popover key
+// derived from the (id, machineId) pair plus an optional sub-tag for
+// inheritance variants. titleOverride sets the tooltip text; null
+// uses the default "Show all N services in this filter."
+function renderServicesChipRun(id, popoverKey, services, titleOverride) {
+  var inline = services.slice(0, SERVICES_INLINE_LIMIT);
+  var html = '<div class="services-chips">';
+  inline.forEach(function (svc) {
+    html += '<span class="chip">' + escHtml(svc) + '</span>';
+  });
+  html += '</div>';
+  if (services.length > SERVICES_INLINE_LIMIT) {
+    var overflow = services.length - SERVICES_INLINE_LIMIT;
+    html += '<button type="button" class="services-more"'
+      + ' data-popover-key="' + escAttr(id + '|' + popoverKey) + '"'
+      + ' onclick="accessToggleServicesPopover(this, \'' + escAttr(id) + '\', \'' + escAttr(popoverKey) + '\')"'
+      + ' title="' + escAttr(titleOverride || ('Show all ' + services.length + ' services in this filter')) + '">'
+      + '+' + overflow + ' more</button>';
+  }
+  return html;
 }
 
 // ── By-identity detail ────────────────────────────────────────────
