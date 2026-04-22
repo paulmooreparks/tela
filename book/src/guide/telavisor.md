@@ -902,7 +902,7 @@ every action that operates on the current hub:
   there is pending work.
 - **Save.** Commits every pending change in parallel. Enabled only
   when there is pending work. See *Save and conflicts* below.
-- **+ Add User.** Creates a new token-backed identity. Opens a
+- **Add Identity...** Creates a new token-backed identity. Opens a
   dialog asking for a name and a role; the new token is shown once
   in a follow-up dialog so the operator can copy it.
 - **Pair Code...** Generates a one-time pairing code for onboarding a

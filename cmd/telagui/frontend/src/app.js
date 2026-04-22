@@ -8183,7 +8183,7 @@ function accessReload() {
 // Toolbar action stubs for wiring still being built. Full behavior
 // lands in the toolbar-actions commit; the stubs keep clicks from
 // throwing while the rest of the surface is under construction.
-function accessAddUser() {
+function accessAddIdentity() {
   // Reuse the existing create-token modal; the modal's submit path
   // now calls accessReload() which refreshes the Access page in place.
   if (typeof promptCreateToken === 'function') {
