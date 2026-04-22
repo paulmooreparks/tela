@@ -1207,6 +1207,15 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 }
 .empty-hint { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
 
+/* TDL .loading: transient placeholder text shown while a pane is
+   waiting on data ("Loading hubs...", "Checking for updates..."). The
+   sidebar adds left-padding to align with sidebar items via the
+   .sidebar .loading rule below; outside that scope this base rule
+   gives every loading line the same subordinate appearance so the
+   flash of placeholder content reads as part of the surrounding
+   surface rather than as a foreign body-text paragraph. */
+.loading { color: var(--text-muted); font-size: 13px; }
+
 /* TDL .hint: annotation text that sits next to or below a control.
    Smaller than body copy and muted so it reads as subordinate.
    Every other hint class in the app (modal-intro-hint, setting-card-
@@ -2269,6 +2278,16 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   gap: 16px; margin-bottom: 8px;
 }
 .updates-header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+.updates-header-actions {
+  display: flex; align-items: center; gap: 12px;
+}
+.updates-autocheck {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-muted); cursor: pointer;
+}
+.updates-autocheck input[type="checkbox"] {
+  accent-color: var(--accent); margin: 0; cursor: pointer;
+}
 .updates-intro { margin-bottom: 20px; }
 .updates-channel-row {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

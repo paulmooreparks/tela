@@ -237,13 +237,19 @@
       <div class="status-pane">
         <div class="updates-header">
           <h1>Updates</h1>
-          <button type="button" class="btn btn-sm" onclick="refreshUpdatesTab()" title="Re-check the channel manifest and re-scan local binaries">&#x21BB; Check Now</button>
+          <div class="updates-header-actions">
+            <label class="updates-autocheck">
+              <input type="checkbox" id="updates-autocheck" onchange="toggleAutoCheckUpdates(this.checked)">
+              Check automatically
+            </label>
+            <button type="button" class="btn btn-sm" onclick="refreshUpdatesTab()" title="Re-check the channel manifest and re-scan local binaries">&#x21BB; Check Now</button>
+          </div>
         </div>
         <p class="section-desc updates-intro">Local Tela binaries on this machine. Hub and agent updates live on the <strong>Hubs</strong> and <strong>Agents</strong> tabs in Infrastructure mode.</p>
 
         <div class="setting-card">
           <div class="setting-card-title">Release Channel</div>
-          <p class="setting-card-desc">The release channel TelaVisor and the tela CLI follow on this machine. Custom channel sources are managed in <button type="button" class="link" onclick="switchTabByName('client-settings')">Client Settings</button>.</p>
+          <p class="setting-card-desc">The channel used to update TelaVisor and tela on this machine. Custom channel sources are managed in <button type="button" class="link" onclick="switchTabByName('client-settings')">Client Settings</button>.</p>
           <div class="updates-channel-row">
             <select id="updates-channel-select" class="tb-select" title="Local client channel"></select>
             <span id="updates-channel-status" class="tools-service-label"></span>
@@ -527,21 +533,6 @@
           <div class="settings-group">
             <div class="settings-group-header">Window</div>
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-minimizeOnClose" title="Minimize to tray" onchange="markSettingsDirty()"></div><div class="settings-label">Minimize to tray on close</div></div>
-          </div>
-          <div class="settings-group">
-            <div class="settings-group-header">TelaVisor self-update</div>
-            <div class="settings-group-desc">Controls how TelaVisor updates itself. Hubs and agents have their own update channels, configured separately in Hub Settings and Agent Settings.</div>
-            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="markSettingsDirty()"></div><div class="settings-label">Check for TelaVisor updates automatically</div></div>
-            <div class="settings-check-now"><button type="button" class="btn btn-sm" onclick="goApp.CheckForUpdatesNow()">Check Now</button></div>
-            <div class="settings-stacked-row">
-              <div class="settings-stacked-label">TelaVisor release channel</div>
-              <select id="client-channel-select" class="tb-select">
-                <option value="dev">dev</option>
-                <option value="beta">beta</option>
-                <option value="stable">stable</option>
-              </select>
-              <div id="client-channel-status" class="tools-service-label" style="margin-top:4px;"></div>
-            </div>
           </div>
           <div class="settings-group">
             <div class="settings-group-header">Logging</div>

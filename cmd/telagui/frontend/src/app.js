@@ -5445,7 +5445,6 @@ function refreshSettings() {
     document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;
     document.getElementById('setting-confirmDisconnect').checked = s.confirmDisconnect;
     document.getElementById('setting-minimizeOnClose').checked = s.minimizeOnClose;
-    document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
 
     var logInput = document.getElementById('setting-logMaxLines');
@@ -5459,12 +5458,11 @@ function refreshSettings() {
 
   });
 
-  // Load channel sources first, then populate the client channel select with
-  // the full list (including any custom entries).
-  loadChannelSources(function () {
-    populateChannelSelect('client-channel-select');
-    loadClientChannel();
-  });
+  // Channel selection lives on the Updates tab; refreshSettings no
+  // longer touches a client-channel-select element. Channel sources
+  // are still managed in Client Settings (the custom sources card),
+  // and the in-memory channelSources cache is loaded by Client
+  // Settings' refreshClientSettings() so dropdowns stay populated.
 }
 
 // populateChannelSelect rebuilds a channel <select> element's options from
@@ -5882,11 +5880,14 @@ function gatherSettings() {
     minimizeTo: 'tray',
     startMinimized: false,
     minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
-    autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
     verboseDefault: document.getElementById('setting-verboseDefault').checked,
     theme: themeRadio ? themeRadio.value : 'system',
     logMaxLines: logVal
   };
+  // autoCheckUpdates lives on the Updates tab, not Application Settings.
+  // SaveSettings preserves any field omitted from the JSON body, so
+  // skipping it here leaves whatever the operator most recently set on
+  // the Updates tab intact.
 
   // defaultProfile and binPath are managed in Client Settings tab.
   // Only include them when those DOM elements are present; when they are
@@ -8644,6 +8645,19 @@ function accessExportAudit() {
 function refreshUpdatesTab() {
   var tools = document.getElementById('updates-tools-status');
   if (tools) tools.innerHTML = '<p class="loading">Checking for updates&hellip;</p>';
+  // Pull the auto-check setting and any other update-relevant prefs
+  // from the credstore each time the tab opens, so toggles made
+  // elsewhere (the topbar update overlay, a future keyboard shortcut)
+  // show up here without a full-app refresh.
+  goApp.GetSettings().then(function (s) {
+    var cb = document.getElementById('updates-autocheck');
+    if (cb) cb.checked = !!(s && s.autoCheckUpdates);
+  }).catch(function () { /* best effort */ });
+  // Re-fire the periodic update check now so the topbar indicator
+  // and the tools table reflect the same fresh data.
+  if (typeof goApp.CheckForUpdatesNow === 'function') {
+    goApp.CheckForUpdatesNow();
+  }
   populateChannelSelect('updates-channel-select');
   var sel = document.getElementById('updates-channel-select');
   var status = document.getElementById('updates-channel-status');
@@ -8686,5 +8700,20 @@ function renderUpdatesToolsTable(forceRefresh) {
   var el = document.getElementById('updates-tools-status');
   if (!el) return;
   renderToolsTable(el, /*showActions*/ true, null, !!forceRefresh);
+}
+
+// toggleAutoCheckUpdates is the change handler for the Updates tab's
+// "Check automatically" checkbox. Persists immediately through
+// SaveSettings so the next periodic refreshAll() picks up the new
+// value without an explicit Save action; the Updates tab is not a
+// staged-change surface.
+function toggleAutoCheckUpdates(checked) {
+  goApp.GetSettings().then(function (s) {
+    s = s || {};
+    s.autoCheckUpdates = !!checked;
+    return goApp.SaveSettings(JSON.stringify(s));
+  }).catch(function (err) {
+    showError('Save failed: ' + (err && err.message ? err.message : err));
+  });
 }
 
