@@ -152,6 +152,8 @@ export function GetUpdateVersion():Promise<string>;
 
 export function GetVersion():Promise<string>;
 
+export function HasLocalTelad():Promise<boolean>;
+
 export function HasUpdate():Promise<boolean>;
 
 export function HubCapabilities(arg1:string):Promise<string>;
@@ -209,6 +211,8 @@ export function PortalRenameSource(arg1:string,arg2:string):Promise<void>;
 export function PortalSetSourceEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function QuitApp():Promise<void>;
+
+export function RedeemAgentCode(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function RefreshBinStatus():Promise<Array<main.BinaryInfo>>;
 

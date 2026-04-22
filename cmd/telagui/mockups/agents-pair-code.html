@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Agent pairing code flow (proposed)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+    /* TDL tokens (dark theme), inline so the mockup stands alone. */
+    :root {
+        --bg: #111827;
+        --surface: #1f2937;
+        --surface-alt: #1a2332;
+        --text: #e5e7eb;
+        --text-muted: #9ca3af;
+        --border: #4b5668;
+        --accent: #2ecc71;
+        --accent-hover: #27ae60;
+        --warn: #f39c12;
+        --danger: #e74c3c;
+        --radius: 8px;
+        --radius-sm: 4px;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+    body { min-height: 100vh; padding: 20px 24px 60px; }
+
+    h1.mockup-title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+    p.mockup-sub {
+        font-size: 12px; color: var(--text-muted);
+        margin: 0 0 24px;
+    }
+
+    .step {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 18px 20px; margin-bottom: 20px;
+    }
+    .step-label {
+        display: inline-block; padding: 2px 8px;
+        background: var(--surface-alt); border-radius: 3px;
+        font-size: 10px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.06em; color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+    .step-title { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
+
+    /* ─── TDL primitives ─── */
+    .btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border-radius: 6px;
+        font-size: 13px; font-weight: 500; font-family: var(--font);
+        color: var(--text); cursor: pointer;
+        border: 1px solid var(--border); background: #2a3545;
+    }
+    .btn:hover { background: #3a465c; }
+    .btn-primary { background: var(--accent); color: #1f2937; border-color: var(--accent-hover); font-weight: 600; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* Faux Agents-tab sidebar context for step 1. */
+    .agents-sidebar-faux {
+        width: 280px; border: 1px solid var(--border);
+        border-radius: var(--radius); background: var(--surface);
+        overflow: hidden;
+    }
+    .agents-sidebar-header {
+        padding: 10px 16px 8px; font-size: 11px; text-transform: uppercase;
+        color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+    }
+    .agents-sidebar-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 16px; color: var(--text);
+        border-left: 3px solid transparent;
+        border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .agents-sidebar-item.active {
+        background: var(--surface-alt);
+        border-left-color: var(--accent);
+        font-weight: 600;
+    }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .dot-online { background: var(--accent); }
+    .agents-sidebar-footer {
+        padding: 10px 12px; border-top: 1px solid var(--border);
+        display: flex; flex-direction: column; gap: 6px;
+    }
+    .agents-sidebar-footer .btn { justify-content: center; }
+    .footer-caption {
+        font-size: 11px; color: var(--text-muted); text-align: center;
+    }
+
+    /* Modal mock — not floating, rendered inline so the flow reads
+       end-to-end on one page. */
+    .modal-mock {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        width: 540px; max-width: 100%;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.45), 0 0 0 1px var(--border);
+        overflow: hidden;
+    }
+    .modal-mock-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .modal-mock-header h3 { margin: 0; font-size: 16px; font-weight: 700; }
+    .modal-mock-close {
+        background: none; border: none; font-size: 18px;
+        color: var(--text-muted); cursor: pointer; padding: 0 4px;
+    }
+    .modal-mock-body { padding: 20px; }
+    .modal-mock-actions {
+        display: flex; justify-content: flex-end; gap: 8px;
+        margin-top: 16px;
+    }
+
+    /* Form bits */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+        display: block; font-size: 13px; font-weight: 500;
+        margin-bottom: 4px;
+    }
+    .form-group input[type="text"], .form-group select {
+        width: 100%; padding: 8px 10px;
+        border: 1px solid var(--border); border-radius: 5px;
+        background: var(--surface-alt); color: var(--text);
+        font-size: 13px; font-family: var(--font);
+    }
+    .form-group input[type="text"]:focus, .form-group select:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(46,204,113,0.15);
+    }
+
+    .modal-intro-hint {
+        font-size: 12px; color: var(--text-muted);
+        line-height: 1.5; margin: 0 0 14px;
+    }
+    .hint {
+        font-size: 12px; color: var(--text-muted);
+        line-height: 1.5; margin: 8px 0 0;
+    }
+
+    /* Result modal copy-affordances */
+    .copyable {
+        display: flex; align-items: center; gap: 8px;
+        background: var(--surface-alt); border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px; margin-bottom: 6px;
+    }
+    .copyable-label {
+        font-size: 11px; color: var(--text-muted);
+        text-transform: uppercase; letter-spacing: 0.06em;
+        font-weight: 600;
+        flex-shrink: 0; width: 70px;
+    }
+    .copyable-value {
+        flex: 1; font-family: var(--mono); font-size: 13px;
+        color: var(--text); word-break: break-all;
+        background: none; border: none; padding: 0; margin: 0;
+        white-space: pre-wrap;
+    }
+    .copyable-value-large {
+        flex: 1; font-family: var(--mono); font-size: 18px;
+        font-weight: 700; letter-spacing: 0.06em; color: var(--accent);
+    }
+    .copy-btn {
+        background: none; border: 1px solid var(--border);
+        color: var(--text-muted); border-radius: 4px;
+        padding: 4px 8px; font-size: 11px; cursor: pointer;
+        flex-shrink: 0;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
+
+    .meta-row {
+        display: flex; gap: 16px; font-size: 11px;
+        color: var(--text-muted); margin-top: 8px;
+    }
+
+    /* Annotations next to the mockup */
+    .note {
+        font-size: 12px; color: var(--text-muted);
+        line-height: 1.5; margin-top: 10px;
+        padding-left: 10px; border-left: 2px solid var(--border);
+    }
+
+    .row-2col { display: flex; gap: 24px; align-items: flex-start; }
+    .row-2col > div { flex: 1; }
+    </style>
+</head>
+<body>
+
+<h1 class="mockup-title">Agent pairing code flow (proposed)</h1>
+<p class="mockup-sub">Replaces the current "Pair Agent" button on the Agents tab. The button name and the result modal are the changes; the underlying code-generation API call is unchanged.</p>
+
+<!-- ─── Step 1: button label change in the Agents sidebar ─── -->
+<div class="step">
+    <div class="step-label">Step 1 — Agents tab sidebar</div>
+    <div class="step-title">Button labeled for what it actually does</div>
+
+    <div class="row-2col">
+        <div>
+            <div class="agents-sidebar-faux">
+                <div class="agents-sidebar-header">Agents</div>
+                <div class="agents-sidebar-item active">
+                    <span class="dot dot-online"></span>
+                    work-laptop
+                </div>
+                <div class="agents-sidebar-item">
+                    <span class="dot dot-online"></span>
+                    dev-vm
+                </div>
+                <div class="agents-sidebar-item">
+                    <span class="dot dot-online"></span>
+                    owlsnest-agent
+                </div>
+                <div class="agents-sidebar-footer">
+                    <button class="btn btn-primary">Generate Agent Code&hellip;</button>
+                    <div class="footer-caption">Onboards a new agent on a remote machine</div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <p class="note">
+                Old label: <strong>Pair Agent</strong>. Suggested a complete
+                in-app handshake; really it just generates a code the operator
+                copies to the agent machine.
+            </p>
+            <p class="note">
+                New label: <strong>Generate Agent Code&hellip;</strong>. The
+                ellipsis matches TDL's convention for buttons that open a
+                dialog. The footer caption explains the purpose so an operator
+                seeing this for the first time understands why this lives on
+                the Agents tab and not somewhere else.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Step 2: generation modal ─── -->
+<div class="step">
+    <div class="step-label">Step 2 — generation modal</div>
+    <div class="step-title">Asks for machine name + expiration, in a real dialog</div>
+
+    <div class="row-2col">
+        <div>
+            <div class="modal-mock">
+                <div class="modal-mock-header">
+                    <h3>Generate Agent Code</h3>
+                    <button class="modal-mock-close">&times;</button>
+                </div>
+                <div class="modal-mock-body">
+                    <p class="modal-intro-hint">Generate a one-time code that the operator on the new machine can exchange for an agent token using <code>telad pair</code>.</p>
+                    <div class="form-group">
+                        <label for="m-machine">Machine name</label>
+                        <input type="text" id="m-machine" placeholder="e.g. dev-vm, web-01" value="staging-runner">
+                        <div class="hint">The name the agent will register under. Operators usually match the host's name. Required.</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="m-expires">Expiration</label>
+                        <select id="m-expires">
+                            <option value="15m">15 minutes</option>
+                            <option value="1h" selected>1 hour</option>
+                            <option value="24h">24 hours</option>
+                            <option value="7d">7 days</option>
+                        </select>
+                    </div>
+                    <div class="modal-mock-actions">
+                        <button class="btn">Cancel</button>
+                        <button class="btn btn-primary">Generate</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <p class="note">
+                Replaces the current single-line prompt that only asked for
+                the machine name and used the generic dialog primitive. A
+                proper modal lets us add the expiration dropdown the user
+                already sees on the Pair Code modal in the Access tab, plus
+                room for a hint that explains what "machine name" actually
+                means when this dialog opens for the first time.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Step 3: result modal ─── -->
+<div class="step">
+    <div class="step-label">Step 3 — result modal</div>
+    <div class="step-title">Code + ready-to-run command, both with copy buttons</div>
+
+    <div class="row-2col">
+        <div>
+            <div class="modal-mock">
+                <div class="modal-mock-header">
+                    <h3>Agent Code Generated</h3>
+                    <button class="modal-mock-close">&times;</button>
+                </div>
+                <div class="modal-mock-body">
+                    <p class="modal-intro-hint">Run the command below on the machine where you want to install the agent. The code can only be used once and expires shortly.</p>
+
+                    <div class="copyable">
+                        <span class="copyable-label">Code</span>
+                        <span class="copyable-value-large">ABCD-1234</span>
+                        <button class="copy-btn">Copy</button>
+                    </div>
+
+                    <div class="copyable">
+                        <span class="copyable-label">Command</span>
+                        <span class="copyable-value">telad pair -hub wss://owlsnest.parkscomputing.com -code ABCD-1234</span>
+                        <button class="copy-btn">Copy</button>
+                    </div>
+
+                    <div class="meta-row">
+                        <span><strong>Machine:</strong> staging-runner</span>
+                        <span><strong>Expires:</strong> 2026-04-22T05:30:00Z (in 1 hour)</span>
+                    </div>
+
+                    <p class="hint">
+                        After the command runs successfully on the agent
+                        machine, the agent will appear in the sidebar on the
+                        left. If the agent is offline or unreachable, the
+                        code stays valid until the expiration time above.
+                    </p>
+
+                    <div class="modal-mock-actions">
+                        <button class="btn btn-primary">Done</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <p class="note">
+                Today the result is shown in a generic prompt dialog that
+                displays just the code. The new modal upgrades that with:
+            </p>
+            <ul class="note" style="border-left: none; padding-left: 22px; list-style: disc;">
+                <li>The code in large monospace, easy to read aloud or screenshot.</li>
+                <li>A pre-filled <code>telad pair</code> command line, so the operator can paste it straight into a chat or SSH session without hand-assembling it.</li>
+                <li>One Copy button per item.</li>
+                <li>Meta row with machine name and absolute expiry timestamp (operators have asked for absolute timestamps elsewhere).</li>
+                <li>A hint clarifying what happens after the operator runs the command, since pairing completion is the part the operator can&#39;t see in TV until it lands.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

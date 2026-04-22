@@ -2570,6 +2570,57 @@ func (a *App) PairWithCode(hubURL, code string) error {
 	return nil
 }
 
+// HasLocalTelad reports whether a telad binary is installed in the
+// configured Binary Location. Used by TelaVisor's "Redeem Agent
+// Code" flow to short-circuit before showing the redemption form
+// when there is no telad to invoke; the operator is sent to the
+// Updates tab to install it. Pure read, no side effects.
+func (a *App) HasLocalTelad() bool {
+	return a.findTool("telad") != ""
+}
+
+// RedeemAgentCode runs `telad pair -hub <url> -code <code> [-machine <id>]`
+// against the local telad binary. Used by TelaVisor's "Redeem Agent
+// Code" flow when an operator wants to register an agent on the same
+// machine TV is running on. Returns the trimmed CLI output on
+// success and an error containing whatever telad printed on failure.
+//
+// machine is optional; when empty the hub determines the machine ID
+// from the code. Passing it explicitly lets the operator confirm the
+// expected name in the UI.
+//
+// Unlike PairWithCode (which auto-installs tela when missing), this
+// path errors out if telad is absent rather than silently downloading
+// it. telad is a service binary; installing it is a deliberate
+// operator action that should go through the Updates tab so the
+// install / start-as-service flow is visible.
+func (a *App) RedeemAgentCode(hubURL, code, machine string) (string, error) {
+	teladPath := a.findTool("telad")
+	if teladPath == "" {
+		return "", fmt.Errorf("telad is not installed locally; install it from the Updates tab and try again")
+	}
+
+	wsURL := toWSURL(hubURL)
+	args := []string{"pair", "-hub", wsURL, "-code", code}
+	if machine != "" {
+		args = append(args, "-machine", machine)
+	}
+	cmdStr := "telad " + strings.Join(args, " ")
+	a.logCommand("Redeem agent code on hub "+wsURL, cmdStr)
+
+	cmd := exec.Command(teladPath, args...)
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	output := strings.TrimSpace(string(out))
+	if err != nil {
+		if output != "" {
+			return "", fmt.Errorf("%s", output)
+		}
+		return "", fmt.Errorf("redeem failed: %w", err)
+	}
+	return output, nil
+}
+
 // DetectCredentialType returns "code" if the input looks like a pairing code,
 // "token" if it looks like a hex token, or "unknown".
 func (a *App) DetectCredentialType(input string) string {

@@ -302,6 +302,10 @@ export function GetVersion() {
   return window['go']['main']['App']['GetVersion']();
 }
 
+export function HasLocalTelad() {
+  return window['go']['main']['App']['HasLocalTelad']();
+}
+
 export function HasUpdate() {
   return window['go']['main']['App']['HasUpdate']();
 }
@@ -416,6 +420,10 @@ export function PortalSetSourceEnabled(arg1, arg2) {
 
 export function QuitApp() {
   return window['go']['main']['App']['QuitApp']();
+}
+
+export function RedeemAgentCode(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RedeemAgentCode'](arg1, arg2, arg3);
 }
 
 export function RefreshBinStatus() {

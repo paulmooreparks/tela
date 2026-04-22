@@ -161,7 +161,11 @@
             <p class="empty-hint agents-empty-hint">Connect to view agents.</p>
           </div>
           <div class="agents-sidebar-footer">
-            <button type="button" class="btn btn-primary" id="agents-pair-btn" onclick="agentsPairAgent()" disabled>Pair Agent</button>
+            <div class="agents-sidebar-footer-row">
+              <button type="button" class="btn btn-primary" id="agents-generate-btn" onclick="agentsGenerateCode()" disabled title="Generate a pairing code on this hub for an agent on a remote machine">Generate Agent Code&hellip;</button>
+              <button type="button" class="btn" id="agents-redeem-btn" onclick="agentsRedeemCode()" title="Register a local telad on this machine using a pairing code">Redeem Code&hellip;</button>
+            </div>
+            <div class="agents-sidebar-footer-caption">Generate a code on this hub for a remote machine, or redeem one to register a local agent on this machine.</div>
           </div>
         </div>
         <div class="agents-detail" id="agents-detail">
@@ -836,6 +840,154 @@
             <button type="submit" class="btn btn-primary">Apply</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Agent Code Modal: opens from the Agents sidebar's
+       Generate Agent Code... button. Asks for a machine name and an
+       expiration, then calls the hub's pair-code endpoint with
+       type=register. The result lands in #generate-agent-code-result. -->
+  <div class="modal-overlay hidden" id="generate-agent-code-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Generate Agent Code</h3>
+        <button type="button" class="modal-close" onclick="closeModal('generate-agent-code-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitGenerateAgentCode(event)">
+          <p class="modal-intro-hint">Generate a one-time code that the operator on the new machine can exchange for an agent token using <code>telad pair</code>.</p>
+          <div class="form-group">
+            <label for="gac-hub">Hub</label>
+            <select id="gac-hub" title="Hub the agent will register with"></select>
+            <div class="hint">The hub the new agent will register with.</div>
+          </div>
+          <div class="form-group">
+            <label for="gac-machine">Machine name</label>
+            <input type="text" id="gac-machine" placeholder="e.g. dev-vm, web-01" required>
+            <div class="hint">The name the agent will register under. Operators usually match the host's name. Required.</div>
+          </div>
+          <div class="form-group">
+            <label for="gac-expires">Expiration</label>
+            <select id="gac-expires" title="Code expiration">
+              <option value="15m">15 minutes</option>
+              <option value="1h" selected>1 hour</option>
+              <option value="24h">24 hours</option>
+              <option value="7d">7 days</option>
+            </select>
+          </div>
+          <div id="gac-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal('generate-agent-code-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Generate</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Agent Code Result Modal: shows the code in large
+       monospace plus a ready-to-run telad pair command line, both
+       with copy buttons. -->
+  <div class="modal-overlay hidden" id="generate-agent-code-result-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Agent Code Generated</h3>
+        <button type="button" class="modal-close" onclick="closeModal('generate-agent-code-result-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro-hint">Run the command below on the machine where you want to install the agent. The code can only be used once and expires shortly.</p>
+        <div class="copyable">
+          <span class="copyable-label">Code</span>
+          <span class="copyable-value-large" id="gacr-code"></span>
+          <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('gacr-code').textContent, this)">Copy</button>
+        </div>
+        <div class="copyable">
+          <span class="copyable-label">Command</span>
+          <span class="copyable-value" id="gacr-command"></span>
+          <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('gacr-command').textContent, this)">Copy</button>
+        </div>
+        <div class="result-meta-row">
+          <span><strong>Machine:</strong> <span id="gacr-machine"></span></span>
+          <span><strong>Expires:</strong> <span id="gacr-expires"></span></span>
+        </div>
+        <p class="hint">After the command runs successfully on the agent machine, the agent will appear in the sidebar on the left. If the agent is offline or unreachable, the code stays valid until the expiration time above.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary" onclick="closeModal('generate-agent-code-result-modal')">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Redeem Agent Code Modal: opens from the Agents sidebar's
+       Redeem Code... button. Two states: when telad is installed
+       locally, shows the form; when not, shows the install-needed
+       bail-out with an "Open Updates..." action. -->
+  <div class="modal-overlay hidden" id="redeem-agent-code-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Redeem Agent Code</h3>
+        <button type="button" class="modal-close" onclick="closeModal('redeem-agent-code-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Form state -->
+        <form id="redeem-agent-code-form" onsubmit="submitRedeemAgentCode(event)">
+          <p class="modal-intro-hint">Register a local <code>telad</code> on this machine using a one-time code generated by the hub administrator. The agent will appear in the sidebar above when registration completes.</p>
+          <div class="form-group">
+            <label for="rac-hub">Hub</label>
+            <select id="rac-hub" title="Hub the code was issued from" onchange="onRedeemHubChange()"></select>
+            <div class="hint">The hub the code was issued from. Choose from hubs you already have credentials for, or pick "Other hub URL..." to type a URL.</div>
+          </div>
+          <div class="form-group hidden" id="rac-hub-other-group">
+            <label for="rac-hub-other">Hub URL</label>
+            <input type="text" id="rac-hub-other" placeholder="wss://hub.example.com">
+          </div>
+          <div class="form-group">
+            <label for="rac-code">Pair code</label>
+            <input type="text" id="rac-code" class="mono" placeholder="ABCD-1234" required>
+          </div>
+          <div class="form-group">
+            <label for="rac-machine">Machine name</label>
+            <input type="text" id="rac-machine" placeholder="e.g. dev-vm, web-01">
+            <div class="hint">Optional. If set, telad will register under this name; otherwise the hub uses the name encoded in the code.</div>
+          </div>
+          <div id="rac-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal('redeem-agent-code-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Redeem</button>
+          </div>
+        </form>
+        <!-- telad-not-installed state -->
+        <div id="redeem-agent-code-not-installed" class="hidden">
+          <div class="status-warn">
+            <div><strong>telad is not installed on this machine.</strong> Pairing requires a local <code>telad</code> binary; the Updates tab can install it for you.</div>
+          </div>
+          <p class="modal-intro-hint">If you are trying to register an agent running on a different machine, run <code>telad pair</code> there instead. Generating the code in TV does not deliver a token to the remote host; only the operator on the agent machine can complete the handshake.</p>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal('redeem-agent-code-modal')">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="closeModal('redeem-agent-code-modal'); switchToClientsMode(); switchTabByName('updates');">Open Updates&hellip;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Redeem Agent Code Result Modal: success summary after the
+       local telad pair invocation completes. -->
+  <div class="modal-overlay hidden" id="redeem-agent-code-result-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Agent Registered</h3>
+        <button type="button" class="modal-close" onclick="closeModal('redeem-agent-code-result-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="status-success"><span><strong>Agent registered.</strong> A new entry will appear in the Agents sidebar within a few seconds.</span></div>
+        <div class="result-row"><span class="result-label">Hub</span><span class="result-value" id="racr-hub"></span></div>
+        <div class="result-row"><span class="result-label">Machine</span><span class="result-value" id="racr-machine"></span></div>
+        <p class="hint">Run <code>telad service install</code> if you want telad to start automatically on boot.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary" onclick="closeModal('redeem-agent-code-result-modal')">Done</button>
+        </div>
       </div>
     </div>
   </div>

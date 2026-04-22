@@ -2677,9 +2677,16 @@ function applyConnectionUI() {
   var dot = document.getElementById('log-tela-dot');
   if (dot) dot.className = (connPhase === 'connected' || connPhase === 'connecting') ? 'dot dot-online' : 'dot dot-offline';
 
-  // Agents pair button
-  var pairBtn = document.getElementById('agents-pair-btn');
-  if (pairBtn) pairBtn.disabled = (connPhase !== 'connected');
+  // Agents-tab footer buttons. Generate is enabled whenever there is
+  // at least one hub TV knows about (admin credentials are required
+  // by the hub's pair-code endpoint, but TV cannot tell from here
+  // which hubs the operator has admin on, so any-known is the right
+  // gate). Redeem is always enabled; the modal itself handles the
+  // telad-not-installed case.
+  var generateBtn = document.getElementById('agents-generate-btn');
+  if (generateBtn) generateBtn.disabled = !(knownHubsData && knownHubsData.length > 0);
+  var redeemBtn = document.getElementById('agents-redeem-btn');
+  if (redeemBtn) redeemBtn.disabled = false;
 
   dismissConnectTooltip();
 }
@@ -2945,11 +2952,14 @@ var agentsSelectedHub = '';
 var agentStatusCache = {}; // { [id]: { version: string, status: 'current'|'outdated' } }
 
 function agentsRefresh() {
-  goApp.GetConnectionState().then(function (state) {
-    document.getElementById('agents-pair-btn').disabled = !state.connected;
-  }).catch(function () {
-    document.getElementById('agents-pair-btn').disabled = true;
-  });
+  // Refresh the footer buttons against the current known-hubs view.
+  // Generate needs at least one hub (admin call goes to a real hub);
+  // Redeem is always enabled since it has its own telad-installed
+  // check inside the modal-open handler.
+  var generateBtn = document.getElementById('agents-generate-btn');
+  if (generateBtn) generateBtn.disabled = !(knownHubsData && knownHubsData.length > 0);
+  var redeemBtn = document.getElementById('agents-redeem-btn');
+  if (redeemBtn) redeemBtn.disabled = false;
   goApp.GetAgentList().then(function (agents) {
     agentsData = agents || [];
     agentsData.sort(function (a, b) {
@@ -3312,29 +3322,208 @@ function agentShareRemove(btn) {
   }
 }
 
-function agentsPairAgent() {
-  // Find the first hub from the profile
-  var hub = '';
-  for (var key in selectedServices) {
-    var svc = selectedServices[key];
-    if (svc.hub) { hub = svc.hub; break; }
-  }
-  if (!hub) { showError('No hub available'); return; }
+// ── Agent pairing flows ───────────────────────────────────────────
+//
+// Two related but distinct workflows live on the Agents tab:
+//
+//   1. Generate Agent Code: an operator produces a register-type
+//      pair code on a hub for an agent that will run on a remote
+//      machine. The result modal includes a copy-ready
+//      `telad pair` command line so the operator can paste it
+//      straight into chat or SSH on the agent host.
+//
+//   2. Redeem Agent Code: an operator with telad installed locally
+//      consumes a register-type pair code to register a local agent.
+//      Only useful for development workstations and single-host
+//      setups; production agents on remote machines redeem via
+//      `telad pair` on the agent host itself.
 
-  showPromptDialog('Pair Agent', 'Enter the machine name for the new agent:', '', 'Generate Code').then(function (machine) {
-    if (!machine) return;
-    goApp.AdminAPICall(hub, 'POST', 'pair-code',
-      JSON.stringify({type: 'register', machines: [machine]}))
-      .then(function (resp) {
-        try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
-        if (data.code) {
-          tvLog('Pairing code for ' + machine + ': ' + data.code);
-          showPromptDialog('Pairing Code', 'Give this code to the agent operator. It expires in ' + (data.expires || '10 minutes') + '.', data.code, 'Close');
-        } else if (data.error) {
-          showError('Pair failed: ' + data.error);
-        }
-      }).catch(function (err) { showError('Pair failed: ' + err); });
-  }).catch(function () {});
+// agentsGenerateCode opens the generate modal pre-populated with the
+// hub of the currently-selected agent (if any) or the first known
+// hub. The form's submit handler is submitGenerateAgentCode below.
+function agentsGenerateCode() {
+  var sel = document.getElementById('gac-hub');
+  if (!sel) return;
+  populateAgentHubSelect(sel, agentsSelectedHub || '');
+  document.getElementById('gac-machine').value = '';
+  document.getElementById('gac-expires').value = '1h';
+  var errEl = document.getElementById('gac-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  document.getElementById('generate-agent-code-modal').classList.remove('hidden');
+  setTimeout(function () { document.getElementById('gac-machine').focus(); }, 0);
+}
+
+function submitGenerateAgentCode(event) {
+  event.preventDefault();
+  var hub = document.getElementById('gac-hub').value;
+  var machine = document.getElementById('gac-machine').value.trim();
+  var expires = document.getElementById('gac-expires').value;
+  var errEl = document.getElementById('gac-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  if (!hub || !machine) {
+    errEl.textContent = 'Hub and machine name are required.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  goApp.AdminGeneratePairCode(hub, 'register', '', machine, expires).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('generate-agent-code-modal');
+    showGenerateAgentCodeResult(hub, machine, data);
+  });
+}
+
+function showGenerateAgentCodeResult(hubName, machine, data) {
+  var hubURL = hubURLFor(hubName) || hubName;
+  var wsURL = toWSURL(hubURL);
+  var cmd = 'telad pair -hub ' + wsURL + ' -code ' + data.code;
+  if (machine) cmd += ' -machine ' + machine;
+
+  document.getElementById('gacr-code').textContent = data.code || '';
+  document.getElementById('gacr-command').textContent = cmd;
+  document.getElementById('gacr-machine').textContent = machine;
+  document.getElementById('gacr-expires').textContent = data.expiresAt || data.expires || 'soon';
+  document.getElementById('generate-agent-code-result-modal').classList.remove('hidden');
+
+  tvLog('Generated agent code for ' + machine + ' on ' + hubName + ': ' + (data.code || ''));
+}
+
+// agentsRedeemCode opens the redeem modal. Checks whether telad is
+// installed locally first; if not, the modal opens in the
+// install-needed bail-out state with a single CTA routing to the
+// Updates tab.
+function agentsRedeemCode() {
+  var modal = document.getElementById('redeem-agent-code-modal');
+  var formState = document.getElementById('redeem-agent-code-form');
+  var notInstalledState = document.getElementById('redeem-agent-code-not-installed');
+
+  goApp.HasLocalTelad().then(function (hasTelad) {
+    if (hasTelad) {
+      formState.classList.remove('hidden');
+      notInstalledState.classList.add('hidden');
+      var sel = document.getElementById('rac-hub');
+      populateAgentHubSelect(sel, '', /*allowOther*/ true);
+      onRedeemHubChange();
+      document.getElementById('rac-code').value = '';
+      document.getElementById('rac-machine').value = '';
+      document.getElementById('rac-hub-other').value = '';
+      var errEl = document.getElementById('rac-error');
+      errEl.classList.add('hidden'); errEl.textContent = '';
+    } else {
+      formState.classList.add('hidden');
+      notInstalledState.classList.remove('hidden');
+    }
+    modal.classList.remove('hidden');
+  });
+}
+
+function onRedeemHubChange() {
+  var sel = document.getElementById('rac-hub');
+  var other = document.getElementById('rac-hub-other-group');
+  if (!sel || !other) return;
+  other.classList.toggle('hidden', sel.value !== '__other__');
+}
+
+function submitRedeemAgentCode(event) {
+  event.preventDefault();
+  var sel = document.getElementById('rac-hub');
+  var hubVal = sel.value;
+  if (hubVal === '__other__') {
+    hubVal = document.getElementById('rac-hub-other').value.trim();
+  } else {
+    // Convert a known hub name to its URL for telad pair.
+    hubVal = hubURLFor(hubVal) || hubVal;
+  }
+  var code = document.getElementById('rac-code').value.trim();
+  var machine = document.getElementById('rac-machine').value.trim();
+  var errEl = document.getElementById('rac-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  if (!hubVal || !code) {
+    errEl.textContent = 'Hub and pair code are required.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  goApp.RedeemAgentCode(hubVal, code, machine).then(function (output) {
+    closeModal('redeem-agent-code-modal');
+    document.getElementById('racr-hub').textContent = hubVal;
+    document.getElementById('racr-machine').textContent = machine || '(from code)';
+    document.getElementById('redeem-agent-code-result-modal').classList.remove('hidden');
+    tvLog('Redeemed agent code on ' + hubVal + (machine ? ' as ' + machine : ''));
+    // Refresh the agents list so the new entry appears as soon as
+    // the hub registers it.
+    setTimeout(agentsRefresh, 1500);
+  }).catch(function (err) {
+    errEl.textContent = String(err && err.message ? err.message : err);
+    errEl.classList.remove('hidden');
+  });
+}
+
+// populateAgentHubSelect rebuilds an agent-flow hub <select> from
+// the global knownHubsData. Sets selected to the named hub if it
+// exists in the list. When allowOther is true an "Other hub URL..."
+// option is appended so the operator can type a hub they have not
+// added yet (used by the redeem flow only; generation requires
+// admin credentials, which the operator must already have).
+function populateAgentHubSelect(sel, selected, allowOther) {
+  if (!sel) return;
+  sel.innerHTML = '';
+  (knownHubsData || []).forEach(function (h) {
+    var opt = document.createElement('option');
+    opt.value = h.name;
+    opt.textContent = h.name;
+    sel.appendChild(opt);
+  });
+  if (allowOther) {
+    var opt = document.createElement('option');
+    opt.value = '__other__';
+    opt.textContent = 'Other hub URL\u2026';
+    sel.appendChild(opt);
+  }
+  if (selected) sel.value = selected;
+}
+
+// switchToClientsMode flips the top-level mode toggle to Clients;
+// used by the Redeem Code modal's "Open Updates..." button so a
+// click from Infrastructure mode lands on the Updates tab without
+// the operator having to also click the mode bar.
+function switchToClientsMode() {
+  var btn = document.getElementById('mode-clients-btn');
+  if (btn) btn.click();
+}
+
+// copyToClipboard puts text on the system clipboard and gives the
+// triggering button a brief visual confirmation. Used by the
+// Generate Agent Code Result modal's per-row Copy buttons.
+function copyToClipboard(text, triggerBtn) {
+  if (!text) return;
+  var promise = (navigator.clipboard && navigator.clipboard.writeText)
+    ? navigator.clipboard.writeText(text)
+    : Promise.reject(new Error('clipboard API unavailable'));
+  promise.then(function () {
+    if (!triggerBtn) return;
+    var orig = triggerBtn.textContent;
+    triggerBtn.textContent = 'Copied';
+    setTimeout(function () { triggerBtn.textContent = orig; }, 1200);
+  }).catch(function () {
+    // Fallback: legacy execCommand path.
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* nothing else to try */ }
+    document.body.removeChild(ta);
+    if (triggerBtn) {
+      var orig = triggerBtn.textContent;
+      triggerBtn.textContent = 'Copied';
+      setTimeout(function () { triggerBtn.textContent = orig; }, 1200);
+    }
+  });
 }
 
 function agentsRestartSelected() {

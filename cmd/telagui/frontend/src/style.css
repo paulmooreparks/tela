@@ -2307,6 +2307,115 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .updates-autocheck input[type="checkbox"] {
   accent-color: var(--accent); margin: 0; cursor: pointer;
 }
+
+/* Agents-tab sidebar footer: two side-by-side buttons (Generate /
+   Redeem) plus a one-sentence caption explaining the relationship.
+   The buttons are equal width via flex:1 so neither dominates the
+   row. */
+.agents-sidebar-footer-row {
+  display: flex; gap: 6px;
+}
+.agents-sidebar-footer-row .btn {
+  flex: 1; padding: 6px 8px; font-size: 12px;
+  justify-content: center;
+}
+.agents-sidebar-footer-caption {
+  margin-top: 6px;
+  font-size: 11px; line-height: 1.3;
+  color: var(--text-muted); text-align: center;
+}
+
+/* Copyable row: a code or command line with a Copy button on the
+   right. Used by the Generate Agent Code Result modal and any other
+   place that shows an operator a value they need to share. */
+.copyable {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 6px;
+}
+.copyable-label {
+  flex-shrink: 0; width: 70px;
+  font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+}
+.copyable-value {
+  flex: 1; min-width: 0;
+  font-family: var(--mono); font-size: 13px;
+  color: var(--text); word-break: break-all;
+  background: none; border: none; padding: 0; margin: 0;
+  white-space: pre-wrap;
+}
+.copyable-value-large {
+  flex: 1;
+  font-family: var(--mono); font-size: 18px; font-weight: 700;
+  letter-spacing: 0.06em; color: var(--accent);
+}
+.copy-btn {
+  flex-shrink: 0;
+  background: none; border: 1px solid var(--border);
+  color: var(--text-muted); border-radius: 4px;
+  padding: 4px 8px; font-size: 11px; cursor: pointer;
+  font-family: var(--font);
+}
+.copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
+
+/* Inline status banners for modal bodies. status-warn for amber
+   advisories (telad-not-installed bail-out); status-success for
+   green confirmations (agent registered). Both carry a glyph
+   prefix per TDL. */
+.status-warn {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: rgba(243,156,18,0.08); border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 14px;
+  font-size: 12px; line-height: 1.5;
+}
+.status-warn::before {
+  content: '\26A0';
+  color: var(--warn); font-size: 14px; line-height: 1;
+  flex-shrink: 0; margin-top: 1px;
+}
+.status-success {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: rgba(46,204,113,0.08); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 14px;
+  font-size: 12px; line-height: 1.5; color: var(--text);
+}
+.status-success::before {
+  content: '\2713';
+  color: var(--accent); font-size: 14px; font-weight: 700; line-height: 1;
+  flex-shrink: 0; margin-top: 1px;
+}
+
+/* Result-modal label/value rows: confirmation summary inside the
+   Redeem Agent Code Result modal and any other "what just landed
+   where" report. */
+.result-row {
+  display: flex; gap: 16px; font-size: 12px;
+  padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
+}
+.result-row:last-of-type { border-bottom: none; }
+.result-label {
+  flex-shrink: 0; width: 110px; padding-top: 2px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.result-value {
+  flex: 1; font-family: var(--mono); font-size: 13px;
+  color: var(--text); word-break: break-all;
+}
+.result-meta-row {
+  display: flex; gap: 16px; font-size: 11px;
+  color: var(--text-muted); margin-top: 8px;
+}
+.result-meta-row strong { color: var(--text); font-weight: 600; }
+
+/* Mono input variant: pair codes are easier to read in monospace. */
+.form-group input.mono {
+  font-family: var(--mono); font-size: 14px; letter-spacing: 0.04em;
+}
 .updates-intro { margin-bottom: 20px; }
 .updates-channel-row {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
