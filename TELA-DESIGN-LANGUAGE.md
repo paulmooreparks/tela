@@ -1104,8 +1104,8 @@ require manual dismissal so the user has time to read and act on the error.
 
 An empty state explains what the user sees (or doesn't see) and includes a
 pointer to the action the user should take next. An empty sidebar with the
-text "No agents registered. Pair Agent to add one." is a good empty state. An
-empty sidebar with no text is not.
+text "No agents registered. Use Generate Agent Code to onboard one." is a
+good empty state. An empty sidebar with no text is not.
 
 ## Progress and code
 
