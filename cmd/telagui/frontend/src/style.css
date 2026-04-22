@@ -1206,6 +1206,63 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   padding: 8px 16px;
 }
 .empty-hint { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
+
+/* TDL .hint: annotation text that sits next to or below a control.
+   Smaller than body copy and muted so it reads as subordinate.
+   Every other hint class in the app (modal-intro-hint, setting-card-
+   desc, settings-group-desc) matches these metrics so the styling
+   stays consistent across forms, modals, and setting cards. */
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 10px 0 4px;
+}
+
+/* TDL .link: inline underlined accent text used for every clickable
+   text outside the topbar. Rendered as a <button class="link"> or an
+   <a class="link">; both resolve to the same visual. The button reset
+   (background/border/padding) is explicit because browsers give
+   <button> default chrome that would otherwise ruin the link look.
+   .link-muted is the subordinate variant used in secondary contexts
+   (footer cross-references, inline annotations). */
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.link:hover {
+  color: var(--accent-hover);
+  text-decoration-thickness: 2px;
+}
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.link:visited { color: var(--accent); }
+
+.link-muted {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.link-muted:hover {
+  color: var(--text);
+  text-decoration-thickness: 2px;
+}
 .log-entry-card { margin-bottom: 12px; }
 .log-entry-header {
   display: flex; align-items: center; justify-content: space-between;
