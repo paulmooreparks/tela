@@ -2120,6 +2120,14 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
 }
 .access-matrix-check input[type="checkbox"]:disabled { cursor: not-allowed; }
+
+/* Checkbox cell when the permission is inherited from the wildcard
+   "*" ACL. The cell picks up a very light blue tint matching the
+   implicit-role rows so the operator sees at a glance that the state
+   comes from elsewhere, and the title tooltip on the cell explains
+   where to go to edit it. */
+.access-matrix-check-inherited { background: rgba(59,130,246,0.08); }
+.access-matrix-check-inherited input[type="checkbox"]:disabled { opacity: 0.75; }
 .access-matrix-na { color: var(--text-muted); text-align: center; }
 .access-matrix-actions { text-align: left; white-space: nowrap; }
 .access-matrix-actions .btn + .btn { margin-left: 6px; }

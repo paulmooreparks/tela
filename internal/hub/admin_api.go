@@ -537,6 +537,22 @@ type accessEntry struct {
 	// echo it back as If-Match on mutating requests to detect drift. See
 	// internal/hub/access_version.go for lifecycle details.
 	Version uint64 `json:"version"`
+	// WildcardInherited enumerates the permissions the wildcard "*" ACL
+	// entry cascades to every machine that does not appear explicitly in
+	// Machines. The hub's canConnect / canManage routines honor this
+	// cascade; the field is derived from the same source so clients can
+	// render the effective per-machine state without re-implementing
+	// the cascade rules. Empty when the identity has no wildcard entry
+	// or its wildcard entry grants no cascading permissions. Owner,
+	// admin, and viewer identities have role-based implicit access
+	// rather than ACL-based cascade; for them the list is always empty
+	// and the implicit grant is represented by a synthetic "*" entry
+	// in Machines.
+	WildcardInherited []string `json:"wildcardInherited,omitempty"`
+	// WildcardInheritedServices is the services filter attached to the
+	// wildcard connect grant. Empty means "all services". Ignored when
+	// WildcardInherited does not contain "connect".
+	WildcardInheritedServices []string `json:"wildcardInheritedServices,omitempty"`
 }
 
 type machineAccess struct {
@@ -666,6 +682,27 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 				Permissions: perms,
 				Services:    services,
 			})
+		}
+	}
+
+	// Compute wildcard-cascade metadata. The hub's canConnect and
+	// canManage check the wildcard entry as a fallback when a machine-
+	// specific grant is absent; we surface which permissions that
+	// fallback covers so clients render specific-machine rows
+	// consistently with the hub's own authorization decisions rather
+	// than re-implementing the cascade rules.
+	if wildACL, ok := globalCfg.Auth.Machines["*"]; ok {
+		if grant, gOk := findConnectGrant(wildACL.ConnectTokens, t.Token); gOk {
+			entry.WildcardInherited = append(entry.WildcardInherited, "connect")
+			if len(grant.Services) > 0 {
+				entry.WildcardInheritedServices = append([]string(nil), grant.Services...)
+			}
+		}
+		for _, mt := range wildACL.ManageTokens {
+			if mt == t.Token {
+				entry.WildcardInherited = append(entry.WildcardInherited, "manage")
+				break
+			}
 		}
 	}
 

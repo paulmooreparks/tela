@@ -217,6 +217,60 @@ func TestAdminPatchAccess_ChangesRole(t *testing.T) {
 	}
 }
 
+func TestBuildAccessEntry_ReportsWildcardInheritance(t *testing.T) {
+	// Clients render the effective per-machine permission state using
+	// WildcardInherited on the identity record rather than re-
+	// implementing the cascade rules. The hub cascades connect and
+	// manage from the wildcard "*" ACL; register does not cascade.
+	// This test pins that contract at the builder level.
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "charlie", Token: "tok-charlie"},
+			},
+			Machines: map[string]machineACL{
+				"*": {
+					ConnectTokens: []connectGrant{{Token: "tok-charlie", Services: []string{"SSH"}}},
+					ManageTokens:  []string{"tok-charlie"},
+				},
+			},
+		},
+	})
+	defer restore()
+
+	entry := buildAccessEntry(globalCfg.Auth.Tokens[0])
+	if !reflect.DeepEqual(entry.WildcardInherited, []string{"connect", "manage"}) {
+		t.Errorf("WildcardInherited = %v, want [connect manage]", entry.WildcardInherited)
+	}
+	if !reflect.DeepEqual(entry.WildcardInheritedServices, []string{"SSH"}) {
+		t.Errorf("WildcardInheritedServices = %v, want [SSH]", entry.WildcardInheritedServices)
+	}
+}
+
+func TestBuildAccessEntry_OmitsWildcardInheritanceForOwnerAdmin(t *testing.T) {
+	// Owner and admin identities get a role-based synthetic "*" entry
+	// in Machines. Their access comes from the role, not the ACL
+	// cascade, so WildcardInherited must be empty to avoid
+	// double-counting implicit-all-access as both the synthetic "*"
+	// row and a cascade.
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+			},
+			Machines: map[string]machineACL{
+				"*": {ConnectTokens: []connectGrant{{Token: "tok-owner"}}},
+			},
+		},
+	})
+	defer restore()
+
+	entry := buildAccessEntry(globalCfg.Auth.Tokens[0])
+	if len(entry.WildcardInherited) != 0 {
+		t.Errorf("owner WildcardInherited should be empty, got %v", entry.WildcardInherited)
+	}
+}
+
 func TestAdminPatchAccess_RejectsUnknownRole(t *testing.T) {
 	resetAccessVersions()
 	restore := withTestConfig(t, &hubConfig{

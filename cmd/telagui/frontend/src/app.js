@@ -7049,6 +7049,27 @@ function accessBaselineFor(id, machineId) {
   return { permissions: [], services: [] };
 }
 
+// accessWildcardInherited returns which permissions an identity
+// receives from the wildcard "*" ACL as reported by the hub's
+// /api/admin/access response. The hub is the source of truth for
+// cascade rules; the UI reads the derived data on each accessEntry
+// rather than re-implementing the cascade logic, so any future change
+// to the protocol flows through without a client update.
+//
+// Identities with no wildcard inheritance (or identities not yet
+// loaded) return a zeroed struct: every caller treats those as "not
+// inherited" and falls back to the identity's explicit grants.
+function accessWildcardInherited(id) {
+  var entry = accessEntryFor(id);
+  if (!entry) return { connect: false, manage: false, services: [] };
+  var perms = entry.wildcardInherited || [];
+  return {
+    connect: perms.indexOf('connect') !== -1,
+    manage: perms.indexOf('manage') !== -1,
+    services: (entry.wildcardInheritedServices || []).slice(),
+  };
+}
+
 // accessEffectiveGrant returns the grant that should be rendered for
 // (id, machineId): the pending desired state if a pending entry exists,
 // otherwise the baseline. Revoke-staged rows return empty permissions
@@ -7630,6 +7651,12 @@ function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
   var grant = accessEffectiveGrant(e.id, machineId);
   var pending = accessIsPending(e.id, machineId);
   var revoked = accessIsRevoked(e.id, machineId);
+  // Permissions inherited from the wildcard "*" ACL. On the wildcard
+  // row itself there is no parent wildcard to inherit from, so the
+  // struct is zeroed. Connect and manage cascade; register does not.
+  var inherited = isWildcard
+    ? { connect: false, manage: false, services: [] }
+    : accessWildcardInherited(e.id);
   var rowClass = 'access-matrix-row';
   if (revoked) rowClass += ' access-matrix-row-revoked';
   else if (pending) rowClass += ' access-matrix-row-dirty';
@@ -7638,8 +7665,13 @@ function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
   var hasConnect = perms.indexOf('connect') !== -1;
   var hasRegister = perms.indexOf('register') !== -1;
   var hasManage = perms.indexOf('manage') !== -1;
-  // Register is not meaningful on the wildcard row; hubs never register
-  // against "*". Render a muted em-dash instead of a checkbox.
+
+  var connectCell = renderInheritableCheck(e.id, machineId, 'connect', hasConnect, inherited.connect);
+  var manageCell = renderInheritableCheck(e.id, machineId, 'manage', hasManage, inherited.manage);
+  // Register is not meaningful on the wildcard row (hubs never register
+  // against "*") and does not cascade from the wildcard, so a plain
+  // interactive checkbox without inheritance logic is correct for
+  // specific-machine rows.
   var registerCell = isWildcard
     ? '<td class="access-matrix-na">&mdash;</td>'
     : '<td class="access-matrix-check"><input type="checkbox" ' + (hasRegister ? 'checked ' : '') +
@@ -7659,14 +7691,52 @@ function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
 
   return '<tr class="' + rowClass + '">'
     + '<td><strong class="identity-name">' + escHtml(e.id) + '</strong> <span class="chip">' + escHtml(formatRole(e.role)) + '</span>' + dirtyInd + '</td>'
-    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasConnect ? 'checked ' : '') +
-      'onchange="accessToggleCheck(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\',\'connect\',this.checked)"></td>'
+    + connectCell
     + registerCell
-    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasManage ? 'checked ' : '') +
-      'onchange="accessToggleCheck(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\',\'manage\',this.checked)"></td>'
-    + '<td>' + renderAccessServicesCell(e.id, machineId, grant) + '</td>'
+    + manageCell
+    + '<td>' + renderAccessServicesCellWithInheritance(e.id, machineId, grant, inherited) + '</td>'
     + '<td class="access-matrix-actions">' + actions + '</td>'
     + '</tr>';
+}
+
+// renderInheritableCheck renders a permission checkbox that may be
+// inherited from the wildcard ACL. When inherited is true the cell
+// reads as checked + disabled with a title tooltip pointing at the
+// wildcard row; clicking is a no-op because the wildcard alone grants
+// the permission. When not inherited, the checkbox is a plain
+// interactive toggle bound to accessToggleCheck.
+function renderInheritableCheck(id, machineId, perm, ownChecked, inherited) {
+  if (inherited) {
+    return '<td class="access-matrix-check access-matrix-check-inherited" title="Granted via the wildcard * ACL. Edit the wildcard row to change.">'
+      + '<input type="checkbox" checked disabled></td>';
+  }
+  return '<td class="access-matrix-check"><input type="checkbox" ' + (ownChecked ? 'checked ' : '') +
+    'onchange="accessToggleCheck(\'' + escAttr(id) + '\',\'' + escAttr(machineId) + '\',\'' + perm + '\',this.checked)"></td>';
+}
+
+// renderAccessServicesCellWithInheritance wraps renderAccessServicesCell
+// and annotates the cell when connect is inherited from the wildcard.
+// When the identity has no specific-machine connect but the wildcard
+// does, we render the wildcard's effective services (or "All services")
+// with a "via *" marker so the operator sees the real state rather
+// than an em-dash that suggests no access.
+function renderAccessServicesCellWithInheritance(id, machineId, grant, inherited) {
+  var ownConnect = (grant.permissions || []).indexOf('connect') !== -1;
+  if (!ownConnect && inherited.connect) {
+    var svc = inherited.services || [];
+    if (svc.length === 0) {
+      return '<span class="services-summary-muted" title="Inherited from wildcard">All services (via *)</span>';
+    }
+    var html = '<div class="services-cell" title="Inherited from wildcard">'
+      + '<span class="services-summary-muted">via *</span>'
+      + '<div class="services-chips">';
+    svc.forEach(function (s) {
+      html += '<span class="chip">' + escHtml(s) + '</span>';
+    });
+    html += '</div></div>';
+    return html;
+  }
+  return renderAccessServicesCell(id, machineId, grant);
 }
 
 // renderAccessServicesCell renders the Connect services column for an
