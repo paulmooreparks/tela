@@ -2139,13 +2139,20 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 
 /* Edit services modal: scrollable checkbox list rendered when a
    specific machine's services-filter is being edited. The free-text
-   input takes over for the wildcard "*" machine. */
+   input takes over for the wildcard "*" machine.
+
+   Specificity on the row selector (.form-group ... label, plus a
+   standalone label.aes-service-row) is deliberately elevated above
+   the form defaults. Without it, .form-group label { display: block }
+   beats our { display: flex } and the flex gap collapses, jamming
+   the checkbox against the service name with no visible separation. */
 .aes-services-list {
   max-height: 180px; overflow-y: auto;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 6px 10px; background: var(--surface-alt);
 }
-.aes-service-row {
+.form-group .aes-services-list label.aes-service-row,
+label.aes-service-row {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; padding: 4px 0; margin: 0;
   font-weight: 400; cursor: pointer; color: var(--text);
