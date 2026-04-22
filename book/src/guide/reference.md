@@ -730,6 +730,7 @@ All admin endpoints require an owner or admin token via `Authorization: Bearer <
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/api/admin/agents/{machine}` | Lightweight presence probe: returns `id`, `agentConnected`, `lastSeen` without the full `/api/status` payload |
 | GET/POST | `/api/admin/agents/{machine}/{action}` | Proxy management request to agent |
 | POST | `/api/admin/pair-code` | Generate a pairing code |
 | POST | `/api/pair` | Exchange a pairing code for a token (no auth required) |

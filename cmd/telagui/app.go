@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"log"
@@ -1278,6 +1279,17 @@ func probeHubID(hubURL, token string) string {
 // Queries the first enabled portal source. Returns an error if no
 // enabled source knows a hub at that URL.
 func (a *App) resolveHubNameByURL(rawURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return a.resolveHubNameByURLCtx(ctx, rawURL)
+}
+
+// resolveHubNameByURLCtx is the context-aware variant. Callers with a
+// tighter deadline (the presence probe's 2-second budget) pass ctx so
+// the portal ListHubs call actually cancels when the budget fires,
+// instead of ignoring the caller's deadline and orphaning the lookup
+// for up to the default 10 seconds.
+func (a *App) resolveHubNameByURLCtx(ctx context.Context, rawURL string) (string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return "", fmt.Errorf("empty hub URL")
@@ -1291,8 +1303,6 @@ func (a *App) resolveHubNameByURL(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	hubs, err := client.ListHubs(ctx)
 	if err != nil {
 		return "", err
@@ -1489,11 +1499,21 @@ func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]
 // use adminProxyCall. The extraHeaders map threads request headers
 // (If-Match, ...) through to the upstream hub.
 func (a *App) adminProxyCallRich(hubName, method, operation string, body []byte, extraHeaders map[string]string) ([]byte, int, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return a.adminProxyCallCtx(ctx, hubName, method, operation, body, extraHeaders)
+}
+
+// adminProxyCallCtx is the context-aware variant. Callers with a
+// shorter deadline (for example the sidebar button-enable probe, which
+// allots a 2-second budget so a slow hub cannot block the UI) pass a
+// trimmed context so the underlying HTTP request is cancelled when the
+// deadline fires -- not left to run to the default 30-second timeout
+// after TV has already moved on.
+func (a *App) adminProxyCallCtx(ctx context.Context, hubName, method, operation string, body []byte, extraHeaders map[string]string) ([]byte, int, string, error) {
 	if hubName == "" {
 		return nil, 0, "", fmt.Errorf("adminProxyCall: hubName is required")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	sourceName, _, _ := a.sourceForHub(ctx, hubName)
 	client, err := a.portalClientForSource(sourceName)
@@ -2570,13 +2590,304 @@ func (a *App) PairWithCode(hubURL, code string) error {
 	return nil
 }
 
-// HasLocalTelad reports whether a telad binary is installed in the
-// configured Binary Location. Used by TelaVisor's "Redeem Agent
-// Code" flow to short-circuit before showing the redemption form
-// when there is no telad to invoke; the operator is sent to the
-// Updates tab to install it. Pure read, no side effects.
+// HasLocalTelad reports whether telad is installed on this machine.
+// Sources, in order, most-authoritative to least:
+//  1. Hub-mediated comms: read the control file (`telad.json`) to
+//     discover which hub telad registered with, then ask that hub
+//     whether the machine is online. agentConnected=true means
+//     telad's outbound WebSocket session is live -- the actual API
+//     check, not just "the process started at some point".
+//  2. OS service manager: `QueryStatus` hits the platform service
+//     control (Windows SCM, systemd, launchd); `QueryUserStatus`
+//     hits the user-mode equivalent. Installed but maybe not
+//     currently connected.
+//  3. Configured Binary Location: where TV's own update flow
+//     installs tools. Installed but not running and not a service.
+//
+// Service-config JSON reads (the BinaryPath in `telad-service.json`)
+// are reserved for locateTelad's path resolution; they are not used
+// here. PATH is not scanned -- if telad lives in some directory not
+// recorded in any of these three sources, TV does not pretend to
+// know about it.
+//
+// Caching and invalidation:
+//   - Successful probes cache their result for teladPresenceTTL so
+//     the Agents sidebar's button-enable logic does not fire a
+//     fresh hub round-trip on every re-render.
+//   - Concurrent cache-miss callers coalesce onto a single in-flight
+//     probe (teladPresenceProbeMu), so N paints stacked on the TTL
+//     boundary produce exactly one network round-trip, not N.
+//   - invalidateTeladPresence bumps a generation counter and zeros
+//     the timestamp. A probe that started before the bump captures
+//     the pre-bump generation and, on completion, checks it against
+//     current: if the counter advanced (an invalidation landed while
+//     the probe was network-blocked), the probe's answer reflects
+//     pre-change state and is discarded rather than cached. The
+//     next caller re-probes against post-change state.
 func (a *App) HasLocalTelad() bool {
-	return a.findTool("telad") != ""
+	if v, ok := readTeladPresenceCache(); ok {
+		return v
+	}
+
+	teladPresenceProbeMu.Lock()
+	defer teladPresenceProbeMu.Unlock()
+
+	// A concurrent caller may have refreshed the cache while we were
+	// queued on the probe mutex. Re-check before doing the work.
+	if v, ok := readTeladPresenceCache(); ok {
+		return v
+	}
+
+	genBefore := atomic.LoadUint64(&teladPresenceGen)
+	result := a.checkTeladPresent()
+
+	teladPresenceMu.Lock()
+	if atomic.LoadUint64(&teladPresenceGen) == genBefore {
+		teladPresenceCached = result
+		teladPresenceAt = time.Now()
+	}
+	teladPresenceMu.Unlock()
+	return result
+}
+
+const (
+	teladPresenceTTL       = 5 * time.Second
+	teladPresenceProbeWait = 2 * time.Second
+)
+
+var (
+	teladPresenceMu      sync.Mutex
+	teladPresenceCached  bool
+	teladPresenceAt      time.Time
+	teladPresenceProbeMu sync.Mutex
+	teladPresenceGen     uint64
+)
+
+// readTeladPresenceCache returns the cached answer if it is fresh.
+// The boolean tuple is (value, ok): ok=false means the cache is
+// empty or expired and the caller must probe.
+func readTeladPresenceCache() (bool, bool) {
+	teladPresenceMu.Lock()
+	defer teladPresenceMu.Unlock()
+	if teladPresenceAt.IsZero() || time.Since(teladPresenceAt) >= teladPresenceTTL {
+		return false, false
+	}
+	return teladPresenceCached, true
+}
+
+func (a *App) checkTeladPresent() bool {
+	hub, svc, usvc, bin := a.teladPresenceCascade()
+	var winner string
+	var answer bool
+	switch {
+	case hub == hubProbeOnline:
+		answer, winner = true, "hub"
+	case svc == presenceYes:
+		answer, winner = true, "service"
+	case usvc == presenceYes:
+		answer, winner = true, "user-service"
+	case bin == presenceYes:
+		answer, winner = true, "bin-path"
+	default:
+		answer, winner = false, "none"
+	}
+	// Log every tier's outcome so an operator investigating a surprising
+	// answer can tell "hub was unreachable and we fell through to
+	// service" apart from "hub said offline and service caught it". Log
+	// rate is bounded by the presence cache TTL (one line per cache
+	// miss).
+	log.Printf("[telavisor] telad presence: hub=%s service=%s user-service=%s bin-path=%s -> %v (%s)",
+		hub, svc, usvc, bin, answer, winner)
+	return answer
+}
+
+// presenceOutcome tags a tier in the OS-inspection part of the
+// cascade (service manager, user-service manager, bin-path). Three
+// states: yes (tier answered positively), no (tier ran and said
+// not here), skip (tier was not consulted because an earlier tier
+// already answered yes and the probe short-circuited). The hub
+// tier has its own richer hubProbeResult type with extra states
+// (offline, unreachable, no-control-file).
+type presenceOutcome string
+
+const (
+	presenceYes  presenceOutcome = "yes"
+	presenceNo   presenceOutcome = "no"
+	presenceSkip presenceOutcome = "skip"
+)
+
+// teladPresenceCascade runs every tier of the detection cascade and
+// returns each tier's outcome. Short-circuiting behavior is preserved
+// for performance (if hub answers yes, we do not hit the OS service
+// manager or stat the binary location), so a tier not consulted
+// returns presenceSkip rather than presenceNo.
+func (a *App) teladPresenceCascade() (hub hubProbeResult, svc, usvc, bin presenceOutcome) {
+	hub = a.probeTeladViaHub()
+	svc, usvc, bin = presenceSkip, presenceSkip, presenceSkip
+	if hub == hubProbeOnline {
+		return
+	}
+
+	if status, err := service.QueryStatus("telad"); err == nil && status.Installed {
+		svc = presenceYes
+		return
+	}
+	svc = presenceNo
+
+	if status, err := service.QueryUserStatus("telad"); err == nil && status.Installed {
+		usvc = presenceYes
+		return
+	}
+	usvc = presenceNo
+
+	if a.findTool("telad") != "" {
+		bin = presenceYes
+		return
+	}
+	bin = presenceNo
+	return
+}
+
+// invalidateTeladPresence clears the presence cache so the next
+// HasLocalTelad call runs a fresh probe. Called from paths that
+// change the answer -- post-install, post-pair -- so the UI reacts
+// immediately instead of waiting out the TTL.
+//
+// Bumps teladPresenceGen atomically so an in-flight probe (which
+// captured the pre-bump generation at start) will detect the race
+// on completion and skip writing its stale answer to the cache.
+// Both the gen bump and the timestamp zero happen under the same
+// mutex region so cache readers see the invalidation atomically:
+// either the pre-invalidate state (gen=N, ts=fresh) or the post-
+// invalidate state (gen=N+1, ts=zero), never the in-between.
+// Invalidation does not wait on the probe mutex; it runs
+// immediately, even if a slow probe is network-blocked.
+func invalidateTeladPresence() {
+	teladPresenceMu.Lock()
+	atomic.AddUint64(&teladPresenceGen, 1)
+	teladPresenceAt = time.Time{}
+	teladPresenceMu.Unlock()
+}
+
+// hubProbeResult captures the outcome of the hub-mediated presence
+// probe with enough granularity for the cascade logger to
+// distinguish "hub said not connected" from "we could not even
+// reach the hub to ask". All non-online outcomes fall through to
+// the next tier in the cascade; the granularity is for telemetry
+// only.
+type hubProbeResult string
+
+const (
+	hubProbeOnline      hubProbeResult = "yes"
+	hubProbeOffline     hubProbeResult = "offline"
+	hubProbeUnreachable hubProbeResult = "unreachable"
+	hubProbeNoControl   hubProbeResult = "no-control-file"
+)
+
+// probeTeladViaHub asks the hub telad registered with whether any
+// of the machine names telad serves is currently online. The
+// control file is consulted only to discover the hub URL and the
+// machine names; the answer comes from the hub's single-machine
+// presence endpoint (GET /api/admin/agents/{m}), where
+// agentConnected==true means the WebSocket control session is
+// currently held open.
+//
+// The probe runs under a teladPresenceProbeWait budget. All network
+// calls on the probe path -- the portal ListHubs lookup in
+// resolveHubNameByURLCtx and each adminProxyCallCtx to the hub --
+// inherit the same context, so they all cancel together when the
+// budget fires. The goroutine exits promptly rather than orphaning
+// work against a slow portal or hub after the caller has moved on.
+func (a *App) probeTeladViaHub() hubProbeResult {
+	data, err := readControlFile("telad.json")
+	if err != nil {
+		return hubProbeNoControl
+	}
+	var info struct {
+		Hub      string   `json:"hub"`
+		Machines []string `json:"machines"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.Hub == "" || len(info.Machines) == 0 {
+		return hubProbeNoControl
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), teladPresenceProbeWait)
+	defer cancel()
+
+	done := make(chan hubProbeResult, 1)
+	go func() {
+		// Probe each machine this telad serves with the lightweight
+		// single-machine presence endpoint. Return on the first
+		// connected hit; a missing machine or a disconnected one both
+		// 404/200-false and we try the next.
+		hubName, err := a.resolveHubNameByURLCtx(ctx, info.Hub)
+		if err != nil {
+			done <- hubProbeUnreachable
+			return
+		}
+		anyReached := false
+		for _, name := range info.Machines {
+			raw, status, _, err := a.adminProxyCallCtx(ctx, hubName, "GET", "agents/"+url.QueryEscape(name), nil, nil)
+			if err != nil {
+				continue
+			}
+			anyReached = true
+			if status >= 400 {
+				continue
+			}
+			var presence struct {
+				AgentConnected bool `json:"agentConnected"`
+			}
+			if json.Unmarshal(raw, &presence) == nil && presence.AgentConnected {
+				done <- hubProbeOnline
+				return
+			}
+		}
+		if !anyReached {
+			done <- hubProbeUnreachable
+			return
+		}
+		done <- hubProbeOffline
+	}()
+
+	select {
+	case v := <-done:
+		return v
+	case <-ctx.Done():
+		return hubProbeUnreachable
+	}
+}
+
+// locateTelad returns an absolute path to an executable telad
+// binary, or "" if none is reachable. Used by RedeemAgentCode to
+// pick the binary it will spawn. Same three sources as
+// HasLocalTelad, but they have to yield an absolute path, not just
+// a "yes it's installed" signal:
+//  1. Bundled Binary Location (findTool).
+//  2. System-service install: the BinaryPath recorded in the
+//     service config JSON (`%ProgramData%\Tela\telad-service.json`
+//     on Windows, `/etc/tela/telad-service.json` on Unix).
+//  3. User-mode service install: same shape, user-level config.
+//
+// HasLocalTelad can return true while locateTelad returns ""
+// (e.g. the service is registered but TV cannot read its config
+// JSON, or telad is running from a binary path we have no record
+// of); RedeemAgentCode handles the empty-path case explicitly.
+func (a *App) locateTelad() string {
+	if p := a.findTool("telad"); p != "" {
+		return p
+	}
+	if cfg, err := service.LoadConfig("telad"); err == nil && cfg.BinaryPath != "" {
+		if _, err := os.Stat(cfg.BinaryPath); err == nil {
+			return cfg.BinaryPath
+		}
+	}
+	if cfg, err := service.LoadUserConfig("telad"); err == nil && cfg.BinaryPath != "" {
+		if _, err := os.Stat(cfg.BinaryPath); err == nil {
+			return cfg.BinaryPath
+		}
+	}
+	return ""
 }
 
 // RedeemAgentCode runs `telad pair -hub <url> -code <code> [-machine <id>]`
@@ -2595,9 +2906,9 @@ func (a *App) HasLocalTelad() bool {
 // operator action that should go through the Updates tab so the
 // install / start-as-service flow is visible.
 func (a *App) RedeemAgentCode(hubURL, code, machine string) (string, error) {
-	teladPath := a.findTool("telad")
+	teladPath := a.locateTelad()
 	if teladPath == "" {
-		return "", fmt.Errorf("telad is not installed locally; install it from the Updates tab and try again")
+		return "", fmt.Errorf("telad is not installed on this machine; install it from the Updates tab and try again")
 	}
 
 	wsURL := toWSURL(hubURL)
@@ -2618,6 +2929,7 @@ func (a *App) RedeemAgentCode(hubURL, code, machine string) (string, error) {
 		}
 		return "", fmt.Errorf("redeem failed: %w", err)
 	}
+	invalidateTeladPresence()
 	return output, nil
 }
 
@@ -4235,6 +4547,10 @@ func (a *App) InstallBinary(name string) error {
 		return fmt.Errorf("install %s: %w", destPath, err)
 	}
 	os.Chmod(destPath, 0755)
+
+	if name == "telad" {
+		invalidateTeladPresence()
+	}
 
 	// Logged by installTool caller
 	return nil

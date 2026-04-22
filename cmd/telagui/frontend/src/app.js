@@ -2699,8 +2699,18 @@ function onConnectionChanged() {
   agentsRefresh();
   if (connPhase === 'connected') {
     refreshFilesTab();
-    // Re-check mount state after auto-mount has had time to start
-    setTimeout(updateMountButtonState, 3000);
+    // Auto-mount (spawned by `tela connect` when the profile has a
+    // mount configured) brings up its WebDAV port asynchronously, and
+    // sometimes not before a single 3-second check. Poll the button
+    // state across an ~8-second window so the button turns green as
+    // soon as the port is listening, regardless of where in that
+    // window the mount finishes coming up. Cheap (TCP dial with 500ms
+    // timeout, plus one Go call), no-op once the button is green.
+    [500, 1500, 3000, 5000, 8000].forEach(function (ms) {
+      setTimeout(function () {
+        if (connPhase === 'connected') updateMountButtonState();
+      }, ms);
+    });
   } else {
     filesShowMachineList();
   }
@@ -7742,12 +7752,6 @@ function renderAccessSidebarMachines(list) {
 function renderAccessSidebarIdentities(list) {
   var entries = accessState.entries.slice();
   entries.sort(function (a, b) {
-    // Sort implicit roles (owner/admin/viewer) before user so operators
-    // see the built-in identities first. Then by id within role group.
-    var roleOrder = { owner: 0, admin: 1, viewer: 2, user: 3 };
-    var ra = roleOrder[a.role] != null ? roleOrder[a.role] : 4;
-    var rb = roleOrder[b.role] != null ? roleOrder[b.role] : 4;
-    if (ra !== rb) return ra - rb;
     return (a.id || '').localeCompare(b.id || '');
   });
   var html = '';

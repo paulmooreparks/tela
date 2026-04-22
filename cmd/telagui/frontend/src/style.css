@@ -957,8 +957,15 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   color: var(--text-muted);
   padding: 0 4px;
 }
-.modal-body { padding: 0; }
-.modal-dialog form { padding: 20px; }
+/* Modal body owns the interior gutter. Every direct child (form,
+   bail-out state div, result rows, settings groups, about copy)
+   inherits the 20px inset automatically -- there is no need to wrap
+   content in a padded sub-element, and no class-by-class rule for
+   each shape that lands inside a modal. Modals with full-width
+   structural elements like a top tab-bar opt out with the
+   .modal-body-flush modifier and provide their own gutter inside. */
+.modal-body { padding: 20px; }
+.modal-body-flush { padding: 0; }
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -2522,7 +2529,9 @@ label.aes-service-row {
 .update-note { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
 .update-actions { justify-content: flex-end; gap: 8px; }
 
-.modal-body-padded { padding: 20px; }
+/* Inert: padding now lives on .modal-body itself. Existing wrappers
+   are harmless and will be swept out of markup in a follow-up. */
+.modal-body-padded { padding: 0; }
 .modal-confirm { width: 420px; }
 .confirm-message { font-size: 14px; margin-bottom: 20px; }
 /* Duplicate .btn-danger definition removed — canonical rules are in the

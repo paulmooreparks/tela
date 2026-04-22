@@ -2256,8 +2256,20 @@ func handleAdminAgents(w http.ResponseWriter, r *http.Request) {
 	// Parse path first to get machineID for permission check
 	path := strings.TrimPrefix(r.URL.Path, "/api/admin/agents/")
 	parts := strings.SplitN(path, "/", 2)
+
+	// GET /api/admin/agents/{machine} is a lightweight presence probe.
+	// It returns just the machine id, agentConnected flag, and lastSeen
+	// without pulling the full /api/status payload (machines times
+	// services times capabilities). Used by TelaVisor's HasLocalTelad
+	// check so a sidebar button-enable does not download the whole
+	// fleet state on every repaint.
+	if len(parts) == 1 && parts[0] != "" && r.Method == http.MethodGet {
+		handleAdminAgentPresence(w, r, parts[0])
+		return
+	}
+
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "expected /api/admin/agents/{machine}/{action}"})
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "expected /api/admin/agents/{machine}/{action} or GET /api/admin/agents/{machine}"})
 		return
 	}
 	machineName := parts[0]
@@ -2348,6 +2360,57 @@ func writeAdminJSON(w http.ResponseWriter, r *http.Request, status int, v interf
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// handleAdminAgentPresence answers GET /api/admin/agents/{machine} with
+// a minimal presence object: the machine id, whether its control
+// WebSocket is currently held open, and the last-seen timestamp. This
+// is the lightweight counterpart to /api/status for callers that just
+// want "is this agent reachable right now?" (the primary case is
+// TelaVisor's HasLocalTelad check). Viewers who do not hold
+// canViewMachine for the target see the same 404 an unregistered
+// machine produces, so the endpoint cannot be used to enumerate.
+func handleAdminAgentPresence(w http.ResponseWriter, r *http.Request, machineName string) {
+	callerToken := tokenFromRequest(r)
+	if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, machineName) {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "machine not found"})
+		return
+	}
+
+	machinesMu.RLock()
+	agentID := machinesByName[machineName]
+	var entry *machineEntry
+	var exists bool
+	if agentID != "" {
+		entry, exists = machines[agentID]
+	}
+	machinesMu.RUnlock()
+	if !exists {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "machine not found"})
+		return
+	}
+
+	// Brief Lock() for a two-field snapshot, identical in shape to
+	// handleAPIStatus. entry.mu is not a sync.RWMutex because several
+	// existing "read" sites are actually WebSocket-write paths (ping
+	// loop, mgmt-request sends) that must serialize to avoid gorilla
+	// frame corruption, so they cannot be downgraded to RLock. A
+	// dedicated presence RWMutex would help only this endpoint and
+	// would add a second lock to every writer; not worth the
+	// complexity for a two-field read.
+	entry.mu.Lock()
+	connected := entry.ControlWS != nil
+	lastSeen := entry.LastSeen
+	entry.mu.Unlock()
+
+	payload := map[string]any{
+		"id":             machineName,
+		"agentConnected": connected,
+	}
+	if !lastSeen.IsZero() {
+		payload["lastSeen"] = lastSeen.UTC().Format(time.RFC3339)
+	}
+	writeAdminJSON(w, r, http.StatusOK, payload)
 }
 
 // Run starts the hub HTTP/WebSocket server and the supporting background

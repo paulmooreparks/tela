@@ -32,6 +32,7 @@
 //
 //   Agents (mediated agent management; the hub forwards to telad):
 //     GET    /api/admin/agents                                List registered agents
+//     GET    /api/admin/agents/{machine}                      Lightweight presence probe (id, agentConnected, lastSeen)
 //     POST   /api/admin/agents/{machine}/{action}             Send a management action (config-get, config-set, logs, restart, update)
 //
 //   Hub lifecycle:

@@ -59,6 +59,7 @@ All require owner or admin role.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/admin/agents` | GET | List registered agents with metadata |
+| `/api/admin/agents/{machine}` | GET | Lightweight presence probe (id, agentConnected, lastSeen) without pulling the full /api/status payload. ACL: view+ (same filtering as /api/status). |
 | `/api/admin/agents/{machine}/config` | GET | Read agent's running config |
 | `/api/admin/agents/{machine}/config` | PUT | Push config update to agent |
 | `/api/admin/agents/{machine}/restart` | POST | Request agent restart |

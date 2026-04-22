@@ -738,6 +738,14 @@ title and close button, a body, and an action footer on a tinted background.
   a strictly higher z-index than its parent. A confirmation dialog hidden
   behind its parent is a serious bug: from the user's perspective, clicking
   Cancel appears to do nothing.
+- **The body owns the gutter.** The 20px interior inset belongs to
+  `.modal-body`, never to a child class like a form, a wrapper div, or a
+  state-specific block. Every direct child (form, bail-out state, result
+  rows, settings groups, copyable command blocks) inherits the gutter for
+  free, which means a new state pattern added later cannot accidentally
+  render edge-to-edge. Modals that contain a full-width structural element
+  like a top tab bar opt out with the `.modal-body-flush` modifier and
+  provide their own gutter inside (typically on `.tab-content`).
 
 ## Tables
 
