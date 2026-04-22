@@ -69,11 +69,37 @@ function switchTab(name, btn) {
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
   if (name === 'files') refreshFilesTab();
+  if (name === 'updates') refreshUpdatesTab();
   if (name === 'agents') agentsRefresh();
   if (name === 'hubs') refreshHubsTab();
+  if (name === 'access') refreshAccessTab();
   if (name === 'remotes') refreshRemotesList();
   if (name === 'credentials') refreshCredentialsList();
   if (name === 'client-settings') refreshClientSettings();
+}
+
+// switchTabByName drives a tab change from a programmatic source (a
+// link in another pane, a notification, etc.) instead of a click on
+// the actual tab button. It mirrors switchTab's effect by locating
+// the right .main-tab in whichever tab bar is currently visible and
+// dispatching a click. The visible tab bar test handles the
+// Clients/Infrastructure mode split: the same button id can appear
+// in both bars, but only one is in the DOM tree of a visible bar at
+// a time.
+function switchTabByName(name) {
+  var bars = document.querySelectorAll('.main-tab-bar');
+  for (var i = 0; i < bars.length; i++) {
+    if (bars[i].classList.contains('hidden')) continue;
+    var btns = bars[i].querySelectorAll('.main-tab');
+    for (var j = 0; j < btns.length; j++) {
+      var btn = btns[j];
+      var oc = btn.getAttribute('onclick') || '';
+      if (oc.indexOf("switchTab('" + name + "'") !== -1) {
+        btn.click();
+        return;
+      }
+    }
+  }
 }
 
 // --- Log Panel ---
@@ -2651,9 +2677,16 @@ function applyConnectionUI() {
   var dot = document.getElementById('log-tela-dot');
   if (dot) dot.className = (connPhase === 'connected' || connPhase === 'connecting') ? 'dot dot-online' : 'dot dot-offline';
 
-  // Agents pair button
-  var pairBtn = document.getElementById('agents-pair-btn');
-  if (pairBtn) pairBtn.disabled = (connPhase !== 'connected');
+  // Agents-tab footer buttons. Generate is enabled whenever there is
+  // at least one hub TV knows about (admin credentials are required
+  // by the hub's pair-code endpoint, but TV cannot tell from here
+  // which hubs the operator has admin on, so any-known is the right
+  // gate). Redeem is always enabled; the modal itself handles the
+  // telad-not-installed case.
+  var generateBtn = document.getElementById('agents-generate-btn');
+  if (generateBtn) generateBtn.disabled = !(knownHubsData && knownHubsData.length > 0);
+  var redeemBtn = document.getElementById('agents-redeem-btn');
+  if (redeemBtn) redeemBtn.disabled = false;
 
   dismissConnectTooltip();
 }
@@ -2666,8 +2699,18 @@ function onConnectionChanged() {
   agentsRefresh();
   if (connPhase === 'connected') {
     refreshFilesTab();
-    // Re-check mount state after auto-mount has had time to start
-    setTimeout(updateMountButtonState, 3000);
+    // Auto-mount (spawned by `tela connect` when the profile has a
+    // mount configured) brings up its WebDAV port asynchronously, and
+    // sometimes not before a single 3-second check. Poll the button
+    // state across an ~8-second window so the button turns green as
+    // soon as the port is listening, regardless of where in that
+    // window the mount finishes coming up. Cheap (TCP dial with 500ms
+    // timeout, plus one Go call), no-op once the button is green.
+    [500, 1500, 3000, 5000, 8000].forEach(function (ms) {
+      setTimeout(function () {
+        if (connPhase === 'connected') updateMountButtonState();
+      }, ms);
+    });
   } else {
     filesShowMachineList();
   }
@@ -2919,11 +2962,14 @@ var agentsSelectedHub = '';
 var agentStatusCache = {}; // { [id]: { version: string, status: 'current'|'outdated' } }
 
 function agentsRefresh() {
-  goApp.GetConnectionState().then(function (state) {
-    document.getElementById('agents-pair-btn').disabled = !state.connected;
-  }).catch(function () {
-    document.getElementById('agents-pair-btn').disabled = true;
-  });
+  // Refresh the footer buttons against the current known-hubs view.
+  // Generate needs at least one hub (admin call goes to a real hub);
+  // Redeem is always enabled since it has its own telad-installed
+  // check inside the modal-open handler.
+  var generateBtn = document.getElementById('agents-generate-btn');
+  if (generateBtn) generateBtn.disabled = !(knownHubsData && knownHubsData.length > 0);
+  var redeemBtn = document.getElementById('agents-redeem-btn');
+  if (redeemBtn) redeemBtn.disabled = false;
   goApp.GetAgentList().then(function (agents) {
     agentsData = agents || [];
     agentsData.sort(function (a, b) {
@@ -3286,29 +3332,208 @@ function agentShareRemove(btn) {
   }
 }
 
-function agentsPairAgent() {
-  // Find the first hub from the profile
-  var hub = '';
-  for (var key in selectedServices) {
-    var svc = selectedServices[key];
-    if (svc.hub) { hub = svc.hub; break; }
-  }
-  if (!hub) { showError('No hub available'); return; }
+// ── Agent pairing flows ───────────────────────────────────────────
+//
+// Two related but distinct workflows live on the Agents tab:
+//
+//   1. Generate Agent Code: an operator produces a register-type
+//      pair code on a hub for an agent that will run on a remote
+//      machine. The result modal includes a copy-ready
+//      `telad pair` command line so the operator can paste it
+//      straight into chat or SSH on the agent host.
+//
+//   2. Redeem Agent Code: an operator with telad installed locally
+//      consumes a register-type pair code to register a local agent.
+//      Only useful for development workstations and single-host
+//      setups; production agents on remote machines redeem via
+//      `telad pair` on the agent host itself.
 
-  showPromptDialog('Pair Agent', 'Enter the machine name for the new agent:', '', 'Generate Code').then(function (machine) {
-    if (!machine) return;
-    goApp.AdminAPICall(hub, 'POST', 'pair-code',
-      JSON.stringify({type: 'register', machines: [machine]}))
-      .then(function (resp) {
-        try { var data = JSON.parse(resp); } catch (e) { showError('Invalid response'); return; }
-        if (data.code) {
-          tvLog('Pairing code for ' + machine + ': ' + data.code);
-          showPromptDialog('Pairing Code', 'Give this code to the agent operator. It expires in ' + (data.expires || '10 minutes') + '.', data.code, 'Close');
-        } else if (data.error) {
-          showError('Pair failed: ' + data.error);
-        }
-      }).catch(function (err) { showError('Pair failed: ' + err); });
-  }).catch(function () {});
+// agentsGenerateCode opens the generate modal pre-populated with the
+// hub of the currently-selected agent (if any) or the first known
+// hub. The form's submit handler is submitGenerateAgentCode below.
+function agentsGenerateCode() {
+  var sel = document.getElementById('gac-hub');
+  if (!sel) return;
+  populateAgentHubSelect(sel, agentsSelectedHub || '');
+  document.getElementById('gac-machine').value = '';
+  document.getElementById('gac-expires').value = '1h';
+  var errEl = document.getElementById('gac-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  document.getElementById('generate-agent-code-modal').classList.remove('hidden');
+  setTimeout(function () { document.getElementById('gac-machine').focus(); }, 0);
+}
+
+function submitGenerateAgentCode(event) {
+  event.preventDefault();
+  var hub = document.getElementById('gac-hub').value;
+  var machine = document.getElementById('gac-machine').value.trim();
+  var expires = document.getElementById('gac-expires').value;
+  var errEl = document.getElementById('gac-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  if (!hub || !machine) {
+    errEl.textContent = 'Hub and machine name are required.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  goApp.AdminGeneratePairCode(hub, 'register', '', machine, expires).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { data = {}; }
+    if (data.error) {
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('generate-agent-code-modal');
+    showGenerateAgentCodeResult(hub, machine, data);
+  });
+}
+
+function showGenerateAgentCodeResult(hubName, machine, data) {
+  var hubURL = hubURLFor(hubName) || hubName;
+  var wsURL = toWSURL(hubURL);
+  var cmd = 'telad pair -hub ' + wsURL + ' -code ' + data.code;
+  if (machine) cmd += ' -machine ' + machine;
+
+  document.getElementById('gacr-code').textContent = data.code || '';
+  document.getElementById('gacr-command').textContent = cmd;
+  document.getElementById('gacr-machine').textContent = machine;
+  document.getElementById('gacr-expires').textContent = data.expiresAt || data.expires || 'soon';
+  document.getElementById('generate-agent-code-result-modal').classList.remove('hidden');
+
+  tvLog('Generated agent code for ' + machine + ' on ' + hubName + ': ' + (data.code || ''));
+}
+
+// agentsRedeemCode opens the redeem modal. Checks whether telad is
+// installed locally first; if not, the modal opens in the
+// install-needed bail-out state with a single CTA routing to the
+// Updates tab.
+function agentsRedeemCode() {
+  var modal = document.getElementById('redeem-agent-code-modal');
+  var formState = document.getElementById('redeem-agent-code-form');
+  var notInstalledState = document.getElementById('redeem-agent-code-not-installed');
+
+  goApp.HasLocalTelad().then(function (hasTelad) {
+    if (hasTelad) {
+      formState.classList.remove('hidden');
+      notInstalledState.classList.add('hidden');
+      var sel = document.getElementById('rac-hub');
+      populateAgentHubSelect(sel, '', /*allowOther*/ true);
+      onRedeemHubChange();
+      document.getElementById('rac-code').value = '';
+      document.getElementById('rac-machine').value = '';
+      document.getElementById('rac-hub-other').value = '';
+      var errEl = document.getElementById('rac-error');
+      errEl.classList.add('hidden'); errEl.textContent = '';
+    } else {
+      formState.classList.add('hidden');
+      notInstalledState.classList.remove('hidden');
+    }
+    modal.classList.remove('hidden');
+  });
+}
+
+function onRedeemHubChange() {
+  var sel = document.getElementById('rac-hub');
+  var other = document.getElementById('rac-hub-other-group');
+  if (!sel || !other) return;
+  other.classList.toggle('hidden', sel.value !== '__other__');
+}
+
+function submitRedeemAgentCode(event) {
+  event.preventDefault();
+  var sel = document.getElementById('rac-hub');
+  var hubVal = sel.value;
+  if (hubVal === '__other__') {
+    hubVal = document.getElementById('rac-hub-other').value.trim();
+  } else {
+    // Convert a known hub name to its URL for telad pair.
+    hubVal = hubURLFor(hubVal) || hubVal;
+  }
+  var code = document.getElementById('rac-code').value.trim();
+  var machine = document.getElementById('rac-machine').value.trim();
+  var errEl = document.getElementById('rac-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  if (!hubVal || !code) {
+    errEl.textContent = 'Hub and pair code are required.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  goApp.RedeemAgentCode(hubVal, code, machine).then(function (output) {
+    closeModal('redeem-agent-code-modal');
+    document.getElementById('racr-hub').textContent = hubVal;
+    document.getElementById('racr-machine').textContent = machine || '(from code)';
+    document.getElementById('redeem-agent-code-result-modal').classList.remove('hidden');
+    tvLog('Redeemed agent code on ' + hubVal + (machine ? ' as ' + machine : ''));
+    // Refresh the agents list so the new entry appears as soon as
+    // the hub registers it.
+    setTimeout(agentsRefresh, 1500);
+  }).catch(function (err) {
+    errEl.textContent = String(err && err.message ? err.message : err);
+    errEl.classList.remove('hidden');
+  });
+}
+
+// populateAgentHubSelect rebuilds an agent-flow hub <select> from
+// the global knownHubsData. Sets selected to the named hub if it
+// exists in the list. When allowOther is true an "Other hub URL..."
+// option is appended so the operator can type a hub they have not
+// added yet (used by the redeem flow only; generation requires
+// admin credentials, which the operator must already have).
+function populateAgentHubSelect(sel, selected, allowOther) {
+  if (!sel) return;
+  sel.innerHTML = '';
+  (knownHubsData || []).forEach(function (h) {
+    var opt = document.createElement('option');
+    opt.value = h.name;
+    opt.textContent = h.name;
+    sel.appendChild(opt);
+  });
+  if (allowOther) {
+    var opt = document.createElement('option');
+    opt.value = '__other__';
+    opt.textContent = 'Other hub URL\u2026';
+    sel.appendChild(opt);
+  }
+  if (selected) sel.value = selected;
+}
+
+// switchToClientsMode flips the top-level mode toggle to Clients;
+// used by the Redeem Code modal's "Open Updates..." button so a
+// click from Infrastructure mode lands on the Updates tab without
+// the operator having to also click the mode bar.
+function switchToClientsMode() {
+  var btn = document.getElementById('mode-clients-btn');
+  if (btn) btn.click();
+}
+
+// copyToClipboard puts text on the system clipboard and gives the
+// triggering button a brief visual confirmation. Used by the
+// Generate Agent Code Result modal's per-row Copy buttons.
+function copyToClipboard(text, triggerBtn) {
+  if (!text) return;
+  var promise = (navigator.clipboard && navigator.clipboard.writeText)
+    ? navigator.clipboard.writeText(text)
+    : Promise.reject(new Error('clipboard API unavailable'));
+  promise.then(function () {
+    if (!triggerBtn) return;
+    var orig = triggerBtn.textContent;
+    triggerBtn.textContent = 'Copied';
+    setTimeout(function () { triggerBtn.textContent = orig; }, 1200);
+  }).catch(function () {
+    // Fallback: legacy execCommand path.
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* nothing else to try */ }
+    document.body.removeChild(ta);
+    if (triggerBtn) {
+      var orig = triggerBtn.textContent;
+      triggerBtn.textContent = 'Copied';
+      setTimeout(function () { triggerBtn.textContent = orig; }, 1200);
+    }
+  });
 }
 
 function agentsRestartSelected() {
@@ -4641,8 +4866,6 @@ function renderHubAdminDetail() {
   switch (currentAdminView) {
     case 'hub-settings': renderHubSettings(pane); break;
     case 'machines': renderHubMachines(pane); break;
-    case 'access': renderHubAccess(pane); break;
-    case 'tokens': renderHubTokens(pane); break;
     case 'console': renderHubConsole(pane); break;
     case 'history': renderHubHistory(pane); break;
     default: pane.innerHTML = '';
@@ -4857,58 +5080,6 @@ function renderHubMachines(pane) {
   });
 }
 
-// --- Tokens View ---
-
-function renderHubTokens(pane) {
-  var hub = currentAdminHub;
-  pane.innerHTML = '<h2>Tokens</h2>'
-    + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hub) + '</strong></p>'
-    + '<p class="loading">Loading...</p>';
-
-
-  goApp.AdminListTokens(hub).then(function (raw) {
-    var data;
-    try { data = JSON.parse(raw); } catch (e) { data = {}; }
-    if (data.error) {
-      pane.innerHTML = '<h2>Tokens</h2><p class="section-desc">' + escHtml(data.error) + '</p>';
-      return;
-    }
-    var tokens = data.tokens || [];
-
-    var html = '<h2>Tokens</h2>'
-      + '<p class="section-desc">Manage authentication tokens for <strong>' + escHtml(hub) + '</strong></p>';
-
-    html += '<div class="toolbar">'
-      + '<button class="btn btn-sm btn-primary" onclick="promptCreateToken()">Add Token</button>'
-      + '<button class="btn btn-sm" onclick="promptPairCode()">Generate Pairing Code</button>'
-      + '</div>';
-
-    html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Full tokens are only shown at creation or after rotation.</p>';
-
-    html += '<table class="admin-table"><thead><tr>'
-      + '<th>Identity</th><th>Role</th><th>Token Preview</th><th>Actions</th>'
-      + '</tr></thead><tbody>';
-
-    tokens.forEach(function (t) {
-      var isOwner = t.role === 'owner';
-      html += '<tr><td><strong>' + escHtml(t.id) + '</strong></td>'
-        + '<td><span class="chip chip-role-' + t.role + '">' + t.role + '</span></td>'
-        + '<td><span class="token-preview">' + escHtml(t.tokenPreview) + '</span></td>'
-        + '<td><div class="action-btns">'
-        + '<button class="btn btn-sm" onclick="rotateToken(\'' + escAttr(t.id) + '\')">Rotate</button>';
-      if (!isOwner) {
-        html += '<button class="btn btn-sm btn-danger" onclick="deleteToken(\'' + escAttr(t.id) + '\')">Delete</button>';
-      }
-      html += '</div></td></tr>';
-    });
-
-    html += '</tbody></table>';
-    html += '<p style="font-size:11px;color:var(--text-muted);margin-top:8px;">To change a token\'s role, delete it and create a new one with the desired role.</p>';
-
-    pane.innerHTML = html;
-  });
-}
-
 // --- Modal Helpers ---
 
 function closeModal(id) {
@@ -4945,13 +5116,31 @@ function promptCreateToken() {
   document.getElementById('new-token-id').focus();
 }
 
+// formatRole converts a wire-level role value (lowercase, possibly
+// empty) into the capitalized label the UI shows everywhere:
+//   ""       -> "User"   (empty is the default user role)
+//   "user"   -> "User"
+//   "admin"  -> "Admin"
+//   "owner"  -> "Owner"
+//   "viewer" -> "Viewer"
+// Unknown values are passed through with the first letter capitalized
+// so future roles display sanely without a code change.
+function formatRole(r) {
+  if (!r) return 'User';
+  return r.charAt(0).toUpperCase() + r.slice(1);
+}
+
 function submitCreateToken(event) {
   event.preventDefault();
   var id = document.getElementById('new-token-id').value.trim();
-  var role = document.getElementById('new-token-role').value;
+  var selectedRole = document.getElementById('new-token-role').value;
   if (!id) return;
+  // Backend treats an empty role as "user" (the default). The dropdown
+  // shows "User" for clarity; we normalize to "" on the wire because
+  // the backend's role validation rejects the literal "user".
+  var wireRole = (selectedRole === 'user') ? '' : selectedRole;
 
-  goApp.AdminCreateToken(currentAdminHub, id, role).then(function (raw) {
+  goApp.AdminCreateToken(currentAdminHub, id, wireRole).then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { data = {}; }
     if (data.error) {
@@ -4962,17 +5151,23 @@ function submitCreateToken(event) {
     }
     closeModal('create-token-modal');
     if (data.token) {
-      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + role);
+      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + formatRole(selectedRole));
     }
-    renderHubTokens(document.getElementById('hubs-admin-detail'));
+    accessReload();
   });
 }
 
 function deleteToken(id) {
   showConfirmDialog('Delete Token', 'Delete identity "' + id + '"? This removes the token and all its ACL entries.', 'Delete').then(function (yes) {
     if (!yes) return;
-    goApp.AdminDeleteToken(currentAdminHub, id).then(function () {
-      renderHubTokens(document.getElementById('hubs-admin-detail'));
+    goApp.AdminDeleteToken(currentAdminHub, id).then(function (raw) {
+      var data;
+      try { data = JSON.parse(raw || '{}'); } catch (e) { data = {}; }
+      if (data.error) {
+        showError('Delete failed: ' + data.error);
+        return;
+      }
+      accessReload();
     });
   });
 }
@@ -4990,7 +5185,7 @@ function rotateToken(id) {
       if (data.token) {
         showResultModal('Token Rotated', 'New token for "' + id + '". Copy now, it will not be shown again.', data.token);
       }
-      renderHubTokens(document.getElementById('hubs-admin-detail'));
+      accessReload();
     });
   });
 }
@@ -5020,138 +5215,6 @@ function submitPairCode(event) {
     }
     closeModal('pair-code-modal');
     showResultModal('Pairing Code', 'Share this code with the user. It can only be used once.', data.code, 'Expires: ' + (data.expiresAt || 'soon'));
-  });
-}
-
-// --- Access View (unified tokens + permissions) ---
-
-function renderHubAccess(pane) {
-  var hub = currentAdminHub;
-  pane.innerHTML = '<h2>Access</h2><p class="empty-hint">Loading...</p>';
-
-  goApp.AdminListAccess(hub).then(function (raw) {
-    var data;
-    try { data = JSON.parse(raw); } catch (e) { pane.innerHTML = '<p class="empty-hint">Invalid response.</p>'; return; }
-    if (data.error) { pane.innerHTML = '<p class="empty-hint">' + escHtml(data.error) + '</p>'; return; }
-
-    var entries = data.access || [];
-
-    var html = '<h2>Access</h2>'
-      + '<p class="hint" style="margin-bottom:16px;">Each identity and its effective per-machine permissions. Owner and admin tokens have implicit access to all machines.</p>';
-
-    if (entries.length === 0) {
-      html += '<p class="empty-hint">No access entries.</p>';
-    } else {
-      entries.forEach(function (entry) {
-        var roleClass = entry.role === 'owner' ? 'owner' : entry.role === 'admin' ? 'admin' : '';
-        html += '<div class="setting-card"><div class="setting-card-title-row">'
-          + '<div><strong>' + escHtml(entry.id) + '</strong>'
-          + ' <span class="pill ' + roleClass + '">' + escHtml(entry.role) + '</span>'
-          + ' <span class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</span></div>';
-
-        if (entry.role !== 'owner') {
-          html += '<button type="button" class="btn btn-sm" onclick="accessRename(\'' + escAttr(entry.id) + '\')">Rename</button>';
-        }
-
-        html += '</div>';
-
-        if (entry.role === 'owner' || entry.role === 'admin') {
-          html += '<div class="setting-card-desc">All machines (implicit)</div>';
-        } else if (entry.role === 'viewer') {
-          html += '<div class="setting-card-desc">View-only (no machine permissions)</div>';
-        } else if (!entry.machines || entry.machines.length === 0) {
-          html += '<div class="setting-card-desc">No machine permissions granted.</div>';
-        } else {
-          entry.machines.forEach(function (m) {
-            html += '<div class="access-machine-row">'
-              + '<strong>' + escHtml(m.machineId) + '</strong> ';
-            (m.permissions || []).forEach(function (p) {
-              html += '<span class="pill">' + escHtml(p) + '</span> ';
-            });
-            html += '<button type="button" class="btn btn-sm btn-danger" onclick="accessRevokeMachine(\'' + escAttr(entry.id) + '\',\'' + escAttr(m.machineId) + '\')">Revoke</button>';
-            html += '</div>';
-          });
-        }
-
-        html += '</div>';
-      });
-    }
-
-    html += '<div style="margin-top:16px;">'
-      + '<button type="button" class="btn btn-sm btn-primary" onclick="accessGrantModal()">Grant Access</button>'
-      + '</div>';
-
-    pane.innerHTML = html;
-  });
-}
-
-function accessRename(id) {
-  showPromptDialog('Rename Identity', 'Enter a new name for "' + id + '":', id, 'Rename').then(function (newId) {
-    if (!newId || newId === id) return;
-    goApp.AdminRenameAccess(currentAdminHub, id, newId).then(function (raw) {
-      var data; try { data = JSON.parse(raw); } catch (e) {}
-      if (data && data.error) { showError('Rename failed: ' + data.error); return; }
-      renderHubAccess(document.getElementById('hubs-admin-detail'));
-    });
-  });
-}
-
-function accessRevokeMachine(id, machineId) {
-  showConfirmDialog('Revoke Access', 'Revoke all permissions for "' + id + '" on "' + machineId + '"?', 'Revoke').then(function (yes) {
-    if (!yes) return;
-    goApp.AdminRevokeMachineAccess(currentAdminHub, id, machineId).then(function () {
-      renderHubAccess(document.getElementById('hubs-admin-detail'));
-    });
-  });
-}
-
-function accessGrantModal() {
-  // Load tokens and machines for dropdowns
-  Promise.all([
-    goApp.AdminListTokens(currentAdminHub).then(function (r) { try { return JSON.parse(r); } catch (e) { return {}; } }),
-    goApp.GetHubStatus(currentAdminHub).then(function (s) { return s; })
-  ]).then(function (results) {
-    var tokenData = results[0];
-    var statusData = results[1];
-    var tokens = (tokenData.tokens || []).filter(function (t) { return t.role !== 'owner' && t.role !== 'admin'; });
-    var machines = (statusData.machines || []).map(function (m) { return m.id; });
-
-    var identityOpts = '<option value="">Select identity...</option>';
-    tokens.forEach(function (t) {
-      identityOpts += '<option value="' + escAttr(t.id) + '">' + escHtml(t.id) + ' (' + escHtml(t.role) + ')</option>';
-    });
-
-    var machineOpts = '<option value="*">* (all machines)</option>';
-    machines.forEach(function (m) {
-      machineOpts += '<option value="' + escAttr(m) + '">' + escHtml(m) + '</option>';
-    });
-
-    document.getElementById('grant-access-identity').innerHTML = identityOpts;
-    document.getElementById('grant-access-machine').innerHTML = machineOpts;
-    document.getElementById('grant-access-connect').checked = true;
-    document.getElementById('grant-access-register').checked = false;
-    document.getElementById('grant-access-manage').checked = false;
-    document.getElementById('grant-access-modal').classList.remove('hidden');
-  });
-}
-
-function submitAccessGrant(event) {
-  event.preventDefault();
-  var id = document.getElementById('grant-access-identity').value;
-  var machine = document.getElementById('grant-access-machine').value;
-  if (!id) return;
-
-  var perms = [];
-  if (document.getElementById('grant-access-connect').checked) perms.push('connect');
-  if (document.getElementById('grant-access-register').checked) perms.push('register');
-  if (document.getElementById('grant-access-manage').checked) perms.push('manage');
-  if (perms.length === 0) return;
-
-  goApp.AdminSetMachineAccess(currentAdminHub, id, machine, perms.join(',')).then(function (raw) {
-    var data; try { data = JSON.parse(raw); } catch (e) {}
-    if (data && data.error) { showError('Grant failed: ' + data.error); return; }
-    closeModal('grant-access-modal');
-    renderHubAccess(document.getElementById('hubs-admin-detail'));
   });
 }
 
@@ -5581,7 +5644,6 @@ function refreshSettings() {
     document.getElementById('setting-reconnectOnDrop').checked = s.reconnectOnDrop;
     document.getElementById('setting-confirmDisconnect').checked = s.confirmDisconnect;
     document.getElementById('setting-minimizeOnClose').checked = s.minimizeOnClose;
-    document.getElementById('setting-autoCheckUpdates').checked = s.autoCheckUpdates;
     document.getElementById('setting-verboseDefault').checked = s.verboseDefault;
 
     var logInput = document.getElementById('setting-logMaxLines');
@@ -5595,12 +5657,11 @@ function refreshSettings() {
 
   });
 
-  // Load channel sources first, then populate the client channel select with
-  // the full list (including any custom entries).
-  loadChannelSources(function () {
-    populateChannelSelect('client-channel-select');
-    loadClientChannel();
-  });
+  // Channel selection lives on the Updates tab; refreshSettings no
+  // longer touches a client-channel-select element. Channel sources
+  // are still managed in Client Settings (the custom sources card),
+  // and the in-memory channelSources cache is loaded by Client
+  // Settings' refreshClientSettings() so dropdowns stay populated.
 }
 
 // populateChannelSelect rebuilds a channel <select> element's options from
@@ -6018,11 +6079,14 @@ function gatherSettings() {
     minimizeTo: 'tray',
     startMinimized: false,
     minimizeOnClose: document.getElementById('setting-minimizeOnClose').checked,
-    autoCheckUpdates: document.getElementById('setting-autoCheckUpdates').checked,
     verboseDefault: document.getElementById('setting-verboseDefault').checked,
     theme: themeRadio ? themeRadio.value : 'system',
     logMaxLines: logVal
   };
+  // autoCheckUpdates lives on the Updates tab, not Application Settings.
+  // SaveSettings preserves any field omitted from the JSON body, so
+  // skipping it here leaves whatever the operator most recently set on
+  // the Updates tab intact.
 
   // defaultProfile and binPath are managed in Client Settings tab.
   // Only include them when those DOM elements are present; when they are
@@ -6712,9 +6776,17 @@ function refreshClientSettings() {
   refreshChannelSourcesUI();
 }
 
+// refreshClientToolVersions is the legacy entry point used by code
+// paths that mutate local binaries (service install/uninstall, mount
+// enable/disable, profile import/export). Since the Installed Tools
+// card moved to the Updates tab, the function now renders into the
+// Updates tab's target when it exists. Older callers see no behavior
+// change when the Updates tab has been opened at least once; before
+// that, the function is a no-op and the next Updates-tab open
+// picks up fresh state via refreshUpdatesTab's own force-refresh.
 function refreshClientToolVersions() {
-  var el = document.getElementById('cs-bin-status');
-  if (el) renderToolsTable(el, true, null, true);
+  var upd = document.getElementById('updates-tools-status');
+  if (upd) renderToolsTable(upd, true, null, true);
 }
 
 function importProfile() {
@@ -7052,6 +7124,32 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') { e.preventDefault(); genericDialogCancel(); }
 });
 
+// Dismiss the Access page's services popover on Escape, on any click
+// outside the popover and its trigger, and on any scroll inside the
+// Access detail pane. Capture-phase on the click listener so a click
+// on the trigger is counted as "re-click" (the trigger's own handler
+// runs first and handles toggle-off) without this handler closing
+// the panel prematurely.
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && accessState && accessState.servicesPopoverKey) {
+    accessCloseServicesPopover();
+  }
+});
+document.addEventListener('mousedown', function (e) {
+  if (!accessState || !accessState.servicesPopoverKey) return;
+  if (e.target.closest && e.target.closest('.services-popover')) return;
+  if (e.target.closest && e.target.closest('.services-more')) return;
+  accessCloseServicesPopover();
+}, true);
+// Scrolling the access-detail pane re-positions the trigger but not
+// the absolute-positioned popover; close instead of trying to track.
+document.addEventListener('scroll', function (e) {
+  if (!accessState || !accessState.servicesPopoverKey) return;
+  if (e.target && e.target.closest && e.target.closest('.access-detail')) {
+    accessCloseServicesPopover();
+  }
+}, true);
+
 // Enter/Escape for all other modal overlays that are NOT form-based.
 // Form-based modals (create-token, pair-code, grant-access, add-hub)
 // already submit on Enter via their <form onsubmit> handler.
@@ -7115,3 +7213,1700 @@ function toWSURL(url) {
   if (url.indexOf('wss://') !== 0 && url.indexOf('ws://') !== 0) return 'wss://' + url;
   return url;
 }
+
+// ── Access tab ───────────────────────────────────────────────────────
+//
+// Consolidated identity + ACL management, a peer of Hubs and Agents.
+// Two projections of the same data:
+//   - By machine:  machine rail + identity matrix for the selected machine
+//   - By identity: identity rail + machine matrix for the selected identity
+//
+// Pending changes live in accessState.pending, keyed by "id|machineId".
+// Both views read and write the same pending set, so toggling between
+// views never loses staged work. Save fires per-identity PUTs in
+// parallel with If-Match; a 412 on any identity opens the conflict
+// modal listing the affected rows.
+
+// Cached hub capabilities keyed by hub name. Populated on Access page
+// open; a stale entry is acceptable because capabilities only grow.
+// Used by the services filter UI to decide whether to expose the
+// per-service-access-control feature.
+var hubCapabilitiesCache = {};
+
+// hubSupportsPerServiceACL reads the capabilities cache and returns
+// true when the named hub advertises per-service-access-control.
+// Defaults to false when the cache has no entry, keeping the filter UI
+// hidden on pre-0.15 hubs.
+function hubSupportsPerServiceACL(hubName) {
+  var caps = hubCapabilitiesCache[hubName] || [];
+  return caps.indexOf('per-service-access-control') !== -1;
+}
+
+var accessState = {
+  hub: '',             // currently selected hub name
+  view: 'by-machine',  // 'by-machine' | 'by-identity'
+  loaded: false,
+  loadError: '',
+  entries: [],         // accessEntry[] from AdminListAccess (role, version, machines)
+  machines: [],        // MachineStatus[] from GetHubStatus (id, services, online)
+  capabilities: [],    // hub capabilities array (e.g. per-service-access-control)
+  selection: {
+    machineId: '',     // selected machine in by-machine view; "*" = wildcard
+    identityId: '',    // selected identity in by-identity view
+  },
+  pending: {},         // "id|machineId" -> pendingEntry
+  lastSaveConflict: null, // [{id, current: accessEntry}] populated on 412 save
+  servicesPopoverKey: '', // currently-open services popover trigger key, "" if none
+};
+
+// Pending entry shape:
+//   {
+//     id:         string     // identity ID
+//     machineId:  string     // target machine (or "*")
+//     baseline:  {permissions: [], services: []} // state loaded from server
+//     desired:   {permissions: [], services: []} // state after staged edits
+//     revoke:    bool                             // stage a DELETE on save
+//     version:   number                           // identity version at load
+//   }
+
+// accessPendingKey builds the pending-map key for an (id, machineId)
+// pair. Machine "*" is the wildcard ACL, stored the same way as any
+// specific machine.
+function accessPendingKey(id, machineId) { return id + '|' + machineId; }
+
+// accessEntryFor returns the accessEntry with the given id, or null.
+function accessEntryFor(id) {
+  for (var i = 0; i < accessState.entries.length; i++) {
+    if (accessState.entries[i].id === id) return accessState.entries[i];
+  }
+  return null;
+}
+
+// accessMachineFor returns the MachineStatus with the given id, or null.
+function accessMachineFor(machineId) {
+  for (var i = 0; i < accessState.machines.length; i++) {
+    if (accessState.machines[i].id === machineId) return accessState.machines[i];
+  }
+  return null;
+}
+
+// accessBaselineFor returns the {permissions, services} grant an
+// identity has on a machine according to the server's view (no pending
+// changes applied). An absent grant yields empty arrays.
+function accessBaselineFor(id, machineId) {
+  var entry = accessEntryFor(id);
+  if (!entry) return { permissions: [], services: [] };
+  for (var i = 0; i < (entry.machines || []).length; i++) {
+    var m = entry.machines[i];
+    if (m.machineId === machineId) {
+      return {
+        permissions: (m.permissions || []).slice(),
+        services: (m.services || []).slice(),
+      };
+    }
+  }
+  return { permissions: [], services: [] };
+}
+
+// accessWildcardInherited returns which permissions an identity
+// receives from the wildcard "*" ACL as reported by the hub's
+// /api/admin/access response. The hub is the source of truth for
+// cascade rules; the UI reads the derived data on each accessEntry
+// rather than re-implementing the cascade logic, so any future change
+// to the protocol flows through without a client update.
+//
+// Identities with no wildcard inheritance (or identities not yet
+// loaded) return a zeroed struct: every caller treats those as "not
+// inherited" and falls back to the identity's explicit grants.
+function accessWildcardInherited(id) {
+  var entry = accessEntryFor(id);
+  if (!entry) return { connect: false, manage: false, services: [] };
+  var perms = entry.wildcardInherited || [];
+  return {
+    connect: perms.indexOf('connect') !== -1,
+    manage: perms.indexOf('manage') !== -1,
+    services: (entry.wildcardInheritedServices || []).slice(),
+  };
+}
+
+// accessEffectiveGrant returns the grant that should be rendered for
+// (id, machineId): the pending desired state if a pending entry exists,
+// otherwise the baseline. Revoke-staged rows return empty permissions
+// but retain the baseline's services so the operator can see what is
+// about to be removed.
+function accessEffectiveGrant(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  var p = accessState.pending[key];
+  if (!p) return accessBaselineFor(id, machineId);
+  if (p.revoke) return { permissions: [], services: p.baseline.services.slice() };
+  return { permissions: p.desired.permissions.slice(), services: p.desired.services.slice() };
+}
+
+function accessIsPending(id, machineId) {
+  return !!accessState.pending[accessPendingKey(id, machineId)];
+}
+
+function accessIsRevoked(id, machineId) {
+  var p = accessState.pending[accessPendingKey(id, machineId)];
+  return !!(p && p.revoke);
+}
+
+// accessArraysEqual compares two string arrays as sets (order-insensitive).
+function accessArraysEqual(a, b) {
+  if ((a || []).length !== (b || []).length) return false;
+  var s = {};
+  for (var i = 0; i < a.length; i++) s[a[i]] = true;
+  for (var j = 0; j < b.length; j++) if (!s[b[j]]) return false;
+  return true;
+}
+
+// accessPendingMatchesBaseline returns true if a pending entry's
+// desired state equals its baseline (i.e. the row is no longer dirty
+// and the entry can be removed).
+function accessPendingMatchesBaseline(p) {
+  if (!p) return true;
+  if (p.revoke) return false; // revoke is always a change
+  return accessArraysEqual(p.desired.permissions, p.baseline.permissions) &&
+         accessArraysEqual(p.desired.services, p.baseline.services);
+}
+
+function accessIdentityDirty(id) {
+  for (var k in accessState.pending) {
+    if (Object.prototype.hasOwnProperty.call(accessState.pending, k)) {
+      if (accessState.pending[k].id === id) return true;
+    }
+  }
+  return false;
+}
+
+function accessMachineDirty(machineId) {
+  for (var k in accessState.pending) {
+    if (Object.prototype.hasOwnProperty.call(accessState.pending, k)) {
+      if (accessState.pending[k].machineId === machineId) return true;
+    }
+  }
+  return false;
+}
+
+function accessAnyDirty() {
+  for (var k in accessState.pending) {
+    if (Object.prototype.hasOwnProperty.call(accessState.pending, k)) return true;
+  }
+  return false;
+}
+
+// accessEnsurePending returns the pending entry for (id, machineId),
+// creating one seeded from the baseline if none exists.
+function accessEnsurePending(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  if (accessState.pending[key]) return accessState.pending[key];
+  var baseline = accessBaselineFor(id, machineId);
+  var entry = accessEntryFor(id);
+  accessState.pending[key] = {
+    id: id,
+    machineId: machineId,
+    baseline: baseline,
+    desired: {
+      permissions: baseline.permissions.slice(),
+      services: baseline.services.slice(),
+    },
+    revoke: false,
+    version: entry ? (entry.version || 0) : 0,
+  };
+  return accessState.pending[key];
+}
+
+// accessDropPending removes the entry for (id, machineId) when it has
+// converged back to the baseline, so the row stops rendering dirty.
+function accessDropIfClean(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  var p = accessState.pending[key];
+  if (p && accessPendingMatchesBaseline(p)) {
+    delete accessState.pending[key];
+  }
+}
+
+// ── Data loading ───────────────────────────────────────────────────
+
+function refreshAccessTab() {
+  var select = document.getElementById('access-hub-select');
+  if (!select) return;
+
+  Promise.all([goApp.GetKnownHubs(), goApp.GetSettings()]).then(function (results) {
+    var hubs = (results[0] || []).slice();
+    hubs.sort(function (a, b) {
+      var an = (a.name || '').toLowerCase();
+      var bn = (b.name || '').toLowerCase();
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return 0;
+    });
+    // Keep the shared cache in sync so hubURLFor() works for callers
+    // outside the Hubs tab.
+    knownHubsData = hubs;
+
+    var settings = results[1] || {};
+    var prev = accessState.hub || settings.lastSelectedHub || '';
+
+    select.innerHTML = '';
+    if (hubs.length === 0) {
+      select.innerHTML = '<option value="">No hubs configured</option>';
+      accessState.hub = '';
+      accessState.loaded = false;
+      renderAccessEmpty('Add a hub to manage access.');
+      return;
+    }
+    hubs.forEach(function (hub) {
+      var opt = document.createElement('option');
+      opt.value = hub.name;
+      opt.textContent = hub.name;
+      select.appendChild(opt);
+    });
+    if (prev && hubs.some(function (h) { return h.name === prev; })) {
+      select.value = prev;
+    }
+    accessState.hub = select.value;
+
+    if (settings.lastAccessView === 'by-identity' || settings.lastAccessView === 'by-machine') {
+      accessState.view = settings.lastAccessView;
+    }
+    accessApplyViewToggle();
+    accessLoadData();
+  }).catch(function (err) {
+    console.error('[access] refreshAccessTab failed:', err);
+    renderAccessError('Could not load hubs: ' + (err && err.message ? err.message : err));
+  });
+}
+
+function onAccessHubChange() {
+  var select = document.getElementById('access-hub-select');
+  var newHub = select ? select.value : '';
+  if (accessAnyDirty()) {
+    // Switching hubs abandons pending changes on the old hub; warn the
+    // operator before dropping their work.
+    showConfirmDialog(
+      'Discard staged changes?',
+      'You have pending access changes on ' + accessState.hub + '. Switching hubs discards them.',
+      'Discard'
+    ).then(function (yes) {
+      if (!yes) {
+        // Restore the dropdown to the previous hub.
+        if (select) select.value = accessState.hub;
+        return;
+      }
+      accessState.hub = newHub;
+      accessState.pending = {};
+      accessState.selection = { machineId: '', identityId: '' };
+      accessCloseServicesPopover();
+      if (newHub) goApp.SaveLastSelectedHub(newHub).catch(function () { /* best effort */ });
+      accessLoadData();
+    });
+    return;
+  }
+  accessState.hub = newHub;
+  accessState.pending = {};
+  accessState.selection = { machineId: '', identityId: '' };
+  accessCloseServicesPopover();
+  if (accessState.hub) {
+    goApp.SaveLastSelectedHub(accessState.hub).catch(function () { /* best effort */ });
+  }
+  accessLoadData();
+}
+
+// accessLoadData fetches identities + machines + capabilities for the
+// selected hub and re-renders. Pending changes are cleared on a fresh
+// load; callers that want to preserve pending state should not call
+// this (use incremental updates instead).
+//
+// Each bridge call is wrapped in Promise.resolve so a rejection from
+// one (e.g. a transient hub-unreachable error from GetHubStatus) does
+// not leave the whole pane stuck on the Loading placeholder. Any
+// non-access failure degrades gracefully with empty data; only a
+// failing AdminListAccess call triggers the error state, since
+// identities are the minimum viable payload for the page.
+function accessLoadData() {
+  if (!accessState.hub) {
+    accessState.loaded = false;
+    renderAccessEmpty('Select a hub to view access.');
+    return;
+  }
+  var hub = accessState.hub;
+  accessState.loaded = false;
+  accessState.loadError = '';
+  accessState.pending = {};
+  accessState.lastSaveConflict = null;
+  renderAccessLoading();
+
+  function safely(promise, label) {
+    return Promise.resolve(promise).catch(function (err) {
+      console.error('[access] ' + label + ' failed:', err);
+      return null;
+    });
+  }
+
+  Promise.all([
+    safely(goApp.AdminListAccess(hub), 'AdminListAccess'),
+    safely(goApp.GetHubStatus(hub), 'GetHubStatus'),
+    safely(goApp.HubCapabilities(hub), 'HubCapabilities'),
+  ]).then(function (results) {
+    if (accessState.hub !== hub) return; // raced with another hub switch
+
+    var access = {};
+    if (results[0]) {
+      try { access = JSON.parse(results[0] || '{}'); } catch (e) { access = { error: 'invalid response' }; }
+    } else {
+      access = { error: 'hub unreachable' };
+    }
+    if (access.error) {
+      accessState.loaded = false;
+      accessState.loadError = access.error;
+      renderAccessError('Could not load access for ' + hub + ': ' + access.error);
+      return;
+    }
+    var status = results[1] || {};
+    var caps = {};
+    if (results[2]) {
+      try { caps = JSON.parse(results[2] || '{}'); } catch (e) { caps = {}; }
+    }
+
+    accessState.entries = access.access || [];
+    accessState.machines = status.machines || [];
+    accessState.capabilities = caps.capabilities || [];
+    accessState.loaded = true;
+    hubCapabilitiesCache[hub] = accessState.capabilities;
+
+    // Resolve selection against the freshly loaded data. If the
+    // previously selected machine or identity no longer exists (it was
+    // deleted out-of-band), fall back to the first available entry of
+    // the relevant kind so the detail pane is never stranded.
+    if (accessState.view === 'by-machine') {
+      if (!accessMachineFor(accessState.selection.machineId) &&
+          accessState.selection.machineId !== '*') {
+        accessState.selection.machineId = accessState.machines.length ? accessState.machines[0].id : '*';
+      }
+    } else {
+      if (!accessEntryFor(accessState.selection.identityId)) {
+        accessState.selection.identityId = accessState.entries.length ? accessState.entries[0].id : '';
+      }
+    }
+    accessUpdateToolbar();
+    renderAccessPane();
+  }).catch(function (err) {
+    console.error('[access] accessLoadData post-resolve failed:', err);
+    if (accessState.hub !== hub) return;
+    accessState.loaded = false;
+    accessState.loadError = (err && err.message) ? err.message : String(err);
+    renderAccessError('Could not load access for ' + hub + ': ' + accessState.loadError);
+  });
+}
+
+// ── Selection + toolbar state ─────────────────────────────────────
+
+function accessSetView(view) {
+  if (view !== 'by-machine' && view !== 'by-identity') return;
+  if (accessState.view === view) return;
+  accessState.view = view;
+  accessApplyViewToggle();
+  goApp.GetSettings().then(function (s) {
+    s = s || {};
+    s.lastAccessView = view;
+    goApp.SaveSettings(JSON.stringify(s));
+  }).catch(function () { /* best effort */ });
+  // Populate a default selection for the new view so the detail pane
+  // shows something useful straight away.
+  if (accessState.loaded) {
+    if (view === 'by-machine' && !accessState.selection.machineId) {
+      accessState.selection.machineId = accessState.machines.length ? accessState.machines[0].id : '*';
+    }
+    if (view === 'by-identity' && !accessState.selection.identityId) {
+      accessState.selection.identityId = accessState.entries.length ? accessState.entries[0].id : '';
+    }
+  }
+  renderAccessPane();
+}
+
+function accessApplyViewToggle() {
+  var bm = document.getElementById('access-view-by-machine');
+  var bi = document.getElementById('access-view-by-identity');
+  if (!bm || !bi) return;
+  bm.classList.toggle('active', accessState.view === 'by-machine');
+  bm.setAttribute('aria-selected', accessState.view === 'by-machine' ? 'true' : 'false');
+  bi.classList.toggle('active', accessState.view === 'by-identity');
+  bi.setAttribute('aria-selected', accessState.view === 'by-identity' ? 'true' : 'false');
+
+  var hdr = document.getElementById('access-sidebar-header');
+  if (hdr) {
+    hdr.textContent = accessState.view === 'by-identity' ? 'Identities' : 'Machines';
+  }
+}
+
+// accessUpdateToolbar enables/disables Undo and Save based on the
+// pending set.
+function accessUpdateToolbar() {
+  var dirty = accessAnyDirty();
+  var undo = document.getElementById('access-undo-btn');
+  var save = document.getElementById('access-save-btn');
+  if (undo) undo.disabled = !dirty;
+  if (save) save.disabled = !dirty;
+}
+
+function accessSelectMachine(machineId) {
+  accessState.selection.machineId = machineId;
+  renderAccessPane();
+}
+
+function accessSelectIdentity(id) {
+  accessState.selection.identityId = id;
+  renderAccessPane();
+}
+
+// ── Rendering ─────────────────────────────────────────────────────
+
+function renderAccessPane() {
+  // Any open services popover is anchored to a trigger node that is
+  // about to be replaced by the re-render. Tear it down first so the
+  // panel never lingers on top of stale content.
+  accessCloseServicesPopover();
+  if (!accessState.hub) {
+    renderAccessEmpty('Select a hub to view access.');
+    return;
+  }
+  if (!accessState.loaded) {
+    if (accessState.loadError) {
+      renderAccessError(accessState.loadError);
+    } else {
+      renderAccessLoading();
+    }
+    return;
+  }
+  renderAccessSidebar();
+  renderAccessDetail();
+  accessUpdateToolbar();
+}
+
+function renderAccessLoading() {
+  var list = document.getElementById('access-sidebar-list');
+  var detail = document.getElementById('access-detail');
+  if (list) list.innerHTML = '<p class="empty-hint">Loading access for <strong>' + escHtml(accessState.hub) + '</strong>&hellip;</p>';
+  if (detail) detail.innerHTML = '<div class="access-detail-empty">Loading&hellip;</div>';
+}
+
+function renderAccessError(msg) {
+  var list = document.getElementById('access-sidebar-list');
+  var detail = document.getElementById('access-detail');
+  if (list) list.innerHTML = '<p class="empty-hint">' + escHtml(msg) + '</p>';
+  if (detail) detail.innerHTML = '<div class="access-detail-empty">' + escHtml(msg) + '</div>';
+}
+
+function renderAccessEmpty(msg) {
+  var list = document.getElementById('access-sidebar-list');
+  var detail = document.getElementById('access-detail');
+  if (list) list.innerHTML = '<p class="empty-hint">' + escHtml(msg) + '</p>';
+  if (detail) detail.innerHTML = '<div class="access-detail-empty">' + escHtml(msg) + '</div>';
+}
+
+function renderAccessSidebar() {
+  var list = document.getElementById('access-sidebar-list');
+  if (!list) return;
+  if (accessState.view === 'by-machine') {
+    renderAccessSidebarMachines(list);
+  } else {
+    renderAccessSidebarIdentities(list);
+  }
+}
+
+function renderAccessSidebarMachines(list) {
+  var machines = accessState.machines.slice();
+  machines.sort(function (a, b) { return (a.id || '').localeCompare(b.id || ''); });
+  var html = '';
+  machines.forEach(function (m) {
+    var isActive = (m.id === accessState.selection.machineId);
+    var dirty = accessMachineDirty(m.id);
+    var statusClass = m.agentConnected ? 'dot-online' : 'dot-offline';
+    var statusLabel = m.agentConnected ? 'Online' : 'Offline';
+    html += '<div class="access-sidebar-item' + (isActive ? ' active' : '') +
+      '" onclick="accessSelectMachine(\'' + escAttr(m.id) + '\')">'
+      + '<div class="access-sidebar-primary">'
+      + '<span class="dot ' + statusClass + '" title="' + statusLabel + '"></span>'
+      + escHtml(m.id)
+      + (dirty ? '<span class="access-sidebar-dirty">&bull; pending</span>' : '')
+      + '</div>'
+      + '<div class="access-sidebar-secondary">'
+      + ((m.services || []).length + ' service' + ((m.services || []).length === 1 ? '' : 's'))
+      + '</div>'
+      + '</div>';
+  });
+  // Wildcard entry: ACL that applies to any machine not listed.
+  var wildDirty = accessMachineDirty('*');
+  html += '<div class="access-sidebar-item' + (accessState.selection.machineId === '*' ? ' active' : '') +
+    '" onclick="accessSelectMachine(\'*\')">'
+    + '<div class="access-sidebar-primary">'
+    + '<span class="chip">Wildcard</span> all machines'
+    + (wildDirty ? '<span class="access-sidebar-dirty">&bull; pending</span>' : '')
+    + '</div>'
+    + '<div class="access-sidebar-secondary">Fallback rule</div>'
+    + '</div>';
+  list.innerHTML = html || '<p class="empty-hint">No machines registered.</p>';
+}
+
+function renderAccessSidebarIdentities(list) {
+  var entries = accessState.entries.slice();
+  entries.sort(function (a, b) {
+    return (a.id || '').localeCompare(b.id || '');
+  });
+  var html = '';
+  entries.forEach(function (e) {
+    var isActive = (e.id === accessState.selection.identityId);
+    var dirty = accessIdentityDirty(e.id);
+    var roleLabel = formatRole(e.role);
+    var summary = accessIdentitySummary(e);
+    html += '<div class="access-sidebar-item' + (isActive ? ' active' : '') +
+      '" onclick="accessSelectIdentity(\'' + escAttr(e.id) + '\')">'
+      + '<div class="access-sidebar-primary">'
+      + escHtml(e.id)
+      + ' <span class="chip">' + escHtml(roleLabel) + '</span>'
+      + (dirty ? '<span class="access-sidebar-dirty">&bull; pending</span>' : '')
+      + '</div>'
+      + '<div class="access-sidebar-secondary">' + escHtml(summary) + '</div>'
+      + '</div>';
+  });
+  list.innerHTML = html || '<p class="empty-hint">No identities on this hub.</p>';
+}
+
+// accessIdentitySummary produces the secondary-line text in the
+// by-identity rail: a short description of what the identity can do.
+// A wildcard ("*") grant is not counted as a machine; it expands to
+// every machine the hub has registered. We report it explicitly so
+// "1 machine" never means "all machines."
+function accessIdentitySummary(e) {
+  if (e.role === 'owner' || e.role === 'admin') return 'All machines (implicit)';
+  if (e.role === 'viewer') return 'Read-only console';
+  var specific = 0;
+  var hasWildcard = false;
+  (e.machines || []).forEach(function (m) {
+    if (m.machineId === '*') hasWildcard = true;
+    else specific++;
+  });
+  if (specific === 0 && !hasWildcard) return 'No grants';
+  if (specific === 0 && hasWildcard) return 'All machines (wildcard)';
+  var label = specific + ' machine' + (specific === 1 ? '' : 's');
+  if (hasWildcard) label += ' + wildcard';
+  return label;
+}
+
+function renderAccessDetail() {
+  var detail = document.getElementById('access-detail');
+  if (!detail) return;
+  if (accessState.view === 'by-machine') {
+    renderAccessDetailByMachine(detail);
+  } else {
+    renderAccessDetailByIdentity(detail);
+  }
+}
+
+// ── By-machine detail ─────────────────────────────────────────────
+
+function renderAccessDetailByMachine(pane) {
+  var machineId = accessState.selection.machineId;
+  if (!machineId) {
+    pane.innerHTML = '<div class="access-detail-empty">Select a machine to view access.</div>';
+    return;
+  }
+  var m = accessMachineFor(machineId);
+  var isWildcard = (machineId === '*');
+  var title = isWildcard ? '* (all machines)' : machineId;
+
+  var html = '<header class="access-detail-header">';
+  html += '<div><h2>' + escHtml(title) + '</h2>';
+  if (isWildcard) {
+    html += '<div class="access-detail-meta">Wildcard fallback. Applies to any machine not listed above.</div>';
+  } else if (m) {
+    var statusBadge = m.agentConnected
+      ? '<span class="status status-online"><span class="status-dot"></span>Online</span>'
+      : '<span class="status status-offline"><span class="status-dot"></span>Offline</span>';
+    html += '<div class="access-detail-meta">' + statusBadge;
+    if (m.os) html += ' &middot; <span>' + escHtml(m.os) + '</span>';
+    html += '</div>';
+    if ((m.services || []).length > 0) {
+      html += '<div class="access-service-list">';
+      m.services.forEach(function (svc) {
+        var name = svc.name || ('port-' + svc.port);
+        html += '<span class="chip">' + escHtml(name + ' · ' + svc.port) + '</span>';
+      });
+      html += '</div>';
+    }
+  } else {
+    html += '<div class="access-detail-meta">Unknown machine.</div>';
+  }
+  html += '</div></header>';
+
+  html += '<p class="hint">Every identity on this hub. Toggle permissions to stage changes; press <strong>Save</strong> in the toolbar to commit. Owner and admin roles have implicit all-access; their checkboxes are locked.</p>';
+
+  html += '<table class="access-matrix"><thead><tr>'
+    + '<th>Identity</th>'
+    + '<th class="access-col-check">Connect</th>'
+    + '<th class="access-col-check">Register</th>'
+    + '<th class="access-col-check">Manage</th>'
+    + '<th>Connect services</th>'
+    + '<th class="access-matrix-actions">Actions</th>'
+    + '</tr></thead><tbody>';
+
+  // Implicit-role rows first: owner, admin(s), viewer(s). Full weight,
+  // disabled checkboxes; no revoke (role is the source of truth, not
+  // the per-machine ACL).
+  var entries = accessState.entries.slice();
+  entries.sort(function (a, b) {
+    var roleOrder = { owner: 0, admin: 1, viewer: 2, user: 3 };
+    var ra = roleOrder[a.role] != null ? roleOrder[a.role] : 4;
+    var rb = roleOrder[b.role] != null ? roleOrder[b.role] : 4;
+    if (ra !== rb) return ra - rb;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+  entries.forEach(function (e) {
+    if (e.role === 'owner' || e.role === 'admin' || e.role === 'viewer') {
+      html += renderAccessMatrixRow_Implicit(e, machineId, isWildcard);
+    }
+  });
+  // Explicit (user) rows: interactive.
+  entries.forEach(function (e) {
+    if (e.role === 'owner' || e.role === 'admin' || e.role === 'viewer') return;
+    html += renderAccessMatrixRow_Explicit(e, machineId, isWildcard);
+  });
+
+  html += '</tbody></table>';
+  pane.innerHTML = html;
+}
+
+function renderAccessMatrixRow_Implicit(e, machineId, isWildcard) {
+  var roleLabel = formatRole(e.role);
+  var allChecked = (e.role === 'owner' || e.role === 'admin');
+  var checkConnect = allChecked ? 'checked' : '';
+  var checkRegister = allChecked ? 'checked' : '';
+  var checkManage = allChecked ? 'checked' : '';
+  var note;
+  if (e.role === 'owner') {
+    note = 'Implicit all-access &middot; cannot be filtered or revoked';
+  } else if (e.role === 'admin') {
+    note = 'Implicit all-access';
+  } else {
+    note = 'Read-only console access (no connect)';
+  }
+  var services = allChecked ? '<span class="services-summary-muted">All services</span>'
+                           : '<span class="services-summary-muted">&mdash;</span>';
+  return '<tr class="access-matrix-row access-matrix-row-implicit">'
+    + '<td><strong>' + escHtml(e.id) + '</strong> <span class="chip">' + escHtml(roleLabel) + '</span>'
+    +   '<div class="implicit-note">' + note + '</div></td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + checkConnect + ' disabled></td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + checkRegister + ' disabled></td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + checkManage + ' disabled></td>'
+    + '<td>' + services + '</td>'
+    + '<td class="access-matrix-actions"></td>'
+    + '</tr>';
+}
+
+function renderAccessMatrixRow_Explicit(e, machineId, isWildcard) {
+  var grant = accessEffectiveGrant(e.id, machineId);
+  var pending = accessIsPending(e.id, machineId);
+  var revoked = accessIsRevoked(e.id, machineId);
+  // Permissions inherited from the wildcard "*" ACL. On the wildcard
+  // row itself there is no parent wildcard to inherit from, so the
+  // struct is zeroed. Connect and manage cascade; register does not.
+  var inherited = isWildcard
+    ? { connect: false, manage: false, services: [] }
+    : accessWildcardInherited(e.id);
+  var rowClass = 'access-matrix-row';
+  if (revoked) rowClass += ' access-matrix-row-revoked';
+  else if (pending) rowClass += ' access-matrix-row-dirty';
+
+  var perms = grant.permissions;
+  var hasConnect = perms.indexOf('connect') !== -1;
+  var hasRegister = perms.indexOf('register') !== -1;
+  var hasManage = perms.indexOf('manage') !== -1;
+
+  var connectCell = renderInheritableCheck(e.id, machineId, 'connect', hasConnect, inherited.connect);
+  var manageCell = renderInheritableCheck(e.id, machineId, 'manage', hasManage, inherited.manage);
+  // Register is not meaningful on the wildcard row (hubs never register
+  // against "*") and does not cascade from the wildcard, so a plain
+  // interactive checkbox without inheritance logic is correct for
+  // specific-machine rows.
+  var registerCell = isWildcard
+    ? '<td class="access-matrix-na">&mdash;</td>'
+    : '<td class="access-matrix-check"><input type="checkbox" ' + (hasRegister ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\',\'register\',this.checked)"></td>';
+
+  var dirtyInd = '';
+  if (revoked) dirtyInd = '<span class="dirty-indicator">&bull; will be revoked</span>';
+  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; pending</span>';
+
+  var actions;
+  if (revoked) {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessUndoRevokeRow(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\')">Undo</button>';
+  } else {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessEditServices(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\')">Edit&hellip;</button>'
+      + '<button type="button" class="btn btn-sm btn-danger" onclick="accessStageRevoke(\'' + escAttr(e.id) + '\',\'' + escAttr(machineId) + '\')">Revoke</button>';
+  }
+
+  return '<tr class="' + rowClass + '">'
+    + '<td><strong class="identity-name">' + escHtml(e.id) + '</strong> <span class="chip">' + escHtml(formatRole(e.role)) + '</span>' + dirtyInd + '</td>'
+    + connectCell
+    + registerCell
+    + manageCell
+    + '<td>' + renderAccessServicesCellWithInheritance(e.id, machineId, grant, inherited) + '</td>'
+    + '<td class="access-matrix-actions">' + actions + '</td>'
+    + '</tr>';
+}
+
+// renderInheritableCheck renders a permission checkbox that may be
+// inherited from the wildcard ACL. When inherited is true the cell
+// reads as checked + disabled with a title tooltip pointing at the
+// wildcard row; clicking is a no-op because the wildcard alone grants
+// the permission. When not inherited, the checkbox is a plain
+// interactive toggle bound to accessToggleCheck.
+function renderInheritableCheck(id, machineId, perm, ownChecked, inherited) {
+  if (inherited) {
+    return '<td class="access-matrix-check access-matrix-check-inherited" title="Granted via the wildcard * ACL. Edit the wildcard row to change.">'
+      + '<input type="checkbox" checked disabled></td>';
+  }
+  return '<td class="access-matrix-check"><input type="checkbox" ' + (ownChecked ? 'checked ' : '') +
+    'onchange="accessToggleCheck(\'' + escAttr(id) + '\',\'' + escAttr(machineId) + '\',\'' + perm + '\',this.checked)"></td>';
+}
+
+// renderAccessServicesCellWithInheritance wraps renderAccessServicesCell
+// and annotates the cell when connect is inherited from the wildcard.
+// When the identity has no specific-machine connect but the wildcard
+// does, we render the wildcard's effective services (or "All services")
+// with a "via *" marker so the operator sees the real state rather
+// than an em-dash that suggests no access.
+function renderAccessServicesCellWithInheritance(id, machineId, grant, inherited) {
+  var ownConnect = (grant.permissions || []).indexOf('connect') !== -1;
+  if (!ownConnect && inherited.connect) {
+    var svc = inherited.services || [];
+    if (svc.length === 0) {
+      return '<span class="services-summary-muted" title="Inherited from wildcard">All services (via *)</span>';
+    }
+    return '<div class="services-cell" title="Inherited from wildcard">'
+      + '<span class="services-summary-muted">via *</span>'
+      + renderServicesChipRun(id, machineId + '|inh', svc, /*titlePrefix*/ 'All ' + svc.length + ' services inherited from wildcard')
+      + '</div>';
+  }
+  return renderAccessServicesCell(id, machineId, grant);
+}
+
+// renderAccessServicesCell renders the Connect services column for an
+// explicit row. The cell is always one line tall: unfiltered grants
+// show "All services" in muted italics; filtered grants render up to
+// the first three service chips inline and collapse any overflow into
+// a "+N more" button that opens a read-only popover with the full
+// list. Edit... in the actions column is the only path that mutates
+// the filter, so an operator who is only trying to read the list
+// cannot wander into edit by mistake.
+//
+// Revoked rows show the baseline services (not the empty desired
+// state) so the operator can see what is about to be removed. The
+// row-level CSS on .access-matrix-row-revoked strikes the chips and
+// the "All services" label through.
+function renderAccessServicesCell(id, machineId, grant) {
+  var src = grant;
+  if (accessIsRevoked(id, machineId)) {
+    src = accessBaselineFor(id, machineId);
+  }
+  if ((src.permissions || []).indexOf('connect') === -1) {
+    return '<span class="services-summary-muted">&mdash;</span>';
+  }
+  var services = src.services || [];
+  if (services.length === 0) {
+    return '<span class="services-summary-muted">All services</span>';
+  }
+  return '<div class="services-cell">'
+    + renderServicesChipRun(id, machineId, services, null)
+    + '</div>';
+}
+
+// SERVICES_INLINE_LIMIT controls how many chips the cell shows before
+// collapsing the rest into the "+N more" popover trigger. Three is a
+// good balance: short common-case filters fit, long lists stay on one
+// line.
+var SERVICES_INLINE_LIMIT = 3;
+
+// ── Services popover ─────────────────────────────────────────────
+//
+// Clicking "+N more" in a services cell opens a small floating panel
+// listing every service in the filter. The panel is strictly read-
+// only; Edit... in the actions column is the only mutation path, so
+// an operator scanning for "is SSH in this filter?" cannot
+// accidentally change the filter while looking at the answer.
+//
+// Only one popover is open at a time. Toggling the same trigger
+// twice closes it. Clicking anywhere outside it, pressing Escape,
+// scrolling the detail pane, or re-rendering the matrix all close
+// it too. Outside-click is bound once per page via the
+// DOMContentLoaded block below, using a capture-phase listener so it
+// runs before the trigger's own click handler and never sees the
+// trigger's own event as "outside."
+
+function accessToggleServicesPopover(trigger, id, popoverKey) {
+  var fullKey = id + '|' + popoverKey;
+  // Close on re-click of the same trigger.
+  if (accessState.servicesPopoverKey === fullKey) {
+    accessCloseServicesPopover();
+    return;
+  }
+  // Drop any previously-open popover before placing the new one.
+  accessCloseServicesPopover();
+
+  // The service list to display is re-derived from current state at
+  // open time rather than captured at render time; a save or reload
+  // between matrix paint and click would otherwise produce stale
+  // content.
+  var services = accessServicesForPopover(id, popoverKey);
+  if (!services || services.length === 0) return;
+
+  var el = document.createElement('div');
+  el.className = 'services-popover';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', 'Services filter');
+  var html = '<div class="services-popover-title">All ' + services.length +
+    ' services in this filter</div>'
+    + '<div class="services-popover-chips">';
+  services.forEach(function (svc) {
+    html += '<span class="chip">' + escHtml(svc) + '</span>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+  document.body.appendChild(el);
+
+  // Anchor the popover under the trigger. document.body positioning
+  // (not trigger's parent) means the panel is never clipped by a
+  // table row's overflow:hidden; that keeps long lists legible.
+  var rect = trigger.getBoundingClientRect();
+  el.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+  el.style.left = (window.scrollX + rect.left) + 'px';
+
+  // If the panel would overflow the right edge of the viewport,
+  // re-anchor to the trigger's right edge.
+  var panelRect = el.getBoundingClientRect();
+  var vw = document.documentElement.clientWidth;
+  if (panelRect.right > vw - 8) {
+    el.style.left = (window.scrollX + rect.right - panelRect.width) + 'px';
+  }
+
+  accessState.servicesPopoverKey = fullKey;
+}
+
+// accessServicesForPopover returns the service list to display for a
+// popover keyed on (id, popoverKey). popoverKey is either a machine
+// id (for a specific-machine row) or "<machineId>|inh" (for a cell
+// showing wildcard-inherited access). The switch picks the right
+// source so the popover reflects what the cell was showing.
+function accessServicesForPopover(id, popoverKey) {
+  var parts = popoverKey.split('|');
+  var machineId = parts[0];
+  var sub = parts[1] || '';
+  if (sub === 'inh') {
+    var inherited = accessWildcardInherited(id);
+    return inherited.services || [];
+  }
+  var src = accessIsRevoked(id, machineId)
+    ? accessBaselineFor(id, machineId)
+    : accessEffectiveGrant(id, machineId);
+  return src.services || [];
+}
+
+function accessCloseServicesPopover() {
+  var existing = document.querySelectorAll('.services-popover');
+  for (var i = 0; i < existing.length; i++) {
+    existing[i].parentNode.removeChild(existing[i]);
+  }
+  accessState.servicesPopoverKey = '';
+}
+
+// renderServicesChipRun builds the chip strip (and "+N more" button
+// when needed) for a list of service names. popoverKey identifies the
+// popover that opens for this run; rows render their own popover key
+// derived from the (id, machineId) pair plus an optional sub-tag for
+// inheritance variants. titleOverride sets the tooltip text; null
+// uses the default "Show all N services in this filter."
+function renderServicesChipRun(id, popoverKey, services, titleOverride) {
+  var inline = services.slice(0, SERVICES_INLINE_LIMIT);
+  var html = '<div class="services-chips">';
+  inline.forEach(function (svc) {
+    html += '<span class="chip">' + escHtml(svc) + '</span>';
+  });
+  html += '</div>';
+  if (services.length > SERVICES_INLINE_LIMIT) {
+    var overflow = services.length - SERVICES_INLINE_LIMIT;
+    html += '<button type="button" class="services-more"'
+      + ' data-popover-key="' + escAttr(id + '|' + popoverKey) + '"'
+      + ' onclick="accessToggleServicesPopover(this, \'' + escAttr(id) + '\', \'' + escAttr(popoverKey) + '\')"'
+      + ' title="' + escAttr(titleOverride || ('Show all ' + services.length + ' services in this filter')) + '">'
+      + '+' + overflow + ' more</button>';
+  }
+  return html;
+}
+
+// ── By-identity detail ────────────────────────────────────────────
+
+function renderAccessDetailByIdentity(pane) {
+  var id = accessState.selection.identityId;
+  if (!id) {
+    pane.innerHTML = '<div class="access-detail-empty">Select an identity to view access.</div>';
+    return;
+  }
+  var entry = accessEntryFor(id);
+  if (!entry) {
+    pane.innerHTML = '<div class="access-detail-empty">Identity ' + escHtml(id) + ' not found.</div>';
+    return;
+  }
+  var html = '<header class="access-detail-header">';
+  html += '<div><h2>' + escHtml(entry.id) + ' <span class="chip">' + escHtml(formatRole(entry.role)) + '</span></h2>';
+  html += '<div class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</div>';
+  html += '</div>';
+  html += '<div class="access-detail-actions">'
+    + '<button type="button" class="btn btn-sm" onclick="accessRenameIdentity(\'' + escAttr(entry.id) + '\')">Rename</button>'
+    + '<button type="button" class="btn btn-sm" onclick="accessChangeRole(\'' + escAttr(entry.id) + '\')">Change role&hellip;</button>'
+    + '<button type="button" class="btn btn-sm" onclick="accessRotateIdentityToken(\'' + escAttr(entry.id) + '\')">Rotate token</button>';
+  if (entry.role !== 'owner') {
+    html += '<button type="button" class="btn btn-sm btn-danger" onclick="accessDeleteIdentity(\'' + escAttr(entry.id) + '\')">Delete identity</button>';
+  }
+  html += '</div></header>';
+
+  if (entry.role === 'owner' || entry.role === 'admin') {
+    html += '<p class="hint">Implicit all-access. ' + escHtml(formatRole(entry.role)) +
+      ' tokens can register, connect, and manage every machine on this hub without per-machine ACL entries. Demote to User in Change role to restrict.</p>';
+    pane.innerHTML = html;
+    return;
+  }
+  if (entry.role === 'viewer') {
+    html += '<p class="hint">Read-only console access. Viewer tokens see the built-in hub console; they cannot open sessions or manage agents.</p>';
+    pane.innerHTML = html;
+    return;
+  }
+
+  html += '<p class="hint">Per-machine permissions for this identity. Toggle to stage changes; press <strong>Save</strong> in the toolbar to commit.</p>';
+
+  html += '<table class="access-matrix"><thead><tr>'
+    + '<th>Machine</th>'
+    + '<th class="access-col-check">Connect</th>'
+    + '<th class="access-col-check">Register</th>'
+    + '<th class="access-col-check">Manage</th>'
+    + '<th>Connect services</th>'
+    + '<th class="access-matrix-actions">Actions</th>'
+    + '</tr></thead><tbody>';
+
+  // Render a row for every known machine plus a wildcard fallback. The
+  // operator can grant from here even if the identity has no existing
+  // grant on that machine.
+  var machines = accessState.machines.slice();
+  machines.sort(function (a, b) { return (a.id || '').localeCompare(b.id || ''); });
+  machines.forEach(function (m) {
+    html += renderAccessMatrixRow_ByIdentity(entry, m, false);
+  });
+  html += renderAccessMatrixRow_ByIdentity(entry, { id: '*' }, true);
+
+  html += '</tbody></table>';
+  pane.innerHTML = html;
+}
+
+function renderAccessMatrixRow_ByIdentity(entry, m, isWildcard) {
+  var machineId = m.id;
+  var grant = accessEffectiveGrant(entry.id, machineId);
+  var pending = accessIsPending(entry.id, machineId);
+  var revoked = accessIsRevoked(entry.id, machineId);
+  var rowClass = 'access-matrix-row';
+  if (revoked) rowClass += ' access-matrix-row-revoked';
+  else if (pending) rowClass += ' access-matrix-row-dirty';
+  if (!isWildcard && m.agentConnected === false) rowClass += ' access-matrix-row-offline';
+  if (isWildcard) rowClass += ' access-matrix-row-wildcard';
+
+  var perms = grant.permissions;
+  var hasConnect = perms.indexOf('connect') !== -1;
+  var hasRegister = perms.indexOf('register') !== -1;
+  var hasManage = perms.indexOf('manage') !== -1;
+
+  var registerCell = isWildcard
+    ? '<td class="access-matrix-na">&mdash;</td>'
+    : '<td class="access-matrix-check"><input type="checkbox" ' + (hasRegister ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\',\'register\',this.checked)"></td>';
+
+  var dirtyInd = '';
+  if (revoked) dirtyInd = '<span class="dirty-indicator">&bull; will be revoked</span>';
+  else if (pending) dirtyInd = '<span class="dirty-indicator">&bull; pending</span>';
+
+  var meta;
+  if (isWildcard) {
+    meta = '<div class="access-matrix-meta">Applies to any machine not listed</div>';
+  } else {
+    var svcCount = (m.services || []).length;
+    var statusBadge = m.agentConnected
+      ? '<span class="status status-online"><span class="status-dot"></span>Online</span>'
+      : '<span class="status status-offline"><span class="status-dot"></span>Offline</span>';
+    meta = '<div class="access-matrix-meta">' + statusBadge + ' &middot; ' +
+      svcCount + ' service' + (svcCount === 1 ? '' : 's') + '</div>';
+  }
+
+  var label = isWildcard ? '<strong>* (all machines)</strong>' : '<strong>' + escHtml(machineId) + '</strong>';
+
+  var actions;
+  if (revoked) {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessUndoRevokeRow(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\')">Undo</button>';
+  } else if (perms.length === 0 && !pending) {
+    // No grant yet; Revoke is meaningless. Edit... still makes sense
+    // once the connect box is ticked, but before that it's not useful.
+    actions = '';
+  } else {
+    actions = '<button type="button" class="btn btn-sm" onclick="accessEditServices(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\')">Edit&hellip;</button>'
+      + '<button type="button" class="btn btn-sm btn-danger" onclick="accessStageRevoke(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\')">Revoke</button>';
+  }
+
+  return '<tr class="' + rowClass + '">'
+    + '<td>' + label + meta + dirtyInd + '</td>'
+    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasConnect ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\',\'connect\',this.checked)"></td>'
+    + registerCell
+    + '<td class="access-matrix-check"><input type="checkbox" ' + (hasManage ? 'checked ' : '') +
+      'onchange="accessToggleCheck(\'' + escAttr(entry.id) + '\',\'' + escAttr(machineId) + '\',\'manage\',this.checked)"></td>'
+    + '<td>' + renderAccessServicesCell(entry.id, machineId, grant) + '</td>'
+    + '<td class="access-matrix-actions">' + actions + '</td>'
+    + '</tr>';
+}
+
+// ── Interaction handlers ──────────────────────────────────────────
+
+function accessToggleCheck(id, machineId, perm, checked) {
+  var p = accessEnsurePending(id, machineId);
+  if (p.revoke) {
+    // Toggling a checkbox on a revoke-staged row clears the revoke and
+    // treats the click as a normal edit on top of the baseline.
+    p.revoke = false;
+  }
+  var perms = p.desired.permissions.slice();
+  var idx = perms.indexOf(perm);
+  if (checked && idx === -1) perms.push(perm);
+  if (!checked && idx !== -1) perms.splice(idx, 1);
+  p.desired.permissions = perms;
+  // Services filter only makes sense when connect is granted. Clear
+  // it when connect is removed so we don't send a stale filter on
+  // save; the server ignores services without connect anyway but the
+  // UI would still render chips, which is confusing.
+  if (perms.indexOf('connect') === -1) {
+    p.desired.services = [];
+  }
+  accessDropIfClean(id, machineId);
+  renderAccessPane();
+}
+
+function accessStageRevoke(id, machineId) {
+  var baseline = accessBaselineFor(id, machineId);
+  if ((baseline.permissions || []).length === 0 && !accessIsPending(id, machineId)) {
+    // Nothing to revoke.
+    return;
+  }
+  var p = accessEnsurePending(id, machineId);
+  p.revoke = true;
+  p.desired.permissions = [];
+  p.desired.services = [];
+  renderAccessPane();
+}
+
+function accessUndoRevokeRow(id, machineId) {
+  var key = accessPendingKey(id, machineId);
+  var p = accessState.pending[key];
+  if (!p) return;
+  p.revoke = false;
+  p.desired.permissions = p.baseline.permissions.slice();
+  p.desired.services = p.baseline.services.slice();
+  accessDropIfClean(id, machineId);
+  renderAccessPane();
+}
+
+function accessUndo() {
+  // Simple global undo: drop every pending change. A per-row stack
+  // would be nicer but this matches Profiles / Agents' Undo semantics
+  // (the whole pending batch is rolled back).
+  accessState.pending = {};
+  renderAccessPane();
+}
+
+// ── Save ──────────────────────────────────────────────────────────
+
+function accessSave() {
+  var pending = accessState.pending;
+  var keys = [];
+  for (var k in pending) {
+    if (Object.prototype.hasOwnProperty.call(pending, k)) keys.push(k);
+  }
+  if (keys.length === 0) return;
+
+  var hub = accessState.hub;
+  var saveBtn = document.getElementById('access-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
+
+  var promises = keys.map(function (k) {
+    var p = pending[k];
+    var ifMatch = p.version > 0 ? String(p.version) : '';
+    if (p.revoke) {
+      return goApp.AdminRevokeMachineAccess(hub, p.id, p.machineId, ifMatch).then(function (raw) {
+        return { key: k, pending: p, result: parseJSON(raw) };
+      });
+    }
+    var perms = p.desired.permissions.join(',');
+    var services = p.desired.services.join(',');
+    return goApp.AdminSetMachineAccess(hub, p.id, p.machineId, perms, services, ifMatch).then(function (raw) {
+      return { key: k, pending: p, result: parseJSON(raw) };
+    });
+  });
+
+  Promise.all(promises).then(function (results) {
+    if (accessState.hub !== hub) return; // user switched hubs mid-save
+    var conflicts = [];
+    var errors = [];
+    results.forEach(function (r) {
+      if (r.result.conflict) {
+        conflicts.push({ key: r.key, pending: r.pending, current: r.result.current, version: r.result.version });
+      } else if (r.result.error) {
+        errors.push({ key: r.key, pending: r.pending, message: r.result.error });
+      }
+    });
+
+    if (errors.length > 0 && conflicts.length === 0) {
+      // No conflicts, just other errors: show them and keep pending
+      // state so the operator can retry.
+      var msg = errors.map(function (e) { return e.pending.id + '/' + e.pending.machineId + ': ' + e.message; }).join('\n');
+      showError('Save failed:\n' + msg);
+      accessLoadData(); // reload so successful writes are reflected
+      return;
+    }
+
+    if (conflicts.length > 0) {
+      accessState.lastSaveConflict = conflicts;
+      openAccessConflictModal(conflicts);
+      return;
+    }
+
+    // All writes succeeded: clear pending and reload from server so
+    // the new versions and any server-side derived changes (e.g.,
+    // normalized service names) show up.
+    accessState.pending = {};
+    accessLoadData();
+  }).catch(function (err) {
+    showError('Save failed: ' + (err && err.message ? err.message : err));
+    accessUpdateToolbar();
+  });
+}
+
+function parseJSON(raw) {
+  try { return JSON.parse(raw || '{}'); } catch (e) { return { error: 'invalid server response' }; }
+}
+
+// ── Conflict modal ────────────────────────────────────────────────
+
+function openAccessConflictModal(conflicts) {
+  var listHtml = '';
+  conflicts.forEach(function (c) {
+    listHtml += '<li><strong>' + escHtml(c.pending.id) + '</strong> on <strong>' + escHtml(c.pending.machineId) + '</strong></li>';
+  });
+  var html = '<div class="modal-overlay" id="access-conflict-modal" role="dialog" aria-modal="true" aria-labelledby="access-conflict-title">'
+    + '<div class="modal-dialog"><div class="modal-header">'
+    + '<h3 id="access-conflict-title" class="access-conflict-title">Server state changed</h3>'
+    + '<button type="button" class="modal-close" onclick="accessDiscardAfterConflict()" aria-label="Close">&times;</button>'
+    + '</div><div class="modal-body">'
+    + '<p>Another operator modified access on <strong>' + escHtml(accessState.hub) + '</strong> since you loaded this view. The following rows were affected:</p>'
+    + '<ul>' + listHtml + '</ul>'
+    + '<p>Reload to see the current server state, then re-apply your staged changes.</p>'
+    + '<p>If you prefer to commit your batch as-is and overwrite the other operator\'s edits on those rows, you can <button type="button" class="link" onclick="accessForceOverwriteConflicts()">force overwrite instead</button>. That path requires a second confirmation.</p>'
+    + '</div><div class="modal-actions">'
+    + '<button type="button" class="btn" onclick="accessDiscardAfterConflict()">Discard my changes</button>'
+    + '<button type="button" class="btn btn-primary" onclick="accessReloadAfterConflict()">Reload</button>'
+    + '</div></div></div>';
+  var host = document.getElementById('access-conflict-modal-host') || (function () {
+    var el = document.createElement('div');
+    el.id = 'access-conflict-modal-host';
+    document.body.appendChild(el);
+    return el;
+  })();
+  host.innerHTML = html;
+  accessUpdateToolbar();
+}
+
+// closeAccessConflictModal tears down the modal's DOM without touching
+// pending state. Callers must pair it with one of the three recovery
+// actions below; otherwise pending state would carry stale If-Match
+// values that guarantee 412 on the next Save. This function is kept
+// internal on purpose — the modal's buttons drive the recovery paths.
+function closeAccessConflictModal() {
+  var host = document.getElementById('access-conflict-modal-host');
+  if (host) host.innerHTML = '';
+}
+
+// accessReloadAfterConflict abandons pending changes and reloads the
+// server state. The operator can re-stage any changes they still want
+// to make against the fresh baseline. This is the safe default.
+function accessReloadAfterConflict() {
+  closeAccessConflictModal();
+  accessState.pending = {};
+  accessState.lastSaveConflict = null;
+  accessLoadData();
+}
+
+// accessDiscardAfterConflict throws away pending changes and closes
+// the modal without reloading. Use when the operator realizes their
+// batch was wrong and wants to walk away from it. Wired to the Cancel
+// button and the X close button so there is no path where the operator
+// can linger with stale If-Match values in pending state.
+function accessDiscardAfterConflict() {
+  closeAccessConflictModal();
+  accessState.pending = {};
+  accessState.lastSaveConflict = null;
+  accessUpdateToolbar();
+  renderAccessPane();
+}
+
+function accessForceOverwriteConflicts() {
+  var conflicts = accessState.lastSaveConflict || [];
+  if (conflicts.length === 0) { closeAccessConflictModal(); return; }
+  showConfirmDialog(
+    'Force overwrite?',
+    'Commit your staged changes without the concurrency check. The other operator\'s edits on the conflicting rows will be lost.',
+    'Force overwrite'
+  ).then(function (yes) {
+    if (!yes) return;
+    closeAccessConflictModal();
+    var hub = accessState.hub;
+    // Retry the conflicting writes with no If-Match. Non-conflicting
+    // rows have already been committed and can be ignored.
+    var promises = conflicts.map(function (c) {
+      var p = c.pending;
+      if (p.revoke) {
+        return goApp.AdminRevokeMachineAccess(hub, p.id, p.machineId, '').then(parseJSON);
+      }
+      return goApp.AdminSetMachineAccess(hub, p.id, p.machineId,
+        p.desired.permissions.join(','), p.desired.services.join(','), '').then(parseJSON);
+    });
+    Promise.all(promises).then(function () {
+      accessState.pending = {};
+      accessState.lastSaveConflict = null;
+      accessLoadData();
+    }).catch(function (err) {
+      showError('Force overwrite failed: ' + (err && err.message ? err.message : err));
+    });
+  });
+}
+
+// accessReload re-renders the Access page after a successful mutation
+// (token create / rotate / delete, etc.). When the Access tab is not
+// the active tab, it's a no-op; the next switchTab('access') does a
+// full refresh anyway. Placeholder until the full data layer lands.
+function accessReload() {
+  var pane = document.getElementById('tab-access');
+  if (!pane || pane.classList.contains('hidden')) return;
+  refreshAccessTab();
+}
+
+// Toolbar action stubs for wiring still being built. Full behavior
+// lands in the toolbar-actions commit; the stubs keep clicks from
+// throwing while the rest of the surface is under construction.
+function accessAddIdentity() {
+  // Reuse the existing create-token modal; the modal's submit path
+  // now calls accessReload() which refreshes the Access page in place.
+  if (typeof promptCreateToken === 'function') {
+    // The old flow expected currentAdminHub to be set; the new flow
+    // uses accessState.hub. Bridge them for reuse.
+    currentAdminHub = accessState.hub;
+    promptCreateToken();
+  }
+}
+function accessPairCode() {
+  if (typeof promptPairCode === 'function') {
+    currentAdminHub = accessState.hub;
+    promptPairCode();
+  }
+}
+function accessRescanServices() { accessLoadData(); }
+
+// ── By-identity detail header actions ─────────────────────────────
+//
+// These wrappers glue the Access page to the existing confirm-modal
+// helpers and the admin bridge. They currently share currentAdminHub
+// with the (dead) legacy Hubs admin plumbing so the helper functions
+// keep working without a bigger refactor.
+
+function accessRenameIdentity(id) {
+  currentAdminHub = accessState.hub;
+  showPromptDialog('Rename Identity', 'Enter a new name for "' + id + '":', id, 'Rename').then(function (newId) {
+    if (!newId || newId === id) return;
+    var entry = accessEntryFor(id);
+    var ifMatch = entry ? String(entry.version || '') : '';
+    goApp.AdminRenameAccess(accessState.hub, id, newId, ifMatch).then(function (raw) {
+      var data = parseJSON(raw);
+      if (data.conflict) {
+        showError('Identity "' + id + '" was modified by another operator. Reload and try again.');
+        accessLoadData();
+        return;
+      }
+      if (data.error) { showError('Rename failed: ' + data.error); return; }
+      if (accessState.selection.identityId === id) accessState.selection.identityId = newId;
+      accessLoadData();
+    });
+  });
+}
+
+function accessChangeRole(id) {
+  var entry = accessEntryFor(id);
+  if (!entry) return;
+  // Owner demotion is allowed at this layer; the backend's last-owner
+  // guard rejects the specific case of demoting the only owner and
+  // surfaces that as an error in the modal. Operators with multiple
+  // owner identities can freely rebalance.
+  document.getElementById('crm-identity').textContent = id;
+  document.getElementById('crm-role').value = (entry.role === '' || entry.role === 'user') ? '' : entry.role;
+  var errEl = document.getElementById('crm-error');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  // Stash the identity ID on the modal so submitChangeRole can read it.
+  document.getElementById('access-change-role-modal').setAttribute('data-identity', id);
+  document.getElementById('access-change-role-modal').classList.remove('hidden');
+}
+
+function submitChangeRole() {
+  var modal = document.getElementById('access-change-role-modal');
+  var id = modal.getAttribute('data-identity') || '';
+  if (!id) { closeModal('access-change-role-modal'); return; }
+  var newRole = document.getElementById('crm-role').value;
+  var entry = accessEntryFor(id);
+  var current = entry ? entry.role : '';
+  // Normalize current: the backend stores "" for user; the UI shows
+  // "" in the dropdown for the same value. If they match, bail
+  // silently so we don't emit a no-op PATCH.
+  if (current === newRole || (current === 'user' && newRole === '') || (current === '' && newRole === '')) {
+    closeModal('access-change-role-modal');
+    return;
+  }
+
+  // Owner promotion is a privilege escalation that confers full
+  // control of the hub including the power to demote or delete
+  // other admins. A second confirm forces the operator to
+  // acknowledge the severity. Owner demotion is already guarded on
+  // the server by the last-owner rule, so no extra confirm is needed
+  // when going owner -> admin (or any other role).
+  if (newRole === 'owner' && current !== 'owner') {
+    showConfirmDialog(
+      'Promote to Owner?',
+      'Promoting "' + id + '" to Owner grants full control of this hub, including the power to demote or remove any other admin. Continue?',
+      'Promote to Owner'
+    ).then(function (yes) {
+      if (!yes) return;
+      doChangeRole(id, newRole, entry);
+    });
+    return;
+  }
+
+  doChangeRole(id, newRole, entry);
+}
+
+// doChangeRole issues the PATCH. Factored out of submitChangeRole so
+// the owner-promotion confirm and the regular path share one code
+// path for the If-Match wiring, conflict handling, and error
+// surfacing.
+function doChangeRole(id, newRole, entry) {
+  var ifMatch = entry ? String(entry.version || '') : '';
+  goApp.AdminChangeRole(accessState.hub, id, newRole, ifMatch).then(function (raw) {
+    var data = parseJSON(raw);
+    if (data.conflict) {
+      var errEl = document.getElementById('crm-error');
+      errEl.textContent = 'This identity was modified by another operator. Close and reload, then try again.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (data.error) {
+      var errEl = document.getElementById('crm-error');
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('access-change-role-modal');
+    accessLoadData();
+  });
+}
+
+function accessRotateIdentityToken(id) {
+  currentAdminHub = accessState.hub;
+  if (typeof rotateToken === 'function') rotateToken(id);
+}
+
+function accessDeleteIdentity(id) {
+  currentAdminHub = accessState.hub;
+  if (typeof deleteToken === 'function') deleteToken(id);
+}
+
+// ── Edit services modal ───────────────────────────────────────────
+
+// aesState pins the identity+machine currently being edited so the
+// modal's submit handler can reach them without re-parsing the DOM.
+var aesState = { id: '', machineId: '' };
+
+function accessEditServices(id, machineId) {
+  if (!hubSupportsPerServiceACL(accessState.hub)) {
+    // Expose the capability hint even on unsupported hubs so the
+    // operator understands why the filter is unavailable. Opening the
+    // modal in a disabled state is more informative than a toast.
+    aesOpenDisabled(id, machineId);
+    return;
+  }
+  aesState.id = id;
+  aesState.machineId = machineId;
+
+  var grant = accessEffectiveGrant(id, machineId);
+  var isRestricted = (grant.services || []).length > 0;
+
+  document.getElementById('aes-identity').textContent = id;
+  document.getElementById('aes-machine').textContent = machineId === '*' ? '* (all machines)' : machineId;
+  document.getElementById('aes-scope-all').checked = !isRestricted;
+  document.getElementById('aes-scope-restrict').checked = isRestricted;
+  document.getElementById('aes-disabled-hint').style.display = 'none';
+
+  aesPopulateServicesList(machineId, grant.services || []);
+  aesUpdateVisibility();
+  document.getElementById('access-edit-services-modal').classList.remove('hidden');
+}
+
+function aesOpenDisabled(id, machineId) {
+  aesState.id = id;
+  aesState.machineId = machineId;
+  document.getElementById('aes-identity').textContent = id;
+  document.getElementById('aes-machine').textContent = machineId === '*' ? '* (all machines)' : machineId;
+  document.getElementById('aes-scope-all').checked = true;
+  document.getElementById('aes-scope-restrict').checked = false;
+  document.getElementById('aes-scope-restrict').disabled = true;
+  document.getElementById('aes-services-group').style.display = 'none';
+  document.getElementById('aes-disabled-hint').style.display = '';
+  document.getElementById('access-edit-services-modal').classList.remove('hidden');
+}
+
+function aesPopulateServicesList(machineId, selected) {
+  var list = document.getElementById('aes-services-list');
+  var input = document.getElementById('aes-services-freetext');
+  var hint = document.getElementById('aes-services-hint');
+  document.getElementById('aes-scope-restrict').disabled = false;
+
+  // Wildcard machine: no concrete service list to enumerate, so fall
+  // back to free-text. Users may legitimately want a cross-machine
+  // filter like "jellyfin on any machine that exposes one."
+  if (machineId === '*') {
+    list.innerHTML = '';
+    list.style.display = 'none';
+    input.style.display = '';
+    input.value = (selected || []).join(', ');
+    hint.textContent = 'Wildcard machine: enter comma-separated service names.';
+    return;
+  }
+
+  var m = accessMachineFor(machineId);
+  var services = (m && m.services) ? m.services : [];
+  input.style.display = 'none';
+  if (services.length === 0) {
+    list.style.display = '';
+    list.innerHTML = '<p class="empty-hint">No services advertised by this machine.</p>';
+    hint.textContent = '';
+    return;
+  }
+
+  var selectedSet = {};
+  (selected || []).forEach(function (s) { selectedSet[s] = true; });
+
+  var html = '';
+  services.forEach(function (svc) {
+    var name = svc.name || ('port-' + svc.port);
+    html += '<label class="aes-service-row">';
+    html += '<input type="checkbox" value="' + escAttr(name) + '"' + (selectedSet[name] ? ' checked' : '') + '>';
+    html += '<span>' + escHtml(name) + '</span>';
+    html += '<span class="aes-service-port">port ' + escHtml(String(svc.port || '?')) + '</span>';
+    html += '</label>';
+  });
+  list.innerHTML = html;
+  list.style.display = '';
+  hint.textContent = 'Tick the services to include.';
+}
+
+function aesUpdateVisibility() {
+  var group = document.getElementById('aes-services-group');
+  var restrict = document.getElementById('aes-scope-restrict').checked;
+  group.style.display = restrict ? '' : 'none';
+}
+
+function aesApply() {
+  var scope = document.getElementById('aes-scope-all').checked ? 'all' : 'restrict';
+  var services = [];
+
+  if (scope === 'restrict') {
+    if (aesState.machineId === '*') {
+      var raw = document.getElementById('aes-services-freetext').value || '';
+      services = raw.split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+    } else {
+      var boxes = document.querySelectorAll('#aes-services-list input[type="checkbox"]:checked');
+      for (var i = 0; i < boxes.length; i++) services.push(boxes[i].value);
+    }
+    // Deduplicate. The free-text path can produce duplicates ("git, git");
+    // the checkbox path cannot, but dedup is free and keeps the server
+    // view tidy.
+    var seen = {};
+    services = services.filter(function (s) {
+      if (seen[s]) return false;
+      seen[s] = true;
+      return true;
+    });
+    if (services.length === 0) {
+      showError('Pick at least one service, or switch back to "Allow all services".');
+      return;
+    }
+  }
+
+  var p = accessEnsurePending(aesState.id, aesState.machineId);
+  // Editing the services filter is a positive action, so it clears any
+  // pending revoke on the same row.
+  if (p.revoke) {
+    p.revoke = false;
+    p.desired.permissions = p.baseline.permissions.slice();
+  }
+  if (scope === 'restrict') {
+    // A services filter without connect is meaningless; the backend
+    // would ignore it. Force connect on when the operator is
+    // explicitly restricting.
+    if (p.desired.permissions.indexOf('connect') === -1) {
+      p.desired.permissions.push('connect');
+    }
+    p.desired.services = services;
+  } else {
+    // "Allow all services" just clears the filter. It does not touch
+    // the connect permission: if the operator unchecked connect a
+    // moment ago, the modal should not silently re-grant it.
+    p.desired.services = [];
+  }
+  accessDropIfClean(aesState.id, aesState.machineId);
+  closeModal('access-edit-services-modal');
+  renderAccessPane();
+}
+
+// ── Export audit ──────────────────────────────────────────────────
+
+function accessExportAudit() {
+  if (!accessState.loaded) {
+    showError('Load a hub before exporting the audit.');
+    return;
+  }
+  // Trim the machines snapshot to just the identifying fields; the
+  // full MachineStatus carries transient runtime state (sessionCount,
+  // lastSeen) that would make diffs noisy. Services are retained in
+  // their full form since they drive the ACL semantics.
+  var audit = {
+    exportedAt: new Date().toISOString(),
+    hub: accessState.hub,
+    entries: accessState.entries,
+    machines: accessState.machines.map(function (m) {
+      return {
+        id: m.id,
+        agentConnected: m.agentConnected === true,
+        services: (m.services || []).map(function (s) {
+          return { name: s.name || '', port: s.port || 0, proto: s.proto || '' };
+        }),
+      };
+    }),
+  };
+  var json = JSON.stringify(audit, null, 2);
+  // Route through the native OS save dialog, not a browser download,
+  // so the operator picks a real filesystem location the same way
+  // they do from the log pane's Save button. See SaveAccessAudit in
+  // app.go for the Wails-bound dialog + writer.
+  goApp.SaveAccessAudit(accessState.hub, json).then(function (path) {
+    if (path) tvLog('Exported access audit to ' + path);
+  }).catch(function (err) {
+    showError('Export failed: ' + (err && err.message ? err.message : err));
+  });
+}
+
+// ── Updates tab ─────────────────────────────────────────────────────
+//
+// Lifecycle UI for the binaries installed on this machine: TelaVisor
+// itself, the tela CLI, and any local telad / telahubd copies. Hub
+// and agent update surfaces live on their respective Infrastructure
+// tabs and are unaffected by this tab.
+//
+// The tab mirrors the channel selector from Application Settings so
+// the most-touched workflow (check, switch channel, install) stays
+// in one place. The underlying state (GetClientChannel /
+// SetClientChannel) is the same, so edits from either surface stay
+// in sync.
+
+function refreshUpdatesTab() {
+  var tools = document.getElementById('updates-tools-status');
+  if (tools) tools.innerHTML = '<p class="loading">Checking for updates&hellip;</p>';
+  // Pull the auto-check setting and any other update-relevant prefs
+  // from the credstore each time the tab opens, so toggles made
+  // elsewhere (the topbar update overlay, a future keyboard shortcut)
+  // show up here without a full-app refresh.
+  goApp.GetSettings().then(function (s) {
+    var cb = document.getElementById('updates-autocheck');
+    if (cb) cb.checked = !!(s && s.autoCheckUpdates);
+  }).catch(function () { /* best effort */ });
+  // Re-fire the periodic update check now so the topbar indicator
+  // and the tools table reflect the same fresh data.
+  if (typeof goApp.CheckForUpdatesNow === 'function') {
+    goApp.CheckForUpdatesNow();
+  }
+  populateChannelSelect('updates-channel-select');
+  var sel = document.getElementById('updates-channel-select');
+  var status = document.getElementById('updates-channel-status');
+  if (sel && !sel.dataset.wired) {
+    sel.dataset.wired = '1';
+    sel.addEventListener('change', function () {
+      var newCh = sel.value;
+      if (status) status.textContent = 'Switching to ' + newCh + '\u2026';
+      goApp.SetClientChannel(newCh, findChannelManifestBase(newCh)).then(function (r) {
+        var data;
+        try { data = typeof r === 'string' ? JSON.parse(r) : r; } catch (e) { data = {}; }
+        if (data && data.error) {
+          if (status) status.textContent = 'Error: ' + data.error;
+          return;
+        }
+        if (status) status.textContent = 'Now on ' + newCh + '.';
+        // The channel switch moves the goalpost for "latest"; re-run
+        // the check so the tools table reflects the new baseline.
+        goApp.CheckForUpdatesNow().then(function () {
+          renderUpdatesToolsTable();
+        });
+      }).catch(function (err) {
+        if (status) status.textContent = 'Error: ' + err;
+      });
+    });
+  }
+  goApp.GetClientChannel().then(function (info) {
+    if (!sel) return;
+    var ch = (info && info.channel) ? info.channel : 'dev';
+    sel.value = ch;
+    if (status) status.textContent = 'Currently on ' + ch + '.';
+  }).catch(function () { /* best effort */ });
+  // Force-refresh: a tab switch onto Updates is the operator asking
+  // "tell me the current state," which is exactly what forceRefresh
+  // does inside renderToolsTable.
+  renderUpdatesToolsTable(true);
+}
+
+function renderUpdatesToolsTable(forceRefresh) {
+  var el = document.getElementById('updates-tools-status');
+  if (!el) return;
+  renderToolsTable(el, /*showActions*/ true, null, !!forceRefresh);
+}
+
+// toggleAutoCheckUpdates is the change handler for the Updates tab's
+// "Check automatically" checkbox. Persists immediately through
+// SaveSettings so the next periodic refreshAll() picks up the new
+// value without an explicit Save action; the Updates tab is not a
+// staged-change surface.
+function toggleAutoCheckUpdates(checked) {
+  goApp.GetSettings().then(function (s) {
+    s = s || {};
+    s.autoCheckUpdates = !!checked;
+    return goApp.SaveSettings(JSON.stringify(s));
+  }).catch(function (err) {
+    showError('Save failed: ' + (err && err.message ? err.message : err));
+  });
+}
+

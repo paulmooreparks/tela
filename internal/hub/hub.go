@@ -583,6 +583,39 @@ func portLabel(p int) string {
 	return fmt.Sprintf("port %d", p)
 }
 
+// serviceFilterName returns the name used for per-service access
+// filtering. A service with a non-empty Name matches that string; an
+// unnamed service matches "port-<N>" (a stable, operator-specifiable
+// token that survives telad config reformatting).
+func serviceFilterName(s serviceDesc) string {
+	if s.Name != "" {
+		return s.Name
+	}
+	return fmt.Sprintf("port-%d", s.Port)
+}
+
+// filterServicesByName returns only the services whose filter name is
+// present in allowed. An empty allowed list returns an empty result;
+// callers that want "no filter" behavior should not call this helper
+// (see connectServicesFilter for the distinction). Matching is exact
+// and case-sensitive.
+func filterServicesByName(services []serviceDesc, allowed []string) []serviceDesc {
+	if len(allowed) == 0 {
+		return []serviceDesc{}
+	}
+	allowSet := make(map[string]struct{}, len(allowed))
+	for _, name := range allowed {
+		allowSet[name] = struct{}{}
+	}
+	out := make([]serviceDesc, 0, len(services))
+	for _, s := range services {
+		if _, ok := allowSet[serviceFilterName(s)]; ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // normalizeServices converts ports[] / services[] into a consistent
 // list of serviceDesc, matching hub.js behavior exactly.
 func normalizeServices(ports []int, services []serviceDesc) []serviceDesc {
@@ -640,8 +673,9 @@ func adminCorsHeaders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Access-Control-Allow-Origin", origin)
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, If-Match")
+	w.Header().Set("Access-Control-Expose-Headers", "ETag")
 	w.Header().Set("Vary", "Origin")
 }
 
@@ -720,6 +754,17 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 			AgentConnected:        entry.ControlWS != nil,
 			SessionCount:          len(entry.Sessions),
 			Services:              normalizeServices(entry.Ports, entry.Services),
+		}
+		// Apply per-token service filter. Owner/admin/viewer and
+		// unfiltered grants return filtered=false, leaving sm.Services
+		// untouched. A filtered grant restricts the list to the named
+		// services (other services are invisible, not blocked; a client
+		// who knows the port and has canConnect can still dial through
+		// the WG tunnel).
+		if globalAuth.isEnabled() {
+			if allowed, filtered := globalAuth.connectServicesFilter(callerToken, entry.MachineName); filtered {
+				sm.Services = filterServicesByName(sm.Services, allowed)
+			}
 		}
 		if entry.DisplayName != "" {
 			sm.DisplayName = &entry.DisplayName
@@ -806,6 +851,26 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(payload)
 }
 
+// hubCapabilities returns the opt-in feature tokens this hub advertises
+// on /.well-known/tela. Clients negotiate optional behavior by testing
+// for a capability token before sending a request that depends on it.
+// The returned slice is a fresh copy on each call; callers may sort or
+// mutate it without affecting other callers.
+//
+// Capability tokens are short kebab-case strings. Adding a token is
+// a non-breaking change; removing one is a major-version bump because
+// clients may gate functionality on its presence.
+func hubCapabilities() []string {
+	return []string{
+		// per-service-access-control: the hub understands the Services
+		// field on connectGrant (in config), on PUT /api/admin/access
+		// request bodies, and enforces per-service visibility on
+		// /api/status. Clients use this to decide whether sending a
+		// filtered grant is safe (see issue #27).
+		"per-service-access-control",
+	}
+}
+
 // handleWellKnown serves GET /.well-known/tela on the hub. It is
 // unauthenticated so that portals can discover the hub's identity
 // without needing a token. See DESIGN-identity.md section 6.1.
@@ -822,6 +887,13 @@ func handleWellKnown(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{
 		"protocolVersion":   "1.1",
 		"supportedVersions": []string{"1.1"},
+		// capabilities is an unordered set of opt-in feature tokens
+		// clients use to negotiate optional behavior. Unknown tokens
+		// are ignored by both sides. Each token is a short string
+		// naming a specific capability; see DESIGN-remote-admin.md
+		// for the registry. Adding a capability is a non-breaking
+		// change; removing one is a major-version bump.
+		"capabilities": hubCapabilities(),
 	}
 	if hubID != "" {
 		payload["hubId"] = hubID
@@ -2184,8 +2256,20 @@ func handleAdminAgents(w http.ResponseWriter, r *http.Request) {
 	// Parse path first to get machineID for permission check
 	path := strings.TrimPrefix(r.URL.Path, "/api/admin/agents/")
 	parts := strings.SplitN(path, "/", 2)
+
+	// GET /api/admin/agents/{machine} is a lightweight presence probe.
+	// It returns just the machine id, agentConnected flag, and lastSeen
+	// without pulling the full /api/status payload (machines times
+	// services times capabilities). Used by TelaVisor's HasLocalTelad
+	// check so a sidebar button-enable does not download the whole
+	// fleet state on every repaint.
+	if len(parts) == 1 && parts[0] != "" && r.Method == http.MethodGet {
+		handleAdminAgentPresence(w, r, parts[0])
+		return
+	}
+
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "expected /api/admin/agents/{machine}/{action}"})
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "expected /api/admin/agents/{machine}/{action} or GET /api/admin/agents/{machine}"})
 		return
 	}
 	machineName := parts[0]
@@ -2276,6 +2360,57 @@ func writeAdminJSON(w http.ResponseWriter, r *http.Request, status int, v interf
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// handleAdminAgentPresence answers GET /api/admin/agents/{machine} with
+// a minimal presence object: the machine id, whether its control
+// WebSocket is currently held open, and the last-seen timestamp. This
+// is the lightweight counterpart to /api/status for callers that just
+// want "is this agent reachable right now?" (the primary case is
+// TelaVisor's HasLocalTelad check). Viewers who do not hold
+// canViewMachine for the target see the same 404 an unregistered
+// machine produces, so the endpoint cannot be used to enumerate.
+func handleAdminAgentPresence(w http.ResponseWriter, r *http.Request, machineName string) {
+	callerToken := tokenFromRequest(r)
+	if globalAuth.isEnabled() && !globalAuth.canViewMachine(callerToken, machineName) {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "machine not found"})
+		return
+	}
+
+	machinesMu.RLock()
+	agentID := machinesByName[machineName]
+	var entry *machineEntry
+	var exists bool
+	if agentID != "" {
+		entry, exists = machines[agentID]
+	}
+	machinesMu.RUnlock()
+	if !exists {
+		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "machine not found"})
+		return
+	}
+
+	// Brief Lock() for a two-field snapshot, identical in shape to
+	// handleAPIStatus. entry.mu is not a sync.RWMutex because several
+	// existing "read" sites are actually WebSocket-write paths (ping
+	// loop, mgmt-request sends) that must serialize to avoid gorilla
+	// frame corruption, so they cannot be downgraded to RLock. A
+	// dedicated presence RWMutex would help only this endpoint and
+	// would add a second lock to every writer; not worth the
+	// complexity for a two-field read.
+	entry.mu.Lock()
+	connected := entry.ControlWS != nil
+	lastSeen := entry.LastSeen
+	entry.mu.Unlock()
+
+	payload := map[string]any{
+		"id":             machineName,
+		"agentConnected": connected,
+	}
+	if !lastSeen.IsZero() {
+		payload["lastSeen"] = lastSeen.UTC().Format(time.RFC3339)
+	}
+	writeAdminJSON(w, r, http.StatusOK, payload)
 }
 
 // Run starts the hub HTTP/WebSocket server and the supporting background
@@ -2799,11 +2934,14 @@ func runAsWindowsService() {
 // telaWellKnown is the JSON shape returned by /.well-known/tela. The
 // fields match DESIGN-portal.md section 2: hub_directory points at the
 // directory base path; protocolVersion + supportedVersions carry the
-// 1.0 version-negotiation handshake.
+// 1.0 version-negotiation handshake; capabilities is an opt-in feature
+// token list that clients check before sending requests that depend on
+// newer hub behavior.
 type telaWellKnown struct {
 	HubDirectory      string   `json:"hub_directory"`
 	ProtocolVersion   string   `json:"protocolVersion,omitempty"`
 	SupportedVersions []string `json:"supportedVersions,omitempty"`
+	Capabilities      []string `json:"capabilities,omitempty"`
 }
 
 // discoverHubDirectory queries /.well-known/tela to discover the hub
@@ -3530,7 +3668,7 @@ func cmdUserBootstrap() {
 		cfg.Auth.Machines = make(map[string]machineACL)
 	}
 	cfg.Auth.Machines["*"] = machineACL{
-		ConnectTokens: []string{token},
+		ConnectTokens: []connectGrant{{Token: token}},
 	}
 
 	if err := saveUserConfig(cfgPath, cfg); err != nil {
@@ -3762,16 +3900,11 @@ func cmdUserRemove() {
 			acl.RegisterToken = ""
 			changed = true
 		}
-		newCT := make([]string, 0, len(acl.ConnectTokens))
-		for _, ct := range acl.ConnectTokens {
-			if ct == removedToken {
-				changed = true
-				continue
-			}
-			newCT = append(newCT, ct)
+		if hasConnectGrant(acl.ConnectTokens, removedToken) {
+			acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, removedToken)
+			changed = true
 		}
 		if changed {
-			acl.ConnectTokens = newCT
 			cfg.Auth.Machines[name] = acl
 		}
 	}
@@ -3819,13 +3952,11 @@ func cmdUserGrant() {
 	acl := cfg.Auth.Machines[machineID]
 
 	// Check if already granted
-	for _, ct := range acl.ConnectTokens {
-		if ct == entry.Token {
-			fmt.Printf("Identity '%s' already has connect access to '%s'.\n", id, machineID)
-			return
-		}
+	if hasConnectGrant(acl.ConnectTokens, entry.Token) {
+		fmt.Printf("Identity '%s' already has connect access to '%s'.\n", id, machineID)
+		return
 	}
-	acl.ConnectTokens = append(acl.ConnectTokens, entry.Token)
+	acl.ConnectTokens = append(acl.ConnectTokens, connectGrant{Token: entry.Token})
 	cfg.Auth.Machines[machineID] = acl
 
 	if err := saveUserConfig(cfgPath, cfg); err != nil {
@@ -3871,20 +4002,11 @@ func cmdUserRevoke() {
 		os.Exit(1)
 	}
 
-	found := false
-	newCT := make([]string, 0, len(acl.ConnectTokens))
-	for _, ct := range acl.ConnectTokens {
-		if ct == entry.Token {
-			found = true
-			continue
-		}
-		newCT = append(newCT, ct)
-	}
-	if !found {
+	if !hasConnectGrant(acl.ConnectTokens, entry.Token) {
 		fmt.Fprintf(os.Stderr, "error: identity '%s' does not have connect access to '%s'\n", id, machineID)
 		os.Exit(1)
 	}
-	acl.ConnectTokens = newCT
+	acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, entry.Token)
 	cfg.Auth.Machines[machineID] = acl
 
 	if err := saveUserConfig(cfgPath, cfg); err != nil {
@@ -3938,11 +4060,8 @@ func cmdUserRotate() {
 			acl.RegisterToken = newToken
 			changed = true
 		}
-		for i, ct := range acl.ConnectTokens {
-			if ct == oldToken {
-				acl.ConnectTokens[i] = newToken
-				changed = true
-			}
+		if replaceConnectGrantToken(acl.ConnectTokens, oldToken, newToken) {
+			changed = true
 		}
 		if changed {
 			cfg.Auth.Machines[name] = acl

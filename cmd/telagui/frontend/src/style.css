@@ -414,6 +414,20 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   padding: 6px 16px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+/* Subtle "Hub:" / "Profile:" label that precedes a pane-toolbar select.
+   Smaller than body text so the select dominates visually, matching the
+   Profiles toolbar where the select carries the weight on its own. */
+.pane-toolbar-label {
+  font-size: 12px; color: var(--text-muted); font-weight: 500;
+  margin-right: 2px;
+}
+/* Shared select style for pane toolbars. Identical to .profile-toolbar-select
+   so the Profile picker and the Access hub picker render the same. */
+.pane-toolbar-select {
+  padding: 4px 8px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font); background: var(--surface); min-width: 160px;
+}
 /* Profile toolbar */
 .profile-toolbar {}
 .profile-toolbar-select {
@@ -943,8 +957,15 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   color: var(--text-muted);
   padding: 0 4px;
 }
-.modal-body { padding: 0; }
-.modal-dialog form { padding: 20px; }
+/* Modal body owns the interior gutter. Every direct child (form,
+   bail-out state div, result rows, settings groups, about copy)
+   inherits the 20px inset automatically -- there is no need to wrap
+   content in a padded sub-element, and no class-by-class rule for
+   each shape that lands inside a modal. Modals with full-width
+   structural elements like a top tab-bar opt out with the
+   .modal-body-flush modifier and provide their own gutter inside. */
+.modal-body { padding: 20px; }
+.modal-body-flush { padding: 0; }
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -967,6 +988,18 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   border-radius: 5px;
   font-size: 14px;
   font-family: var(--font);
+}
+/* Overrides so checkboxes and radios inside a form-group do not inherit
+   the text-input styling (full-row width, padding, border). Without
+   this, every checkbox/radio stretches to 100% of its container and
+   the visible control drifts to the right edge. */
+.form-group input[type="checkbox"],
+.form-group input[type="radio"] {
+  width: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  accent-color: var(--accent);
 }
 .form-group input:focus, .form-group select:focus {
   outline: none;
@@ -1179,7 +1212,92 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   overflow-y: auto;
   padding: 8px 16px;
 }
+/* ─── TDL annotation text primitives ─────────────────────────────────
+   Every text class that exists to sit *next to* a control or *below*
+   a heading lives in this block. They share a muted color, smaller
+   font, and consistent line-height so the surface reads as one thing.
+
+   IMPORTANT to future contributors: any new annotation-style class
+   used in markup MUST have a top-level rule here. A class that lives
+   only as a scoped descendant rule (".some-pane .my-class") inherits
+   default body styling outside its scope and renders inconsistently
+   the moment another pane uses it. Several painful regressions traced
+   to exactly this gap; do not reintroduce it. The shorthand: if you
+   add `class="something-desc"` or `class="something-hint"` in markup,
+   add a global CSS rule for it before committing. */
 .empty-hint { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
+
+/* .loading: transient placeholder text shown while a pane waits on
+   data ("Loading hubs...", "Checking for updates..."). */
+.loading { color: var(--text-muted); font-size: 13px; }
+
+/* .hint: annotation text that sits next to or below a control.
+   Used inside form groups, modals, and setting cards. */
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 10px 0 4px;
+}
+
+/* .section-desc: descriptive paragraph below an h1/h2 page heading.
+   Replaces the previous .hubs-admin-detail .section-desc scoped rule
+   that left every other usage at default body styling. */
+.section-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.section-desc code {
+  font-family: var(--mono); font-size: 0.82rem;
+  background: var(--surface-alt); padding: 1px 6px; border-radius: 3px;
+}
+
+/* TDL .link: inline underlined accent text used for every clickable
+   text outside the topbar. Rendered as a <button class="link"> or an
+   <a class="link">; both resolve to the same visual. The button reset
+   (background/border/padding) is explicit because browsers give
+   <button> default chrome that would otherwise ruin the link look.
+   .link-muted is the subordinate variant used in secondary contexts
+   (footer cross-references, inline annotations). */
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.link:hover {
+  color: var(--accent-hover);
+  text-decoration-thickness: 2px;
+}
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.link:visited { color: var(--accent); }
+
+.link-muted {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.link-muted:hover {
+  color: var(--text);
+  text-decoration-thickness: 2px;
+}
 .log-entry-card { margin-bottom: 12px; }
 .log-entry-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -1373,7 +1491,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   flex: 1; overflow-y: auto; padding: 24px 32px;
 }
 .hubs-admin-detail h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-.hubs-admin-detail .section-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+/* .section-desc rule moved to the global annotation primitives block. */
 .hubs-admin-detail .toolbar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
 
 /* Admin tables */
@@ -1501,7 +1619,31 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px;
 }
 .setting-check:last-child { margin-bottom: 0; }
-.setting-check input { accent-color: var(--accent); margin: 0; }
+/* Explicit width:auto is required because .form-group input { width: 100% }
+   would otherwise stretch these checkboxes across the whole row. */
+.setting-check input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: auto; }
+
+/* Labels paired with a checkbox/radio inside .setting-check need to
+   opt out of the .form-group label defaults (display:block, 500-weight,
+   4px margin-bottom), which would otherwise force a full-row break
+   and over-emphasize the inline label text. Clicking the label still
+   forwards focus to its associated input because of the `for="..."`
+   binding. */
+.form-group .setting-check label,
+.setting-check label {
+  display: inline; font-weight: 400; margin: 0; cursor: pointer;
+  color: var(--text);
+}
+
+/* Introductory paragraph inside a modal body form. Replaces the
+   generic .hint with a rule that leaves enough room between the copy
+   and the first form control below, matching the gutter between
+   adjacent .form-group blocks (14px). */
+.modal-intro-hint {
+  font-size: 12px; color: var(--text-muted);
+  margin: 0 0 14px; line-height: 1.5;
+}
+
 .kv-table { width: 100%; border-collapse: collapse; }
 .kv-table td { padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .kv-table tr:last-child td { border-bottom: none; }
@@ -1644,7 +1786,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .tools-action-btn { padding: 2px 8px; font-size: 11px; }
 .tools-service-row td { border-bottom: 1px solid var(--surface-alt); padding-top: 0; }
 .tools-service-label { font-size: 11px; color: var(--text-muted); font-style: italic; }
-.section-desc code { font-family: var(--mono); font-size: 0.82rem; background: var(--surface-alt); padding: 1px 6px; border-radius: 3px; }
+/* .section-desc code rule moved to the global annotation primitives block. */
 .history-item { padding: 6px 0; border-bottom: 1px solid var(--surface-alt); font-size: 13px; }
 .history-item:last-child { border-bottom: none; }
 .history-time { color: var(--text-muted); font-family: var(--mono); font-size: 12px; margin-right: 8px; }
@@ -1953,13 +2095,375 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .acl-machine-name { font-weight: 700; font-size: 14px; }
 .acl-machine-meta { font-size: 12px; color: var(--text-muted); }
 .acl-card-body { padding: 12px 16px; }
-.access-token-preview { color: var(--text-muted); font-size: 11px; font-family: var(--mono); }
-.access-machine-row {
-  display: flex; align-items: center; gap: 8px; padding: 8px 0;
-  border-bottom: 1px solid var(--border); font-size: 13px;
+/* ─── Access page (peer tab) ─────────────────────────────────────────
+   Consolidated identity + ACL surface. Layout mirrors the Agents tab
+   (sidebar + detail) so it reads as a member of the same family. The
+   sidebar uses the same solid right-border pattern, never card chrome. */
+
+.access-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+.access-sidebar {
+  width: 280px; min-width: 240px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
 }
-.access-machine-row:last-child { border-bottom: none; }
-.access-machine-row .btn-danger { margin-left: auto; }
+.access-sidebar-header {
+  padding: 10px 16px 8px; font-size: 11px; text-transform: uppercase;
+  color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.access-sidebar-list { flex: 1; overflow-y: auto; }
+/* Placeholder / loading messages that sit inside the list share the
+   same left inset as real items so the column reads as one. */
+.access-sidebar-list > .empty-hint { padding: 12px 16px; }
+.access-sidebar-item {
+  display: block; padding: 10px 16px; cursor: pointer; color: var(--text-muted);
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.access-sidebar-item:hover { background: var(--surface-alt); color: var(--text); }
+.access-sidebar-item.active {
+  background: var(--surface-alt); color: var(--text);
+  border-left-color: var(--accent);
+}
+.access-sidebar-primary {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.access-sidebar-secondary { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.access-sidebar-dirty {
+  color: var(--warn); font-size: 10px; font-weight: 700; margin-left: auto;
+}
+
+.access-detail { flex: 1; overflow-y: auto; padding: 20px 24px; min-width: 0; }
+.access-detail-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-muted); font-size: 13px;
+}
+
+/* View toggle (By machine / By identity): TDL mode-bar vocabulary. The
+   active segment is bold with a 3px accent underline; inactive segments
+   are hoverable. Active is cursor:default so it reads as "you are here"
+   rather than "click me." */
+.access-view-toggle {
+  display: inline-flex; align-items: stretch;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); overflow: hidden;
+}
+.access-view-btn {
+  position: relative;
+  padding: 4px 14px; background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  font-size: 12px; font-weight: 500; font-family: var(--font);
+}
+.access-view-btn + .access-view-btn { border-left: 1px solid var(--border); }
+.access-view-btn:hover:not(.active) { background: var(--surface-alt); color: var(--text); }
+.access-view-btn.active {
+  color: var(--text); font-weight: 700; cursor: default;
+}
+.access-view-btn.active::after {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--accent);
+}
+
+/* Access detail header: identity or machine name, status/meta, and
+   optional per-identity action cluster. Mirrors the mockup. */
+.access-detail-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 4px; gap: 16px; flex-wrap: wrap;
+}
+.access-detail-header h2 {
+  margin: 0; font-size: 20px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+.access-detail-meta {
+  font-size: 12px; color: var(--text-muted); margin-top: 6px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.access-detail-meta .status { margin-right: 4px; }
+.access-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.access-service-list { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+.access-token-preview {
+  color: var(--text-muted); font-size: 11px; font-family: var(--mono); margin-top: 4px;
+}
+
+/* Access matrix: identity x permission x service filter table. Used by
+   both By machine and By identity views; they swap the row identity
+   between "identity on this machine" and "machine for this identity". */
+.access-matrix { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+.access-matrix th {
+  text-align: left; padding: 10px 12px; font-weight: 600;
+  color: var(--text-muted); border-bottom: 1px solid var(--border);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.access-matrix th.access-col-check { width: 72px; text-align: center; }
+.access-matrix-row td {
+  padding: 14px 12px; border-bottom: 1px solid var(--border); vertical-align: top;
+}
+.access-matrix-row:hover:not(.access-matrix-row-implicit) { background: var(--surface-alt); }
+
+/* Implicit-role rows (owner, admin, viewer) are rendered at full
+   weight with disabled checkboxes so the operator can see the role's
+   effective access without being tempted to toggle it per-machine. */
+.access-matrix-row-implicit td { background: rgba(59,130,246,0.06); }
+.access-matrix-row-implicit .implicit-note {
+  font-size: 11px; color: var(--text-muted); margin-top: 2px;
+}
+
+.access-matrix-row-dirty {
+  background: rgba(243,156,18,0.08);
+  box-shadow: inset 3px 0 0 0 var(--warn);
+}
+.access-matrix-row-revoked { box-shadow: inset 3px 0 0 0 var(--danger); }
+.access-matrix-row-revoked .identity-name,
+.access-matrix-row-revoked .chip,
+.access-matrix-row-revoked .services-summary-muted {
+  text-decoration: line-through; color: var(--text-muted);
+}
+.access-matrix-row-revoked .access-matrix-check input[type="checkbox"] { opacity: 0.3; }
+
+.access-matrix-row-offline { opacity: 0.65; }
+.access-matrix-row-wildcard { background: rgba(26,35,50,0.4); font-style: italic; }
+
+.access-matrix-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-style: normal; }
+.access-matrix-check { text-align: center; }
+.access-matrix-check input[type="checkbox"] {
+  accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+}
+.access-matrix-check input[type="checkbox"]:disabled { cursor: not-allowed; }
+
+/* Checkbox cell when the permission is inherited from the wildcard
+   "*" ACL. The cell picks up a very light blue tint matching the
+   implicit-role rows so the operator sees at a glance that the state
+   comes from elsewhere, and the title tooltip on the cell explains
+   where to go to edit it. */
+.access-matrix-check-inherited { background: rgba(59,130,246,0.08); }
+.access-matrix-check-inherited input[type="checkbox"]:disabled { opacity: 0.75; }
+.access-matrix-na { color: var(--text-muted); text-align: center; }
+.access-matrix-actions { text-align: left; white-space: nowrap; }
+.access-matrix-actions .btn + .btn { margin-left: 6px; }
+
+/* Services cell: compact one-line display in the matrix.
+   - Unfiltered grants show "All services" (services-summary-muted).
+   - Filtered grants render up to N chips inline; longer filters
+     collapse to a "+N more" affordance that opens a read-only
+     popover listing every service. The popover never edits;
+     Edit... in the actions column is the dedicated edit path. */
+.services-cell {
+  display: flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; overflow: hidden;
+}
+.services-summary-muted { color: var(--text-muted); font-size: 12px; font-style: italic; }
+.services-chips {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; overflow: hidden; min-width: 0;
+}
+.services-more {
+  color: var(--accent); font-size: 11px; font-weight: 600;
+  background: none; border: none; padding: 0 2px;
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  font-family: var(--font);
+}
+.services-more:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
+.services-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Services popover: anchored to the body and positioned absolutely
+   relative to the trigger by the JS that opens it. Read-only by
+   design; no form controls live inside. Dismiss via outside click,
+   Esc, or trigger re-click. */
+.services-popover {
+  position: absolute; z-index: 50;
+  min-width: 220px; max-width: 360px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px var(--border);
+}
+.services-popover-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 600; margin-bottom: 6px;
+}
+.services-popover-chips {
+  display: flex; flex-wrap: wrap; gap: 4px;
+}
+
+.dirty-indicator {
+  display: inline-block; margin-left: 6px;
+  color: var(--warn); font-size: 11px; font-weight: 600;
+}
+
+/* Updates tab: lifecycle UI for locally-installed Tela binaries.
+   Reuses the status-pane layout and setting-card primitives so the
+   visual language matches Client Settings and Status. */
+.updates-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; margin-bottom: 8px;
+}
+.updates-header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+.updates-header-actions {
+  display: flex; align-items: center; gap: 12px;
+}
+.updates-autocheck {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-muted); cursor: pointer;
+}
+.updates-autocheck input[type="checkbox"] {
+  accent-color: var(--accent); margin: 0; cursor: pointer;
+}
+
+/* Agents-tab sidebar footer: two side-by-side buttons (Generate /
+   Redeem) plus a one-sentence caption explaining the relationship.
+   The buttons are equal width via flex:1 so neither dominates the
+   row. */
+.agents-sidebar-footer-row {
+  display: flex; gap: 6px;
+}
+.agents-sidebar-footer-row .btn {
+  flex: 1; padding: 6px 8px; font-size: 12px;
+  justify-content: center;
+}
+.agents-sidebar-footer-caption {
+  margin-top: 6px;
+  font-size: 11px; line-height: 1.3;
+  color: var(--text-muted); text-align: center;
+}
+
+/* Copyable row: a code or command line with a Copy button on the
+   right. Used by the Generate Agent Code Result modal and any other
+   place that shows an operator a value they need to share. */
+.copyable {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 6px;
+}
+.copyable-label {
+  flex-shrink: 0; width: 70px;
+  font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+}
+.copyable-value {
+  flex: 1; min-width: 0;
+  font-family: var(--mono); font-size: 13px;
+  color: var(--text); word-break: break-all;
+  background: none; border: none; padding: 0; margin: 0;
+  white-space: pre-wrap;
+}
+.copyable-value-large {
+  flex: 1;
+  font-family: var(--mono); font-size: 18px; font-weight: 700;
+  letter-spacing: 0.06em; color: var(--accent);
+}
+.copy-btn {
+  flex-shrink: 0;
+  background: none; border: 1px solid var(--border);
+  color: var(--text-muted); border-radius: 4px;
+  padding: 4px 8px; font-size: 11px; cursor: pointer;
+  font-family: var(--font);
+}
+.copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
+
+/* Inline status banners for modal bodies. status-warn for amber
+   advisories (telad-not-installed bail-out); status-success for
+   green confirmations (agent registered). Both carry a glyph
+   prefix per TDL. */
+.status-warn {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: rgba(243,156,18,0.08); border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 14px;
+  font-size: 12px; line-height: 1.5;
+}
+.status-warn::before {
+  content: '\26A0';
+  color: var(--warn); font-size: 14px; line-height: 1;
+  flex-shrink: 0; margin-top: 1px;
+}
+.status-success {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: rgba(46,204,113,0.08); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 14px;
+  font-size: 12px; line-height: 1.5; color: var(--text);
+}
+.status-success::before {
+  content: '\2713';
+  color: var(--accent); font-size: 14px; font-weight: 700; line-height: 1;
+  flex-shrink: 0; margin-top: 1px;
+}
+
+/* Result-modal label/value rows: confirmation summary inside the
+   Redeem Agent Code Result modal and any other "what just landed
+   where" report. */
+.result-row {
+  display: flex; gap: 16px; font-size: 12px;
+  padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
+}
+.result-row:last-of-type { border-bottom: none; }
+.result-label {
+  flex-shrink: 0; width: 110px; padding-top: 2px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.result-value {
+  flex: 1; font-family: var(--mono); font-size: 13px;
+  color: var(--text); word-break: break-all;
+}
+.result-meta-row {
+  display: flex; gap: 16px; font-size: 11px;
+  color: var(--text-muted); margin-top: 8px;
+}
+.result-meta-row strong { color: var(--text); font-weight: 600; }
+
+/* Mono input variant: pair codes are easier to read in monospace. */
+.form-group input.mono {
+  font-family: var(--mono); font-size: 14px; letter-spacing: 0.04em;
+}
+.updates-intro { margin-bottom: 20px; }
+.updates-channel-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.updates-channel-row select { min-width: 160px; }
+
+/* Conflict modal: reuses the TDL modal primitives, with a danger-tinted
+   title and a muted "force overwrite" escape hatch link in the body. */
+.access-conflict-title { color: var(--danger); display: flex; align-items: center; gap: 8px; }
+.access-conflict-title::before { content: '\26A0'; font-size: 16px; }
+
+/* Edit services modal: scrollable checkbox list rendered when a
+   specific machine's services-filter is being edited. The free-text
+   input takes over for the wildcard "*" machine.
+
+   Specificity on the row selector (.form-group ... label, plus a
+   standalone label.aes-service-row) is deliberately elevated above
+   the form defaults. Without it, .form-group label { display: block }
+   beats our { display: flex } and the flex gap collapses, jamming
+   the checkbox against the service name with no visible separation. */
+.aes-services-list {
+  max-height: 180px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 10px; background: var(--surface-alt);
+}
+.form-group .aes-services-list label.aes-service-row,
+label.aes-service-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; padding: 4px 0; margin: 0;
+  font-weight: 400; cursor: pointer; color: var(--text);
+}
+.aes-service-row:hover { color: var(--text); }
+.aes-service-row input[type="checkbox"] {
+  accent-color: var(--accent); margin: 0; width: auto; flex-shrink: 0;
+}
+.aes-service-row .aes-service-port {
+  color: var(--text-muted); font-size: 12px; margin-left: auto;
+  font-family: var(--mono);
+}
+
+
 .acl-perm-row {
   display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
   font-size: 13px;
@@ -2025,7 +2529,9 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
 .update-note { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
 .update-actions { justify-content: flex-end; gap: 8px; }
 
-.modal-body-padded { padding: 20px; }
+/* Inert: padding now lives on .modal-body itself. Existing wrappers
+   are harmless and will be swept out of markup in a follow-up. */
+.modal-body-padded { padding: 0; }
 .modal-confirm { width: 420px; }
 .confirm-message { font-size: 14px; margin-bottom: 20px; }
 /* Duplicate .btn-danger definition removed — canonical rules are in the

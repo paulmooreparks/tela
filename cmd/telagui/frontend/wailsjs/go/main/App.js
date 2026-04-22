@@ -14,6 +14,10 @@ export function AdminAPICall(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AdminAPICall'](arg1, arg2, arg3, arg4);
 }
 
+export function AdminChangeRole(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AdminChangeRole'](arg1, arg2, arg3, arg4);
+}
+
 export function AdminCreateToken(arg1, arg2, arg3) {
   return window['go']['main']['App']['AdminCreateToken'](arg1, arg2, arg3);
 }
@@ -38,20 +42,20 @@ export function AdminListTokens(arg1) {
   return window['go']['main']['App']['AdminListTokens'](arg1);
 }
 
-export function AdminRenameAccess(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminRenameAccess'](arg1, arg2, arg3);
+export function AdminRenameAccess(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AdminRenameAccess'](arg1, arg2, arg3, arg4);
 }
 
-export function AdminRevokeMachineAccess(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminRevokeMachineAccess'](arg1, arg2, arg3);
+export function AdminRevokeMachineAccess(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AdminRevokeMachineAccess'](arg1, arg2, arg3, arg4);
 }
 
 export function AdminRotateToken(arg1, arg2) {
   return window['go']['main']['App']['AdminRotateToken'](arg1, arg2);
 }
 
-export function AdminSetMachineAccess(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['AdminSetMachineAccess'](arg1, arg2, arg3, arg4);
+export function AdminSetMachineAccess(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['AdminSetMachineAccess'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function AssignLocalPort(arg1) {
@@ -298,8 +302,16 @@ export function GetVersion() {
   return window['go']['main']['App']['GetVersion']();
 }
 
+export function HasLocalTelad() {
+  return window['go']['main']['App']['HasLocalTelad']();
+}
+
 export function HasUpdate() {
   return window['go']['main']['App']['HasUpdate']();
+}
+
+export function HubCapabilities(arg1) {
+  return window['go']['main']['App']['HubCapabilities'](arg1);
 }
 
 export function ImportProfile() {
@@ -410,6 +422,10 @@ export function QuitApp() {
   return window['go']['main']['App']['QuitApp']();
 }
 
+export function RedeemAgentCode(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RedeemAgentCode'](arg1, arg2, arg3);
+}
+
 export function RefreshBinStatus() {
   return window['go']['main']['App']['RefreshBinStatus']();
 }
@@ -460,6 +476,10 @@ export function RestartHub(arg1) {
 
 export function RestartToUpdate() {
   return window['go']['main']['App']['RestartToUpdate']();
+}
+
+export function SaveAccessAudit(arg1, arg2) {
+  return window['go']['main']['App']['SaveAccessAudit'](arg1, arg2);
 }
 
 export function SaveFileDialog(arg1) {

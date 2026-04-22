@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Agent code redemption flow (proposed)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+    :root {
+        --bg: #111827;
+        --surface: #1f2937;
+        --surface-alt: #1a2332;
+        --text: #e5e7eb;
+        --text-muted: #9ca3af;
+        --border: #4b5668;
+        --accent: #2ecc71;
+        --accent-hover: #27ae60;
+        --warn: #f39c12;
+        --danger: #e74c3c;
+        --radius: 8px;
+        --radius-sm: 4px;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+    body { min-height: 100vh; padding: 20px 24px 60px; }
+
+    h1.mockup-title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+    p.mockup-sub {
+        font-size: 12px; color: var(--text-muted);
+        margin: 0 0 24px;
+    }
+
+    .step {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 18px 20px; margin-bottom: 20px;
+    }
+    .step-label {
+        display: inline-block; padding: 2px 8px;
+        background: var(--surface-alt); border-radius: 3px;
+        font-size: 10px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.06em; color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+    .step-title { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
+
+    /* Buttons */
+    .btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border-radius: 6px;
+        font-size: 13px; font-weight: 500; font-family: var(--font);
+        color: var(--text); cursor: pointer;
+        border: 1px solid var(--border); background: #2a3545;
+    }
+    .btn:hover { background: #3a465c; }
+    .btn-primary { background: var(--accent); color: #1f2937; border-color: var(--accent-hover); font-weight: 600; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .link {
+        color: var(--accent); text-decoration: underline;
+        text-decoration-thickness: 1px; text-underline-offset: 2px;
+        cursor: pointer; background: none; border: none; padding: 0;
+        font: inherit;
+    }
+    .link:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
+
+    /* Faux Agents-tab sidebar context */
+    .agents-sidebar-faux {
+        width: 280px; border: 1px solid var(--border);
+        border-radius: var(--radius); background: var(--surface);
+        overflow: hidden;
+    }
+    .agents-sidebar-header {
+        padding: 10px 16px 8px; font-size: 11px; text-transform: uppercase;
+        color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+    }
+    .agents-sidebar-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 16px; color: var(--text);
+        border-left: 3px solid transparent;
+        border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .agents-sidebar-item.active {
+        background: var(--surface-alt);
+        border-left-color: var(--accent);
+        font-weight: 600;
+    }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .dot-online { background: var(--accent); }
+    .agents-sidebar-footer {
+        padding: 10px 12px; border-top: 1px solid var(--border);
+        display: flex; flex-direction: column; gap: 6px;
+    }
+    .agents-sidebar-footer .btn { justify-content: center; }
+    .footer-caption {
+        font-size: 11px; color: var(--text-muted); text-align: center;
+        line-height: 1.3;
+    }
+    .footer-row {
+        display: flex; gap: 6px;
+    }
+    .footer-row .btn { flex: 1; padding: 6px 8px; font-size: 12px; }
+
+    /* Modal mock */
+    .modal-mock {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        width: 540px; max-width: 100%;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.45), 0 0 0 1px var(--border);
+        overflow: hidden;
+    }
+    .modal-mock-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .modal-mock-header h3 { margin: 0; font-size: 16px; font-weight: 700; }
+    .modal-mock-close {
+        background: none; border: none; font-size: 18px;
+        color: var(--text-muted); cursor: pointer; padding: 0 4px;
+    }
+    .modal-mock-body { padding: 20px; }
+    .modal-mock-actions {
+        display: flex; justify-content: flex-end; gap: 8px;
+        margin-top: 16px;
+    }
+
+    /* Form bits */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+        display: block; font-size: 13px; font-weight: 500;
+        margin-bottom: 4px;
+    }
+    .form-group input[type="text"], .form-group select {
+        width: 100%; padding: 8px 10px;
+        border: 1px solid var(--border); border-radius: 5px;
+        background: var(--surface-alt); color: var(--text);
+        font-size: 13px; font-family: var(--font);
+    }
+    .form-group input.mono {
+        font-family: var(--mono); font-size: 14px;
+        letter-spacing: 0.04em;
+    }
+    .form-group input[type="text"]:focus, .form-group select:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(46,204,113,0.15);
+    }
+
+    .modal-intro-hint {
+        font-size: 12px; color: var(--text-muted);
+        line-height: 1.5; margin: 0 0 14px;
+    }
+    .hint {
+        font-size: 12px; color: var(--text-muted);
+        line-height: 1.5; margin: 8px 0 0;
+    }
+
+    /* Inline status block (for telad-not-installed warning) */
+    .status-warn {
+        display: flex; align-items: flex-start; gap: 10px;
+        background: rgba(243,156,18,0.08);
+        border: 1px solid var(--warn);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px; margin-bottom: 14px;
+        font-size: 12px; line-height: 1.5;
+    }
+    .status-warn::before {
+        content: '\26A0';
+        color: var(--warn); font-size: 14px; line-height: 1;
+        flex-shrink: 0; margin-top: 1px;
+    }
+    .status-success {
+        display: flex; align-items: flex-start; gap: 10px;
+        background: rgba(46,204,113,0.08);
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px; margin-bottom: 14px;
+        font-size: 12px; line-height: 1.5;
+        color: var(--text);
+    }
+    .status-success::before {
+        content: '\2713';
+        color: var(--accent); font-size: 14px; font-weight: 700; line-height: 1;
+        flex-shrink: 0; margin-top: 1px;
+    }
+
+    /* Result modal: registered-agent summary */
+    .result-row {
+        display: flex; gap: 16px; font-size: 12px;
+        padding: 6px 0; border-bottom: 1px solid var(--surface-alt);
+    }
+    .result-row:last-child { border-bottom: none; }
+    .result-label {
+        width: 110px; color: var(--text-muted); flex-shrink: 0;
+        text-transform: uppercase; font-size: 10px; font-weight: 600;
+        letter-spacing: 0.06em; padding-top: 2px;
+    }
+    .result-value {
+        flex: 1; font-family: var(--mono); font-size: 13px;
+        color: var(--text); word-break: break-all;
+    }
+
+    /* Annotations next to mockups */
+    .note {
+        font-size: 12px; color: var(--text-muted);
+        line-height: 1.5; margin-top: 10px;
+        padding-left: 10px; border-left: 2px solid var(--border);
+    }
+
+    .row-2col { display: flex; gap: 24px; align-items: flex-start; }
+    .row-2col > div { flex: 1; }
+
+    code.kbd {
+        font-family: var(--mono); font-size: 11px;
+        background: var(--surface-alt);
+        padding: 1px 6px; border-radius: 3px;
+        border: 1px solid var(--border);
+    }
+    </style>
+</head>
+<body>
+
+<h1 class="mockup-title">Agent code redemption flow (proposed)</h1>
+<p class="mockup-sub">A new "Redeem Agent Code" path on the Agents tab, only useful when telad runs on the same machine as TV (developer workstations, single-host setups). Production agents on remote machines still redeem via <code class="kbd">telad pair</code> on the agent host; this surface does not change that.</p>
+
+<!-- ─── Step 1: button placement ─── -->
+<div class="step">
+    <div class="step-label">Step 1 — Agents sidebar</div>
+    <div class="step-title">Redeem button paired with Generate, both single-purpose</div>
+
+    <div class="row-2col">
+        <div>
+            <div class="agents-sidebar-faux">
+                <div class="agents-sidebar-header">Agents</div>
+                <div class="agents-sidebar-item active">
+                    <span class="dot dot-online"></span>
+                    work-laptop
+                </div>
+                <div class="agents-sidebar-item">
+                    <span class="dot dot-online"></span>
+                    dev-vm
+                </div>
+                <div class="agents-sidebar-footer">
+                    <div class="footer-row">
+                        <button class="btn btn-primary">Generate Agent Code&hellip;</button>
+                        <button class="btn">Redeem Code&hellip;</button>
+                    </div>
+                    <div class="footer-caption">
+                        Generate a code on this hub for a remote machine, or
+                        redeem one to register a local agent on this machine.
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <p class="note">
+                Two buttons sit side by side in the sidebar footer. Generate
+                is primary because it is the more common operation; Redeem
+                is secondary because it only matters for the
+                local-agent-on-this-machine case.
+            </p>
+            <p class="note">
+                The combined caption is a single sentence so the relationship
+                is obvious: one direction generates, the other consumes.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Step 2: redeem modal (happy path) ─── -->
+<div class="step">
+    <div class="step-label">Step 2 — Redeem modal</div>
+    <div class="step-title">Hub picker + code input + machine name</div>
+
+    <div class="row-2col">
+        <div>
+            <div class="modal-mock">
+                <div class="modal-mock-header">
+                    <h3>Redeem Agent Code</h3>
+                    <button class="modal-mock-close">&times;</button>
+                </div>
+                <div class="modal-mock-body">
+                    <p class="modal-intro-hint">Register a local <code class="kbd">telad</code> on this machine using a one-time code generated by the hub administrator. The agent will appear in the sidebar above when registration completes.</p>
+
+                    <div class="form-group">
+                        <label for="r-hub">Hub</label>
+                        <select id="r-hub">
+                            <option>owlsnest.parkscomputing.com</option>
+                            <option>devhub.awansaya.net</option>
+                            <option value="other">Other hub URL&hellip;</option>
+                        </select>
+                        <div class="hint">The hub the code was issued from. Choose from hubs you already have credentials for, or pick "Other" to type a URL.</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="r-code">Pair code</label>
+                        <input type="text" id="r-code" class="mono" placeholder="ABCD-1234" value="ABCD-1234">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="r-machine">Machine name</label>
+                        <input type="text" id="r-machine" placeholder="e.g. dev-vm, web-01" value="dev-vm">
+                        <div class="hint">The name <code class="kbd">telad</code> will register under. Must match the name on the code (the hub administrator will tell you).</div>
+                    </div>
+
+                    <div class="modal-mock-actions">
+                        <button class="btn">Cancel</button>
+                        <button class="btn btn-primary">Redeem</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <p class="note">
+                The hub picker pulls from TV's known-hubs list. Picking
+                "Other" reveals an inline URL input (not shown here for
+                brevity). This handles the case where the operator was given
+                a code for a hub they have not added yet.
+            </p>
+            <p class="note">
+                The machine name is required even though it duplicates what
+                the code already encodes. Reasoning: we want the operator to
+                confirm what they expect, and the value must be passed to
+                <code class="kbd">telad pair</code> as a flag.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Step 3: result modal (success) ─── -->
+<div class="step">
+    <div class="step-label">Step 3 — Result modal (success)</div>
+    <div class="step-title">Registration summary</div>
+
+    <div class="row-2col">
+        <div>
+            <div class="modal-mock">
+                <div class="modal-mock-header">
+                    <h3>Agent Registered</h3>
+                    <button class="modal-mock-close">&times;</button>
+                </div>
+                <div class="modal-mock-body">
+                    <div class="status-success">
+                        <span><strong>Agent registered.</strong> A new entry will appear in the Agents sidebar within a few seconds.</span>
+                    </div>
+
+                    <div class="result-row">
+                        <span class="result-label">Hub</span>
+                        <span class="result-value">owlsnest.parkscomputing.com</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Machine</span>
+                        <span class="result-value">dev-vm</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Token stored</span>
+                        <span class="result-value">/etc/tela/credentials.yaml</span>
+                    </div>
+
+                    <p class="hint">
+                        The new token is in the system credential store
+                        <code class="kbd">telad</code> reads at startup. Run
+                        <code class="kbd">telad service install</code> if you
+                        want it to start automatically on boot.
+                    </p>
+
+                    <div class="modal-mock-actions">
+                        <button class="btn btn-primary">Done</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <p class="note">
+                The result confirms what landed where, including the
+                credstore path so the operator knows where the token lives.
+                The <code class="kbd">telad service install</code> hint is
+                deliberate: pairing alone gets the token in place, but the
+                agent will not actually run until <code class="kbd">telad</code>
+                is started (either manually or as a service).
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Step 4: telad-not-installed edge case ─── -->
+<div class="step">
+    <div class="step-label">Step 4 — Edge case: telad not installed locally</div>
+    <div class="step-title">Bail out with a pointer to Updates</div>
+
+    <div class="row-2col">
+        <div>
+            <div class="modal-mock">
+                <div class="modal-mock-header">
+                    <h3>Redeem Agent Code</h3>
+                    <button class="modal-mock-close">&times;</button>
+                </div>
+                <div class="modal-mock-body">
+                    <div class="status-warn">
+                        <div>
+                            <strong>telad is not installed on this machine.</strong>
+                            Pairing requires a local <code class="kbd">telad</code>
+                            binary; the Updates tab can install it for you.
+                        </div>
+                    </div>
+
+                    <p class="modal-intro-hint">If you are trying to register an agent running on a different machine, run <code class="kbd">telad pair</code> there instead. Generating the code in TV does not deliver a token to the remote host; only the operator on the agent machine can complete the handshake.</p>
+
+                    <div class="modal-mock-actions">
+                        <button class="btn">Cancel</button>
+                        <button class="btn btn-primary">Open Updates&hellip;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <p class="note">
+                The redeem flow checks for a local <code class="kbd">telad</code>
+                binary before showing the form. If none exists, the modal
+                opens in this short bail-out state with a single action that
+                routes the operator to the Updates tab where they can
+                install it.
+            </p>
+            <p class="note">
+                The second paragraph is a deliberate disclaimer: redemption
+                in TV only works for local agents. The remote-agent case is
+                explicitly called out so an operator who reached this dialog
+                hoping to register a remote agent learns the right flow
+                (run <code class="kbd">telad pair</code> on that host).
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Boundary note ─── -->
+<div class="step">
+    <div class="step-label">Out of scope</div>
+    <div class="step-title">What this flow does not do</div>
+    <p style="font-size: 13px; line-height: 1.5; color: var(--text); margin: 0 0 8px;">
+        Redemption in TV is local-only. TV cannot redeem a code on behalf of an
+        agent on a different machine, because the resulting token has to land
+        in that machine's credential store. The generate-side mockup
+        (<code class="kbd">agents-pair-code.html</code>) handles the remote-
+        agent case correctly: it produces a code plus a copy-ready
+        <code class="kbd">telad pair</code> command for the operator to run on
+        the target host.
+    </p>
+    <p style="font-size: 13px; line-height: 1.5; color: var(--text); margin: 0;">
+        TV also does not orchestrate post-registration startup. The result
+        modal hints at <code class="kbd">telad service install</code> but does
+        not run it; service management is a separate workflow living in
+        Client Settings (System Service card). A future iteration could fold
+        a "Register and start as service" checkbox into the redeem modal,
+        but only after watching how operators actually use this surface.
+    </p>
+</div>
+
+</body>
+</html>

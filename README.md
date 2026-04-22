@@ -83,15 +83,13 @@ TelaVisor wraps the `tela` CLI in a graphical interface. It manages hub credenti
 
 ![TelaVisor Status tab, connected](book/src/screens/telavisor-status-connected.png)
 
-TelaVisor uses a two-mode layout. **Clients mode** manages connections, profiles, files, and client settings. **Infrastructure mode** provides full hub and agent administration: hub settings, machines, per-identity access, tokens, history, agent configuration, remote management, and credential storage.
+TelaVisor uses a two-mode layout. **Clients mode** manages connections, profiles, files, local updates, and client settings. **Infrastructure mode** provides full hub and agent administration: hub settings, machines, history, agent configuration, a consolidated Access tab for identities and per-machine permissions, remote management, and credential storage.
 
 The Hub Settings view exposes lifecycle controls (View Logs, Update, Restart) and shows version badges that compare the running hub against the latest GitHub release. The same pattern is mirrored on the Agents tab for telad instances.
 
 ![TelaVisor Hub Settings](book/src/screens/telavisor-hub-settings.png)
 
-The Tokens view lets you create identities, rotate tokens, delete identities, and generate one-time pairing codes that users or agents can exchange for permanent tokens.
-
-![TelaVisor Hubs, Tokens](book/src/screens/telavisor-hub-tokens.png)
+The Access tab lets you create identities, rotate tokens, change roles, delete identities, grant and revoke per-machine permissions (including per-service filters on the connect grant), and generate one-time pairing codes. Changes are staged as a batch and committed with optimistic concurrency, so a concurrent edit by another operator surfaces as a conflict dialog rather than a silent overwrite.
 
 The Agents tab lists all telad instances visible across your configured hubs without requiring an active tunnel connection. Each agent shows version, services, file share configuration, and management controls. The Software row updates the agent binary in place by downloading from GitHub releases and restarting through the OS service manager.
 

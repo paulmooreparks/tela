@@ -197,11 +197,11 @@ when the binary is behind. Clicking it triggers the same admin-API path as
 above and polls the binary's reported version until it changes, so the
 table reflects the actual installed version.
 
-For locally installed services, the Installed Tools card on Client Settings
-has Update buttons that delegate to the elevated service process (TelaVisor
-itself does not need to be elevated to update an elevated service binary --
-the running service updates itself from the inside, then the process supervisor
-restarts it against the new binary).
+For locally installed services, the Installed Tools table on the Updates
+tab has Update buttons that delegate to the elevated service process
+(TelaVisor itself does not need to be elevated to update an elevated
+service binary -- the running service updates itself from the inside,
+then the process supervisor restarts it against the new binary).
 
 ## Bootstrapping a fresh box
 

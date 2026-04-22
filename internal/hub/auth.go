@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"sync"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ── Auth configuration types ────────────────────────────────────────────────
@@ -29,9 +31,47 @@ type tokenEntry struct {
 // machineACL controls which tokens may register or connect to a specific machine.
 // Use the key "*" as a wildcard that applies to all machines.
 type machineACL struct {
-	RegisterToken string   `yaml:"registerToken,omitempty"` // if set, only this token may (re)register
-	ConnectTokens []string `yaml:"connectTokens,omitempty"` // tokens permitted to connect
-	ManageTokens  []string `yaml:"manageTokens,omitempty"`  // tokens permitted to manage (config, restart, logs)
+	RegisterToken string         `yaml:"registerToken,omitempty"` // if set, only this token may (re)register
+	ConnectTokens []connectGrant `yaml:"connectTokens,omitempty"` // tokens permitted to connect, each with an optional service filter
+	ManageTokens  []string       `yaml:"manageTokens,omitempty"`  // tokens permitted to manage (config, restart, logs)
+}
+
+// connectGrant is one token entry in a machine's connect ACL, optionally
+// restricted to a subset of the agent's named services. An empty Services
+// list means "all services" (the pre-0.15 behavior). A non-empty list
+// means the session-setup path on the hub exposes only those named
+// services to the client; other services are invisible, not merely
+// blocked.
+type connectGrant struct {
+	Token    string   `yaml:"token"`              // secret hex value
+	Services []string `yaml:"services,omitempty"` // nil or empty = all services
+}
+
+// UnmarshalYAML accepts either a bare string (pre-0.15 config form) or
+// the struct form {token: ..., services: [...]}. The bare-string form
+// is rewritten to the struct form on the next config write, so configs
+// self-upgrade without an explicit migration.
+func (g *connectGrant) UnmarshalYAML(node *yaml.Node) error {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.ScalarNode {
+		g.Token = node.Value
+		g.Services = nil
+		return nil
+	}
+	// Use a helper type to avoid infinite recursion into UnmarshalYAML.
+	type rawGrant struct {
+		Token    string   `yaml:"token"`
+		Services []string `yaml:"services,omitempty"`
+	}
+	var r rawGrant
+	if err := node.Decode(&r); err != nil {
+		return err
+	}
+	g.Token = r.Token
+	g.Services = r.Services
+	return nil
 }
 
 // ── Runtime auth store ──────────────────────────────────────────────────────
@@ -129,8 +169,11 @@ func (s *authStore) canRegister(token, machineID string) bool {
 // canConnect returns true when the token may open a session to machineID.
 //   - Auth disabled: always true.
 //   - Hub owner/admin: always true.
-//   - Token in machine-specific connectTokens: true.
-//   - Token in wildcard "*" connectTokens: true.
+//   - Token appears in the machine's connectTokens: true.
+//   - Token appears in the wildcard "*" connectTokens: true.
+//
+// canConnect does not consider service-name filtering; use
+// connectServicesFilter to obtain the filter for a specific grant.
 func (s *authStore) canConnect(token, machineID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -140,13 +183,50 @@ func (s *authStore) canConnect(token, machineID string) bool {
 	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
 		return true
 	}
-	if inTokenList(s.machines[machineID].ConnectTokens, token) {
+	if _, ok := findConnectGrant(s.machines[machineID].ConnectTokens, token); ok {
 		return true
 	}
-	if inTokenList(s.machines["*"].ConnectTokens, token) {
+	if _, ok := findConnectGrant(s.machines["*"].ConnectTokens, token); ok {
 		return true
 	}
 	return false
+}
+
+// connectServicesFilter returns the allowed service-name set for a
+// (token, machineID) pair, plus a boolean "filtered" flag.
+//   - filtered=false means "all services" (no filter applied; callers
+//     should expose every service the agent advertises).
+//   - filtered=true with names set means only those service names are
+//     visible to the session.
+//   - filtered=true with names empty is treated as filtered=false (no
+//     filter); an empty list in config means "all services."
+//
+// When both a machine-specific grant and a wildcard grant match, the
+// machine-specific grant wins. Owner, admin, and viewer tokens are
+// always unfiltered; viewers are read-only console observers and
+// filtering their service view would silently break monitoring.
+func (s *authStore) connectServicesFilter(token, machineID string) (names []string, filtered bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.enabled {
+		return nil, false
+	}
+	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin" || e.HubRole == "viewer") {
+		return nil, false
+	}
+	if g, ok := findConnectGrant(s.machines[machineID].ConnectTokens, token); ok {
+		if len(g.Services) == 0 {
+			return nil, false
+		}
+		return append([]string(nil), g.Services...), true
+	}
+	if g, ok := findConnectGrant(s.machines["*"].ConnectTokens, token); ok {
+		if len(g.Services) == 0 {
+			return nil, false
+		}
+		return append([]string(nil), g.Services...), true
+	}
+	return nil, false
 }
 
 // canManage returns true when the token may send management commands to machineID.
@@ -215,6 +295,51 @@ func inTokenList(list []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// findConnectGrant returns the first connectGrant whose Token matches
+// target (constant-time compared). The boolean is false if no entry
+// matches. The returned grant is a copy; callers that want to mutate
+// storage must modify the slice element in place.
+func findConnectGrant(grants []connectGrant, target string) (connectGrant, bool) {
+	for _, g := range grants {
+		if subtle.ConstantTimeCompare([]byte(g.Token), []byte(target)) == 1 {
+			return g, true
+		}
+	}
+	return connectGrant{}, false
+}
+
+// hasConnectGrant reports whether any grant's Token matches target.
+func hasConnectGrant(grants []connectGrant, target string) bool {
+	_, ok := findConnectGrant(grants, target)
+	return ok
+}
+
+// removeConnectGrant returns grants with every entry whose Token
+// matches target removed. The underlying array may be reused.
+func removeConnectGrant(grants []connectGrant, target string) []connectGrant {
+	out := grants[:0]
+	for _, g := range grants {
+		if subtle.ConstantTimeCompare([]byte(g.Token), []byte(target)) != 1 {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// replaceConnectGrantToken walks grants and rewrites any entry whose
+// Token equals oldToken to newToken, leaving Services untouched.
+// Returns true when at least one entry changed.
+func replaceConnectGrantToken(grants []connectGrant, oldToken, newToken string) bool {
+	changed := false
+	for i := range grants {
+		if subtle.ConstantTimeCompare([]byte(grants[i].Token), []byte(oldToken)) == 1 {
+			grants[i].Token = newToken
+			changed = true
+		}
+	}
+	return changed
 }
 
 // ── Token generation ────────────────────────────────────────────────────────
@@ -314,7 +439,7 @@ func bootstrapAuth(cfg *hubConfig, cfgPath string, ownerToken string) {
 		cfg.Auth.Machines = make(map[string]machineACL)
 	}
 	cfg.Auth.Machines["*"] = machineACL{
-		ConnectTokens: []string{ownerToken},
+		ConnectTokens: []connectGrant{{Token: ownerToken}},
 	}
 
 	// Persist so the token survives container and service restarts. A

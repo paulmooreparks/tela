@@ -399,7 +399,7 @@ func handlePair(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, machineID := range pc.Machines {
 			acl := globalCfg.Auth.Machines[machineID]
-			acl.ConnectTokens = append(acl.ConnectTokens, token)
+			acl.ConnectTokens = append(acl.ConnectTokens, connectGrant{Token: token})
 			globalCfg.Auth.Machines[machineID] = acl
 		}
 	}

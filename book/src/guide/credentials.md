@@ -74,7 +74,7 @@ Client pairing command:
   tela pair -hub wss://hub.example.com -code ABCD-1234
 ```
 
-Codes can also be generated from TelaVisor's Tokens view for administrators who prefer a graphical interface.
+Codes can also be generated from TelaVisor's Access tab, using the *Pair Code...* button in the toolbar, for administrators who prefer a graphical interface.
 
 ### Redeeming a code (user)
 
@@ -97,3 +97,5 @@ sudo telad pair -hub wss://hub.example.com -code ABCD-1234
 ```
 
 `telad pair` stores the resulting token in the system credential store. The agent then connects to the hub without a token in its config file.
+
+For administrators who prefer a graphical interface and run `telad` on the same machine as TelaVisor (developer workstations, single-host setups), the Agents tab's *Redeem...* button opens a dialog that runs the same `telad pair` invocation under the hood. The button only handles the local case; agents on remote hosts must redeem on the host itself, since the resulting token has to land in that host's credential store.

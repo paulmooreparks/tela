@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"log"
@@ -1278,6 +1279,17 @@ func probeHubID(hubURL, token string) string {
 // Queries the first enabled portal source. Returns an error if no
 // enabled source knows a hub at that URL.
 func (a *App) resolveHubNameByURL(rawURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return a.resolveHubNameByURLCtx(ctx, rawURL)
+}
+
+// resolveHubNameByURLCtx is the context-aware variant. Callers with a
+// tighter deadline (the presence probe's 2-second budget) pass ctx so
+// the portal ListHubs call actually cancels when the budget fires,
+// instead of ignoring the caller's deadline and orphaning the lookup
+// for up to the default 10 seconds.
+func (a *App) resolveHubNameByURLCtx(ctx context.Context, rawURL string) (string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return "", fmt.Errorf("empty hub URL")
@@ -1291,8 +1303,6 @@ func (a *App) resolveHubNameByURL(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	hubs, err := client.ListHubs(ctx)
 	if err != nil {
 		return "", err
@@ -1465,16 +1475,50 @@ func maskToken(token string) string {
 // is the default on a fresh launch, so this path is friction-free for
 // users who never sign into a remote portal.
 func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]byte, error) {
-	if hubName == "" {
-		return nil, fmt.Errorf("adminProxyCall: hubName is required")
+	respBody, status, _, err := a.adminProxyCallRich(hubName, method, operation, body, nil)
+	if err != nil {
+		return nil, err
 	}
+	if status >= 400 {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("HTTP %d", status)
+	}
+	return respBody, nil
+}
+
+// adminProxyCallRich is the same as adminProxyCall but surfaces the
+// full response body, HTTP status code, and ETag header regardless of
+// status. Call sites that need to distinguish between semantically
+// different 4xx responses (412 Precondition Failed vs 409 Conflict
+// vs 404) use this variant; classic "success or error" call sites
+// use adminProxyCall. The extraHeaders map threads request headers
+// (If-Match, ...) through to the upstream hub.
+func (a *App) adminProxyCallRich(hubName, method, operation string, body []byte, extraHeaders map[string]string) ([]byte, int, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	return a.adminProxyCallCtx(ctx, hubName, method, operation, body, extraHeaders)
+}
+
+// adminProxyCallCtx is the context-aware variant. Callers with a
+// shorter deadline (for example the sidebar button-enable probe, which
+// allots a 2-second budget so a slow hub cannot block the UI) pass a
+// trimmed context so the underlying HTTP request is cancelled when the
+// deadline fires -- not left to run to the default 30-second timeout
+// after TV has already moved on.
+func (a *App) adminProxyCallCtx(ctx context.Context, hubName, method, operation string, body []byte, extraHeaders map[string]string) ([]byte, int, string, error) {
+	if hubName == "" {
+		return nil, 0, "", fmt.Errorf("adminProxyCall: hubName is required")
+	}
 
 	sourceName, _, _ := a.sourceForHub(ctx, hubName)
 	client, err := a.portalClientForSource(sourceName)
 	if err != nil {
-		return nil, err
+		return nil, 0, "", err
 	}
 
 	operation = strings.TrimPrefix(operation, "/api/admin/")
@@ -1485,26 +1529,21 @@ func (a *App) adminProxyCall(hubName, method, operation string, body []byte) ([]
 		bodyAny = json.RawMessage(body)
 	}
 
-	resp, err := client.HubAdmin(ctx, hubName, operation, method, bodyAny)
+	var headerArgs []map[string]string
+	if len(extraHeaders) > 0 {
+		headerArgs = append(headerArgs, extraHeaders)
+	}
+	resp, err := client.HubAdmin(ctx, hubName, operation, method, bodyAny, headerArgs...)
 	if err != nil {
-		return nil, err
+		return nil, 0, "", err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, 0, "", fmt.Errorf("read response: %w", err)
 	}
-	if resp.StatusCode >= 400 {
-		var errResp struct {
-			Error string `json:"error"`
-		}
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("%s", errResp.Error)
-		}
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	return respBody, nil
+	return respBody, resp.StatusCode, resp.Header.Get("ETag"), nil
 }
 
 // LogAdminGET is a no-op retained for frontend compatibility.
@@ -1560,33 +1599,139 @@ func (a *App) AdminListAccess(hubName string) string {
 }
 
 // AdminSetMachineAccess sets permissions for an identity on a machine.
-func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions string) string {
+// services is a comma-separated list of service names that scopes the
+// connect permission; pass "" for an unfiltered grant (the pre-0.15
+// behavior). services is ignored when "connect" is not in permissions.
+// ifMatch, when non-empty, is the expected version of the identity
+// (e.g. "42"); the wrapper wraps it in the strong-ETag form the server
+// expects and surfaces a {"conflict": true, ...} response body to JS
+// callers when the precondition fails (HTTP 412). Pass "" to skip the
+// precondition (force overwrite).
+func (a *App) AdminSetMachineAccess(hubName, id, machineId, permissions, services, ifMatch string) string {
 	perms := strings.Split(permissions, ",")
-	body, _ := json.Marshal(map[string]any{"permissions": perms})
-	data, err := a.adminProxyCall(hubName, "PUT", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), body)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
+	body := map[string]any{"permissions": perms}
+	if strings.TrimSpace(services) != "" {
+		var svc []string
+		for _, s := range strings.Split(services, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				svc = append(svc, s)
+			}
+		}
+		if len(svc) > 0 {
+			body["services"] = svc
+		}
 	}
-	return string(data)
+	bodyBytes, _ := json.Marshal(body)
+	return a.adminMutateAccess(hubName, "PUT", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), bodyBytes, ifMatch, id)
 }
 
-// AdminRevokeMachineAccess revokes all permissions for an identity on a machine.
-func (a *App) AdminRevokeMachineAccess(hubName, id, machineId string) string {
-	data, err := a.adminProxyCall(hubName, "DELETE", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), nil)
-	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
+// HubCapabilities fetches /.well-known/tela on the named hub and
+// returns the capabilities list as a JSON-encoded string:
+//
+//	{"capabilities": ["per-service-access-control", ...]}
+//
+// The frontend uses this to decide whether to expose per-service
+// access control UI. On any error (unreachable hub, non-200, bad
+// JSON), the response contains an "error" field and an empty
+// capabilities list, so the frontend can render as pre-0.15.
+func (a *App) HubCapabilities(hubName string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, hubURL, err := a.sourceForHub(ctx, hubName)
+	if err != nil || hubURL == "" {
+		return `{"error":"unknown hub","capabilities":[]}`
 	}
-	return string(data)
+	wkURL := strings.TrimRight(hubURL, "/") + "/.well-known/tela"
+	req, err := http.NewRequestWithContext(ctx, "GET", wkURL, nil)
+	if err != nil {
+		return `{"error":"` + err.Error() + `","capabilities":[]}`
+	}
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return `{"error":"` + err.Error() + `","capabilities":[]}`
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Sprintf(`{"error":"HTTP %d","capabilities":[]}`, resp.StatusCode)
+	}
+	var wk struct {
+		Capabilities []string `json:"capabilities"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&wk); err != nil {
+		return `{"error":"parse response","capabilities":[]}`
+	}
+	out, _ := json.Marshal(map[string]any{"capabilities": wk.Capabilities})
+	return string(out)
 }
 
-// AdminRenameAccess renames a token identity.
-func (a *App) AdminRenameAccess(hubName, id, newId string) string {
+// AdminRevokeMachineAccess revokes all permissions for an identity on a
+// machine. ifMatch is the expected version; pass "" to skip the
+// precondition. On 412 the return is a {"conflict": true, ...} JSON
+// body the JS side uses to drive the conflict modal.
+func (a *App) AdminRevokeMachineAccess(hubName, id, machineId, ifMatch string) string {
+	return a.adminMutateAccess(hubName, "DELETE", "access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineId), nil, ifMatch, id)
+}
+
+// AdminRenameAccess renames a token identity. ifMatch is optional.
+func (a *App) AdminRenameAccess(hubName, id, newId, ifMatch string) string {
 	body, _ := json.Marshal(map[string]string{"id": newId})
-	data, err := a.adminProxyCall(hubName, "PATCH", "access/"+url.PathEscape(id), body)
+	return a.adminMutateAccess(hubName, "PATCH", "access/"+url.PathEscape(id), body, ifMatch, id)
+}
+
+// AdminChangeRole changes the HubRole of a token identity. Role must
+// be one of "owner", "admin", "viewer", or "" (user, the default).
+// ifMatch is optional; non-empty values become the strong-ETag-form
+// If-Match header the server checks against the identity's version.
+func (a *App) AdminChangeRole(hubName, id, role, ifMatch string) string {
+	body, _ := json.Marshal(map[string]string{"role": role})
+	return a.adminMutateAccess(hubName, "PATCH", "access/"+url.PathEscape(id), body, ifMatch, id)
+}
+
+// adminMutateAccess is the shared helper for access-resource mutations
+// that honor the per-identity optimistic-concurrency contract. It
+// threads the If-Match header, preserves the response body on 412 so
+// the caller can present a conflict dialog, and annotates the returned
+// JSON with a conflict:true marker when the server rejects on
+// precondition. On non-conflict failures the hub's standard
+// {"error": "..."} body is returned. On success, the hub's success
+// body (which already carries a "version" field) is returned as-is.
+func (a *App) adminMutateAccess(hubName, method, operation string, body []byte, ifMatch, id string) string {
+	var headers map[string]string
+	if ifMatch != "" {
+		headers = map[string]string{"If-Match": `"` + ifMatch + `"`}
+	}
+	respBody, status, _, err := a.adminProxyCallRich(hubName, method, operation, body, headers)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}
-	return string(data)
+	if status == http.StatusPreconditionFailed {
+		// Keep the full hub response intact (which carries id, version,
+		// and the current server-side accessEntry) and tack on a
+		// conflict:true marker so JS call sites can branch cheaply
+		// without inspecting status codes.
+		var payload map[string]any
+		if err := json.Unmarshal(respBody, &payload); err != nil || payload == nil {
+			payload = map[string]any{"error": "access entry has been modified since last read"}
+		}
+		payload["conflict"] = true
+		if _, ok := payload["id"]; !ok && id != "" {
+			payload["id"] = id
+		}
+		out, _ := json.Marshal(payload)
+		return string(out)
+	}
+	if status >= 400 {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
+			return `{"error":"` + errResp.Error + `"}`
+		}
+		return fmt.Sprintf(`{"error":"HTTP %d"}`, status)
+	}
+	return string(respBody)
 }
 
 // AdminListPortals returns the portal registrations from a hub's admin API.
@@ -2360,6 +2505,61 @@ func (a *App) SaveTerminalOutput(content string) (string, error) {
 	return dialog, nil
 }
 
+// SaveAccessAudit writes the Access page's audit export JSON to a
+// location the operator picks via a native save dialog. Mirrors
+// SaveTerminalOutput so the Export audit... button on the Access
+// page behaves like Save in the log pane rather than triggering a
+// browser download. The default filename embeds the hub name
+// (sanitized to a filesystem-safe form) and an ISO 8601 UTC
+// timestamp so multiple exports sort chronologically in a folder.
+func (a *App) SaveAccessAudit(hubName, content string) (string, error) {
+	safeHub := sanitizeFilenameComponent(hubName)
+	if safeHub == "" {
+		safeHub = "hub"
+	}
+	filename := fmt.Sprintf("%s-access-%s.json", safeHub, time.Now().UTC().Format("2006-01-02T150405Z"))
+
+	dialog, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		DefaultFilename: filename,
+		Title:           "Export Access Audit",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "JSON Files", Pattern: "*.json"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("dialog failed: %w", err)
+	}
+	if dialog == "" {
+		return "", nil // user cancelled
+	}
+
+	if err := os.WriteFile(dialog, []byte(content), 0600); err != nil {
+		return "", fmt.Errorf("save failed: %w", err)
+	}
+	return dialog, nil
+}
+
+// sanitizeFilenameComponent strips characters that are reserved or
+// problematic on common filesystems. Kept deliberately narrow: only
+// ASCII letters, digits, dot, dash, and underscore survive; anything
+// else becomes an underscore. Consecutive underscores are not
+// collapsed because the output is purely a default filename the user
+// can still edit in the save dialog.
+func sanitizeFilenameComponent(s string) string {
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '.', c == '-', c == '_':
+			b = append(b, c)
+		default:
+			b = append(b, '_')
+		}
+	}
+	return string(b)
+}
+
 // PairWithCode exchanges a pairing code for a connect token via the tela CLI.
 func (a *App) PairWithCode(hubURL, code string) error {
 	telaPath := a.findTool("tela")
@@ -2388,6 +2588,349 @@ func (a *App) PairWithCode(hubURL, code string) error {
 	}
 
 	return nil
+}
+
+// HasLocalTelad reports whether telad is installed on this machine.
+// Sources, in order, most-authoritative to least:
+//  1. Hub-mediated comms: read the control file (`telad.json`) to
+//     discover which hub telad registered with, then ask that hub
+//     whether the machine is online. agentConnected=true means
+//     telad's outbound WebSocket session is live -- the actual API
+//     check, not just "the process started at some point".
+//  2. OS service manager: `QueryStatus` hits the platform service
+//     control (Windows SCM, systemd, launchd); `QueryUserStatus`
+//     hits the user-mode equivalent. Installed but maybe not
+//     currently connected.
+//  3. Configured Binary Location: where TV's own update flow
+//     installs tools. Installed but not running and not a service.
+//
+// Service-config JSON reads (the BinaryPath in `telad-service.json`)
+// are reserved for locateTelad's path resolution; they are not used
+// here. PATH is not scanned -- if telad lives in some directory not
+// recorded in any of these three sources, TV does not pretend to
+// know about it.
+//
+// Caching and invalidation:
+//   - Successful probes cache their result for teladPresenceTTL so
+//     the Agents sidebar's button-enable logic does not fire a
+//     fresh hub round-trip on every re-render.
+//   - Concurrent cache-miss callers coalesce onto a single in-flight
+//     probe (teladPresenceProbeMu), so N paints stacked on the TTL
+//     boundary produce exactly one network round-trip, not N.
+//   - invalidateTeladPresence bumps a generation counter and zeros
+//     the timestamp. A probe that started before the bump captures
+//     the pre-bump generation and, on completion, checks it against
+//     current: if the counter advanced (an invalidation landed while
+//     the probe was network-blocked), the probe's answer reflects
+//     pre-change state and is discarded rather than cached. The
+//     next caller re-probes against post-change state.
+func (a *App) HasLocalTelad() bool {
+	if v, ok := readTeladPresenceCache(); ok {
+		return v
+	}
+
+	teladPresenceProbeMu.Lock()
+	defer teladPresenceProbeMu.Unlock()
+
+	// A concurrent caller may have refreshed the cache while we were
+	// queued on the probe mutex. Re-check before doing the work.
+	if v, ok := readTeladPresenceCache(); ok {
+		return v
+	}
+
+	genBefore := atomic.LoadUint64(&teladPresenceGen)
+	result := a.checkTeladPresent()
+
+	teladPresenceMu.Lock()
+	if atomic.LoadUint64(&teladPresenceGen) == genBefore {
+		teladPresenceCached = result
+		teladPresenceAt = time.Now()
+	}
+	teladPresenceMu.Unlock()
+	return result
+}
+
+const (
+	teladPresenceTTL       = 5 * time.Second
+	teladPresenceProbeWait = 2 * time.Second
+)
+
+var (
+	teladPresenceMu      sync.Mutex
+	teladPresenceCached  bool
+	teladPresenceAt      time.Time
+	teladPresenceProbeMu sync.Mutex
+	teladPresenceGen     uint64
+)
+
+// readTeladPresenceCache returns the cached answer if it is fresh.
+// The boolean tuple is (value, ok): ok=false means the cache is
+// empty or expired and the caller must probe.
+func readTeladPresenceCache() (bool, bool) {
+	teladPresenceMu.Lock()
+	defer teladPresenceMu.Unlock()
+	if teladPresenceAt.IsZero() || time.Since(teladPresenceAt) >= teladPresenceTTL {
+		return false, false
+	}
+	return teladPresenceCached, true
+}
+
+func (a *App) checkTeladPresent() bool {
+	hub, svc, usvc, bin := a.teladPresenceCascade()
+	var winner string
+	var answer bool
+	switch {
+	case hub == hubProbeOnline:
+		answer, winner = true, "hub"
+	case svc == presenceYes:
+		answer, winner = true, "service"
+	case usvc == presenceYes:
+		answer, winner = true, "user-service"
+	case bin == presenceYes:
+		answer, winner = true, "bin-path"
+	default:
+		answer, winner = false, "none"
+	}
+	// Log every tier's outcome so an operator investigating a surprising
+	// answer can tell "hub was unreachable and we fell through to
+	// service" apart from "hub said offline and service caught it". Log
+	// rate is bounded by the presence cache TTL (one line per cache
+	// miss).
+	log.Printf("[telavisor] telad presence: hub=%s service=%s user-service=%s bin-path=%s -> %v (%s)",
+		hub, svc, usvc, bin, answer, winner)
+	return answer
+}
+
+// presenceOutcome tags a tier in the OS-inspection part of the
+// cascade (service manager, user-service manager, bin-path). Three
+// states: yes (tier answered positively), no (tier ran and said
+// not here), skip (tier was not consulted because an earlier tier
+// already answered yes and the probe short-circuited). The hub
+// tier has its own richer hubProbeResult type with extra states
+// (offline, unreachable, no-control-file).
+type presenceOutcome string
+
+const (
+	presenceYes  presenceOutcome = "yes"
+	presenceNo   presenceOutcome = "no"
+	presenceSkip presenceOutcome = "skip"
+)
+
+// teladPresenceCascade runs every tier of the detection cascade and
+// returns each tier's outcome. Short-circuiting behavior is preserved
+// for performance (if hub answers yes, we do not hit the OS service
+// manager or stat the binary location), so a tier not consulted
+// returns presenceSkip rather than presenceNo.
+func (a *App) teladPresenceCascade() (hub hubProbeResult, svc, usvc, bin presenceOutcome) {
+	hub = a.probeTeladViaHub()
+	svc, usvc, bin = presenceSkip, presenceSkip, presenceSkip
+	if hub == hubProbeOnline {
+		return
+	}
+
+	if status, err := service.QueryStatus("telad"); err == nil && status.Installed {
+		svc = presenceYes
+		return
+	}
+	svc = presenceNo
+
+	if status, err := service.QueryUserStatus("telad"); err == nil && status.Installed {
+		usvc = presenceYes
+		return
+	}
+	usvc = presenceNo
+
+	if a.findTool("telad") != "" {
+		bin = presenceYes
+		return
+	}
+	bin = presenceNo
+	return
+}
+
+// invalidateTeladPresence clears the presence cache so the next
+// HasLocalTelad call runs a fresh probe. Called from paths that
+// change the answer -- post-install, post-pair -- so the UI reacts
+// immediately instead of waiting out the TTL.
+//
+// Bumps teladPresenceGen atomically so an in-flight probe (which
+// captured the pre-bump generation at start) will detect the race
+// on completion and skip writing its stale answer to the cache.
+// Both the gen bump and the timestamp zero happen under the same
+// mutex region so cache readers see the invalidation atomically:
+// either the pre-invalidate state (gen=N, ts=fresh) or the post-
+// invalidate state (gen=N+1, ts=zero), never the in-between.
+// Invalidation does not wait on the probe mutex; it runs
+// immediately, even if a slow probe is network-blocked.
+func invalidateTeladPresence() {
+	teladPresenceMu.Lock()
+	atomic.AddUint64(&teladPresenceGen, 1)
+	teladPresenceAt = time.Time{}
+	teladPresenceMu.Unlock()
+}
+
+// hubProbeResult captures the outcome of the hub-mediated presence
+// probe with enough granularity for the cascade logger to
+// distinguish "hub said not connected" from "we could not even
+// reach the hub to ask". All non-online outcomes fall through to
+// the next tier in the cascade; the granularity is for telemetry
+// only.
+type hubProbeResult string
+
+const (
+	hubProbeOnline      hubProbeResult = "yes"
+	hubProbeOffline     hubProbeResult = "offline"
+	hubProbeUnreachable hubProbeResult = "unreachable"
+	hubProbeNoControl   hubProbeResult = "no-control-file"
+)
+
+// probeTeladViaHub asks the hub telad registered with whether any
+// of the machine names telad serves is currently online. The
+// control file is consulted only to discover the hub URL and the
+// machine names; the answer comes from the hub's single-machine
+// presence endpoint (GET /api/admin/agents/{m}), where
+// agentConnected==true means the WebSocket control session is
+// currently held open.
+//
+// The probe runs under a teladPresenceProbeWait budget. All network
+// calls on the probe path -- the portal ListHubs lookup in
+// resolveHubNameByURLCtx and each adminProxyCallCtx to the hub --
+// inherit the same context, so they all cancel together when the
+// budget fires. The goroutine exits promptly rather than orphaning
+// work against a slow portal or hub after the caller has moved on.
+func (a *App) probeTeladViaHub() hubProbeResult {
+	data, err := readControlFile("telad.json")
+	if err != nil {
+		return hubProbeNoControl
+	}
+	var info struct {
+		Hub      string   `json:"hub"`
+		Machines []string `json:"machines"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.Hub == "" || len(info.Machines) == 0 {
+		return hubProbeNoControl
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), teladPresenceProbeWait)
+	defer cancel()
+
+	done := make(chan hubProbeResult, 1)
+	go func() {
+		// Probe each machine this telad serves with the lightweight
+		// single-machine presence endpoint. Return on the first
+		// connected hit; a missing machine or a disconnected one both
+		// 404/200-false and we try the next.
+		hubName, err := a.resolveHubNameByURLCtx(ctx, info.Hub)
+		if err != nil {
+			done <- hubProbeUnreachable
+			return
+		}
+		anyReached := false
+		for _, name := range info.Machines {
+			raw, status, _, err := a.adminProxyCallCtx(ctx, hubName, "GET", "agents/"+url.QueryEscape(name), nil, nil)
+			if err != nil {
+				continue
+			}
+			anyReached = true
+			if status >= 400 {
+				continue
+			}
+			var presence struct {
+				AgentConnected bool `json:"agentConnected"`
+			}
+			if json.Unmarshal(raw, &presence) == nil && presence.AgentConnected {
+				done <- hubProbeOnline
+				return
+			}
+		}
+		if !anyReached {
+			done <- hubProbeUnreachable
+			return
+		}
+		done <- hubProbeOffline
+	}()
+
+	select {
+	case v := <-done:
+		return v
+	case <-ctx.Done():
+		return hubProbeUnreachable
+	}
+}
+
+// locateTelad returns an absolute path to an executable telad
+// binary, or "" if none is reachable. Used by RedeemAgentCode to
+// pick the binary it will spawn. Same three sources as
+// HasLocalTelad, but they have to yield an absolute path, not just
+// a "yes it's installed" signal:
+//  1. Bundled Binary Location (findTool).
+//  2. System-service install: the BinaryPath recorded in the
+//     service config JSON (`%ProgramData%\Tela\telad-service.json`
+//     on Windows, `/etc/tela/telad-service.json` on Unix).
+//  3. User-mode service install: same shape, user-level config.
+//
+// HasLocalTelad can return true while locateTelad returns ""
+// (e.g. the service is registered but TV cannot read its config
+// JSON, or telad is running from a binary path we have no record
+// of); RedeemAgentCode handles the empty-path case explicitly.
+func (a *App) locateTelad() string {
+	if p := a.findTool("telad"); p != "" {
+		return p
+	}
+	if cfg, err := service.LoadConfig("telad"); err == nil && cfg.BinaryPath != "" {
+		if _, err := os.Stat(cfg.BinaryPath); err == nil {
+			return cfg.BinaryPath
+		}
+	}
+	if cfg, err := service.LoadUserConfig("telad"); err == nil && cfg.BinaryPath != "" {
+		if _, err := os.Stat(cfg.BinaryPath); err == nil {
+			return cfg.BinaryPath
+		}
+	}
+	return ""
+}
+
+// RedeemAgentCode runs `telad pair -hub <url> -code <code> [-machine <id>]`
+// against the local telad binary. Used by TelaVisor's "Redeem Agent
+// Code" flow when an operator wants to register an agent on the same
+// machine TV is running on. Returns the trimmed CLI output on
+// success and an error containing whatever telad printed on failure.
+//
+// machine is optional; when empty the hub determines the machine ID
+// from the code. Passing it explicitly lets the operator confirm the
+// expected name in the UI.
+//
+// Unlike PairWithCode (which auto-installs tela when missing), this
+// path errors out if telad is absent rather than silently downloading
+// it. telad is a service binary; installing it is a deliberate
+// operator action that should go through the Updates tab so the
+// install / start-as-service flow is visible.
+func (a *App) RedeemAgentCode(hubURL, code, machine string) (string, error) {
+	teladPath := a.locateTelad()
+	if teladPath == "" {
+		return "", fmt.Errorf("telad is not installed on this machine; install it from the Updates tab and try again")
+	}
+
+	wsURL := toWSURL(hubURL)
+	args := []string{"pair", "-hub", wsURL, "-code", code}
+	if machine != "" {
+		args = append(args, "-machine", machine)
+	}
+	cmdStr := "telad " + strings.Join(args, " ")
+	a.logCommand("Redeem agent code on hub "+wsURL, cmdStr)
+
+	cmd := exec.Command(teladPath, args...)
+	hideConsoleWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	output := strings.TrimSpace(string(out))
+	if err != nil {
+		if output != "" {
+			return "", fmt.Errorf("%s", output)
+		}
+		return "", fmt.Errorf("redeem failed: %w", err)
+	}
+	invalidateTeladPresence()
+	return output, nil
 }
 
 // DetectCredentialType returns "code" if the input looks like a pairing code,
@@ -4005,6 +4548,10 @@ func (a *App) InstallBinary(name string) error {
 	}
 	os.Chmod(destPath, 0755)
 
+	if name == "telad" {
+		invalidateTeladPresence()
+	}
+
 	// Logged by installTool caller
 	return nil
 }
@@ -4389,6 +4936,7 @@ type Settings struct {
 	WindowHeight            int             `yaml:"windowHeight" json:"windowHeight"`
 	OpenLogTabs             []LogTabInfo    `yaml:"openLogTabs,omitempty" json:"openLogTabs"`
 	LastSelectedHub         string          `yaml:"lastSelectedHub,omitempty" json:"lastSelectedHub"`
+	LastAccessView          string          `yaml:"lastAccessView,omitempty" json:"lastAccessView"`
 	CustomChannels          []ChannelSource `yaml:"customChannels,omitempty" json:"customChannels"`
 }
 

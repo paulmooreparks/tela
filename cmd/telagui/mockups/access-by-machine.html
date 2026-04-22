@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Access redesign: by machine (peer page, Profiles-style layout)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+    /* TDL tokens (dark theme), inline so the mockup stands alone. */
+    :root {
+        --bg: #111827;
+        --surface: #1f2937;
+        --surface-alt: #1a2332;
+        --text: #e5e7eb;
+        --text-muted: #9ca3af;
+        --border: #4b5668;
+        --accent: #2ecc71;
+        --accent-hover: #27ae60;
+        --warn: #f39c12;
+        --danger: #e74c3c;
+        --radius: 8px;
+        --radius-sm: 4px;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+    body { min-height: 100vh; }
+
+    /* ─── Top strip: approximates the TelaVisor window chrome + mode/tabs ─── */
+    .chrome { max-width: 1280px; margin: 0 auto; padding: 16px 24px 24px; }
+    .tv-mode-row {
+        display: flex; gap: 0; margin-bottom: 8px;
+        font-size: 13px; color: var(--text-muted);
+    }
+    .tv-mode {
+        padding: 8px 16px; cursor: pointer;
+        border-bottom: 2px solid transparent;
+    }
+    .tv-mode.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+    .tv-tabs {
+        display: flex; gap: 0; margin-bottom: 16px;
+        border-bottom: 1px solid var(--border);
+    }
+    .tv-tab {
+        padding: 10px 18px; cursor: pointer;
+        border-bottom: 2px solid transparent; color: var(--text-muted);
+    }
+    .tv-tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+
+    /* ─── Pane toolbar: the shared pattern used by the Profiles, Agents,
+           and Files toolbars in TelaVisor. Tinted surface background, a
+           bottom border, compact padding. The tinted background is what
+           defines the region; buttons inside are plain .btn.btn-sm. ─── */
+    .pane-toolbar {
+        display: flex; align-items: center; gap: 6px;
+        padding: 6px 16px; background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        margin: 0 -24px 16px;
+        flex-wrap: wrap;
+    }
+    .pane-toolbar-label {
+        font-size: 13px; color: var(--text-muted); font-weight: 500;
+    }
+    .pane-toolbar-select {
+        padding: 4px 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+        font-family: var(--font); background: var(--surface);
+        color: var(--text); min-width: 220px;
+    }
+    .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+    .tb-sep-spacer { flex: 1; }
+
+    /* View toggle, right-aligned in the toolbar. Uses the TDL mode-bar
+       visual vocabulary: outlined container, bold label on the active
+       segment, 3px accent bar flush along the bottom edge. Active is
+       cursor:default with no fill so it reads as "you are here" rather
+       than "click me". */
+    .view-toggle {
+        display: inline-flex; align-items: stretch;
+        border: 1px solid var(--border); border-radius: 6px;
+        background: var(--surface); overflow: hidden;
+    }
+    .view-toggle-btn {
+        position: relative;
+        padding: 6px 16px; background: none; border: none;
+        color: var(--text-muted); cursor: pointer;
+        font-size: 13px; font-weight: 500; font-family: var(--font);
+    }
+    .view-toggle-btn + .view-toggle-btn { border-left: 1px solid var(--border); }
+    .view-toggle-btn:hover:not(.active) { background: var(--surface-alt); color: var(--text); }
+    .view-toggle-btn.active {
+        color: var(--text); font-weight: 700; cursor: default;
+    }
+    .view-toggle-btn.active::after {
+        content: ''; position: absolute;
+        left: 0; right: 0; bottom: 0; height: 3px;
+        background: var(--accent);
+    }
+
+    /* ─── Shared primitives (subset of TDL) ─── */
+    .btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border-radius: 6px;
+        font-size: 13px; font-weight: 500; font-family: var(--font);
+        color: var(--text); cursor: pointer;
+        border: 1px solid var(--border); background: #2a3545;
+    }
+    .btn:hover { background: #3a465c; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #1f2937; border-color: var(--accent-hover); font-weight: 600; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { background: var(--accent); opacity: 0.35; color: #1f2937; }
+
+    /* TDL .btn-danger: reversible-destructive initiator. Automatic ⚠ prefix
+       via ::before so the glyph is guaranteed regardless of markup. */
+    .btn-danger { background: #2a3545; color: var(--danger); border-color: var(--border); }
+    .btn-danger::before { content: '\26A0'; font-size: 13px; line-height: 1; }
+    .btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* TDL .chip: flat filled pill, muted text, NO border. Used for neutral
+       metadata tags (roles, service names, counts). Non-interactive. */
+    .chip {
+        display: inline-flex; align-items: center;
+        padding: 1px 7px; border-radius: 3px;
+        font-size: 10px; font-weight: 600;
+        color: var(--text-muted); background: var(--surface-alt);
+        border: none; cursor: default;
+        -webkit-user-select: none; user-select: none;
+    }
+
+    /* TDL .dot: raw colored-dot primitive, used when only a status indicator
+       is needed without a label (e.g., next to a name in a list). */
+    .dot {
+        display: inline-block; width: 8px; height: 8px;
+        border-radius: 50%; flex-shrink: 0;
+    }
+    .dot-online  { background: var(--accent); }
+    .dot-offline { background: var(--text-muted); }
+
+    /* TDL .status: flat inline state badge. Uppercase, colored dot prefix,
+       NO border, NO fill. */
+    .status {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        background: none; border: none; padding: 0;
+        cursor: default;
+    }
+    .status-dot {
+        display: inline-block; width: 7px; height: 7px;
+        border-radius: 50%; background: currentColor;
+        flex-shrink: 0;
+    }
+    .status-online  { color: var(--accent); }
+    .status-offline { color: var(--text-muted); }
+
+    .hint { font-size: 12px; color: var(--text-muted); margin: 10px 0 4px; }
+
+    /* ─── Split layout: machine rail + machine detail ─── */
+    .access-split { display: flex; gap: 16px; min-height: 620px; }
+
+    .access-rail {
+        flex: 0 0 280px; display: flex; flex-direction: column;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface); overflow: hidden;
+    }
+    .access-rail-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--text-muted);
+    }
+    .access-rail-item {
+        padding: 10px 14px; cursor: pointer;
+        border-bottom: 1px solid var(--border);
+    }
+    .access-rail-item:hover { background: var(--surface-alt); }
+    .access-rail-item.active {
+        background: var(--surface-alt);
+        border-left: 3px solid var(--accent); padding-left: 11px;
+    }
+    .access-rail-primary {
+        font-weight: 600; font-size: 14px;
+        display: flex; align-items: center; gap: 6px;
+    }
+    .access-rail-secondary { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .access-rail-dirty {
+        color: var(--warn); font-size: 11px; font-weight: 600;
+        margin-left: auto;
+    }
+
+    /* ─── Detail pane ─── */
+    .access-detail {
+        flex: 1; display: flex; flex-direction: column;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface); padding: 20px 24px; overflow-y: auto;
+    }
+    .access-detail-header {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        margin-bottom: 4px;
+    }
+    .access-detail-header h2 { margin: 0; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+    .access-detail-meta { font-size: 12px; color: var(--text-muted); margin-top: 6px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .access-detail-meta .status { margin-right: 4px; }
+    .access-service-list { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+
+    /* ─── Matrix ─── */
+    .access-matrix { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+    .access-matrix th {
+        text-align: left; padding: 10px 12px; font-weight: 600;
+        color: var(--text-muted); border-bottom: 1px solid var(--border);
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .access-matrix th.access-col-check { width: 72px; text-align: center; }
+    .access-matrix-row td { padding: 14px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .access-matrix-row:hover:not(.access-matrix-row-implicit) { background: var(--surface-alt); }
+
+    .access-matrix-row-implicit td {
+        background: rgba(59,130,246,0.06);
+        /* Admin rows: full visual weight per your call, just non-interactive. */
+    }
+    .access-matrix-row-implicit .implicit-note {
+        font-size: 11px; color: var(--text-muted); margin-top: 2px;
+    }
+    .access-matrix-row-dirty {
+        background: rgba(243,156,18,0.08);
+        box-shadow: inset 3px 0 0 0 var(--warn);
+    }
+
+    /* Staged-revoke row: row still visible (so the operator can undo)
+       but every grant-carrying element is struck through or dimmed
+       to make clear it will be removed on Save. */
+    .access-matrix-row-revoked {
+        box-shadow: inset 3px 0 0 0 var(--danger);
+    }
+    .access-matrix-row-revoked .identity-name,
+    .access-matrix-row-revoked .chip {
+        text-decoration: line-through;
+        color: var(--text-muted);
+    }
+    .access-matrix-row-revoked .access-matrix-check input[type="checkbox"] {
+        opacity: 0.3;
+    }
+
+    .access-matrix-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .access-matrix-check { text-align: center; }
+    .access-matrix-check input[type="checkbox"] {
+        accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+    }
+    .access-matrix-check input[type="checkbox"]:disabled { cursor: not-allowed; }
+    /* Actions column is left-aligned so the first button's left edge lines
+       up with the left edge of the column (and with the header label). */
+    .access-matrix-actions { text-align: left; white-space: nowrap; }
+    .access-matrix-actions .btn + .btn { margin-left: 6px; }
+
+    /* Services cell: compact one-line display. Unfiltered grants show
+       "All services" in muted italics. Filtered grants show the first
+       few service chips inline; longer filters collapse to a "+N more"
+       affordance that opens a read-only popover listing every service.
+       The popover is strictly view: it does not offer edit actions.
+       Edit... in the actions column is the dedicated edit path so an
+       operator who is only trying to read the filter cannot
+       accidentally change it. */
+    .services-cell {
+        display: flex; align-items: center; gap: 4px;
+        flex-wrap: nowrap; overflow: hidden;
+    }
+    .services-summary-muted { color: var(--text-muted); font-size: 12px; font-style: italic; }
+    .services-chips {
+        display: inline-flex; align-items: center; gap: 4px;
+        flex-wrap: nowrap; overflow: hidden; min-width: 0;
+    }
+    .services-more {
+        color: var(--accent); font-size: 11px; font-weight: 600;
+        background: none; border: none; padding: 0 2px;
+        cursor: pointer; white-space: nowrap; flex-shrink: 0;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+    }
+    .services-more:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
+
+    /* Services popover: a small floating panel anchored near the
+       "+N more" trigger. Read-only: header + chip cloud only. No
+       actions inside. Dismiss on outside click, Esc, or trigger
+       re-click. */
+    .services-popover {
+        position: absolute; z-index: 50;
+        min-width: 220px; max-width: 360px;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 6px; padding: 10px 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px var(--border);
+    }
+    .services-popover-title {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--text-muted); font-weight: 600; margin-bottom: 6px;
+    }
+    .services-popover-chips {
+        display: flex; flex-wrap: wrap; gap: 4px;
+    }
+    .services-popover-hint {
+        font-size: 11px; color: var(--text-muted); margin-top: 8px;
+    }
+
+    .dirty-indicator {
+        display: inline-block; margin-left: 6px;
+        color: var(--warn); font-size: 11px; font-weight: 600;
+    }
+
+    /* ─── TDL modal primitives, used by the pre-save conflict dialog.
+           The conflict dialog is NOT rendered inline; it opens only when
+           the operator clicks Save and the pre-save diff detects drift
+           against the server. That is the deterministic trigger. ─── */
+    .modal-overlay {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 1000;
+    }
+    .modal-dialog {
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.45), 0 0 0 1px var(--border);
+        width: 540px; max-width: 90vw;
+        overflow: hidden;
+    }
+    .modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .modal-header h3 {
+        margin: 0; font-size: 15px; font-weight: 700;
+        color: var(--danger);
+        display: flex; align-items: center; gap: 8px;
+    }
+    .modal-header h3::before { content: '\26A0'; font-size: 16px; }
+    .modal-close {
+        background: none; border: none; font-size: 18px;
+        color: var(--text-muted); cursor: pointer; padding: 0 4px;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 20px; font-size: 13px; line-height: 1.5; }
+    .modal-body ul { margin: 8px 0 12px 20px; padding: 0; }
+    .modal-body p { margin: 0 0 10px; }
+    .modal-body p:last-child { margin-bottom: 0; }
+    .modal-actions {
+        display: flex; justify-content: flex-end; gap: 8px;
+        padding: 14px 20px; background: var(--surface-alt);
+        border-top: 1px solid var(--border);
+    }
+
+    /* TDL .link: underlined, accent color, inline with prose. The
+       "force overwrite" escape hatch is a muted link in the body so it
+       does not compete with the primary Reload action in the footer. */
+    .link {
+        color: var(--accent); text-decoration: underline;
+        text-decoration-thickness: 1px; text-underline-offset: 2px;
+        cursor: pointer; background: none; border: none; padding: 0;
+        font: inherit;
+    }
+    .link:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
+
+    /* Annotation used to caption the conflict modal in this mockup,
+       explaining the deterministic trigger. Not part of the UI. */
+    .mockup-annotation {
+        position: fixed; left: 20px; bottom: 20px;
+        max-width: 320px; padding: 10px 12px;
+        background: var(--surface-alt); border: 1px dashed var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 12px; color: var(--text-muted); z-index: 1001;
+    }
+    .mockup-annotation strong { color: var(--text); }
+    </style>
+</head>
+<body>
+
+<div class="chrome">
+    <!-- TelaVisor mode strip (Clients / Infrastructure) for context -->
+    <div class="tv-mode-row">
+        <div class="tv-mode">Clients</div>
+        <div class="tv-mode active">Infrastructure</div>
+    </div>
+
+    <!-- Peer tabs. Tokens is folded into Access; identity-level ops
+         (create, rotate, rename, delete, pair code) live in the Access
+         page toolbar and in the By-identity detail header. -->
+    <div class="tv-tabs">
+        <div class="tv-tab">Hubs</div>
+        <div class="tv-tab">Agents</div>
+        <div class="tv-tab active">Access</div>
+        <div class="tv-tab">Remotes</div>
+        <div class="tv-tab">Credentials</div>
+    </div>
+
+    <!-- Pane toolbar. Matches the Profiles / Agents / Files toolbar pattern:
+         tinted surface band with compact select, .tb-sep separators, and
+         plain .btn.btn-sm buttons. The view toggle is right-aligned via a
+         flex spacer so By machine / By identity feel like equal peers. -->
+    <div class="pane-toolbar">
+        <span class="pane-toolbar-label">Hub:</span>
+        <select class="pane-toolbar-select" title="Current hub">
+            <option>owlsnest.parkscomputing.com</option>
+            <option>devhub.awansaya.net</option>
+        </select>
+
+        <span class="tb-sep"></span>
+
+        <button type="button" class="btn btn-sm" title="Undo the last staged change">&#x21B6; Undo</button>
+        <button type="button" class="btn btn-sm btn-primary" title="Commit all staged changes">Save</button>
+
+        <span class="tb-sep"></span>
+
+        <button type="button" class="btn btn-sm" title="Add a new identity to this hub">Add Identity&hellip;</button>
+        <button type="button" class="btn btn-sm" title="Generate a one-time pair code for onboarding">Pair Code&hellip;</button>
+        <button type="button" class="btn btn-sm" title="Refresh the service list from agents">&#x21BB; Rescan services</button>
+        <button type="button" class="btn btn-sm" title="Export the current ACL state as YAML">Export audit&hellip;</button>
+
+        <span class="tb-sep-spacer"></span>
+
+        <div class="view-toggle" role="tablist" aria-label="Access view">
+            <button type="button" class="view-toggle-btn active" role="tab" aria-selected="true">By machine</button>
+            <button type="button" class="view-toggle-btn" role="tab" aria-selected="false"
+                    onclick="location.href='access-by-identity.html'">By identity</button>
+        </div>
+    </div>
+
+    <div class="access-split">
+        <!-- Left rail: machines for the selected hub -->
+        <aside class="access-rail">
+            <div class="access-rail-header">
+                <span>Machines</span>
+            </div>
+
+            <div class="access-rail-item active">
+                <div class="access-rail-primary">
+                    <span class="dot dot-online" title="Online"></span>
+                    work-laptop
+                    <span class="access-rail-dirty">&bull; unsaved</span>
+                </div>
+                <div class="access-rail-secondary">3 services &middot; 2 grants</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">
+                    <span class="dot dot-online" title="Online"></span>
+                    dev-vm
+                </div>
+                <div class="access-rail-secondary">4 services</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">
+                    <span class="dot dot-offline" title="Offline"></span>
+                    BARN
+                </div>
+                <div class="access-rail-secondary">Offline</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">
+                    <span class="dot dot-online" title="Online"></span>
+                    owlsnest-agent
+                </div>
+                <div class="access-rail-secondary">1 service</div>
+            </div>
+            <div class="access-rail-item">
+                <div class="access-rail-primary">
+                    <span class="chip">Wildcard</span> all machines
+                </div>
+                <div class="access-rail-secondary">Fallback rule &middot; 1 grant</div>
+            </div>
+        </aside>
+
+        <!-- Right pane: work-laptop's identity table -->
+        <section class="access-detail">
+            <header class="access-detail-header">
+                <div>
+                    <h2>work-laptop</h2>
+                    <div class="access-detail-meta">
+                        <span class="status status-online"><span class="status-dot"></span>Online</span>
+                        <span>linux/amd64</span>
+                        <span>last seen 2m ago</span>
+                    </div>
+                    <div class="access-service-list">
+                        <span class="chip">SSH &middot; 22</span>
+                        <span class="chip">RDP &middot; 3389</span>
+                        <span class="chip">git &middot; 9418</span>
+                    </div>
+                </div>
+            </header>
+
+            <p class="hint">
+                Every identity on this hub. Toggle permissions to stage changes; press
+                <strong>Save</strong> in the toolbar to commit. Owner and admin roles have
+                implicit all-access and their checkboxes are locked.
+            </p>
+
+            <table class="access-matrix">
+                <thead>
+                    <tr>
+                        <th>Identity</th>
+                        <th class="access-col-check">Connect</th>
+                        <th class="access-col-check">Register</th>
+                        <th class="access-col-check">Manage</th>
+                        <th>Connect services</th>
+                        <th class="access-matrix-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Implicit-role rows: full visual weight, checkboxes disabled
+                         (not dimmed, just uninteractable). No revoke action: an
+                         admin's access is a property of their role, changed on
+                         the identity itself in By-identity view. -->
+                    <tr class="access-matrix-row access-matrix-row-implicit">
+                        <td>
+                            <strong>owner</strong> <span class="chip">Owner</span>
+                            <div class="implicit-note">Implicit all-access &middot; cannot be filtered or revoked</div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td><span class="services-summary-muted">All services</span></td>
+                        <td class="access-matrix-actions"></td>
+                    </tr>
+                    <tr class="access-matrix-row access-matrix-row-implicit">
+                        <td>
+                            <strong>paul</strong> <span class="chip">Admin</span>
+                            <div class="implicit-note">Implicit all-access &middot; demote to User in By identity to restrict</div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td><span class="services-summary-muted">All services</span></td>
+                        <td class="access-matrix-actions"></td>
+                    </tr>
+                    <tr class="access-matrix-row access-matrix-row-implicit">
+                        <td>
+                            <strong>paired user</strong> <span class="chip">Admin</span>
+                            <div class="implicit-note">Implicit all-access</div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" checked disabled></td>
+                        <td><span class="services-summary-muted">All services</span></td>
+                        <td class="access-matrix-actions"></td>
+                    </tr>
+                    <tr class="access-matrix-row access-matrix-row-implicit">
+                        <td>
+                            <strong>console-viewer</strong> <span class="chip">Viewer</span>
+                            <div class="implicit-note">Read-only console access (no connect)</div>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" disabled></td>
+                        <td class="access-matrix-check"><input type="checkbox" disabled></td>
+                        <td><span class="services-summary-muted">&mdash;</span></td>
+                        <td class="access-matrix-actions"></td>
+                    </tr>
+
+                    <!-- Explicit (editable) rows. Services cell shows at most
+                         the first three chips inline; overflows collapse to a
+                         muted "+N more" marker. Edit... in the actions column
+                         is the single path to see or change the full list. -->
+
+                    <!-- alice: small filter, every chip fits, no overflow. -->
+                    <tr class="access-matrix-row">
+                        <td>
+                            <strong class="identity-name">alice</strong> <span class="chip">User</span>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td>
+                            <div class="services-cell">
+                                <div class="services-chips">
+                                    <span class="chip">git</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm" title="Edit the services filter for this grant">Edit&hellip;</button>
+                            <button type="button" class="btn btn-sm btn-danger" title="Revoke all permissions for alice on work-laptop">Revoke</button>
+                        </td>
+                    </tr>
+
+                    <!-- Staged new grant: bob, connect newly granted, no filter -->
+                    <tr class="access-matrix-row access-matrix-row-dirty">
+                        <td>
+                            <strong class="identity-name">bob</strong> <span class="chip">User</span>
+                            <span class="dirty-indicator">&bull; pending</span>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td>
+                            <div class="services-cell">
+                                <span class="services-summary-muted">All services</span>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm" title="Edit the services filter for this grant">Edit&hellip;</button>
+                            <button type="button" class="btn btn-sm btn-danger" title="Revoke all permissions for bob on work-laptop">Revoke</button>
+                        </td>
+                    </tr>
+
+                    <!-- Medium filter: 3 chips fit, no overflow marker needed. -->
+                    <tr class="access-matrix-row">
+                        <td>
+                            <strong class="identity-name">carlo</strong> <span class="chip">User</span>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td>
+                            <div class="services-cell">
+                                <div class="services-chips">
+                                    <span class="chip">SSH</span>
+                                    <span class="chip">RDP</span>
+                                    <span class="chip">git</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm">Edit&hellip;</button>
+                            <button type="button" class="btn btn-sm btn-danger">Revoke</button>
+                        </td>
+                    </tr>
+
+                    <!-- Large filter: first three chips inline + "+N more"
+                         clickable marker. Clicking it opens a read-only
+                         popover with the full chip cloud (shown below on
+                         the dana row for illustration). Edit... remains the
+                         dedicated edit path; this marker is view-only. -->
+                    <tr class="access-matrix-row" style="position: relative;">
+                        <td>
+                            <strong class="identity-name">dana</strong> <span class="chip">User</span>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td style="position: relative;">
+                            <div class="services-cell">
+                                <div class="services-chips">
+                                    <span class="chip">SSH</span>
+                                    <span class="chip">RDP</span>
+                                    <span class="chip">git</span>
+                                </div>
+                                <button type="button" class="services-more"
+                                    title="Show all services in this filter">+9 more</button>
+                            </div>
+                            <!-- Popover shown here in its open state. In the
+                                 real UI it appears on click of "+N more" and
+                                 dismisses on outside click / Esc. -->
+                            <div class="services-popover" style="top: 100%; left: 12px; margin-top: 4px;">
+                                <div class="services-popover-title">All 12 services in this filter</div>
+                                <div class="services-popover-chips">
+                                    <span class="chip">SSH</span>
+                                    <span class="chip">RDP</span>
+                                    <span class="chip">git</span>
+                                    <span class="chip">Jellyfin</span>
+                                    <span class="chip">Plex</span>
+                                    <span class="chip">Grafana</span>
+                                    <span class="chip">Prometheus</span>
+                                    <span class="chip">Vault</span>
+                                    <span class="chip">Consul</span>
+                                    <span class="chip">port-8080</span>
+                                    <span class="chip">port-8443</span>
+                                    <span class="chip">port-9090</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm" title="Edit the services filter for this grant">Edit&hellip;</button>
+                            <button type="button" class="btn btn-sm btn-danger" title="Revoke all permissions for dana on work-laptop">Revoke</button>
+                        </td>
+                    </tr>
+
+                    <!-- Staged REVOKE: charlie previously had connect, operator
+                         clicked Revoke to stage. Name struck through, checkboxes
+                         dimmed, chips struck through. Action is now an Undo. -->
+                    <tr class="access-matrix-row access-matrix-row-revoked">
+                        <td>
+                            <strong class="identity-name">charlie</strong> <span class="chip">User</span>
+                            <span class="dirty-indicator">&bull; will be revoked</span>
+                        </td>
+                        <td class="access-matrix-check"><input type="checkbox" checked></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td class="access-matrix-check"><input type="checkbox"></td>
+                        <td>
+                            <div class="services-cell">
+                                <div class="services-chips">
+                                    <span class="chip">SSH</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="access-matrix-actions">
+                            <button type="button" class="btn btn-sm" title="Unstage the pending revoke">Undo</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </div>
+</div>
+
+<!-- Pre-save conflict modal. Appears ONLY when the operator clicks Save
+     in the toolbar AND the pre-save diff detects that the server state
+     has moved since the view was loaded. Never shown at random. Built on
+     the TDL .modal-overlay / .modal-dialog primitives. The footer follows
+     the TDL two-button rule (Cancel + primary Reload); the destructive
+     "force overwrite" path is a muted link in the body that opens a
+     nested confirmation modal per TDL rules. -->
+<div class="modal-overlay" id="conflict-modal" role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <h3 id="conflict-title">Server state changed</h3>
+            <button type="button" class="modal-close" aria-label="Close"
+                    onclick="document.getElementById('conflict-modal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Another operator modified access on this hub since you opened this view:</p>
+            <ul>
+                <li><strong>alice</strong> &mdash; services filter changed from <code>git</code> to <code>git, RDP</code></li>
+                <li><strong>charlie</strong> &mdash; connect permission granted</li>
+            </ul>
+            <p>Reload to see the current server state, then re-apply your staged changes.</p>
+            <p>
+                If you prefer to discard the other operator's edits on those rows and
+                commit your batch as-is, you can
+                <button type="button" class="link"
+                        onclick="document.getElementById('conflict-modal').style.display='none'">force overwrite instead</button>.
+                That path requires a second confirmation.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn"
+                    onclick="document.getElementById('conflict-modal').style.display='none'">Cancel</button>
+            <button type="button" class="btn btn-primary"
+                    onclick="document.getElementById('conflict-modal').style.display='none'">Reload</button>
+        </div>
+    </div>
+</div>
+
+<!-- Mockup-only caption explaining that the modal is gated on Save. -->
+<div class="mockup-annotation">
+    <strong>Mockup note.</strong> This modal opens only when the operator
+    clicks <strong>Save</strong> in the toolbar and the pre-save diff
+    detects drift. It is never shown spontaneously.
+</div>
+
+</body>
+</html>

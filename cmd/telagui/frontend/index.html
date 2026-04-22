@@ -46,6 +46,7 @@
       <button class="main-tab active" role="tab" onclick="switchTab('status', this)">Status</button>
       <button class="main-tab" role="tab" onclick="switchTab('profile', this)">Profiles</button>
       <button class="main-tab" role="tab" onclick="switchTab('files', this)">Files</button>
+      <button class="main-tab" role="tab" onclick="switchTab('updates', this)">Updates</button>
       <button class="main-tab" role="tab" onclick="switchTab('client-settings', this)">Client Settings</button>
     </div>
 
@@ -69,6 +70,7 @@
     <div class="main-tab-bar hidden" role="tablist" id="tabbar-infra">
       <button class="main-tab active" role="tab" onclick="switchTab('hubs', this)">Hubs</button>
       <button class="main-tab" role="tab" onclick="switchTab('agents', this)">Agents</button>
+      <button class="main-tab" role="tab" onclick="switchTab('access', this)">Access</button>
       <button class="main-tab" role="tab" onclick="switchTab('remotes', this)">Remotes</button>
       <button class="main-tab" role="tab" onclick="switchTab('credentials', this)">Credentials</button>
     </div>
@@ -159,11 +161,49 @@
             <p class="empty-hint agents-empty-hint">Connect to view agents.</p>
           </div>
           <div class="agents-sidebar-footer">
-            <button type="button" class="btn btn-primary" id="agents-pair-btn" onclick="agentsPairAgent()" disabled>Pair Agent</button>
+            <div class="agents-sidebar-footer-row">
+              <button type="button" class="btn btn-primary" id="agents-generate-btn" onclick="agentsGenerateCode()" disabled title="Generate a pairing code on this hub for an agent on a remote machine">Generate&hellip;</button>
+              <button type="button" class="btn" id="agents-redeem-btn" onclick="agentsRedeemCode()" title="Redeem a pair code to register a local agent on this machine">Redeem&hellip;</button>
+            </div>
+            <div class="agents-sidebar-footer-caption">Generate a pair code for an agent on another machine, or redeem one to register an agent here.</div>
           </div>
         </div>
         <div class="agents-detail" id="agents-detail">
           <div class="agents-detail-empty">Select an agent to view details.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Access tab (peer of Hubs / Agents). Consolidated identity + ACL
+         surface: replaces the old Tokens and Access sub-views under
+         Hubs' admin panel. Toolbar pattern matches Profiles / Agents. -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-access">
+      <div class="pane-toolbar" id="access-toolbar">
+        <span class="pane-toolbar-label">Hub:</span>
+        <select id="access-hub-select" class="pane-toolbar-select" title="Current hub" onchange="onAccessHubChange()"></select>
+        <span class="tb-sep"></span>
+        <button type="button" class="btn btn-sm" id="access-undo-btn" onclick="accessUndo()" title="Undo the last staged change" disabled>&#x21B6; Undo</button>
+        <button type="button" class="btn btn-sm btn-primary" id="access-save-btn" onclick="accessSave()" title="Commit all staged changes" disabled>Save</button>
+        <span class="tb-sep"></span>
+        <button type="button" class="btn btn-sm" id="access-add-identity-btn" onclick="accessAddIdentity()" title="Add a new identity to this hub">Add Identity&hellip;</button>
+        <button type="button" class="btn btn-sm" id="access-pair-code-btn" onclick="accessPairCode()" title="Generate a one-time pair code for agent onboarding">Pair Code&hellip;</button>
+        <button type="button" class="btn btn-sm" id="access-rescan-btn" onclick="accessRescanServices()" title="Refresh the service list from agents">&#x21BB; Rescan services</button>
+        <button type="button" class="btn btn-sm" id="access-export-btn" onclick="accessExportAudit()" title="Export the current ACL state as YAML">Export audit&hellip;</button>
+        <div class="tab-bar-spacer"></div>
+        <div class="access-view-toggle" role="tablist" aria-label="Access view">
+          <button type="button" class="access-view-btn active" id="access-view-by-machine" role="tab" aria-selected="true" onclick="accessSetView('by-machine')">By machine</button>
+          <button type="button" class="access-view-btn" id="access-view-by-identity" role="tab" aria-selected="false" onclick="accessSetView('by-identity')">By identity</button>
+        </div>
+      </div>
+      <div class="access-layout">
+        <div class="access-sidebar" id="access-sidebar">
+          <div class="access-sidebar-header" id="access-sidebar-header">Machines</div>
+          <div class="access-sidebar-list" id="access-sidebar-list">
+            <p class="empty-hint">Select a hub to view access.</p>
+          </div>
+        </div>
+        <div class="access-detail" id="access-detail">
+          <div class="access-detail-empty">Select a hub to view access.</div>
         </div>
       </div>
     </div>
@@ -180,8 +220,6 @@
           <div class="hubs-admin-nav" id="hubs-admin-nav">
             <div class="hubs-admin-nav-item active" data-view="hub-settings" onclick="showHubAdminView('hub-settings')">Hub Settings</div>
             <div class="hubs-admin-nav-item" data-view="machines" onclick="showHubAdminView('machines')">Machines</div>
-            <div class="hubs-admin-nav-item" data-view="access" onclick="showHubAdminView('access')">Access</div>
-            <div class="hubs-admin-nav-item" data-view="tokens" onclick="showHubAdminView('tokens')">Tokens</div>
             <div class="hubs-admin-nav-item" data-view="history" onclick="showHubAdminView('history')">History</div>
           </div>
           <div class="hubs-admin-sidebar-footer">
@@ -190,6 +228,42 @@
         </div>
         <div class="hubs-admin-detail" id="hubs-admin-detail">
           <p class="empty-hint">Select a hub to view details.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Updates tab: lifecycle of locally-installed Tela binaries
+         (TelaVisor itself, the tela CLI, and any local telad/telahubd
+         binaries the operator manages). Channel preference is mirrored
+         here so the most-touched flow (check / install) is at hand
+         without diving into Application Settings. -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-updates">
+      <div class="status-pane">
+        <div class="updates-header">
+          <h1>Updates</h1>
+          <div class="updates-header-actions">
+            <label class="updates-autocheck">
+              <input type="checkbox" id="updates-autocheck" onchange="toggleAutoCheckUpdates(this.checked)">
+              Check automatically
+            </label>
+            <button type="button" class="btn btn-sm" onclick="refreshUpdatesTab()" title="Re-check the channel manifest and re-scan local binaries">&#x21BB; Check Now</button>
+          </div>
+        </div>
+        <p class="section-desc updates-intro">Local Tela binaries on this machine. Hub and agent updates live on the <strong>Hubs</strong> and <strong>Agents</strong> tabs in Infrastructure mode.</p>
+
+        <div class="setting-card">
+          <div class="setting-card-title">Release Channel</div>
+          <p class="setting-card-desc">The channel used to update TelaVisor and tela on this machine. Custom channel sources are managed in <button type="button" class="link" onclick="switchTabByName('client-settings')">Client Settings</button>.</p>
+          <div class="updates-channel-row">
+            <select id="updates-channel-select" class="tb-select" title="Local client channel"></select>
+            <span id="updates-channel-status" class="tools-service-label"></span>
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-card-title">Installed Tools</div>
+          <p class="setting-card-desc">Versions of TelaVisor and the tela binaries found on this machine. Click <strong>Update</strong> on any out-of-date row to fetch and install the latest from the configured channel.</p>
+          <div id="updates-tools-status" class="bin-status"></div>
         </div>
       </div>
     </div>
@@ -218,12 +292,6 @@
             <button class="btn btn-sm" onclick="browseBinPath()" title="Browse">Browse</button>
             <button class="btn btn-sm" onclick="restoreDefaultBinPath()" title="Restore default">Restore Default</button>
           </div>
-        </div>
-
-        <div class="setting-card">
-          <div class="setting-card-title-row"><div class="setting-card-title">Installed Tools</div><button type="button" class="btn btn-sm tools-action-btn" onclick="refreshClientToolVersions()" title="Check all versions">&#x21BB; Refresh</button></div>
-          <p class="setting-card-desc">Versions of tela binaries found in the configured location.</p>
-          <div id="cs-bin-status" class="bin-status"></div>
         </div>
 
         <div class="setting-card">
@@ -471,21 +539,6 @@
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-minimizeOnClose" title="Minimize to tray" onchange="markSettingsDirty()"></div><div class="settings-label">Minimize to tray on close</div></div>
           </div>
           <div class="settings-group">
-            <div class="settings-group-header">TelaVisor self-update</div>
-            <div class="settings-group-desc">Controls how TelaVisor updates itself. Hubs and agents have their own update channels, configured separately in Hub Settings and Agent Settings.</div>
-            <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-autoCheckUpdates" title="Check for updates" onchange="markSettingsDirty()"></div><div class="settings-label">Check for TelaVisor updates automatically</div></div>
-            <div class="settings-check-now"><button type="button" class="btn btn-sm" onclick="goApp.CheckForUpdatesNow()">Check Now</button></div>
-            <div class="settings-stacked-row">
-              <div class="settings-stacked-label">TelaVisor release channel</div>
-              <select id="client-channel-select" class="tb-select">
-                <option value="dev">dev</option>
-                <option value="beta">beta</option>
-                <option value="stable">stable</option>
-              </select>
-              <div id="client-channel-status" class="tools-service-label" style="margin-top:4px;"></div>
-            </div>
-          </div>
-          <div class="settings-group">
             <div class="settings-group-header">Logging</div>
             <div class="settings-row settings-row-check" onclick="if(event.target.tagName!=='INPUT'){this.querySelector('input').click()}"><div class="settings-check"><input type="checkbox" id="setting-verboseDefault" title="Verbose by default" onchange="markSettingsDirty()"></div><div class="settings-label">Verbose by default</div></div>
             <div class="settings-stacked-row">
@@ -602,7 +655,7 @@
         <h3>Add Hub</h3>
         <button class="modal-close" onclick="closeAddHubModal()">&times;</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body modal-body-flush">
         <div class="tab-bar">
           <button class="tab active" data-tab="manual" onclick="showAddHubTab('manual', this)">Manual</button>
           <button class="tab" data-tab="docker" onclick="showAddHubTab('docker', this)">Docker</button>
@@ -721,38 +774,220 @@
     </div>
   </div>
 
-  <!-- Grant Access Modal -->
-  <div class="modal-overlay hidden" id="grant-access-modal">
+  <!-- Edit Services Modal: picks the per-service filter for a Connect
+       grant. Opens from the Access page's per-row Edit... button in
+       both By machine and By identity views. Layout follows the same
+       <form> pattern as the other TV modals so .modal-dialog form
+       { padding: 20px } gives it the standard interior gutter. -->
+  <div class="modal-overlay hidden" id="access-edit-services-modal">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3>Grant Access</h3>
-        <button class="modal-close" onclick="closeModal('grant-access-modal')">&times;</button>
+        <h3>Edit services filter</h3>
+        <button type="button" class="modal-close" onclick="closeModal('access-edit-services-modal')">&times;</button>
       </div>
       <div class="modal-body">
-        <form onsubmit="submitAccessGrant(event)">
+        <form onsubmit="aesApply(); return false;">
+          <p class="modal-intro-hint">Choose which services <strong id="aes-identity"></strong> can reach on <strong id="aes-machine"></strong>.</p>
           <div class="form-group">
-            <label for="grant-access-identity">Identity</label>
-            <select id="grant-access-identity" title="Identity to grant access to">
-              <option value="">Loading identities...</option>
-            </select>
+            <div class="setting-check">
+              <input type="radio" name="aes-scope" id="aes-scope-all" value="all" onchange="aesUpdateVisibility()">
+              <label for="aes-scope-all">Allow all services</label>
+            </div>
+            <div class="setting-check">
+              <input type="radio" name="aes-scope" id="aes-scope-restrict" value="restrict" onchange="aesUpdateVisibility()">
+              <label for="aes-scope-restrict">Restrict to specific services</label>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="grant-access-machine">Machine</label>
-            <select id="grant-access-machine" title="Target machine">
-              <option value="*">* (all machines)</option>
-            </select>
+          <div class="form-group" id="aes-services-group">
+            <div id="aes-services-list" class="aes-services-list"></div>
+            <input type="text" id="aes-services-freetext" placeholder="service1, service2, port-8080" title="Comma-separated service names">
+            <div class="hint" id="aes-services-hint"></div>
           </div>
-          <div class="form-group">
-            <label>Permissions</label>
-            <div class="setting-check"><input type="checkbox" id="grant-access-connect" checked> Connect</div>
-            <div class="setting-check"><input type="checkbox" id="grant-access-register"> Register</div>
-            <div class="setting-check"><input type="checkbox" id="grant-access-manage"> Manage</div>
-          </div>
+          <div class="hint" id="aes-disabled-hint">This hub does not support per-service access control. Upgrade to v0.15 or later to use this filter.</div>
           <div class="modal-actions">
-            <button type="button" class="btn" onclick="closeModal('grant-access-modal')">Cancel</button>
-            <button type="submit" class="btn btn-primary">Grant</button>
+            <button type="button" class="btn" onclick="closeModal('access-edit-services-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Apply</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change Role Modal: picks a new role for an existing identity in
+       the Access page's By identity detail header. -->
+  <div class="modal-overlay hidden" id="access-change-role-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Change role</h3>
+        <button type="button" class="modal-close" onclick="closeModal('access-change-role-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitChangeRole(); return false;">
+          <p class="modal-intro-hint">Change role for <strong id="crm-identity"></strong>.</p>
+          <div class="form-group">
+            <label for="crm-role">New role</label>
+            <select id="crm-role" title="New role">
+              <option value="">User</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+              <option value="owner">Owner</option>
+            </select>
+          </div>
+          <div class="hint">Owner and admin have implicit all-machine access. Viewer is read-only console. User's machine access is managed via the matrix. Promoting to Owner requires a second confirmation.</div>
+          <div id="crm-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal('access-change-role-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Apply</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Agent Code Modal: opens from the Agents sidebar's
+       Generate Agent Code... button. Asks for a machine name and an
+       expiration, then calls the hub's pair-code endpoint with
+       type=register. The result lands in #generate-agent-code-result. -->
+  <div class="modal-overlay hidden" id="generate-agent-code-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Generate Agent Code</h3>
+        <button type="button" class="modal-close" onclick="closeModal('generate-agent-code-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitGenerateAgentCode(event)">
+          <p class="modal-intro-hint">Generate a one-time code that the operator on the new machine can exchange for an agent token using <code>telad pair</code>.</p>
+          <div class="form-group">
+            <label for="gac-hub">Hub</label>
+            <select id="gac-hub" title="Hub the agent will register with"></select>
+            <div class="hint">The hub the new agent will register with.</div>
+          </div>
+          <div class="form-group">
+            <label for="gac-machine">Machine name</label>
+            <input type="text" id="gac-machine" placeholder="e.g. dev-vm, web-01" required>
+            <div class="hint">The name the agent will register under. Operators usually match the host's name. Required.</div>
+          </div>
+          <div class="form-group">
+            <label for="gac-expires">Expiration</label>
+            <select id="gac-expires" title="Code expiration">
+              <option value="15m">15 minutes</option>
+              <option value="1h" selected>1 hour</option>
+              <option value="24h">24 hours</option>
+              <option value="7d">7 days</option>
+            </select>
+          </div>
+          <div id="gac-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal('generate-agent-code-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Generate</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Agent Code Result Modal: shows the code in large
+       monospace plus a ready-to-run telad pair command line, both
+       with copy buttons. -->
+  <div class="modal-overlay hidden" id="generate-agent-code-result-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Agent Code Generated</h3>
+        <button type="button" class="modal-close" onclick="closeModal('generate-agent-code-result-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro-hint">Run the command below on the machine where you want to install the agent. The code can only be used once and expires shortly.</p>
+        <div class="copyable">
+          <span class="copyable-label">Code</span>
+          <span class="copyable-value-large" id="gacr-code"></span>
+          <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('gacr-code').textContent, this)">Copy</button>
+        </div>
+        <div class="copyable">
+          <span class="copyable-label">Command</span>
+          <span class="copyable-value" id="gacr-command"></span>
+          <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('gacr-command').textContent, this)">Copy</button>
+        </div>
+        <div class="result-meta-row">
+          <span><strong>Machine:</strong> <span id="gacr-machine"></span></span>
+          <span><strong>Expires:</strong> <span id="gacr-expires"></span></span>
+        </div>
+        <p class="hint">After the command runs successfully on the agent machine, the agent will appear in the sidebar on the left. If the agent is offline or unreachable, the code stays valid until the expiration time above.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary" onclick="closeModal('generate-agent-code-result-modal')">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Redeem Agent Code Modal: opens from the Agents sidebar's
+       Redeem Code... button. Two states: when telad is installed
+       locally, shows the form; when not, shows the install-needed
+       bail-out with an "Open Updates..." action. -->
+  <div class="modal-overlay hidden" id="redeem-agent-code-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Redeem Agent Code</h3>
+        <button type="button" class="modal-close" onclick="closeModal('redeem-agent-code-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Form state -->
+        <form id="redeem-agent-code-form" onsubmit="submitRedeemAgentCode(event)">
+          <p class="modal-intro-hint">Register a local <code>telad</code> on this machine using a one-time code generated by the hub administrator. The agent will appear in the sidebar above when registration completes.</p>
+          <div class="form-group">
+            <label for="rac-hub">Hub</label>
+            <select id="rac-hub" title="Hub the code was issued from" onchange="onRedeemHubChange()"></select>
+            <div class="hint">The hub the code was issued from. Choose from hubs you already have credentials for, or pick "Other hub URL..." to type a URL.</div>
+          </div>
+          <div class="form-group hidden" id="rac-hub-other-group">
+            <label for="rac-hub-other">Hub URL</label>
+            <input type="text" id="rac-hub-other" placeholder="wss://hub.example.com">
+          </div>
+          <div class="form-group">
+            <label for="rac-code">Pair code</label>
+            <input type="text" id="rac-code" class="mono" placeholder="ABCD-1234" required>
+          </div>
+          <div class="form-group">
+            <label for="rac-machine">Machine name</label>
+            <input type="text" id="rac-machine" placeholder="e.g. dev-vm, web-01">
+            <div class="hint">Optional. If set, telad will register under this name; otherwise the hub uses the name encoded in the code.</div>
+          </div>
+          <div id="rac-error" class="error-msg hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal('redeem-agent-code-modal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Redeem</button>
+          </div>
+        </form>
+        <!-- telad-not-installed state -->
+        <div id="redeem-agent-code-not-installed" class="hidden">
+          <div class="status-warn">
+            <div><strong>telad is not installed on this machine.</strong> Pairing requires a local <code>telad</code> binary; the Updates tab can install it for you.</div>
+          </div>
+          <p class="modal-intro-hint">If you are trying to register an agent running on a different machine, run <code>telad pair</code> there instead. Generating the code in TV does not deliver a token to the remote host; only the operator on the agent machine can complete the handshake.</p>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal('redeem-agent-code-modal')">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="closeModal('redeem-agent-code-modal'); switchToClientsMode(); switchTabByName('updates');">Open Updates&hellip;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Redeem Agent Code Result Modal: success summary after the
+       local telad pair invocation completes. -->
+  <div class="modal-overlay hidden" id="redeem-agent-code-result-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Agent Registered</h3>
+        <button type="button" class="modal-close" onclick="closeModal('redeem-agent-code-result-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="status-success"><span><strong>Agent registered.</strong> A new entry will appear in the Agents sidebar within a few seconds.</span></div>
+        <div class="result-row"><span class="result-label">Hub</span><span class="result-value" id="racr-hub"></span></div>
+        <div class="result-row"><span class="result-label">Machine</span><span class="result-value" id="racr-machine"></span></div>
+        <p class="hint">Run <code>telad service install</code> if you want telad to start automatically on boot.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary" onclick="closeModal('redeem-agent-code-result-modal')">Done</button>
+        </div>
       </div>
     </div>
   </div>

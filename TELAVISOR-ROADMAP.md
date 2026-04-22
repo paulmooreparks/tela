@@ -144,13 +144,13 @@ This section maps every `tela` CLI command to its TelaVisor equivalent. Gaps are
 
 | CLI command | Flags | TelaVisor equivalent | Status |
 |---|---|---|---|
-| `tela admin list-tokens` | `-hub`, `-token`, `-json` | Hubs mode, Tokens view | Implemented |
-| `tela admin add-token <id>` | `-hub`, `-token`, `-role` | Hubs mode, Tokens view | Implemented |
-| `tela admin remove-token <id>` | `-hub`, `-token` | Hubs mode, Tokens view | Implemented |
-| `tela admin rotate <id>` | `-hub`, `-token` | Hubs mode, Tokens view | Implemented |
-| `tela admin grant <id> <machine>` | `-hub`, `-token` | Hubs mode, ACLs view | Implemented |
-| `tela admin revoke <id> <machine>` | `-hub`, `-token` | Hubs mode, ACLs view | Implemented |
-| `tela admin pair-code <machine>` | `-hub`, `-token`, `-expires`, `-type`, `-machines` | Hubs mode, Tokens view | Implemented |
+| `tela admin list-tokens` | `-hub`, `-token`, `-json` | Infrastructure mode, Access tab | Implemented |
+| `tela admin add-token <id>` | `-hub`, `-token`, `-role` | Access tab, Add Identity... | Implemented |
+| `tela admin remove-token <id>` | `-hub`, `-token` | Access tab, By identity, Delete identity | Implemented |
+| `tela admin rotate <id>` | `-hub`, `-token` | Access tab, By identity, Rotate token | Implemented |
+| `tela admin grant <id> <machine>` | `-hub`, `-token`, `-services` | Access tab matrix checkbox | Implemented |
+| `tela admin revoke <id> <machine>` | `-hub`, `-token` | Access tab matrix Revoke button | Implemented |
+| `tela admin pair-code <machine>` | `-hub`, `-token`, `-expires`, `-type`, `-machines` | Access tab, Pair Code... | Implemented |
 | `tela admin list-portals` | `-hub`, `-token`, `-json` | Hubs mode, Hub Settings | Implemented |
 | `tela admin add-portal <name>` | `-hub`, `-token`, `-portal-url`, `-portal-token`, `-hub-url` | Not implemented | Gap |
 | `tela admin remove-portal <name>` | `-hub`, `-token` | Not implemented | Gap |

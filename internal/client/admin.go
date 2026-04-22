@@ -78,6 +78,7 @@ Standalone commands:
 Access:
   tela admin access                                List all identities and their permissions
   tela admin access grant <id> <machine> <perms>   Grant permissions (comma-separated: connect,register,manage)
+                                                   Add -services name,... to restrict connect to specific services.
   tela admin access revoke <id> <machine>          Revoke all permissions on a machine
   tela admin access rename <id> <new-id>           Rename an identity
   tela admin access remove <id>                    Remove an identity entirely
@@ -1497,23 +1498,78 @@ func cmdAdminAccessGrant(args []string) {
 	fs := flag.NewFlagSet("admin access grant", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	servicesFlag := fs.String("services", "", "Restrict connect to a comma-separated list of service names (e.g. -services Jellyfin,SSH). Only applies when 'connect' is in <permissions>.")
 	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
 	if fs.NArg() < 3 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin access grant <id> <machineId> <permissions>")
+		fmt.Fprintln(os.Stderr, "Usage: tela admin access grant <id> <machineId> <permissions> [-services name,name]")
 		fmt.Fprintln(os.Stderr, "  permissions: comma-separated list of connect,register,manage")
 		fmt.Fprintln(os.Stderr, "  Example: tela admin access grant alice barn connect,manage")
+		fmt.Fprintln(os.Stderr, "  Example: tela admin access grant alice barn connect -services Jellyfin")
 		os.Exit(1)
 	}
 	id := fs.Arg(0)
 	machineID := fs.Arg(1)
 	perms := strings.Split(fs.Arg(2), ",")
 
+	var services []string
+	if strings.TrimSpace(*servicesFlag) != "" {
+		for _, s := range strings.Split(*servicesFlag, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				services = append(services, s)
+			}
+		}
+	}
+
+	// Reject filter requests that cannot take effect. Guard rails in
+	// order of severity so the operator gets the most specific error.
+	if len(services) > 0 {
+		hasConnect := false
+		for _, p := range perms {
+			if strings.TrimSpace(p) == "connect" {
+				hasConnect = true
+				break
+			}
+		}
+		if !hasConnect {
+			fmt.Fprintln(os.Stderr, "Error: -services requires 'connect' in <permissions>.")
+			fmt.Fprintln(os.Stderr, "       The services filter only scopes the connect permission;")
+			fmt.Fprintln(os.Stderr, "       register and manage do not accept a service filter.")
+			os.Exit(1)
+		}
+	}
+
 	hub, tok := adminParseHubAndToken(fs)
 
+	// Capability check: refuse to send a filtered grant to a hub that
+	// cannot honor it. Older hubs silently discard unknown request-body
+	// fields, which would turn `-services Jellyfin` into an unfiltered
+	// grant -- a security-relevant cliff for the operator. See #27 and
+	// COMPAT-0.15.md.
+	if len(services) > 0 {
+		caps, err := fetchHubCapabilities(hub, tok)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: could not probe hub capabilities at %s: %v\n", hub, err)
+			fmt.Fprintln(os.Stderr, "       -services requires confirming the hub supports per-service access control.")
+			fmt.Fprintln(os.Stderr, "       Fix the hub connectivity or re-run without -services.")
+			os.Exit(1)
+		}
+		if !hubHasCapability(caps, "per-service-access-control") {
+			fmt.Fprintln(os.Stderr, "Error: the hub at", hub, "does not support per-service access control.")
+			fmt.Fprintln(os.Stderr, "       Sending -services to this hub would be silently ignored and")
+			fmt.Fprintln(os.Stderr, "       would grant ALL-service access instead of the filter you asked for.")
+			fmt.Fprintln(os.Stderr, "       Upgrade the hub to v0.15.0 or later, or re-run without -services.")
+			os.Exit(1)
+		}
+	}
+
 	body := map[string]any{"permissions": perms}
+	if len(services) > 0 {
+		body["services"] = services
+	}
 
 	status, result, err := adminHTTP("PUT", hub, "/api/admin/access/"+url.PathEscape(id)+"/machines/"+url.PathEscape(machineID), tok, body)
 	if err != nil {
@@ -1522,7 +1578,11 @@ func cmdAdminAccessGrant(args []string) {
 	}
 	adminCheckError(status, result)
 
-	fmt.Printf("Set '%s' permissions on '%s' to [%s].\n", id, machineID, strings.Join(perms, ", "))
+	if len(services) > 0 {
+		fmt.Printf("Set '%s' permissions on '%s' to [%s] (services: %s).\n", id, machineID, strings.Join(perms, ", "), strings.Join(services, ", "))
+	} else {
+		fmt.Printf("Set '%s' permissions on '%s' to [%s].\n", id, machineID, strings.Join(perms, ", "))
+	}
 }
 
 func cmdAdminAccessRevoke(args []string) {

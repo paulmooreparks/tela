@@ -2,7 +2,10 @@ package hub
 
 import (
 	"encoding/hex"
+	"reflect"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Token strings used across tests. Real tokens are 64-char hex; the test
@@ -188,7 +191,7 @@ func TestCanRegister_ExplicitRegisterTokenMustMatch(t *testing.T) {
 
 func TestCanRegister_ACLEntryWithoutRegisterTokenAllowsKnownTokens(t *testing.T) {
 	acls := map[string]machineACL{
-		"barn": {ConnectTokens: []string{tokenUser1}},
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
 	}
 	s := makeStore(stdTokens(), acls)
 	if !s.canRegister(tokenUser1, "barn") {
@@ -223,7 +226,7 @@ func TestCanConnect_OwnerAndAdminBypass(t *testing.T) {
 
 func TestCanConnect_PerMachineAllow(t *testing.T) {
 	acls := map[string]machineACL{
-		"barn": {ConnectTokens: []string{tokenUser1}},
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
 	}
 	s := makeStore(stdTokens(), acls)
 	if !s.canConnect(tokenUser1, "barn") {
@@ -236,7 +239,7 @@ func TestCanConnect_PerMachineAllow(t *testing.T) {
 
 func TestCanConnect_WildcardACL(t *testing.T) {
 	acls := map[string]machineACL{
-		"*": {ConnectTokens: []string{tokenUser1}},
+		"*": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
 	}
 	s := makeStore(stdTokens(), acls)
 	if !s.canConnect(tokenUser1, "barn") {
@@ -254,8 +257,8 @@ func TestCanConnect_PerMachineAndWildcardCombine(t *testing.T) {
 	// alice in wildcard, bob only in machine-specific. Both should
 	// connect to barn; only alice should connect to web01.
 	acls := map[string]machineACL{
-		"*":    {ConnectTokens: []string{tokenUser1}},
-		"barn": {ConnectTokens: []string{tokenUser2}},
+		"*":    {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser2}}},
 	}
 	s := makeStore(stdTokens(), acls)
 	if !s.canConnect(tokenUser1, "barn") {
@@ -297,7 +300,7 @@ func TestCanManage_RequiresExplicitGrant(t *testing.T) {
 	// that lets you give read-only / connect-only access to non-admins.
 	acls := map[string]machineACL{
 		"barn": {
-			ConnectTokens: []string{tokenUser1},
+			ConnectTokens: []connectGrant{{Token: tokenUser1}},
 			ManageTokens:  []string{tokenUser2},
 		},
 	}
@@ -346,7 +349,7 @@ func TestCanViewMachine_ViewerSeesAll(t *testing.T) {
 
 func TestCanViewMachine_NonViewerFallsThroughToConnect(t *testing.T) {
 	acls := map[string]machineACL{
-		"barn": {ConnectTokens: []string{tokenUser1}},
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
 	}
 	s := makeStore(stdTokens(), acls)
 	if !s.canViewMachine(tokenUser1, "barn") {
@@ -409,7 +412,7 @@ func TestReload_EmptyTokensDisablesStore(t *testing.T) {
 func TestToConfig_RoundTrip(t *testing.T) {
 	original := stdTokens()
 	originalACLs := map[string]machineACL{
-		"*":    {ConnectTokens: []string{tokenUser1}},
+		"*":    {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
 		"barn": {ManageTokens: []string{tokenUser2}, RegisterToken: tokenAdmin},
 	}
 	s := makeStore(original, originalACLs)
@@ -486,7 +489,7 @@ func TestConcurrentReads(t *testing.T) {
 	// and produce consistent results. This is a smoke test for the lock
 	// shape, not a stress test.
 	acls := map[string]machineACL{
-		"*":    {ConnectTokens: []string{tokenUser1}},
+		"*":    {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
 		"barn": {ManageTokens: []string{tokenUser2}},
 	}
 	s := makeStore(stdTokens(), acls)
@@ -534,4 +537,229 @@ func TestReload_ConcurrentWithReads(t *testing.T) {
 	}
 
 	close(stop)
+}
+
+// ── connectGrant YAML compatibility ───────────────────────────────
+
+// Pre-0.15 configs wrote connectTokens as a plain list of strings.
+// The connectGrant.UnmarshalYAML hook must still accept that form so
+// operators upgrading to 0.15 do not have to rewrite their config.
+func TestConnectGrant_UnmarshalYAML_AcceptsBareString(t *testing.T) {
+	src := `
+connectTokens:
+  - tok-user-1
+  - tok-user-2
+`
+	var acl machineACL
+	if err := yaml.Unmarshal([]byte(src), &acl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := []connectGrant{
+		{Token: "tok-user-1"},
+		{Token: "tok-user-2"},
+	}
+	if !reflect.DeepEqual(acl.ConnectTokens, want) {
+		t.Errorf("bare-string form parsed to %#v, want %#v", acl.ConnectTokens, want)
+	}
+}
+
+func TestConnectGrant_UnmarshalYAML_AcceptsStructForm(t *testing.T) {
+	src := `
+connectTokens:
+  - token: tok-user-1
+  - token: tok-user-2
+    services:
+      - Jellyfin
+      - SSH
+`
+	var acl machineACL
+	if err := yaml.Unmarshal([]byte(src), &acl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := []connectGrant{
+		{Token: "tok-user-1"},
+		{Token: "tok-user-2", Services: []string{"Jellyfin", "SSH"}},
+	}
+	if !reflect.DeepEqual(acl.ConnectTokens, want) {
+		t.Errorf("struct form parsed to %#v, want %#v", acl.ConnectTokens, want)
+	}
+}
+
+func TestConnectGrant_UnmarshalYAML_MixedForms(t *testing.T) {
+	// Mixing bare strings and struct entries in one list must work so
+	// config files edited partially by the admin API and partially by
+	// hand do not break.
+	src := `
+connectTokens:
+  - tok-user-1
+  - token: tok-user-2
+    services: [SSH]
+  - tok-user-3
+`
+	var acl machineACL
+	if err := yaml.Unmarshal([]byte(src), &acl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := []connectGrant{
+		{Token: "tok-user-1"},
+		{Token: "tok-user-2", Services: []string{"SSH"}},
+		{Token: "tok-user-3"},
+	}
+	if !reflect.DeepEqual(acl.ConnectTokens, want) {
+		t.Errorf("mixed form parsed to %#v, want %#v", acl.ConnectTokens, want)
+	}
+}
+
+// ── connectServicesFilter ─────────────────────────────────────────
+
+func TestConnectServicesFilter_NoFilter_MeansAllServices(t *testing.T) {
+	acls := map[string]machineACL{
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+	}
+	s := makeStore(stdTokens(), acls)
+	names, filtered := s.connectServicesFilter(tokenUser1, "barn")
+	if filtered {
+		t.Errorf("grant with no services field should report filtered=false, got filtered=true names=%v", names)
+	}
+	if names != nil {
+		t.Errorf("unfiltered grant should return nil names, got %v", names)
+	}
+}
+
+func TestConnectServicesFilter_EmptyList_MeansAllServices(t *testing.T) {
+	// An explicit empty services list is indistinguishable from absent
+	// and must be treated as "all services". Otherwise operators who
+	// wrote `services: []` would lock themselves out.
+	acls := map[string]machineACL{
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1, Services: []string{}}}},
+	}
+	s := makeStore(stdTokens(), acls)
+	_, filtered := s.connectServicesFilter(tokenUser1, "barn")
+	if filtered {
+		t.Error("empty services list should not register as a filter")
+	}
+}
+
+func TestConnectServicesFilter_NamedServices_ReturnedInOrder(t *testing.T) {
+	acls := map[string]machineACL{
+		"barn": {ConnectTokens: []connectGrant{{
+			Token:    tokenUser1,
+			Services: []string{"Jellyfin", "SSH"},
+		}}},
+	}
+	s := makeStore(stdTokens(), acls)
+	names, filtered := s.connectServicesFilter(tokenUser1, "barn")
+	if !filtered {
+		t.Fatal("grant with services list should report filtered=true")
+	}
+	want := []string{"Jellyfin", "SSH"}
+	if !reflect.DeepEqual(names, want) {
+		t.Errorf("filter names = %v, want %v", names, want)
+	}
+}
+
+func TestConnectServicesFilter_MachineSpecificBeatsWildcard(t *testing.T) {
+	// If both a machine-specific grant and a wildcard grant match the
+	// same token, the machine-specific entry wins. This lets operators
+	// grant blanket "connect to everything" via "*" and then narrow
+	// specific machines by name.
+	acls := map[string]machineACL{
+		"*":    {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1, Services: []string{"SSH"}}}},
+	}
+	s := makeStore(stdTokens(), acls)
+	names, filtered := s.connectServicesFilter(tokenUser1, "barn")
+	if !filtered || !reflect.DeepEqual(names, []string{"SSH"}) {
+		t.Errorf("machine-specific should win; got filtered=%v names=%v", filtered, names)
+	}
+}
+
+func TestConnectServicesFilter_OwnerAdminViewerBypassesFilter(t *testing.T) {
+	// Owner, admin, and viewer roles must not be filterable. Operators
+	// need to see every service for diagnostics regardless of a stray
+	// services entry on their token (which should never exist in
+	// practice but must not lock anyone out if it does). Viewers are
+	// read-only console observers; filtering their view would silently
+	// break monitoring dashboards.
+	acls := map[string]machineACL{
+		"barn": {ConnectTokens: []connectGrant{
+			{Token: tokenOwner, Services: []string{"not-a-real-service"}},
+			{Token: tokenAdmin, Services: []string{"not-a-real-service"}},
+			{Token: tokenViewer, Services: []string{"not-a-real-service"}},
+		}},
+	}
+	s := makeStore(stdTokens(), acls)
+	for _, tok := range []string{tokenOwner, tokenAdmin, tokenViewer} {
+		_, filtered := s.connectServicesFilter(tok, "barn")
+		if filtered {
+			t.Errorf("owner/admin/viewer bypass broken: token %q returned filtered=true", tok)
+		}
+	}
+}
+
+func TestConnectServicesFilter_AuthDisabled_NeverFilters(t *testing.T) {
+	s := newAuthStore(nil)
+	_, filtered := s.connectServicesFilter(tokenUser1, "barn")
+	if filtered {
+		t.Error("open hub should never apply a services filter")
+	}
+}
+
+// ── connectGrant helpers ─────────────────────────────────────────
+
+func TestFindConnectGrant_MatchesByTokenConstantTime(t *testing.T) {
+	grants := []connectGrant{
+		{Token: "one"},
+		{Token: "two", Services: []string{"SSH"}},
+	}
+	g, ok := findConnectGrant(grants, "two")
+	if !ok {
+		t.Fatal("findConnectGrant should have matched 'two'")
+	}
+	if !reflect.DeepEqual(g.Services, []string{"SSH"}) {
+		t.Errorf("matched grant carried wrong Services: %v", g.Services)
+	}
+
+	if _, ok := findConnectGrant(grants, "missing"); ok {
+		t.Error("findConnectGrant should not match an absent token")
+	}
+}
+
+func TestRemoveConnectGrant_RemovesAllMatching(t *testing.T) {
+	// A duplicate shouldn't normally happen but removeConnectGrant
+	// should scrub every occurrence defensively.
+	grants := []connectGrant{
+		{Token: "keep"},
+		{Token: "go"},
+		{Token: "keep"},
+		{Token: "go"},
+	}
+	out := removeConnectGrant(grants, "go")
+	want := []connectGrant{{Token: "keep"}, {Token: "keep"}}
+	if !reflect.DeepEqual(out, want) {
+		t.Errorf("removeConnectGrant = %v, want %v", out, want)
+	}
+}
+
+func TestReplaceConnectGrantToken_PreservesServices(t *testing.T) {
+	// Token rotation must rewrite the token string but leave the
+	// services filter in place; the filter is a policy set by the
+	// operator, not a property of the specific secret.
+	grants := []connectGrant{
+		{Token: "old"},
+		{Token: "old", Services: []string{"SSH"}},
+		{Token: "unrelated"},
+	}
+	changed := replaceConnectGrantToken(grants, "old", "new")
+	if !changed {
+		t.Fatal("replaceConnectGrantToken should report change=true")
+	}
+	want := []connectGrant{
+		{Token: "new"},
+		{Token: "new", Services: []string{"SSH"}},
+		{Token: "unrelated"},
+	}
+	if !reflect.DeepEqual(grants, want) {
+		t.Errorf("after rotation grants = %v, want %v", grants, want)
+	}
 }

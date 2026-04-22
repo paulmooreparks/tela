@@ -32,6 +32,7 @@
 //
 //   Agents (mediated agent management; the hub forwards to telad):
 //     GET    /api/admin/agents                                List registered agents
+//     GET    /api/admin/agents/{machine}                      Lightweight presence probe (id, agentConnected, lastSeen)
 //     POST   /api/admin/agents/{machine}/{action}             Send a management action (config-get, config-set, logs, restart, update)
 //
 //   Hub lifecycle:
@@ -129,11 +130,9 @@ type adminAddRequest struct {
 	Role string `json:"role,omitempty"` // "owner" | "admin" | "" (user)
 }
 
-type adminAddResponse struct {
-	ID    string `json:"id"`
-	Role  string `json:"role"`
-	Token string `json:"token"` // full token -- shown once
-}
+// adminAddToken returns an inline JSON map {id, role, token, version}
+// directly rather than a named struct; the token field is the full
+// secret value and is shown exactly once so the client can capture it.
 
 // ── handleAdminTokens dispatches GET (list) and POST (create).
 // Token deletion goes through DELETE /api/admin/access/{id}, which
@@ -235,15 +234,19 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
+	version := ensureAccessVersion(req.ID)
+
 	log.Printf("[hub] admin: added identity %q (role: %s)", req.ID, req.Role)
 
 	adminCorsHeaders(w, r)
+	setETag(w, version)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(adminAddResponse{
-		ID:    req.ID,
-		Role:  req.Role,
-		Token: token,
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":      req.ID,
+		"role":    req.Role,
+		"token":   token,
+		"version": version,
 	})
 }
 
@@ -286,6 +289,14 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
+	}
+
 	oldToken := entry.Token
 	newToken, err := generateToken()
 	if err != nil {
@@ -304,11 +315,8 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 			acl.RegisterToken = newToken
 			changed = true
 		}
-		for i, ct := range acl.ConnectTokens {
-			if ct == oldToken {
-				acl.ConnectTokens[i] = newToken
-				changed = true
-			}
+		if replaceConnectGrantToken(acl.ConnectTokens, oldToken, newToken) {
+			changed = true
 		}
 		if changed {
 			globalCfg.Auth.Machines[name] = acl
@@ -324,14 +332,18 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		go syncViewerTokenToPortals()
 	}
 
+	newVersion := bumpAccessVersion(id)
+
 	log.Printf("[hub] admin: rotated token for %q", id)
 
 	adminCorsHeaders(w, r)
+	setETag(w, newVersion)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"status": "rotated",
-		"id":     id,
-		"token":  newToken,
+		"status":  "rotated",
+		"id":      id,
+		"token":   newToken,
+		"version": newVersion,
 	})
 }
 
@@ -522,11 +534,36 @@ type accessEntry struct {
 	Role         string          `json:"role"`
 	TokenPreview string          `json:"tokenPreview"`
 	Machines     []machineAccess `json:"machines"`
+	// Version is the identity's current monotonic version counter. Clients
+	// echo it back as If-Match on mutating requests to detect drift. See
+	// internal/hub/access_version.go for lifecycle details.
+	Version uint64 `json:"version"`
+	// WildcardInherited enumerates the permissions the wildcard "*" ACL
+	// entry cascades to every machine that does not appear explicitly in
+	// Machines. The hub's canConnect / canManage routines honor this
+	// cascade; the field is derived from the same source so clients can
+	// render the effective per-machine state without re-implementing
+	// the cascade rules. Empty when the identity has no wildcard entry
+	// or its wildcard entry grants no cascading permissions. Owner,
+	// admin, and viewer identities have role-based implicit access
+	// rather than ACL-based cascade; for them the list is always empty
+	// and the implicit grant is represented by a synthetic "*" entry
+	// in Machines.
+	WildcardInherited []string `json:"wildcardInherited,omitempty"`
+	// WildcardInheritedServices is the services filter attached to the
+	// wildcard connect grant. Empty means "all services". Ignored when
+	// WildcardInherited does not contain "connect".
+	WildcardInheritedServices []string `json:"wildcardInheritedServices,omitempty"`
 }
 
 type machineAccess struct {
 	MachineID   string   `json:"machineId"`
 	Permissions []string `json:"permissions"`
+	// Services, when non-empty, restricts the connect grant on this
+	// machine to the named services. Omitted (nil/absent in JSON) or
+	// empty means "all services" (the 0.14 behavior). Applies only to
+	// the connect permission; register and manage are unaffected.
+	Services []string `json:"services,omitempty"`
 }
 
 // handleAdminAccess dispatches /api/admin/access and /api/admin/access/{id}...
@@ -609,6 +646,7 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 		Role:         role,
 		TokenPreview: preview,
 		Machines:     []machineAccess{},
+		Version:      ensureAccessVersion(t.ID),
 	}
 
 	// Owner/admin: implicit all-access
@@ -623,13 +661,14 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 	// Scan all machine ACLs for this token
 	for machineID, acl := range globalCfg.Auth.Machines {
 		var perms []string
+		var services []string
 		if acl.RegisterToken == t.Token {
 			perms = append(perms, "register")
 		}
-		for _, ct := range acl.ConnectTokens {
-			if ct == t.Token {
-				perms = append(perms, "connect")
-				break
+		if grant, ok := findConnectGrant(acl.ConnectTokens, t.Token); ok {
+			perms = append(perms, "connect")
+			if len(grant.Services) > 0 {
+				services = append([]string(nil), grant.Services...)
 			}
 		}
 		for _, mt := range acl.ManageTokens {
@@ -642,7 +681,29 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 			entry.Machines = append(entry.Machines, machineAccess{
 				MachineID:   machineID,
 				Permissions: perms,
+				Services:    services,
 			})
+		}
+	}
+
+	// Compute wildcard-cascade metadata. The hub's canConnect and
+	// canManage check the wildcard entry as a fallback when a machine-
+	// specific grant is absent; we surface which permissions that
+	// fallback covers so clients render specific-machine rows
+	// consistently with the hub's own authorization decisions rather
+	// than re-implementing the cascade rules.
+	if wildACL, ok := globalCfg.Auth.Machines["*"]; ok {
+		if grant, gOk := findConnectGrant(wildACL.ConnectTokens, t.Token); gOk {
+			entry.WildcardInherited = append(entry.WildcardInherited, "connect")
+			if len(grant.Services) > 0 {
+				entry.WildcardInheritedServices = append([]string(nil), grant.Services...)
+			}
+		}
+		for _, mt := range wildACL.ManageTokens {
+			if mt == t.Token {
+				entry.WildcardInherited = append(entry.WildcardInherited, "manage")
+				break
+			}
 		}
 	}
 
@@ -669,9 +730,11 @@ func adminGetAccess(w http.ResponseWriter, r *http.Request, id string) {
 
 	for _, t := range globalCfg.Auth.Tokens {
 		if t.ID == id {
+			entry := buildAccessEntry(t)
 			adminCorsHeaders(w, r)
+			setETag(w, entry.Version)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(buildAccessEntry(t))
+			json.NewEncoder(w).Encode(entry)
 			return
 		}
 	}
@@ -679,13 +742,37 @@ func adminGetAccess(w http.ResponseWriter, r *http.Request, id string) {
 	writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
 }
 
+// adminPatchAccess applies partial updates to an identity. The patch
+// body may carry an `id` field (rename), a `role` field (role change),
+// or both. Empty body or neither field is a 400. Role must be one of
+// "owner", "admin", "viewer", or "" (user, the default). Demoting the
+// sole owner is rejected with 409 so the hub never ends up without an
+// owner identity.
 func adminPatchAccess(w http.ResponseWriter, r *http.Request, id string) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var patch struct {
-		ID string `json:"id"` // rename
+		ID   *string `json:"id,omitempty"`
+		Role *string `json:"role,omitempty"`
 	}
-	if err := json.Unmarshal(body, &patch); err != nil || patch.ID == "" {
-		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "id field required"})
+	if err := json.Unmarshal(body, &patch); err != nil {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	if patch.ID == nil && patch.Role == nil {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "specify at least one of id or role"})
+		return
+	}
+	if patch.Role != nil {
+		switch *patch.Role {
+		case "", "owner", "admin", "viewer":
+			// ok
+		default:
+			writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "role must be one of owner, admin, viewer, or empty (user)"})
+			return
+		}
+	}
+	if patch.ID != nil && *patch.ID == "" {
+		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "id cannot be empty"})
 		return
 	}
 
@@ -698,23 +785,70 @@ func adminPatchAccess(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	if patch.ID != id {
-		// Check for conflict
-		if findTokenEntryInCfg(patch.ID) != nil {
-			writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "identity already exists: " + patch.ID})
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
 			return
 		}
-		oldID := entry.ID
-		entry.ID = patch.ID
-		if err := persistConfig(); err != nil {
-			log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	resultID := id
+	renamed := false
+	if patch.ID != nil && *patch.ID != id {
+		if findTokenEntryInCfg(*patch.ID) != nil {
+			writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "identity already exists: " + *patch.ID})
+			return
 		}
-		log.Printf("[hub] admin: renamed %q to %q", oldID, patch.ID)
+		entry.ID = *patch.ID
+		resultID = *patch.ID
+		renamed = true
+	}
+
+	if patch.Role != nil && *patch.Role != entry.HubRole {
+		newRole := *patch.Role
+		// Refuse to demote the last owner. Iterating once is cheap
+		// given the number of identities a hub holds, and guarding
+		// here keeps the check colocated with the mutation.
+		if entry.HubRole == "owner" && newRole != "owner" {
+			owners := 0
+			for _, t := range globalCfg.Auth.Tokens {
+				if t.HubRole == "owner" {
+					owners++
+				}
+			}
+			if owners <= 1 {
+				writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "cannot demote the sole owner; promote another identity first"})
+				return
+			}
+		}
+		entry.HubRole = newRole
+	}
+
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	var resultVersion uint64
+	if renamed {
+		renameAccessVersion(id, resultID)
+		resultVersion = currentAccessVersion(resultID)
+		log.Printf("[hub] admin: renamed %q to %q", id, resultID)
+	} else {
+		resultVersion = bumpAccessVersion(id)
+	}
+	if patch.Role != nil {
+		log.Printf("[hub] admin: set %q role to %q", resultID, *patch.Role)
 	}
 
 	adminCorsHeaders(w, r)
+	setETag(w, resultVersion)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "updated", "id": patch.ID})
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":  "updated",
+		"id":      resultID,
+		"version": resultVersion,
+	})
 }
 
 func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
@@ -725,6 +859,14 @@ func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
 	if entry == nil {
 		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "identity not found"})
 		return
+	}
+
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
 	}
 
 	token := entry.Token
@@ -743,7 +885,7 @@ func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
 		if acl.RegisterToken == token {
 			acl.RegisterToken = ""
 		}
-		acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+		acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, token)
 		acl.ManageTokens = removeToken(acl.ManageTokens, token)
 		globalCfg.Auth.Machines[machineID] = acl
 	}
@@ -751,6 +893,8 @@ func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
 	if err := persistConfig(); err != nil {
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
+
+	deleteAccessVersion(id)
 
 	log.Printf("[hub] admin: removed access entry %q", id)
 
@@ -763,6 +907,11 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
 	var req struct {
 		Permissions []string `json:"permissions"`
+		// Services, when present and non-empty, attaches a per-service
+		// filter to the connect permission. nil / absent / empty means
+		// "all services" (the pre-0.15 behavior). Ignored when connect
+		// is not in Permissions.
+		Services []string `json:"services,omitempty"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeAdminJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid body"})
@@ -778,6 +927,14 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 		return
 	}
 
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
+	}
+
 	if globalCfg.Auth.Machines == nil {
 		globalCfg.Auth.Machines = make(map[string]machineACL)
 	}
@@ -788,16 +945,22 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 	if acl.RegisterToken == token {
 		acl.RegisterToken = ""
 	}
-	acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+	acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, token)
 	acl.ManageTokens = removeToken(acl.ManageTokens, token)
 
-	// Apply requested permissions
+	// Apply requested permissions. The connect grant carries the
+	// services filter (if any) from the request body; register and
+	// manage are unaffected by Services.
 	for _, perm := range req.Permissions {
 		switch perm {
 		case "register":
 			acl.RegisterToken = token
 		case "connect":
-			acl.ConnectTokens = append(acl.ConnectTokens, token)
+			grant := connectGrant{Token: token}
+			if len(req.Services) > 0 {
+				grant.Services = append([]string(nil), req.Services...)
+			}
+			acl.ConnectTokens = append(acl.ConnectTokens, grant)
 		case "manage":
 			acl.ManageTokens = append(acl.ManageTokens, token)
 		}
@@ -809,16 +972,24 @@ func adminSetMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
-	log.Printf("[hub] admin: set %q permissions on %q to %v", id, machineID, req.Permissions)
+	newVersion := bumpAccessVersion(id)
+
+	log.Printf("[hub] admin: set %q permissions on %q to %v (services=%v)", id, machineID, req.Permissions, req.Services)
 
 	adminCorsHeaders(w, r)
+	setETag(w, newVersion)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	resp := map[string]any{
 		"status":      "updated",
 		"id":          id,
 		"machineId":   machineID,
 		"permissions": req.Permissions,
-	})
+		"version":     newVersion,
+	}
+	if len(req.Services) > 0 {
+		resp["services"] = req.Services
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machineID string) {
@@ -831,6 +1002,14 @@ func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machin
 		return
 	}
 
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
+	}
+
 	acl, exists := globalCfg.Auth.Machines[machineID]
 	if !exists {
 		writeAdminJSON(w, r, http.StatusNotFound, map[string]string{"error": "no ACL for machine"})
@@ -841,7 +1020,7 @@ func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machin
 	if acl.RegisterToken == token {
 		acl.RegisterToken = ""
 	}
-	acl.ConnectTokens = removeToken(acl.ConnectTokens, token)
+	acl.ConnectTokens = removeConnectGrant(acl.ConnectTokens, token)
 	acl.ManageTokens = removeToken(acl.ManageTokens, token)
 	globalCfg.Auth.Machines[machineID] = acl
 
@@ -849,11 +1028,19 @@ func adminRevokeMachineAccess(w http.ResponseWriter, r *http.Request, id, machin
 		log.Printf("[hub] admin: persist error: %v", err)
 	}
 
+	newVersion := bumpAccessVersion(id)
+
 	log.Printf("[hub] admin: revoked all %q permissions on %q", id, machineID)
 
 	adminCorsHeaders(w, r)
+	setETag(w, newVersion)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id, "machineId": machineID})
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":    "revoked",
+		"id":        id,
+		"machineId": machineID,
+		"version":   newVersion,
+	})
 }
 
 // removeToken returns a new slice with all occurrences of tok removed.

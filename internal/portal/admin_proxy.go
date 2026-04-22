@@ -101,6 +101,15 @@ func (s *Server) handleAdminProxy(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "" && r.Method != http.MethodGet && r.Method != http.MethodHead {
 		upstream.Header.Set("Content-Type", ct)
 	}
+	// Forward conditional-request headers used by optimistic concurrency
+	// control (If-Match, If-None-Match). Admin mutations on the access
+	// endpoints carry If-Match so batched saves can detect drift.
+	if m := r.Header.Get("If-Match"); m != "" {
+		upstream.Header.Set("If-Match", m)
+	}
+	if m := r.Header.Get("If-None-Match"); m != "" {
+		upstream.Header.Set("If-None-Match", m)
+	}
 
 	resp, err := adminProxyClient.Do(upstream)
 	if err != nil {
@@ -113,11 +122,15 @@ func (s *Server) handleAdminProxy(w http.ResponseWriter, r *http.Request) {
 	// Mirror the upstream response. Content-Type is preserved if
 	// the hub set one; otherwise default to JSON. Cache-Control is
 	// always no-cache because admin responses are not safe to
-	// cache anywhere.
+	// cache anywhere. ETag is forwarded when the upstream set it so
+	// the caller can pin conditional requests to the returned version.
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	} else {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	}
+	if e := resp.Header.Get("ETag"); e != "" {
+		w.Header().Set("ETag", e)
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(resp.StatusCode)

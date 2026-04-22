@@ -466,6 +466,7 @@ If you need to override the embedded console with custom files, set `TELAHUBD_WW
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
+| `/api/admin/agents/{machine}` | GET | view+ | Lightweight presence probe: returns `id`, `agentConnected`, `lastSeen` without the full `/api/status` payload |
 | `/api/admin/agents/{machine}/{action}` | GET/POST | manage+ | Proxy management request to agent |
 | `/api/admin/pair-code` | POST | owner/admin | Generate a pairing code |
 | `/api/pair` | POST | none | Exchange a pairing code for a token |

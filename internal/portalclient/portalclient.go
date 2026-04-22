@@ -248,7 +248,10 @@ func (c *Client) FleetAgents(ctx context.Context) ([]FleetAgent, error) {
 // HTTP verb (GET, POST, PATCH, etc.); operation is the hub admin
 // path WITHOUT the leading /api/admin/ (e.g. "access" or
 // "agents/abc123/status"). The body, if any, is sent as
-// application/json.
+// application/json. Additional per-request headers (If-Match,
+// If-None-Match, Accept-Language, ...) may be passed via the optional
+// extraHeaders variadic; maps are applied in order, so a later entry
+// overrides an earlier one for the same key.
 //
 // The returned *http.Response is the raw upstream response. The
 // caller is responsible for closing Body. Non-2xx statuses are NOT
@@ -256,7 +259,7 @@ func (c *Client) FleetAgents(ctx context.Context) ([]FleetAgent, error) {
 // specific status semantics; the caller decides what counts as a
 // failure. Network errors and request-construction errors are
 // returned in err with a nil response.
-func (c *Client) HubAdmin(ctx context.Context, hubName, operation, method string, body any) (*http.Response, error) {
+func (c *Client) HubAdmin(ctx context.Context, hubName, operation, method string, body any, extraHeaders ...map[string]string) (*http.Response, error) {
 	if hubName == "" || operation == "" {
 		return nil, errors.New("portalclient: HubAdmin requires hubName and operation")
 	}
@@ -264,6 +267,11 @@ func (c *Client) HubAdmin(ctx context.Context, hubName, operation, method string
 	req, err := c.newRequest(ctx, method, path, body)
 	if err != nil {
 		return nil, err
+	}
+	for _, h := range extraHeaders {
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
 	}
 	return c.HTTPClient.Do(req)
 }

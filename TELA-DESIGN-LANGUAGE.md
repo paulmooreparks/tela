@@ -152,6 +152,31 @@ to 400, 500, 600, and 700. Italic and underline are not used for emphasis.
 | Muted | 12px | 400 | Descriptions, hints. Color via `--text-muted`, never opacity. |
 | Monospace | 12px | 400-600 | Version strings, paths, IDs, code, terminal. |
 
+### Annotation text primitives
+
+These classes carry the muted-and-subordinate look that explanatory
+copy uses everywhere in TDL: descriptions under headings, loading
+placeholders, hints next to controls, empty-state hints. Every one of
+them MUST have a top-level CSS rule. A class that lives only as a
+scoped descendant rule (`.some-pane .my-class { ... }`) inherits
+default body styling outside its scope and renders inconsistently the
+moment another pane uses it. Several painful regressions traced back
+to exactly this gap; do not reintroduce it.
+
+| Class | Use |
+|---|---|
+| `.section-desc` | Description paragraph immediately below an h1/h2 page heading. |
+| `.hint` | Annotation that sits next to or below a form control. |
+| `.empty-hint` | Empty-state message inside a list or sidebar. |
+| `.loading` | Transient placeholder shown while a pane waits on data. |
+| `.tools-service-label` | Small italic muted label paired with a tool name. |
+| `.update-note` | One-paragraph contextual note inside the update overlay. |
+
+The shorthand: if you add `class="something-desc"` or
+`class="something-hint"` in markup, add a global CSS rule for it
+before committing. Scoped descendant rules layered on top of the
+global are fine; the global must exist first.
+
 ## Buttons
 
 Every content-area button shares an **elevation invariant**: a 1px border, a
@@ -713,6 +738,14 @@ title and close button, a body, and an action footer on a tinted background.
   a strictly higher z-index than its parent. A confirmation dialog hidden
   behind its parent is a serious bug: from the user's perspective, clicking
   Cancel appears to do nothing.
+- **The body owns the gutter.** The 20px interior inset belongs to
+  `.modal-body`, never to a child class like a form, a wrapper div, or a
+  state-specific block. Every direct child (form, bail-out state, result
+  rows, settings groups, copyable command blocks) inherits the gutter for
+  free, which means a new state pattern added later cannot accidentally
+  render edge-to-edge. Modals that contain a full-width structural element
+  like a top tab bar opt out with the `.modal-body-flush` modifier and
+  provide their own gutter inside (typically on `.tab-content`).
 
 ## Tables
 
@@ -1079,8 +1112,8 @@ require manual dismissal so the user has time to read and act on the error.
 
 An empty state explains what the user sees (or doesn't see) and includes a
 pointer to the action the user should take next. An empty sidebar with the
-text "No agents registered. Pair Agent to add one." is a good empty state. An
-empty sidebar with no text is not.
+text "No agents registered. Use Generate to onboard one." is a good empty
+state. An empty sidebar with no text is not.
 
 ## Progress and code
 

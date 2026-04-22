@@ -8,6 +8,8 @@ export function AddRemote(arg1:string,arg2:string):Promise<void>;
 
 export function AdminAPICall(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
+export function AdminChangeRole(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
 export function AdminCreateToken(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AdminDeleteToken(arg1:string,arg2:string):Promise<string>;
@@ -20,13 +22,13 @@ export function AdminListPortals(arg1:string):Promise<string>;
 
 export function AdminListTokens(arg1:string):Promise<string>;
 
-export function AdminRenameAccess(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function AdminRenameAccess(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
-export function AdminRevokeMachineAccess(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function AdminRevokeMachineAccess(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AdminRotateToken(arg1:string,arg2:string):Promise<string>;
 
-export function AdminSetMachineAccess(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function AdminSetMachineAccess(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
 
 export function AssignLocalPort(arg1:number):Promise<number>;
 
@@ -150,7 +152,11 @@ export function GetUpdateVersion():Promise<string>;
 
 export function GetVersion():Promise<string>;
 
+export function HasLocalTelad():Promise<boolean>;
+
 export function HasUpdate():Promise<boolean>;
+
+export function HubCapabilities(arg1:string):Promise<string>;
 
 export function ImportProfile():Promise<void>;
 
@@ -206,6 +212,8 @@ export function PortalSetSourceEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function QuitApp():Promise<void>;
 
+export function RedeemAgentCode(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function RefreshBinStatus():Promise<Array<main.BinaryInfo>>;
 
 export function ReleaseLocalPort(arg1:number):Promise<void>;
@@ -231,6 +239,8 @@ export function RestartAgent(arg1:string,arg2:string):Promise<string>;
 export function RestartHub(arg1:string):Promise<string>;
 
 export function RestartToUpdate():Promise<void>;
+
+export function SaveAccessAudit(arg1:string,arg2:string):Promise<string>;
 
 export function SaveFileDialog(arg1:string):Promise<string>;
 
