@@ -69,12 +69,37 @@ function switchTab(name, btn) {
   if (name === 'status') refreshStatus();
   if (name === 'profile') showProfileOverview();
   if (name === 'files') refreshFilesTab();
+  if (name === 'updates') refreshUpdatesTab();
   if (name === 'agents') agentsRefresh();
   if (name === 'hubs') refreshHubsTab();
   if (name === 'access') refreshAccessTab();
   if (name === 'remotes') refreshRemotesList();
   if (name === 'credentials') refreshCredentialsList();
   if (name === 'client-settings') refreshClientSettings();
+}
+
+// switchTabByName drives a tab change from a programmatic source (a
+// link in another pane, a notification, etc.) instead of a click on
+// the actual tab button. It mirrors switchTab's effect by locating
+// the right .main-tab in whichever tab bar is currently visible and
+// dispatching a click. The visible tab bar test handles the
+// Clients/Infrastructure mode split: the same button id can appear
+// in both bars, but only one is in the DOM tree of a visible bar at
+// a time.
+function switchTabByName(name) {
+  var bars = document.querySelectorAll('.main-tab-bar');
+  for (var i = 0; i < bars.length; i++) {
+    if (bars[i].classList.contains('hidden')) continue;
+    var btns = bars[i].querySelectorAll('.main-tab');
+    for (var j = 0; j < btns.length; j++) {
+      var btn = btns[j];
+      var oc = btn.getAttribute('onclick') || '';
+      if (oc.indexOf("switchTab('" + name + "'") !== -1) {
+        btn.click();
+        return;
+      }
+    }
+  }
 }
 
 // --- Log Panel ---
@@ -6551,9 +6576,17 @@ function refreshClientSettings() {
   refreshChannelSourcesUI();
 }
 
+// refreshClientToolVersions is the legacy entry point used by code
+// paths that mutate local binaries (service install/uninstall, mount
+// enable/disable, profile import/export). Since the Installed Tools
+// card moved to the Updates tab, the function now renders into the
+// Updates tab's target when it exists. Older callers see no behavior
+// change when the Updates tab has been opened at least once; before
+// that, the function is a no-op and the next Updates-tab open
+// picks up fresh state via refreshUpdatesTab's own force-refresh.
 function refreshClientToolVersions() {
-  var el = document.getElementById('cs-bin-status');
-  if (el) renderToolsTable(el, true, null, true);
+  var upd = document.getElementById('updates-tools-status');
+  if (upd) renderToolsTable(upd, true, null, true);
 }
 
 function importProfile() {
@@ -8499,3 +8532,64 @@ function accessExportAudit() {
     showError('Export failed: ' + (err && err.message ? err.message : err));
   });
 }
+
+// ── Updates tab ─────────────────────────────────────────────────────
+//
+// Lifecycle UI for the binaries installed on this machine: TelaVisor
+// itself, the tela CLI, and any local telad / telahubd copies. Hub
+// and agent update surfaces live on their respective Infrastructure
+// tabs and are unaffected by this tab.
+//
+// The tab mirrors the channel selector from Application Settings so
+// the most-touched workflow (check, switch channel, install) stays
+// in one place. The underlying state (GetClientChannel /
+// SetClientChannel) is the same, so edits from either surface stay
+// in sync.
+
+function refreshUpdatesTab() {
+  var tools = document.getElementById('updates-tools-status');
+  if (tools) tools.innerHTML = '<p class="loading">Checking for updates&hellip;</p>';
+  populateChannelSelect('updates-channel-select');
+  var sel = document.getElementById('updates-channel-select');
+  var status = document.getElementById('updates-channel-status');
+  if (sel && !sel.dataset.wired) {
+    sel.dataset.wired = '1';
+    sel.addEventListener('change', function () {
+      var newCh = sel.value;
+      if (status) status.textContent = 'Switching to ' + newCh + '\u2026';
+      goApp.SetClientChannel(newCh, findChannelManifestBase(newCh)).then(function (r) {
+        var data;
+        try { data = typeof r === 'string' ? JSON.parse(r) : r; } catch (e) { data = {}; }
+        if (data && data.error) {
+          if (status) status.textContent = 'Error: ' + data.error;
+          return;
+        }
+        if (status) status.textContent = 'Now on ' + newCh + '.';
+        // The channel switch moves the goalpost for "latest"; re-run
+        // the check so the tools table reflects the new baseline.
+        goApp.CheckForUpdatesNow().then(function () {
+          renderUpdatesToolsTable();
+        });
+      }).catch(function (err) {
+        if (status) status.textContent = 'Error: ' + err;
+      });
+    });
+  }
+  goApp.GetClientChannel().then(function (info) {
+    if (!sel) return;
+    var ch = (info && info.channel) ? info.channel : 'dev';
+    sel.value = ch;
+    if (status) status.textContent = 'Currently on ' + ch + '.';
+  }).catch(function () { /* best effort */ });
+  // Force-refresh: a tab switch onto Updates is the operator asking
+  // "tell me the current state," which is exactly what forceRefresh
+  // does inside renderToolsTable.
+  renderUpdatesToolsTable(true);
+}
+
+function renderUpdatesToolsTable(forceRefresh) {
+  var el = document.getElementById('updates-tools-status');
+  if (!el) return;
+  renderToolsTable(el, /*showActions*/ true, null, !!forceRefresh);
+}
+

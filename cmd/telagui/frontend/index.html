@@ -46,6 +46,7 @@
       <button class="main-tab active" role="tab" onclick="switchTab('status', this)">Status</button>
       <button class="main-tab" role="tab" onclick="switchTab('profile', this)">Profiles</button>
       <button class="main-tab" role="tab" onclick="switchTab('files', this)">Files</button>
+      <button class="main-tab" role="tab" onclick="switchTab('updates', this)">Updates</button>
       <button class="main-tab" role="tab" onclick="switchTab('client-settings', this)">Client Settings</button>
     </div>
 
@@ -227,6 +228,36 @@
       </div>
     </div>
 
+    <!-- Updates tab: lifecycle of locally-installed Tela binaries
+         (TelaVisor itself, the tela CLI, and any local telad/telahubd
+         binaries the operator manages). Channel preference is mirrored
+         here so the most-touched flow (check / install) is at hand
+         without diving into Application Settings. -->
+    <div class="tab-pane hidden" role="tabpanel" id="tab-updates">
+      <div class="status-pane">
+        <div class="updates-header">
+          <h1>Updates</h1>
+          <button type="button" class="btn btn-sm" onclick="refreshUpdatesTab()" title="Re-check the channel manifest and re-scan local binaries">&#x21BB; Check Now</button>
+        </div>
+        <p class="section-desc updates-intro">Local Tela binaries on this machine. Hub and agent updates live on the <strong>Hubs</strong> and <strong>Agents</strong> tabs in Infrastructure mode.</p>
+
+        <div class="setting-card">
+          <div class="setting-card-title">Release channel</div>
+          <p class="setting-card-desc">The release channel TelaVisor and the tela CLI follow on this machine. Custom channel sources are managed in <button type="button" class="link" onclick="switchTabByName('client-settings')">Client Settings</button>.</p>
+          <div class="updates-channel-row">
+            <select id="updates-channel-select" class="tb-select" title="Local client channel"></select>
+            <span id="updates-channel-status" class="tools-service-label"></span>
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-card-title">Installed Tools</div>
+          <p class="setting-card-desc">Versions of TelaVisor and the tela binaries found on this machine. Click <strong>Update</strong> on any out-of-date row to fetch and install the latest from the configured channel.</p>
+          <div id="updates-tools-status" class="bin-status"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Client Settings tab -->
     <div class="tab-pane hidden" role="tabpanel" id="tab-client-settings">
       <div class="pane-toolbar" id="cs-toolbar">
@@ -251,12 +282,6 @@
             <button class="btn btn-sm" onclick="browseBinPath()" title="Browse">Browse</button>
             <button class="btn btn-sm" onclick="restoreDefaultBinPath()" title="Restore default">Restore Default</button>
           </div>
-        </div>
-
-        <div class="setting-card">
-          <div class="setting-card-title-row"><div class="setting-card-title">Installed Tools</div><button type="button" class="btn btn-sm tools-action-btn" onclick="refreshClientToolVersions()" title="Check all versions">&#x21BB; Refresh</button></div>
-          <p class="setting-card-desc">Versions of tela binaries found in the configured location.</p>
-          <div id="cs-bin-status" class="bin-status"></div>
         </div>
 
         <div class="setting-card">

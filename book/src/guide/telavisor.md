@@ -386,6 +386,58 @@ watches the file share directory using the operating system's native
 file change notifications and pushes change events back through the
 tunnel to TelaVisor.
 
+### Updates
+
+The Updates tab is the lifecycle surface for the Tela binaries
+installed on this machine: TelaVisor itself, the `tela` CLI, and any
+local `telad` or `telahubd` binaries the operator manages. Hub and
+agent updates belong to the hub or the agent and are driven from the
+*Hubs* and *Agents* tabs in Infrastructure mode; the Updates tab
+does not touch them.
+
+The tab has a *Check Now* button in the top-right that re-fetches
+the channel manifest and re-scans the local binary directory. Two
+cards fill the page:
+
+**Release channel** names the channel TelaVisor and the `tela` CLI
+follow on this machine. They share a single preference stored in
+`~/.tela/credentials.yaml` under `update.channel`, so switching the
+dropdown reconfigures both binaries at once. The dropdown lists the
+built-in channels (`dev`, `beta`, `stable`) plus every custom
+channel source the operator has added; custom channels are managed
+in [Client Settings](#client-settings), and the card footer links
+there directly.
+
+**Installed Tools** is a table with a row for TelaVisor and a row
+for each managed binary. Each row shows the installed version, the
+latest version on the configured channel, and an action button that
+is either absent (the binary is up to date), *Install* (the binary
+is not present), or *Update* (the binary is behind the channel HEAD).
+The TelaVisor row's button reads *Update & Restart* because TV has
+to hand execution off to the new binary after the swap.
+
+When the same binary exists both as a local file and as an
+installed service (Windows SCM, systemd, launchd), a sub-row shows
+the service version and running state underneath the main row. The
+update action on the main row updates the local copy; updating a
+service-only installation uses a separate *Update* button labeled
+accordingly. After a service restarts against the new binary, the
+*Installed* column polls the on-disk version until it changes so
+the displayed value always reflects what is actually running.
+
+The *Available* column comes from the release channel manifest, not
+from GitHub's `releases/latest`. A TelaVisor on `dev` compares
+against `dev.json`, a TelaVisor on `stable` against `stable.json`.
+Every download is verified against the channel manifest's SHA-256
+hash before being written to disk; a mismatch aborts the swap and
+leaves the existing binary in place.
+
+The whole page is also reachable as a modal via the warning-icon
+update indicator in the topbar; the indicator turns on when any
+monitored binary is behind its channel HEAD and off when every row
+is current. The indicator and the tab share state, so installing
+from either surface clears the other.
+
 ### Client Settings
 
 The Client Settings tab is where you configure how the `tela` process
@@ -417,48 +469,23 @@ application directory:
 Use the *Browse* button to choose a different folder, or *Restore Default*
 to reset.
 
-The Binary Location is the directory where TelaVisor will install or
-update tools through the *Installed Tools* table below. It is also the
-directory the system service is configured against, so all four roles
-(TelaVisor, the `tela` CLI, `telad`, `telahubd`) read and write the same
-binaries from the same place.
+The Binary Location is the directory where TelaVisor installs and
+updates tools. The [Updates](#updates) tab reads from and writes
+to this directory; the system service is configured against it too,
+so all four roles (TelaVisor, the `tela` CLI, `telad`, `telahubd`)
+read and write the same binaries from the same place.
 
-#### Installed Tools
+#### Channel Sources
 
-A table showing every Tela binary that TelaVisor manages. Each row has
-four columns:
-
-- **Tool.** The binary name (TelaVisor, tela, telad, telahubd).
-- **Installed.** The version currently on disk in the configured Binary
-  Location, or *not installed*.
-- **Available.** The latest version on the release channel TelaVisor
-  itself is following.
-- **Action.** A button that depends on the row's state. *Update* if the
-  installed version is older than the available version. *Install* if
-  the binary is missing. *Up to date* (disabled) if the installed
-  version matches the available version.
-
-The available version comes from the release channel manifest, not from
-GitHub `releases/latest`. So a TelaVisor configured to follow the `dev`
-channel compares against `dev.json`, a TelaVisor on `beta` against
-`beta.json`, a TelaVisor on `stable` against `stable.json`. Changing the
-channel in [Application Settings](#application-settings) immediately
-changes which manifest the table compares against, and the buttons in
-this table re-evaluate. Every download is verified against the channel
-manifest's SHA-256 hash before being written to disk.
-
-When `telad` or `telahubd` is installed as a managed operating system
-service, the Installed Tools row shows `service (running)` or `service
-(stopped)` next to the binary name. The Update button in this state
-delegates the swap to the elevated service process; TelaVisor itself
-does not need to be elevated. After the service restarts against the
-new binary, the Installed column polls the on-disk version until it
-changes, so the displayed version always reflects what is actually
-running.
-
-The *Refresh* button at the top right of the table re-checks every row
-against the channel manifest. Use it after changing channels or after
-publishing a new release.
+Custom release channels that should appear in every channel dropdown
+in TelaVisor: the Updates tab, Hub Settings, and Agent Settings. The
+three built-in channels (`dev`, `beta`, `stable`) are always present
+and cannot be removed. Each custom entry is a name and a base URL
+(for example, `local` pointing at `http://localhost:9900/`); the
+name becomes selectable in every channel picker that lists it, and
+the base is used to resolve manifest and binary URLs for that
+channel. Custom channels are stored in `~/.tela/credentials.yaml`
+under `update.sources`.
 
 #### System Service
 
@@ -1253,8 +1280,8 @@ opens an update dialog that shows current and latest versions for each
 binary, with per-binary *Update* and *Install* buttons.
 
 The update dialog is the same workflow as the
-[Installed Tools table in Client Settings](#installed-tools), exposed
-as a one-click affordance from the title bar so you do not have to
+[Installed Tools table on the Updates tab](#updates), exposed as a
+one-click affordance from the title bar so you do not have to
 navigate to find it. The dialog also has *Remind Later* (hides the
 indicator until the next restart) and *Skip This Version* (hides the
 indicator until a newer version is released) options.

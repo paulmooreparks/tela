@@ -2161,6 +2161,20 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   color: var(--warn); font-size: 11px; font-weight: 600;
 }
 
+/* Updates tab: lifecycle UI for locally-installed Tela binaries.
+   Reuses the status-pane layout and setting-card primitives so the
+   visual language matches Client Settings and Status. */
+.updates-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; margin-bottom: 8px;
+}
+.updates-header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+.updates-intro { margin-bottom: 20px; }
+.updates-channel-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.updates-channel-row select { min-width: 160px; }
+
 /* Conflict modal: reuses the TDL modal primitives, with a danger-tinted
    title and a muted "force overwrite" escape hatch link in the body. */
 .access-conflict-title { color: var(--danger); display: flex; align-items: center; gap: 8px; }
