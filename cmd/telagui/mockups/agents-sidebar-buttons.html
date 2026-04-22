@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Agents sidebar buttons (proposed terser labels)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+    /* TDL tokens (dark theme), inline so the mockup stands alone. */
+    :root {
+        --bg: #111827;
+        --surface: #1f2937;
+        --surface-alt: #1a2332;
+        --text: #e5e7eb;
+        --text-muted: #9ca3af;
+        --border: #4b5668;
+        --accent: #2ecc71;
+        --accent-hover: #27ae60;
+        --warn: #f39c12;
+        --danger: #e74c3c;
+        --radius: 8px;
+        --radius-sm: 4px;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+    body { min-height: 100vh; }
+
+    /* TelaVisor window chrome: deliberately reproduces the live app
+       so the sidebar width and surrounding context match the
+       screenshot the operator was looking at. */
+    .tv-window {
+        max-width: 1280px; margin: 0 auto;
+        background: var(--bg); min-height: 100vh;
+        display: flex; flex-direction: column;
+    }
+    .tv-titlebar {
+        background: #1565c0; padding: 8px 14px;
+        font-size: 13px;
+    }
+    .tv-topbar {
+        background: #0f172a; padding: 10px 16px;
+        display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 1px solid #1e293b;
+    }
+    .tv-brand {
+        font-size: 15px; font-weight: 700; color: white;
+    }
+    .tv-brand em { color: var(--accent); font-style: normal; }
+    .tv-mode-bar {
+        display: inline-flex; border: 1px solid rgba(255,255,255,0.28);
+        border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.04);
+    }
+    .tv-mode-btn {
+        padding: 6px 16px; background: none; border: none;
+        color: #cbd5e1; font-size: 12px; font-weight: 500; cursor: default;
+        position: relative;
+    }
+    .tv-mode-btn + .tv-mode-btn { border-left: 1px solid rgba(255,255,255,0.28); }
+    .tv-mode-btn.active { color: white; font-weight: 700; }
+    .tv-mode-btn.active::after {
+        content: ''; position: absolute;
+        left: 0; right: 0; bottom: 0; height: 3px;
+        background: var(--accent);
+    }
+    .tv-chrome-btns {
+        display: flex; gap: 6px;
+    }
+    .tv-chrome-btn {
+        width: 30px; height: 30px; border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.28);
+        background: rgba(255,255,255,0.04); color: #cbd5e1;
+        font-size: 14px; display: inline-flex; align-items: center;
+        justify-content: center;
+    }
+    .tv-chrome-btn.danger { border-color: var(--danger); color: var(--danger); }
+
+    /* Tab bar */
+    .main-tab-bar {
+        display: flex; align-items: center;
+        background: var(--surface-alt); border-bottom: 1px solid var(--border);
+        padding: 0 16px;
+    }
+    .main-tab {
+        background: none; border: none;
+        padding: 10px 16px; font-size: 13px; font-weight: 500;
+        color: var(--text-muted); border-bottom: 2px solid transparent;
+        cursor: default;
+    }
+    .main-tab.active {
+        color: var(--text); font-weight: 600; border-bottom-color: var(--accent);
+    }
+
+    /* Pane toolbar */
+    .pane-toolbar {
+        display: flex; align-items: center; gap: 6px;
+        padding: 6px 16px; background: var(--surface);
+        border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+    .btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border-radius: 6px;
+        font-size: 13px; font-weight: 500; font-family: var(--font);
+        color: var(--text); cursor: default;
+        border: 1px solid var(--border); background: #2a3545;
+    }
+    .btn-primary { background: var(--accent); color: #1f2937; border-color: var(--accent-hover); font-weight: 600; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.4; }
+
+    /* Agents layout: STRICT match to live app metrics so this mockup
+       represents what fits at the real sidebar width. */
+    .agents-layout {
+        display: flex; flex: 1; min-height: 600px; overflow: hidden;
+    }
+    .agents-sidebar {
+        width: 240px; min-width: 200px;
+        border-right: 1px solid var(--border);
+        background: var(--surface);
+        display: flex; flex-direction: column;
+        overflow: hidden; flex-shrink: 0;
+    }
+    .agents-sidebar-header {
+        padding: 10px 16px 8px; font-size: 11px; text-transform: uppercase;
+        color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: space-between;
+    }
+    .agents-sidebar-list { flex: 1; overflow-y: auto; }
+    .agents-sidebar-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 16px; color: var(--text-muted);
+        border-left: 3px solid transparent;
+        border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .agents-sidebar-item .dot { margin-top: 0; }
+    .agents-sidebar-name { font-size: 13px; }
+    .agents-sidebar-version { font-size: 10px; color: var(--text-muted); font-family: var(--mono); display: block; margin-top: 2px; }
+    .agents-sidebar-version.status-current  { color: var(--accent); }
+    .agents-sidebar-version.status-current::before { content: '\2713\00a0'; }
+    .agents-sidebar-version.status-outdated { color: var(--warn); }
+    .agents-sidebar-version.status-outdated::before { content: '\2191\00a0'; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-online { background: var(--accent); }
+    .dot-offline { background: var(--text-muted); }
+
+    .agents-sidebar-footer {
+        padding: 8px 12px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    /* The proposed change: terser button labels (Generate.../Redeem...)
+       so both fit comfortably side-by-side in the 240px sidebar; the
+       caption underneath does the explanatory work the labels can no
+       longer carry on their own. */
+    .agents-sidebar-footer-row {
+        display: flex; gap: 6px;
+    }
+    .agents-sidebar-footer-row .btn {
+        flex: 1; padding: 6px 8px; font-size: 12px;
+        justify-content: center;
+    }
+    .agents-sidebar-footer-caption {
+        margin-top: 6px;
+        font-size: 11px; line-height: 1.3;
+        color: var(--text-muted); text-align: center;
+    }
+
+    .agents-detail {
+        flex: 1; overflow-y: auto; padding: 24px 32px;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--text-muted); font-size: 13px;
+    }
+
+    /* Log panel placeholder so the proportions match the screenshot. */
+    .log-panel {
+        background: var(--surface); border-top: 1px solid var(--border);
+        height: 90px; flex-shrink: 0;
+    }
+    .log-panel-header {
+        display: flex; align-items: center; gap: 0;
+        padding: 0 16px; border-bottom: 1px solid var(--border);
+    }
+    .log-panel-tab {
+        padding: 8px 14px; font-size: 12px; color: var(--text-muted);
+        border-bottom: 2px solid transparent;
+    }
+    .log-panel-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .log-panel-body {
+        padding: 8px 16px; font-family: var(--mono); font-size: 11px;
+        color: var(--text); line-height: 1.5;
+    }
+
+    /* Annotations for the side-by-side compare */
+    .compare-row { display: flex; gap: 24px; margin-top: 24px; align-items: flex-start; }
+    .compare-col { flex: 1; }
+    .compare-label {
+        font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+        letter-spacing: 0.06em; font-weight: 700; margin-bottom: 6px;
+    }
+
+    .note {
+        font-size: 12px; color: var(--text-muted); line-height: 1.5;
+        padding: 14px 18px; background: var(--surface-alt);
+        border-left: 3px solid var(--border);
+        border-radius: 4px;
+        margin: 24px 24px 0;
+    }
+    .note h4 { margin: 0 0 6px; color: var(--text); font-size: 13px; font-weight: 700; }
+    </style>
+</head>
+<body>
+
+<div class="tv-window">
+
+    <!-- Title bar (faux) -->
+    <div class="tv-titlebar">TelaVisor</div>
+
+    <!-- Topbar -->
+    <div class="tv-topbar">
+        <span class="tv-brand">Tela<em>Visor</em></span>
+        <div class="tv-mode-bar">
+            <button class="tv-mode-btn">Clients</button>
+            <button class="tv-mode-btn active">Infrastructure</button>
+        </div>
+        <div class="tv-chrome-btns">
+            <span class="tv-chrome-btn">&#x23FB;</span>
+            <span class="tv-chrome-btn">&#x1F4C1;</span>
+            <span class="tv-chrome-btn">&#x26A0;</span>
+            <span class="tv-chrome-btn">i</span>
+            <span class="tv-chrome-btn">&#x2699;</span>
+            <span class="tv-chrome-btn danger">&times;</span>
+        </div>
+    </div>
+
+    <!-- Infrastructure tab bar -->
+    <div class="main-tab-bar">
+        <button class="main-tab">Hubs</button>
+        <button class="main-tab active">Agents</button>
+        <button class="main-tab">Access</button>
+        <button class="main-tab">Remotes</button>
+        <button class="main-tab">Credentials</button>
+    </div>
+
+    <!-- Agents toolbar -->
+    <div class="pane-toolbar">
+        <button class="btn btn-sm" disabled>&#x21B6;</button>
+        <button class="btn btn-sm btn-primary" disabled>Save</button>
+        <span class="tb-sep"></span>
+        <button class="btn btn-sm" disabled>Restart</button>
+        <button class="btn btn-sm" disabled>Logs</button>
+    </div>
+
+    <!-- Agents layout -->
+    <div class="agents-layout">
+        <aside class="agents-sidebar">
+            <div class="agents-sidebar-header">
+                <span>Agents</span>
+                <button class="btn btn-sm" style="padding: 2px 8px; font-size: 11px;">&#x21BB;</button>
+            </div>
+            <div class="agents-sidebar-list">
+                <div class="agents-sidebar-item">
+                    <span class="dot dot-offline"></span>
+                    <div>
+                        <div class="agents-sidebar-name">BARN</div>
+                        <span class="agents-sidebar-version status-current">v0.15.0-local.21</span>
+                    </div>
+                </div>
+                <div class="agents-sidebar-item">
+                    <span class="dot dot-online"></span>
+                    <div>
+                        <div class="agents-sidebar-name">Development VM</div>
+                        <span class="agents-sidebar-version status-outdated">v0.15.0-local.21</span>
+                    </div>
+                </div>
+                <div class="agents-sidebar-item">
+                    <span class="dot dot-online"></span>
+                    <div>
+                        <div class="agents-sidebar-name">owlsnest-agent</div>
+                        <span class="agents-sidebar-version status-outdated">v0.15.0-local.21</span>
+                    </div>
+                </div>
+                <div class="agents-sidebar-item">
+                    <span class="dot dot-online"></span>
+                    <div>
+                        <div class="agents-sidebar-name">Work Laptop</div>
+                        <span class="agents-sidebar-version status-current">v0.15.0-dev.1</span>
+                    </div>
+                </div>
+            </div>
+            <div class="agents-sidebar-footer">
+                <div class="agents-sidebar-footer-row">
+                    <button class="btn btn-primary">Generate&hellip;</button>
+                    <button class="btn">Redeem&hellip;</button>
+                </div>
+                <div class="agents-sidebar-footer-caption">
+                    Generate a pair code for an agent on another machine, or redeem one to register an agent here.
+                </div>
+            </div>
+        </aside>
+
+        <div class="agents-detail">
+            Select an agent to view details.
+        </div>
+    </div>
+
+    <!-- Log panel -->
+    <div class="log-panel">
+        <div class="log-panel-header">
+            <div class="log-panel-tab active">TelaVisor</div>
+            <div class="log-panel-tab">tela</div>
+            <div class="log-panel-tab">Commands</div>
+        </div>
+        <div class="log-panel-body">
+            2026-04-22T04:40:24Z TelaVisor started<br>
+            2026-04-22T04:40:24Z Profile loaded
+        </div>
+    </div>
+
+</div>
+
+<div class="note">
+    <h4>What changed</h4>
+    Buttons drop the words <em>Agent</em> and <em>Code</em> so they fit
+    side-by-side at the live 240px sidebar width: <strong>Generate&hellip;</strong>
+    and <strong>Redeem&hellip;</strong>. The caption picks up the
+    explanatory work, naming both <em>pair code</em> and the
+    <em>another machine</em> vs <em>here</em> contrast that the labels
+    used to carry. Tooltips on each button (not visible in the static
+    mockup) keep the long form: "Generate a pairing code on this hub
+    for an agent on a remote machine" and "Redeem a pair code to
+    register a local agent on this machine."
+</div>
+
+<div class="note">
+    <h4>Why the caption is fine doing the work</h4>
+    The caption is one sentence and sits directly under the buttons,
+    so an operator scanning the sidebar for the first time sees the
+    full explanation alongside the controls. After they've used either
+    button once, the short labels are enough on their own. This is the
+    same pattern as <strong>Undo</strong> / <strong>Save</strong> in
+    every toolbar in TV: the label alone is meaningless out of context,
+    but the surrounding pane makes it obvious.
+</div>
+
+</body>
+</html>

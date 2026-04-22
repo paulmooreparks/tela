@@ -736,25 +736,25 @@ Each entry in the agent sidebar shows:
 Two buttons sit in the sidebar footer for agent onboarding. They are
 single-purpose so the labels match what each one actually does.
 
-**Generate Agent Code...** opens a modal that asks for a hub, a
-machine name, and an expiration. Submitting it produces a one-time
-pair code on the chosen hub with `type=register`. The result modal
-shows the code in large monospace next to a pre-filled
+**Generate...** opens a modal that asks for a hub, a machine name,
+and an expiration. Submitting it produces a one-time pair code on
+the chosen hub with `type=register`. The result modal shows the code
+in large monospace next to a pre-filled
 `telad pair -hub <ws-url> -code <code> -machine <name>` command line,
 each with its own Copy button. The intended workflow is to paste the
 command into chat, SSH, or a deployment script targeted at the agent
 host. Generation is enabled whenever TelaVisor knows about at least
 one hub; the call requires owner or admin credentials on that hub.
 
-**Redeem Code...** opens a modal that runs `telad pair` against the
-local `telad` binary on this machine. Use it when an operator on this
-same workstation wants to register an agent here (developer
-workstations, single-host setups). The form takes a hub, the pair
-code, and an optional machine name. The hub picker lists the hubs
-TelaVisor already knows about plus an *Other hub URL...* option for
-codes issued by hubs you have not added yet. On success, a
-confirmation modal names the hub and machine, and the agents list
-refreshes a moment later so the new entry appears.
+**Redeem...** opens a modal that runs `telad pair` against the local
+`telad` binary on this machine. Use it when an operator on this same
+workstation wants to register an agent here (developer workstations,
+single-host setups). The form takes a hub, the pair code, and an
+optional machine name. The hub picker lists the hubs TelaVisor
+already knows about plus an *Other hub URL...* option for codes
+issued by hubs you have not added yet. On success, a confirmation
+modal names the hub and machine, and the agents list refreshes a
+moment later so the new entry appears.
 
 When `telad` is not installed in the configured Binary Location, the
 Redeem modal opens in a short bail-out state explaining that
@@ -765,7 +765,7 @@ common confusion: a pair code for an agent on a different machine
 cannot be redeemed in TelaVisor at all because the resulting token
 has to land in the agent host's credential store; in that case the
 operator runs `telad pair` directly on the target host, which is the
-flow Generate Agent Code... is built for.
+flow Generate... is built for.
 
 #### Agent detail
 
