@@ -300,7 +300,8 @@ Deny (403 Forbidden)
       "tokenPreview": "abc123...",
       "machines": [
         {"machineId": "*", "permissions": ["register", "connect", "manage"]}
-      ]
+      ],
+      "version": 1
     },
     {
       "id": "alice",
@@ -309,7 +310,9 @@ Deny (403 Forbidden)
       "machines": [
         {"machineId": "*", "permissions": ["connect"]},
         {"machineId": "barn", "permissions": ["manage"]}
-      ]
+      ],
+      "version": 7,
+      "wildcardInherited": ["connect"]
     },
     {
       "id": "barn-agent",
@@ -317,11 +320,14 @@ Deny (403 Forbidden)
       "tokenPreview": "ghi789...",
       "machines": [
         {"machineId": "barn", "permissions": ["register"]}
-      ]
+      ],
+      "version": 1
     }
   ]
 }
 </code></pre>
+<p><code>version</code> is a per-identity monotonic counter the hub bumps on every mutation. Clients pass it back as <code>If-Match: "&lt;version&gt;"</code> on subsequent mutations; the hub returns <code>412 Precondition Failed</code> when the value is stale, with the current entry in the response body so the caller can diff. The same value also rides on the <code>ETag</code> response header. Clients that omit <code>If-Match</code> skip the check (force overwrite).</p>
+<p><code>wildcardInherited</code> (and the optional <code>wildcardInheritedServices</code>) report which permissions the wildcard <code>*</code> ACL cascades to every machine that has no explicit grant. The hub's <code>canConnect</code> and <code>canManage</code> check the wildcard as a fallback; surfacing the cascade here lets clients render the effective per-machine state without re-implementing the cascade rules. Owner, admin, and viewer identities receive role-based implicit access rather than ACL-based cascade; for them the field is empty and the implicit grant is represented by a synthetic <code>*</code> entry in <code>machines</code>.</p>
 <p>The CLI equivalent:</p>
 <pre><code>$ tela admin access
 IDENTITY      ROLE     MACHINES
@@ -332,11 +338,11 @@ barn-agent    user     barn: register
 <p>The unified access API is the recommended way to view and modify permissions. The full endpoint reference:</p>
 <div class="table-wrapper"><table><thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/api/admin/access</code></td><td>List all access entries</td></tr>
-<tr><td>GET</td><td><code>/api/admin/access/{id}</code></td><td>Get one entry</td></tr>
-<tr><td>PATCH</td><td><code>/api/admin/access/{id}</code></td><td>Rename identity</td></tr>
-<tr><td>DELETE</td><td><code>/api/admin/access/{id}</code></td><td>Remove identity and all permissions</td></tr>
-<tr><td>PUT</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Set permissions on a machine</td></tr>
-<tr><td>DELETE</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Revoke all permissions on a machine</td></tr>
+<tr><td>GET</td><td><code>/api/admin/access/{id}</code></td><td>Get one entry (with <code>ETag</code>)</td></tr>
+<tr><td>PATCH</td><td><code>/api/admin/access/{id}</code></td><td>Rename identity (<code>id</code>) and/or change role (<code>role</code>); honors <code>If-Match</code>. A last-owner guard returns <code>409 Conflict</code> on any attempt to demote the sole owner.</td></tr>
+<tr><td>DELETE</td><td><code>/api/admin/access/{id}</code></td><td>Remove identity and all permissions; honors <code>If-Match</code></td></tr>
+<tr><td>PUT</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Set permissions on a machine; honors <code>If-Match</code></td></tr>
+<tr><td>DELETE</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Revoke all permissions on a machine; honors <code>If-Match</code></td></tr>
 </tbody></table>
 </div>
 <h2 id="common-tasks"><a class="header" href="#common-tasks">Common tasks</a></h2>

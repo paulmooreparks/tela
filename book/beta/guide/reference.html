@@ -756,6 +756,7 @@ telahubd update -h | -? | -help | --help     # print help
 </div>
 <p><strong>Agent management and pairing</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/api/admin/agents/{machine}</code></td><td>Lightweight presence probe: returns <code>id</code>, <code>agentConnected</code>, <code>lastSeen</code> without the full <code>/api/status</code> payload</td></tr>
 <tr><td>GET/POST</td><td><code>/api/admin/agents/{machine}/{action}</code></td><td>Proxy management request to agent</td></tr>
 <tr><td>POST</td><td><code>/api/admin/pair-code</code></td><td>Generate a pairing code</td></tr>
 <tr><td>POST</td><td><code>/api/pair</code></td><td>Exchange a pairing code for a token (no auth required)</td></tr>
