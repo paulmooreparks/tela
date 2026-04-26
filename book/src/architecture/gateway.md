@@ -9,9 +9,10 @@ This rule is not a policy choice. It is a structural property of the design. A r
 | Path gateway | HTTP | `telad` | HTTP requests, routed by URL path to local services | URL path only |
 | Bridge gateway | TCP | `telad` (bridge mode) | TCP streams from the tunnel to LAN-reachable machines | None |
 | Upstream gateway | TCP | `telad` | Outbound dependency calls rerouted to different targets | None |
-| Relay gateway | WireGuard | `telahubd` | Opaque WireGuard ciphertext between a paired client and agent | None |
+| Relay gateway (single-hop) | WireGuard | `telahubd` | Opaque WireGuard ciphertext between a paired client and agent | None |
+| Relay gateway (multi-hop) | WireGuard | `telahubd` | Opaque WireGuard ciphertext between a client and an agent registered on a *different* hub | None |
 
-A fifth instance, the multi-hop relay gateway, bridges sessions across more than one hub. It is the same primitive as the existing single-hop relay applied recursively: a hub that receives a paired session forwards it to an agent registered with a different hub, remaining blind to the payload at every hop. This is on the [1.0 roadmap](https://github.com/paulmooreparks/tela/blob/main/ROADMAP-1.0.md) under "Relay gateway."
+A fifth instance, the multi-hop relay gateway, bridges sessions across more than one hub. It is the same primitive as the single-hop relay applied recursively: a hub that receives a paired session forwards it to an agent registered with a different hub, remaining blind to the payload at every hop. Each forwarding hub decrements a one-byte hop count (TTL) in the shared 7-byte frame header and drops the frame if the count reaches zero, which prevents forwarding loops without a routing protocol. The operator configures which destination hubs a bridging hub will dial via a `bridges:` section in `telahubd.yaml`; the bridging hub advertises the reachable machines through its own `/api/status` with a `reachableThrough` pointer so clients know which hub they are really talking to. For the full specification see [DESIGN-relay-gateway.md](https://github.com/paulmooreparks/tela/blob/main/DESIGN-relay-gateway.md).
 
 ## Why the rule matters
 

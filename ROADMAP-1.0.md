@@ -184,19 +184,19 @@ Tracked: [#53](https://github.com/paulmooreparks/tela/issues/53) (priority:high)
 
 ## Important (seriously hurts 1.0 if not done)
 
-### Relay gateway (hub-to-hub transit)
+### Relay gateway (hub-to-hub transit) — **shipped in v0.6**
 
-Tracked: [#26](https://github.com/paulmooreparks/tela/issues/26) (priority:high) — wire-format forcing function via the TTL hop count field.
+Tracked: [#26](https://github.com/paulmooreparks/tela/issues/26). Shipped 2026-04-09 as "The relay gateway release" (see [CHANGELOG.md](CHANGELOG.md)). The design doc is [DESIGN-relay-gateway.md](DESIGN-relay-gateway.md); the implementation is in `internal/relay/frame.go` (7-byte wire format) and `internal/hub/bridge.go` (bridge session lifecycle, static bridge config, `reachableThrough` directory field). Bridged-session end-to-end tests live in `internal/teststack/stack_test.go`.
 
-The generalization of Tela's existing gateway primitive to the relay layer. A hub forwards opaque WireGuard ciphertext on behalf of a client whose target agent is registered with a *different* hub. The WireGuard handshake remains end to end between the original client and the destination agent. The bridging hub is blind to the payload, the same way the destination hub is blind to the payload today. This is the missing rung of the gateway ladder Tela already implements at every other layer of the stack: path gateway (Layer 7), bridge gateway (Layer 4 inbound), upstream gateway (Layer 4 outbound), single-hop relay gateway (Layer 3, today's hub), multi-hop relay gateway (Layer 3, *this item*).
-
-Why this is a 1.0 deliverable rather than post-1.0 work: the architectural shape is forced now. Once the v1 wire format ships without any hop-count or routing-aware field, the relay gateway becomes harder to add later without a v2 wire bump. Forcing the design through now keeps the protocol freeze honest. The feature also unlocks the multi-customer managed-service-provider, air-gap traversal, geographic-distribution, and acquisition-merger scenarios that the introduction's *fleet* tier implicitly promises but that no other feature in the fabric actually delivers. It is the strongest single answer to "how does Tela scale beyond one hub" the project has.
+The shape: a hub forwards opaque WireGuard ciphertext on behalf of a client whose target agent is registered with a *different* hub. The WireGuard handshake remains end to end; bridging hubs stay blind to the payload the same way the destination hub is blind today. This is the missing rung of the gateway ladder Tela already implements at every other layer of the stack: path gateway (Layer 7), bridge gateway (Layer 4 inbound), upstream gateway (Layer 4 outbound), single-hop relay gateway (Layer 3, the hub), multi-hop relay gateway (Layer 3, this feature).
 
 What it explicitly does not include:
 
-- **Routing protocols.** The bridging hub knows about the destination hub via the directory protocol. It does not learn topology dynamically. No Border Gateway Protocol (BGP), no spanning tree, no link-state algorithm.
+- **Routing protocols.** The bridging hub knows about the destination hub via static config (and, post-v1, the portal directory). It does not learn topology dynamically. No Border Gateway Protocol (BGP), no spanning tree, no link-state algorithm.
 - **Identity federation.** A user with a token on Hub A does not automatically have a token on Hub B. Hub A's bridging token is its own credential. The four federation-shaped scope decisions above are unaffected.
 - **Mesh agent-to-agent routing.** The data path is still client to hub (to hub) to agent. See the **Routed mesh networking** scope decision above for why mesh is not in scope and why the relay gateway is not the same thing.
+
+Remaining work tracked against #26 before it closes: a book chapter teaching the gateway family with the relay gateway as a shipped instance. The two implementation gaps flagged in the design-doc critical review (self-bridge detection at config load, WS ping/pong on the bridge leg) have landed.
 
 ### In-browser fallback
 

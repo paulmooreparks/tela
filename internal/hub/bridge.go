@@ -68,18 +68,31 @@ var (
 
 // initBridgeDir rebuilds the bridge machine directory from config.
 // Called once in applyHubConfig.
+//
+// Self-bridge entries (hubId matching this hub's own) are rejected
+// with a WARNING and skipped. A session routed through a self-bridge
+// loops back into the same hub and drains TTL before any useful
+// forwarding, which is confusing to diagnose; loud refusal at
+// startup is better than silent acceptance. See
+// DESIGN-relay-gateway.md section 10.4.
 func initBridgeDir(cfg *hubConfig) {
 	bridgeDirMu.Lock()
 	defer bridgeDirMu.Unlock()
 	bridgeDir = make(map[string]*bridgeConfig)
+	accepted := 0
 	for i := range cfg.Bridges {
 		bc := &cfg.Bridges[i]
+		if hubID != "" && bc.HubID != "" && bc.HubID == hubID {
+			log.Printf("[hub] WARNING: bridge entry points at this hub's own hubId (%s); skipping. A self-bridge would loop forwarding back into this hub.", bc.HubID)
+			continue
+		}
 		for _, m := range bc.Machines {
 			bridgeDir[m] = bc
 		}
+		accepted++
 	}
-	if len(bridgeDir) > 0 {
-		log.Printf("[hub] bridge directory: %d machines across %d bridge(s)", len(bridgeDir), len(cfg.Bridges))
+	if accepted > 0 {
+		log.Printf("[hub] bridge directory: %d machines across %d bridge(s)", len(bridgeDir), accepted)
 	}
 }
 
@@ -231,16 +244,62 @@ func handleBridgeConnect(clientSC *safeConn, state *wsState, msg *signalingMsg, 
 	recordEvent(machineName, "client-connect-bridge", fmt.Sprintf("via=%s session=%s", bc.HubID, sessionID[:8]))
 	log.Printf("[hub] bridge session started: %s via %s session=%s", machineName, bc.HubID, sessionID[:8])
 
+	// Install WebSocket ping/pong wiring on the outbound bridge WS so a
+	// middlebox that silently drops the TCP connection surfaces as a
+	// read error within the pong timeout, not only via the 45-second
+	// in-band session keepalive. Matches the cadence of the hub's
+	// inbound control-WS keepalive (runKeepalive): ping every 10s,
+	// reset read deadline on pong to 30s out.
+	bridgeConn.SetReadDeadline(time.Now().Add(bridgePongTimeout))
+	bridgeConn.SetPongHandler(func(string) error {
+		bridgeConn.SetReadDeadline(time.Now().Add(bridgePongTimeout))
+		return nil
+	})
+	pingStop := make(chan struct{})
+	go runBridgePinger(bridgeSC, pingStop)
+
 	// Launch the bridge-to-client relay goroutine.
-	go runBridgeReader(bridgeSC, clientSC, sessionID, machineName, clientTokenHex, bc)
+	go runBridgeReader(bridgeSC, clientSC, sessionID, machineName, clientTokenHex, bc, pingStop)
+}
+
+const (
+	// bridgePingInterval is the cadence at which Hub-A sends WebSocket
+	// ping frames to Hub-B on the outbound bridge connection.
+	bridgePingInterval = 10 * time.Second
+
+	// bridgePongTimeout is the read deadline applied after each pong.
+	// If no message (data or pong) arrives within this window, the
+	// read loop errors out and teardown runs.
+	bridgePongTimeout = 30 * time.Second
+)
+
+// runBridgePinger sends a WebSocket ping frame every bridgePingInterval
+// on the outbound bridge WS. Exits when pingStop is closed (by
+// runBridgeReader's teardown) or when WriteControl returns an error
+// (the WS is already dead).
+func runBridgePinger(bridgeSC *safeConn, pingStop <-chan struct{}) {
+	ticker := time.NewTicker(bridgePingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-pingStop:
+			return
+		case <-ticker.C:
+			if err := bridgeSC.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+				return
+			}
+		}
+	}
 }
 
 // runBridgeReader relays messages from Hub-B to the client and handles
 // session teardown when the bridge leg closes. The client-to-Hub-B
 // direction is handled by the existing handleWSConnection relay loop
-// (clientState.Peer = bridgeSC).
-func runBridgeReader(bridgeSC, clientSC *safeConn, sessionID, machineName, clientTokenHex string, bc *bridgeConfig) {
+// (clientState.Peer = bridgeSC). pingStop is closed on teardown to
+// stop the bridge pinger goroutine.
+func runBridgeReader(bridgeSC, clientSC *safeConn, sessionID, machineName, clientTokenHex string, bc *bridgeConfig, pingStop chan<- struct{}) {
 	defer func() {
+		close(pingStop)
 		bridgeSC.Close()
 
 		// Remove leg-1 UDP token.

@@ -295,43 +295,24 @@ One WebSocket, many logical channels. Each channel carries a single TCP stream o
 5. Either side sends `close`.
 6. Channel is freed.
 
-## 6.3 Frame Format (Immutable)
+## 6.3 Frame Format
 
-This is the **frozen wire format**. It must never be changed in a breaking way.
+The v1 relay frame header is a 7-byte big-endian prefix on every
+binary message that crosses the relay path: `magic` (1 byte),
+`hop` (1 byte TTL), `flags` (1 byte; bit 0 selects DATA vs
+CONTROL), and `session_id` (4 bytes). The full specification,
+including transport integration (WebSocket, UDP relay, direct
+tunnel), hop-count semantics on bridged sessions, and the in-band
+CONTROL frame types, lives in [DESIGN-relay-gateway.md](DESIGN-relay-gateway.md)
+section 2. The implementation is in `internal/relay/frame.go`; all
+binaries produce and consume exactly this format.
 
-```c
-/*
-  WARNING: DO NOT MODIFY THIS STRUCT.
-  This struct is serialized over the wire.
-  Adding, removing, or reordering fields breaks protocol compatibility.
-
-  Wire format rules:
-    - All multi-byte fields are BIG-ENDIAN (network byte order).
-    - Packed, no padding between fields.
-    - Total header size: 12 bytes.
-*/
-#pragma pack(push, 1)
-typedef struct {
-    uint8_t  version;        // Protocol version (must remain 1 for v1)
-    uint32_t session_id;     // Unique per session
-    uint16_t channel_id;     // Multiplexed stream ID
-    uint8_t  type;           // Frame type (control, data, heartbeat)
-    uint32_t payload_length; // Length of payload following this header, in bytes
-} tela_frame_header_t;
-#pragma pack(pop)
-```
-
-### Frame Types
-
-- `0x01`: Control
-- `0x02`: Data
-- `0x03`: Heartbeat
-
-### Wire Encoding Rules
-
-- All multi-byte integers (`session_id`, `channel_id`, `payload_length`) are serialized in **big-endian** (network byte order).
-- The header is **packed** with no alignment padding. Total on-wire size: **12 bytes**.
-- `payload_length` specifies the exact number of bytes following the header. The receiver must read exactly this many bytes before parsing the next frame.
+An earlier draft of this section declared a 12-byte aspirational
+header (version + session_id + channel_id + type + payload_length)
+that was never implemented. The shipped 7-byte format replaces it.
+Multiplexed channels (the `channel_id` field in the earlier draft)
+are not a v1 feature; see the channel-multiplexing scope decision
+in ROADMAP-1.0.md.
 
 ## 6.4 Control Messages
 

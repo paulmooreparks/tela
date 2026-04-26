@@ -258,6 +258,27 @@ etc.) will be assigned from the remaining payload-byte space. v1
 implementations must ignore CONTROL frames with unknown payload
 types.
 
+### 3.8 Handshake and retransmission across bridged hops
+
+The WireGuard Noise_IK handshake is end-to-end between the client
+and the agent. Retransmission of handshake messages is WireGuard's
+responsibility, not the relay's; the relay path is a stateless
+byte-forwarder. Each hop validates the 7-byte frame header,
+decrements the TTL, and forwards the payload unchanged. A dropped
+handshake datagram on any hop is indistinguishable from a dropped
+datagram on a direct path: WireGuard's handshake retry timer on the
+originator fires, a fresh handshake initiation is sent, and the
+relay path carries it.
+
+This is the same property the single-hop relay has today. The
+multi-hop relay inherits it without additional state. The
+consequence: a bridging hub can restart mid-session without data
+loss for any session whose WireGuard handshake has already
+completed (the tunnel's internal keepalive will re-establish the
+path through whichever transport is currently available) and with
+at most one retry for sessions whose handshake is in flight at
+restart time.
+
 ## 4. Directory: "Reachable Through" Field
 
 ### 4.1 Hub status extension
@@ -375,6 +396,20 @@ connect to `prod-db` on Hub-A does not automatically gain access to
 `prod-db` on Hub-B (the bridge token controls that, and the operator
 grants it separately).
 
+### 5.4 TLS trust on the outbound bridge dial
+
+Hub-A dials the destination hub over `wss://` and inherits the
+system CA trust store for certificate validation. This matches the
+client dial model today. When cert pinning lands (see
+[ROADMAP-1.0.md](ROADMAP-1.0.md), issue #23), the bridge dial should
+use the same pinning mechanism clients use: the destination hub's
+certificate fingerprint stored alongside the bridge config, TOFU on
+first dial, explicit operator confirmation on change. Designed so
+both dial paths share one implementation; the bridge is just another
+caller of the pinning-aware dialer. v1 ships with system-CA trust
+only; cert pinning will be added to bridge dials in the same commit
+series that adds it to client dials.
+
 ## 6. Transport Upgrade on Bridged Sessions
 
 ### 6.1 Independent legs
@@ -391,12 +426,16 @@ Hub-A to Hub-B does not attempt direct tunnel (STUN hole-punching)
 because both are server-class hosts with stable addresses; the UDP
 relay upgrade is sufficient and simpler.
 
-### 6.2 UDP relay on the bridge leg
+### 6.2 UDP relay on the bridge leg (post-v1)
 
-Hub-A and Hub-B negotiate UDP relay on the bridge leg the same way a
-client and hub do: Hub-B sends `udp-offer` with a token and port,
-Hub-A probes, and on success both sides switch WireGuard datagrams to
-UDP. The frame header is present on both transports (section 2.5).
+v1 keeps the bridge leg on WebSocket unconditionally. Hub-B may send
+a `udp-offer` as part of its normal signaling, but Hub-A ignores it
+on the bridge leg. A future release can upgrade the bridge leg to
+UDP relay using the same mechanism a client and hub use: Hub-B sends
+`udp-offer` with a token and port, Hub-A probes, and on success both
+sides switch WireGuard datagrams to UDP. The frame header is
+identical across transports (section 2.5), so no wire-format change
+is required to add this later.
 
 ### 6.3 Latency profile
 
@@ -438,23 +477,28 @@ correlation ID to the signaling messages, but v1 does not require it.
 
 ### 8.1 Outbound connection management
 
-Hub-A maintains a persistent outbound WebSocket to each destination
-hub in its `bridges` config. The connection is established on first
-use (when a client requests a machine reachable through that hub) and
-kept alive with the standard WebSocket ping/pong heartbeat (20s/45s
-intervals). On disconnect, Hub-A reconnects with exponential backoff
-(1s, 2s, 4s, 8s, capped at 30s). Sessions waiting for the outbound
-connection receive a `session-end` with reason "bridge unavailable"
-if the connection does not recover within a timeout (30s).
+Each bridged session opens a new outbound WebSocket to Hub-B (one
+connection per session, matching the existing one-WS-per-session
+model). The connection is established lazily on first use with a
+15-second dial handshake timeout. If the dial fails, Hub-A sends
+the client an `error` message naming the bridge as unavailable and
+the session terminates; there is no retry at the bridge layer. The
+client is free to reconnect, which opens a fresh bridge dial.
 
-### 8.2 Multiple sessions on one bridge connection
+Future optimization: multiplex multiple sessions over a single
+persistent bridge connection, demultiplexed by `session_id` in the
+frame header. This would let a hub pair amortize one TCP+TLS
+handshake across many sessions and reconnect with exponential
+backoff independently of any one session's lifetime. The wire
+format already reserves the bits for this; see 8.2.
 
-In v1, each bridged session opens a new outbound WebSocket to Hub-B
-(one connection per session, matching the existing one-WS-per-session
-model). The `session_id` field in the frame header is reserved for a
-future optimization where multiple sessions share one connection,
-demultiplexed by session_id. This optimization is not required for
-v1 but the wire format supports it without a version bump.
+### 8.2 Session ID in the frame header
+
+In v1, `session_id` in the 7-byte frame header is constant for the
+life of a WebSocket (one session per connection). Hubs and peers
+do not use it for routing; it exists so that the future
+multiplexing optimization (see 8.1) can be added without a
+wire-format change.
 
 ### 8.3 Existing code changes
 
@@ -525,3 +569,25 @@ recorded here for traceability.
    ping/pong is per-connection and hop-by-hop; it cannot detect
    end-to-end session failures on bridged paths. CONTROL frames
    carry session-level keepalive end-to-end. See section 3.7.
+
+4. **Self-bridge detection at config load.** A `bridges:` entry
+   that points at the hub's own `hubId` is a misconfiguration: a
+   session routed through it loops back into the same hub and
+   drains TTL before any useful forwarding. `initBridgeDir` in
+   `internal/hub/bridge.go` compares each bridge's `hubId` against
+   the hub's own at startup; a match logs a WARNING and the entry
+   is skipped. URL-based matching is not attempted because the
+   hub's external URL is not always knowable at startup (reverse
+   proxies, multi-address binds); `hubId` equality is the reliable
+   signal and catches the common copy-paste misconfiguration.
+
+5. **WebSocket ping/pong on the bridge leg.** The outbound bridge
+   WebSocket installs a `SetPongHandler` that resets a 30-second
+   read deadline, and a pinger goroutine sends a ping every 10
+   seconds (matching the cadence of `runKeepalive` on the inbound
+   control WebSocket). A middlebox that silently drops the TCP
+   connection without tearing it down now surfaces as a read error
+   within the pong timeout rather than only via the 45-second
+   in-band session keepalive. The in-band keepalive (3.7) remains
+   the authoritative end-to-end health signal; the WS-level
+   ping/pong is the per-hop dead-connection detector.
