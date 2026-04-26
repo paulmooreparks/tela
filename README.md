@@ -91,6 +91,8 @@ The Hub Settings view exposes lifecycle controls (View Logs, Update, Restart) an
 
 The Access tab lets you create identities, rotate tokens, change roles, delete identities, grant and revoke per-machine permissions (including per-service filters on the connect grant), and generate one-time pairing codes. Changes are staged as a batch and committed with optimistic concurrency, so a concurrent edit by another operator surfaces as a conflict dialog rather than a silent overwrite.
 
+![TelaVisor Access tab](book/src/screens/telavisor-access-by-identity.png)
+
 The Agents tab lists all telad instances visible across your configured hubs without requiring an active tunnel connection. Each agent shows version, services, file share configuration, and management controls. The Software row updates the agent binary in place by downloading from GitHub releases and restarting through the OS service manager.
 
 ![TelaVisor Agents tab](book/src/screens/telavisor-agents.png)

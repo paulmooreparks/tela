@@ -395,6 +395,8 @@ agent updates belong to the hub or the agent and are driven from the
 *Hubs* and *Agents* tabs in Infrastructure mode; the Updates tab
 does not touch them.
 
+![Updates tab](../screens/telavisor-updates.png)
+
 The tab header carries two controls in the top-right: a
 *Check automatically* checkbox and a *Check Now* button. The
 checkbox toggles the periodic background check (the same check
@@ -410,6 +412,8 @@ built-in channels (`dev`, `beta`, `stable`) plus every custom
 channel source the operator has added; custom channels are managed
 in [Client Settings](#client-settings), and the card footer links
 there directly.
+
+![Release Channel dropdown open](../screens/telavisor-updates-channel.png)
 
 **Installed Tools** is a table with a row for TelaVisor and a row
 for each managed binary. Each row shows the installed version, the
@@ -607,6 +611,8 @@ registered with. Each entry shows the directory name and the directory
 URL. Adding a portal here is the equivalent of running `telahubd portal
 add` from the command line.
 
+![Hub Settings, scrolled to Management](../screens/telavisor-hub-settings-management.png)
+
 The Management section provides hub lifecycle controls. These are only
 visible to owners and admins:
 
@@ -625,15 +631,20 @@ visible to owners and admins:
   via legacy path)`.
 - **Software.** Shows whether the hub is up to date or behind the
   channel's HEAD. The button label reads either `Up to date` (disabled)
-  or `Update to vX.Y.Z` (active). Clicking the active button asks the
-  hub to download the new release, verify it against the channel
-  manifest's SHA-256 hash, replace its binary, and restart. Progress is
-  shown inline (`Hub is downloading update and restarting...`,
-  `Waiting for hub to restart... (1)`, `Updated to vX.Y.Z`) and the
-  page re-renders when the hub comes back online. The label and
-  disabled state are derived from the channel manifest, not from the
-  GitHub `/releases/latest` API, so a hub on `dev` cannot be told to
-  "update to v0.5.0" (the `stable` HEAD).
+  or `Update to vX.Y.Z` (active). Clicking the active button opens a
+  confirmation dialog before proceeding.
+
+  ![Update Hub confirmation dialog](../screens/telavisor-hub-update.png)
+
+  The hub then downloads the new release, verifies it against the
+  channel manifest's SHA-256 hash, replaces its binary, and restarts.
+  Progress is shown inline (`Hub is downloading update and
+  restarting...`, `Waiting for hub to restart... (1)`,
+  `Updated to vX.Y.Z`) and the page re-renders when the hub comes
+  back online. The label and disabled state are derived from the
+  channel manifest, not from the GitHub `/releases/latest` API, so a
+  hub on `dev` cannot be told to "update to v0.5.0" (the `stable`
+  HEAD).
 - **Restart.** Requests an immediate graceful restart of the hub
   process.
 
@@ -643,11 +654,7 @@ hub itself, only your local credentials and view) and clearing all
 stored hub tokens from the local credential file.
 
 The Hub Settings view is the same shape regardless of which hub you have
-selected. The values change with the hub; the layout does not. A second
-hub on a different release version would show the same panels with
-different version badges.
-
-![Hub Settings for a second hub](../screens/telavisor-hub-settings-gohub.png)
+selected. The values change with the hub; the layout does not.
 
 #### Machines
 
@@ -746,6 +753,8 @@ command into chat, SSH, or a deployment script targeted at the agent
 host. Generation is enabled whenever TelaVisor knows about at least
 one hub; the call requires owner or admin credentials on that hub.
 
+![Generate Agent Code modal](../screens/telavisor-agents-generate.png)
+
 **Redeem...** opens a modal that runs `telad pair` against the local
 `telad` binary on this machine. Use it when an operator on this same
 workstation wants to register an agent here (developer workstations,
@@ -755,6 +764,8 @@ already knows about plus an *Other hub URL...* option for codes
 issued by hubs you have not added yet. On success, a confirmation
 modal names the hub and machine, and the agents list refreshes a
 moment later so the new entry appears.
+
+![Redeem Agent Code modal](../screens/telavisor-agents-redeem.png)
 
 When `telad` is not installed in the configured Binary Location, the
 Redeem modal opens in a short bail-out state explaining that
@@ -852,6 +863,8 @@ The Management card mirrors the layout of the hub Management card from
   through the management protocol so it reflects what the agent is
   actually using right now, not what is on disk in
   `telad.yaml`.
+
+  ![Agent config viewer](../screens/telavisor-agents-config.png)
 - **Log output.** A *View Logs* button that opens a new tab in the log
   panel and fetches the agent's recent log buffer through the
   `update-status` mgmt action via the hub's mediated management proxy.
@@ -935,10 +948,15 @@ Access opens on one of two projections of the same underlying data:
   matrix for the selected machine: every identity on the hub gets a
   row, with *Connect*, *Register*, and *Manage* checkboxes and an
   optional services filter.
+
+  ![Access tab, By machine view](../screens/telavisor-access-by-machine.png)
+
 - **By identity.** The sidebar lists every identity on the hub. The
   detail pane shows a machine-vs-permission matrix for the selected
   identity, with a row for every registered machine plus the
   wildcard `*` fallback.
+
+  ![Access tab, By identity view](../screens/telavisor-access-by-identity.png)
 
 The view toggle is in the right side of the toolbar. Switching
 between the two views does not lose staged work; both views read and
@@ -963,8 +981,13 @@ every action that operates on the current hub:
 - **Add Identity...** Creates a new token-backed identity. Opens a
   dialog asking for a name and a role; the new token is shown once
   in a follow-up dialog so the operator can copy it.
+
+  ![Add Identity dialog](../screens/telavisor-access-add-identity.png)
+
 - **Pair Code...** Generates a one-time pairing code for onboarding a
   new identity or agent.
+
+  ![Generate Pairing Code dialog](../screens/telavisor-access-pair-code.png)
 - **Rescan services.** Reloads access data and machine services from
   the hub. Use after changing an agent's `telad.yaml` so newly
   advertised services show up in the matrix.
@@ -1023,6 +1046,8 @@ checkbox in that case is checked and disabled with a tooltip that
 points the operator at the wildcard row in the rail; per-machine
 overrides are not possible because the underlying ACL model has no
 deny semantic.
+
+![Wildcard ACL inheritance shown in the matrix](../screens/telavisor-access-wildcard.png)
 
 The per-row **Edit...** button opens a dialog to narrow or widen the
 filter. The dialog offers two scopes:
@@ -1090,6 +1115,8 @@ For owner, admin, and viewer rows, the detail pane shows an
 explanatory card instead of a matrix. Owner and admin have implicit
 all-machine access that is not manageable per-machine; viewer is
 read-only console access with no machine permissions at all.
+
+![By identity view, owner identity selected](../screens/telavisor-access-by-identity-owner.png)
 
 ### Remotes
 
