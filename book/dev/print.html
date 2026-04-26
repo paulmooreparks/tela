@@ -180,7 +180,7 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>This edition documents Tela v0.14.0-dev.3.</em></p>
+<p><em>This edition documents Tela v0.15.0-dev.3.</em></p>
 <p>Tela is a connectivity fabric. It is a small set of programs that lets one
 machine reach a TCP service on another machine through an encrypted tunnel,
 without either side opening an inbound port, installing a virtual private
@@ -668,7 +668,7 @@ Expires: 2026-04-15T10:30:00Z
 Client pairing command:
   tela pair -hub wss://hub.example.com -code ABCD-1234
 </code></pre>
-<p>Codes can also be generated from TelaVisor's Tokens view for administrators who prefer a graphical interface.</p>
+<p>Codes can also be generated from TelaVisor's Access tab, using the <em>Pair Code...</em> button in the toolbar, for administrators who prefer a graphical interface.</p>
 <h3 id="redeeming-a-code-user"><a class="header" href="#redeeming-a-code-user">Redeeming a code (user)</a></h3>
 <pre><code class="language-bash">tela pair -hub wss://hub.example.com -code ABCD-1234
 </code></pre>
@@ -680,6 +680,7 @@ Client pairing command:
 <pre><code class="language-bash">sudo telad pair -hub wss://hub.example.com -code ABCD-1234
 </code></pre>
 <p><code>telad pair</code> stores the resulting token in the system credential store. The agent then connects to the hub without a token in its config file.</p>
+<p>For administrators who prefer a graphical interface and run <code>telad</code> on the same machine as TelaVisor (developer workstations, single-host setups), the Agents tab's <em>Redeem...</em> button opens a dialog that runs the same <code>telad pair</code> invocation under the hood. The button only handles the local case; agents on remote hosts must redeem on the host itself, since the resulting token has to land in that host's credential store.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="connection-profiles"><a class="header" href="#connection-profiles">Connection profiles</a></h1>
 <p>A connection profile is a YAML file that describes one or more tunnels. Running <code>tela connect -profile &lt;name&gt;</code> opens all of them in parallel with a single command, each reconnecting independently on failure.</p>
 <p>Profiles live in <code>~/.tela/profiles/</code> (or <code>%APPDATA%\tela\profiles\</code> on Windows). Each file is named <code>&lt;profile-name&gt;.yaml</code>.</p>
@@ -1721,6 +1722,55 @@ appear in the file list automatically. This works because the agent
 watches the file share directory using the operating system's native
 file change notifications and pushes change events back through the
 tunnel to TelaVisor.</p>
+<h3 id="updates"><a class="header" href="#updates">Updates</a></h3>
+<p>The Updates tab is the lifecycle surface for the Tela binaries
+installed on this machine: TelaVisor itself, the <code>tela</code> CLI, and any
+local <code>telad</code> or <code>telahubd</code> binaries the operator manages. Hub and
+agent updates belong to the hub or the agent and are driven from the
+<em>Hubs</em> and <em>Agents</em> tabs in Infrastructure mode; the Updates tab
+does not touch them.</p>
+<p><img src="guide/../screens/telavisor-updates.png" alt="Updates tab" /></p>
+<p>The tab header carries two controls in the top-right: a
+<em>Check automatically</em> checkbox and a <em>Check Now</em> button. The
+checkbox toggles the periodic background check (the same check
+that drives the topbar update indicator) and persists immediately
+to the credential store. <em>Check Now</em> fires the check on demand and
+re-scans the local binary directory. Two cards fill the page:</p>
+<p><strong>Release Channel</strong> names the channel TelaVisor and the <code>tela</code> CLI
+follow on this machine. They share a single preference stored in
+<code>~/.tela/credentials.yaml</code> under <code>update.channel</code>, so switching the
+dropdown reconfigures both binaries at once. The dropdown lists the
+built-in channels (<code>dev</code>, <code>beta</code>, <code>stable</code>) plus every custom
+channel source the operator has added; custom channels are managed
+in <a href="guide/telavisor.html#client-settings">Client Settings</a>, and the card footer links
+there directly.</p>
+<p><img src="guide/../screens/telavisor-updates-channel.png" alt="Release Channel dropdown open" /></p>
+<p><strong>Installed Tools</strong> is a table with a row for TelaVisor and a row
+for each managed binary. Each row shows the installed version, the
+latest version on the configured channel, and an action button that
+is either absent (the binary is up to date), <em>Install</em> (the binary
+is not present), or <em>Update</em> (the binary is behind the channel HEAD).
+The TelaVisor row's button reads <em>Update &amp; Restart</em> because TV has
+to hand execution off to the new binary after the swap.</p>
+<p>When the same binary exists both as a local file and as an
+installed service (Windows SCM, systemd, launchd), a sub-row shows
+the service version and running state underneath the main row. The
+update action on the main row updates the local copy; updating a
+service-only installation uses a separate <em>Update</em> button labeled
+accordingly. After a service restarts against the new binary, the
+<em>Installed</em> column polls the on-disk version until it changes so
+the displayed value always reflects what is actually running.</p>
+<p>The <em>Available</em> column comes from the release channel manifest, not
+from GitHub's <code>releases/latest</code>. A TelaVisor on <code>dev</code> compares
+against <code>dev.json</code>, a TelaVisor on <code>stable</code> against <code>stable.json</code>.
+Every download is verified against the channel manifest's SHA-256
+hash before being written to disk; a mismatch aborts the swap and
+leaves the existing binary in place.</p>
+<p>The whole page is also reachable as a modal via the warning-icon
+update indicator in the topbar; the indicator turns on when any
+monitored binary is behind its channel HEAD and off when every row
+is current. The indicator and the tab share state, so installing
+from either surface clears the other.</p>
 <h3 id="client-settings"><a class="header" href="#client-settings">Client Settings</a></h3>
 <p>The Client Settings tab is where you configure how the <code>tela</code> process
 runs on the local machine. It has its own toolbar at the top with <em>Undo</em>
@@ -1743,43 +1793,21 @@ application directory:</p>
 </div>
 <p>Use the <em>Browse</em> button to choose a different folder, or <em>Restore Default</em>
 to reset.</p>
-<p>The Binary Location is the directory where TelaVisor will install or
-update tools through the <em>Installed Tools</em> table below. It is also the
-directory the system service is configured against, so all four roles
-(TelaVisor, the <code>tela</code> CLI, <code>telad</code>, <code>telahubd</code>) read and write the same
-binaries from the same place.</p>
-<h4 id="installed-tools"><a class="header" href="#installed-tools">Installed Tools</a></h4>
-<p>A table showing every Tela binary that TelaVisor manages. Each row has
-four columns:</p>
-<ul>
-<li><strong>Tool.</strong> The binary name (TelaVisor, tela, telad, telahubd).</li>
-<li><strong>Installed.</strong> The version currently on disk in the configured Binary
-Location, or <em>not installed</em>.</li>
-<li><strong>Available.</strong> The latest version on the release channel TelaVisor
-itself is following.</li>
-<li><strong>Action.</strong> A button that depends on the row's state. <em>Update</em> if the
-installed version is older than the available version. <em>Install</em> if
-the binary is missing. <em>Up to date</em> (disabled) if the installed
-version matches the available version.</li>
-</ul>
-<p>The available version comes from the release channel manifest, not from
-GitHub <code>releases/latest</code>. So a TelaVisor configured to follow the <code>dev</code>
-channel compares against <code>dev.json</code>, a TelaVisor on <code>beta</code> against
-<code>beta.json</code>, a TelaVisor on <code>stable</code> against <code>stable.json</code>. Changing the
-channel in <a href="guide/telavisor.html#application-settings">Application Settings</a> immediately
-changes which manifest the table compares against, and the buttons in
-this table re-evaluate. Every download is verified against the channel
-manifest's SHA-256 hash before being written to disk.</p>
-<p>When <code>telad</code> or <code>telahubd</code> is installed as a managed operating system
-service, the Installed Tools row shows <code>service (running)</code> or <code>service (stopped)</code> next to the binary name. The Update button in this state
-delegates the swap to the elevated service process; TelaVisor itself
-does not need to be elevated. After the service restarts against the
-new binary, the Installed column polls the on-disk version until it
-changes, so the displayed version always reflects what is actually
-running.</p>
-<p>The <em>Refresh</em> button at the top right of the table re-checks every row
-against the channel manifest. Use it after changing channels or after
-publishing a new release.</p>
+<p>The Binary Location is the directory where TelaVisor installs and
+updates tools. The <a href="guide/telavisor.html#updates">Updates</a> tab reads from and writes
+to this directory; the system service is configured against it too,
+so all four roles (TelaVisor, the <code>tela</code> CLI, <code>telad</code>, <code>telahubd</code>)
+read and write the same binaries from the same place.</p>
+<h4 id="channel-sources"><a class="header" href="#channel-sources">Channel Sources</a></h4>
+<p>Custom release channels that should appear in every channel dropdown
+in TelaVisor: the Updates tab, Hub Settings, and Agent Settings. The
+three built-in channels (<code>dev</code>, <code>beta</code>, <code>stable</code>) are always present
+and cannot be removed. Each custom entry is a name and a base URL
+(for example, <code>local</code> pointing at <code>http://localhost:9900/</code>); the
+name becomes selectable in every channel picker that lists it, and
+the base is used to resolve manifest and binary URLs for that
+channel. Custom channels are stored in <code>~/.tela/credentials.yaml</code>
+under <code>update.sources</code>.</p>
 <h4 id="system-service"><a class="header" href="#system-service">System Service</a></h4>
 <p>Controls for installing the <code>tela</code> client as a system service. The
 service runs the default profile as an always-on background tunnel that
@@ -1809,16 +1837,18 @@ registers a Scheduled Task that triggers at login. On Linux, it writes
 a systemd user unit. On macOS, it installs a LaunchAgent.</p>
 <h2 id="infrastructure-mode"><a class="header" href="#infrastructure-mode">Infrastructure mode</a></h2>
 <p>Switching the mode toggle in the title bar to <em>Infrastructure</em> changes
-the tab bar to the four administration tabs: Hubs, Agents, Remotes, and
-Credentials. Infrastructure mode is for operators. None of the features
-in this mode are required for a user who only wants to make a connection.
+the tab bar to the five administration tabs: Hubs, Agents, Access,
+Remotes, and Credentials. Infrastructure mode is for operators. None of
+the features in this mode are required for a user who only wants to
+make a connection.
 All of them become important the moment you start running hubs or agents
 on behalf of yourself or others.</p>
 <h3 id="hubs"><a class="header" href="#hubs">Hubs</a></h3>
-<p>The Hubs tab is the centre of operator workflows. It is where you
-administer any hub you have credentials for: viewing settings, managing
-machines, granting and revoking access, issuing tokens, viewing
-connection history, and updating or restarting the hub binary.</p>
+<p>The Hubs tab is where you administer any hub you have credentials for:
+viewing settings, managing machines, viewing connection history, and
+updating or restarting the hub binary. Identity and per-machine access
+management live in a peer tab of their own, <a href="guide/telavisor.html#access">Access</a>; the
+Hubs tab no longer carries a Tokens or Access sub-view.</p>
 <p>The tab is laid out with a sidebar on the left containing a hub picker
 dropdown, a navigation list of views, and an <em>Add Hub</em> button at the
 bottom. The right panel shows the currently selected view for the
@@ -1828,8 +1858,9 @@ currently selected hub.</p>
 credentials for. Clicking it opens a dropdown of hub URLs.</p>
 <p><img src="guide/../screens/telavisor-hub-picker.png" alt="Hub picker, open" /></p>
 <p>Selecting a hub from the dropdown loads its data into the views below.
-All five views (Hub Settings, Machines, Access, Tokens, History) are
-scoped to the currently selected hub.</p>
+All three views (Hub Settings, Machines, History) are scoped to the
+currently selected hub. Identity and access management have their own
+peer tab; see <a href="guide/telavisor.html#access">Access</a>.</p>
 <p>If you do not have credentials for any hub yet, the dropdown is empty
 and the <em>Add Hub</em> button at the bottom of the sidebar is the only way
 forward. <em>Add Hub</em> opens a dialog where you can paste a hub URL and
@@ -1871,13 +1902,17 @@ start.</li>
 <p>Below Hub Info, the Portals section lists hub directories the hub is
 registered with. Each entry shows the directory name and the directory
 URL. Adding a portal here is the equivalent of running <code>telahubd portal add</code> from the command line.</p>
+<p><img src="guide/../screens/telavisor-hub-settings-management.png" alt="Hub Settings, scrolled to Management" /></p>
 <p>The Management section provides hub lifecycle controls. These are only
 visible to owners and admins:</p>
 <ul>
-<li><strong>Log output.</strong> A <em>View Logs</em> button that opens a new tab in the log
+<li>
+<p><strong>Log output.</strong> A <em>View Logs</em> button that opens a new tab in the log
 panel streaming the hub's recent log buffer through the
-<code>/api/admin/logs</code> endpoint.</li>
-<li><strong>Release channel.</strong> A dropdown showing the hub's currently
+<code>/api/admin/logs</code> endpoint.</p>
+</li>
+<li>
+<p><strong>Release channel.</strong> A dropdown showing the hub's currently
 configured release channel (<code>dev</code>, <code>beta</code>, or <code>stable</code>) with a status
 string showing the current and latest versions on that channel.
 Changing the dropdown opens a confirmation dialog and, on confirm,
@@ -1885,30 +1920,34 @@ sends <code>PATCH /api/admin/update</code> to the hub to switch its channel
 persistently. The Software button below updates immediately to
 reflect the new channel's HEAD. If the hub is too old to support
 channels (returns HTTP 405 for the new endpoint), the row hides
-itself and the Software button shows <code>pre-channel build (update first via legacy path)</code>.</li>
-<li><strong>Software.</strong> Shows whether the hub is up to date or behind the
+itself and the Software button shows <code>pre-channel build (update first via legacy path)</code>.</p>
+</li>
+<li>
+<p><strong>Software.</strong> Shows whether the hub is up to date or behind the
 channel's HEAD. The button label reads either <code>Up to date</code> (disabled)
-or <code>Update to vX.Y.Z</code> (active). Clicking the active button asks the
-hub to download the new release, verify it against the channel
-manifest's SHA-256 hash, replace its binary, and restart. Progress is
-shown inline (<code>Hub is downloading update and restarting...</code>,
-<code>Waiting for hub to restart... (1)</code>, <code>Updated to vX.Y.Z</code>) and the
-page re-renders when the hub comes back online. The label and
-disabled state are derived from the channel manifest, not from the
-GitHub <code>/releases/latest</code> API, so a hub on <code>dev</code> cannot be told to
-"update to v0.5.0" (the <code>stable</code> HEAD).</li>
-<li><strong>Restart.</strong> Requests an immediate graceful restart of the hub
-process.</li>
+or <code>Update to vX.Y.Z</code> (active). Clicking the active button opens a
+confirmation dialog before proceeding.</p>
+<p><img src="guide/../screens/telavisor-hub-update.png" alt="Update Hub confirmation dialog" /></p>
+<p>The hub then downloads the new release, verifies it against the
+channel manifest's SHA-256 hash, replaces its binary, and restarts.
+Progress is shown inline (<code>Hub is downloading update and restarting...</code>, <code>Waiting for hub to restart... (1)</code>,
+<code>Updated to vX.Y.Z</code>) and the page re-renders when the hub comes
+back online. The label and disabled state are derived from the
+channel manifest, not from the GitHub <code>/releases/latest</code> API, so a
+hub on <code>dev</code> cannot be told to "update to v0.5.0" (the <code>stable</code>
+HEAD).</p>
+</li>
+<li>
+<p><strong>Restart.</strong> Requests an immediate graceful restart of the hub
+process.</p>
+</li>
 </ul>
 <p>The Danger Zone at the bottom of the page provides destructive actions:
 removing the hub from TelaVisor's local list (which does not affect the
 hub itself, only your local credentials and view) and clearing all
 stored hub tokens from the local credential file.</p>
 <p>The Hub Settings view is the same shape regardless of which hub you have
-selected. The values change with the hub; the layout does not. A second
-hub on a different release version would show the same panels with
-different version badges.</p>
-<p><img src="guide/../screens/telavisor-hub-settings-gohub.png" alt="Hub Settings for a second hub" /></p>
+selected. The values change with the hub; the layout does not.</p>
 <h4 id="machines-1"><a class="header" href="#machines-1">Machines</a></h4>
 <p>The Machines view lists all machines registered on the selected hub
 with their online status, last-seen timestamp, advertised services, and
@@ -1932,69 +1971,10 @@ this machine, on the right side of the row.</li>
 the agent in the <a href="guide/telavisor.html#agents">Agents tab</a> and use the agent detail panel.
 To remove a machine from a hub, use the Danger Zone in the agent
 detail.</p>
-<h4 id="access-1"><a class="header" href="#access-1">Access</a></h4>
-<p>The Access view shows the unified per-identity, per-machine permission
-model. Each identity is a card showing its role pill, token preview, and the
-machines it has permissions on.</p>
-<p><img src="guide/../screens/telavisor-hub-access.png" alt="Access view" /></p>
-<p>For each identity card you see:</p>
-<ul>
-<li><strong>Identity name.</strong> The name the token was issued under.</li>
-<li><strong>Role pill.</strong> Owner, admin, user, or viewer. Owner and admin roles
-have implicit access to all machines, so their cards do not list
-per-machine permissions; the absence of a list is the
-whole-permission grant.</li>
-<li><strong>Token preview.</strong> The first 8 characters of the token, followed by
-an ellipsis. Full tokens are only visible at creation time.</li>
-<li><strong>Per-machine permissions.</strong> A list of machines this identity has
-explicit permissions on, each with a comma-separated list of the
-granted permissions (<code>register</code>, <code>connect</code>, <code>manage</code>).</li>
-<li><strong>Rename button.</strong> Renames the identity. Tokens are not affected by
-the rename.</li>
-</ul>
-<p>The <em>Grant Access</em> button at the bottom of the page opens a dialog that
-lets you grant permissions to any identity on any machine. The dialog
-asks you to choose an identity, choose a machine (or the wildcard <code>*</code>
-which applies to all machines), and choose which of the three
-permissions to grant: <em>Connect</em> lets the identity open a tunnel to the
-machine; <em>Register</em> lets the identity register the machine (single
-assignment, only one identity can be the registrant); <em>Manage</em> lets the
-identity view and edit the agent's configuration, view its logs, and
-restart or update it remotely.</p>
-<p>The Access view is the canonical place to answer the question <em>who can
-do what to which machine on this hub</em>. It is the visual equivalent of
-the unified <code>/api/admin/access</code> API endpoint.</p>
-<h4 id="tokens-1"><a class="header" href="#tokens-1">Tokens</a></h4>
-<p>The Tokens view manages authentication tokens for the selected hub. You
-can create new identities, rotate tokens, delete identities, and
-generate one-time pairing codes.</p>
-<p><img src="guide/../screens/telavisor-hub-tokens.png" alt="Tokens view" /></p>
-<p>The token table shows every identity on the hub, with columns for:</p>
-<ul>
-<li><strong>Identity.</strong> The identity name.</li>
-<li><strong>Role.</strong> A coloured role pill.</li>
-<li><strong>Token preview.</strong> The first 8 characters of the token. Full tokens
-are only visible immediately after creation or rotation, never again.</li>
-<li><strong>Actions.</strong> <em>Rotate</em> (issues a new token for the identity, showing
-the new token in a one-time dialog) and <em>Delete</em> (removes the
-identity, with confirmation).</li>
-</ul>
-<p>The <em>Add Token</em> button at the top creates a new identity. The dialog
-asks for an identity name and a role (owner, admin, user, or viewer)
-and shows the new token in a one-time display after creation. Save the
-token immediately; you will not see it again.</p>
-<p>The <em>Generate Pairing Code</em> button issues a short-lived, single-use
-code (for example, <code>ABCD-1234</code>) that can be exchanged for a permanent
-token by running <code>tela pair</code> from the command line or by pasting the
-code into TelaVisor's pairing flow on another machine. The dialog lets
-you choose the role of the resulting token and the expiration window
-(10 minutes to 7 days). Pairing codes are the recommended way to
-onboard a user or an agent, because they avoid copying 64-character
-hex tokens by hand.</p>
-<p>To change a token's role, delete the identity and create a new one with
-the desired role. Roles are immutable on existing tokens by design;
-changing the role would invalidate the principle that the token at a
-given hash always confers a known set of permissions.</p>
+<p>Identity and per-machine access management used to live in separate
+Access and Tokens sub-views on this tab; both are now folded into the
+top-level <a href="guide/telavisor.html#access">Access</a> peer tab, which is the canonical place
+to answer <em>who can do what to which machine on this hub</em>.</p>
 <h4 id="history"><a class="header" href="#history">History</a></h4>
 <p>The History view shows recent session events on the selected hub:
 agent registrations, client connections, client disconnections, agent
@@ -2037,10 +2017,38 @@ select one.</p>
 <li><strong>Agent version.</strong> The release version of the agent binary, displayed
 as a small caption.</li>
 </ul>
-<p>A <em>Pair Agent</em> button at the bottom of the sidebar opens the same
-pairing flow used for users: it asks for a pairing code generated by
-the <a href="guide/telavisor.html#tokens">Tokens view</a> and exchanges it for a permanent agent
-token, then registers the agent with the hub the code was issued from.</p>
+<p>Two buttons sit in the sidebar footer for agent onboarding. They are
+single-purpose so the labels match what each one actually does.</p>
+<p><strong>Generate...</strong> opens a modal that asks for a hub, a machine name,
+and an expiration. Submitting it produces a one-time pair code on
+the chosen hub with <code>type=register</code>. The result modal shows the code
+in large monospace next to a pre-filled
+<code>telad pair -hub &lt;ws-url&gt; -code &lt;code&gt; -machine &lt;name&gt;</code> command line,
+each with its own Copy button. The intended workflow is to paste the
+command into chat, SSH, or a deployment script targeted at the agent
+host. Generation is enabled whenever TelaVisor knows about at least
+one hub; the call requires owner or admin credentials on that hub.</p>
+<p><img src="guide/../screens/telavisor-agents-generate.png" alt="Generate Agent Code modal" /></p>
+<p><strong>Redeem...</strong> opens a modal that runs <code>telad pair</code> against the local
+<code>telad</code> binary on this machine. Use it when an operator on this same
+workstation wants to register an agent here (developer workstations,
+single-host setups). The form takes a hub, the pair code, and an
+optional machine name. The hub picker lists the hubs TelaVisor
+already knows about plus an <em>Other hub URL...</em> option for codes
+issued by hubs you have not added yet. On success, a confirmation
+modal names the hub and machine, and the agents list refreshes a
+moment later so the new entry appears.</p>
+<p><img src="guide/../screens/telavisor-agents-redeem.png" alt="Redeem Agent Code modal" /></p>
+<p>When <code>telad</code> is not installed in the configured Binary Location, the
+Redeem modal opens in a short bail-out state explaining that
+pairing requires a local <code>telad</code> binary, with an <em>Open Updates...</em>
+button that flips to Clients mode and routes to the <a href="guide/telavisor.html#updates">Updates tab</a>
+where the binary can be installed. The bail-out also calls out a
+common confusion: a pair code for an agent on a different machine
+cannot be redeemed in TelaVisor at all because the resulting token
+has to land in the agent host's credential store; in that case the
+operator runs <code>telad pair</code> directly on the target host, which is the
+flow Generate... is built for.</p>
 <h4 id="agent-detail"><a class="header" href="#agent-detail">Agent detail</a></h4>
 <p>Selecting an agent in the sidebar shows the agent detail panel on the
 right.</p>
@@ -2097,7 +2105,7 @@ that fail validation are rejected with an error message.</p>
 <p>The manage permission is required to edit any of these fields. Owner
 and admin roles have it implicitly. User-role tokens need an explicit
 manage grant on the relevant machine, issued through the
-<a href="guide/telavisor.html#access">Access view</a>.</p>
+<a href="guide/telavisor.html#access">Access</a> tab.</p>
 <h4 id="management-and-danger-zone"><a class="header" href="#management-and-danger-zone">Management and Danger Zone</a></h4>
 <p>Scrolling to the bottom of the agent detail panel reveals the
 Management card and the Danger Zone.</p>
@@ -2111,6 +2119,7 @@ running configuration in a dialog. The configuration is fetched live
 through the management protocol so it reflects what the agent is
 actually using right now, not what is on disk in
 <code>telad.yaml</code>.</p>
+<p><img src="guide/../screens/telavisor-agents-config.png" alt="Agent config viewer" /></p>
 </li>
 <li>
 <p><strong>Log output.</strong> A <em>View Logs</em> button that opens a new tab in the log
@@ -2170,6 +2179,189 @@ launchd) the same Update and Restart actions work because <code>telad</code>
 detects that it is running under a process manager and exits cleanly,
 letting the manager restart the binary. This avoids leaving orphan
 processes from a self-spawned restart.</p>
+<h3 id="access-1"><a class="header" href="#access-1">Access</a></h3>
+<p>The Access tab is the consolidated home for identity and per-machine
+access management. Every operator task that involves "who can do what
+to which machine" lives here: creating and deleting identities,
+rotating tokens, changing roles, granting and revoking per-machine
+permissions, narrowing a grant to a specific set of services, and
+generating one-time pairing codes.</p>
+<p>The tab replaces two older Hubs sub-views: the Access panel that
+listed identities as cards, and the Tokens panel that managed
+authentication tokens as a table. Both are gone; this tab is the
+single place to go.</p>
+<h4 id="two-views-of-the-same-data"><a class="header" href="#two-views-of-the-same-data">Two views of the same data</a></h4>
+<p>Access opens on one of two projections of the same underlying data:</p>
+<ul>
+<li>
+<p><strong>By machine.</strong> The sidebar lists every machine the selected hub
+has registered, plus a wildcard <code>*</code> entry for the cross-machine
+fallback ACL. The detail pane shows an identity-vs-permission
+matrix for the selected machine: every identity on the hub gets a
+row, with <em>Connect</em>, <em>Register</em>, and <em>Manage</em> checkboxes and an
+optional services filter.</p>
+<p><img src="guide/../screens/telavisor-access-by-machine.png" alt="Access tab, By machine view" /></p>
+</li>
+<li>
+<p><strong>By identity.</strong> The sidebar lists every identity on the hub. The
+detail pane shows a machine-vs-permission matrix for the selected
+identity, with a row for every registered machine plus the
+wildcard <code>*</code> fallback.</p>
+<p><img src="guide/../screens/telavisor-access-by-identity.png" alt="Access tab, By identity view" /></p>
+</li>
+</ul>
+<p>The view toggle is in the right side of the toolbar. Switching
+between the two views does not lose staged work; both views read and
+write the same pending-change set, so a permission checkbox ticked in
+By machine is the same edit visible in By identity.</p>
+<p>The selected view is persisted to TelaVisor's settings, so reopening
+the tab returns to whichever view the operator last used.</p>
+<h4 id="the-toolbar"><a class="header" href="#the-toolbar">The toolbar</a></h4>
+<p>The toolbar across the top of the tab holds the Hub selector and
+every action that operates on the current hub:</p>
+<ul>
+<li>
+<p><strong>Hub.</strong> A dropdown of every hub the operator has credentials for.
+Switching hubs discards any pending changes on the previous hub
+(after a confirmation).</p>
+</li>
+<li>
+<p><strong>Undo.</strong> Drops every pending change in one go. Enabled only when
+there is pending work.</p>
+</li>
+<li>
+<p><strong>Save.</strong> Commits every pending change in parallel. Enabled only
+when there is pending work. See <em>Save and conflicts</em> below.</p>
+</li>
+<li>
+<p><strong>Add Identity...</strong> Creates a new token-backed identity. Opens a
+dialog asking for a name and a role; the new token is shown once
+in a follow-up dialog so the operator can copy it.</p>
+<p><img src="guide/../screens/telavisor-access-add-identity.png" alt="Add Identity dialog" /></p>
+</li>
+<li>
+<p><strong>Pair Code...</strong> Generates a one-time pairing code for onboarding a
+new identity or agent.</p>
+<p><img src="guide/../screens/telavisor-access-pair-code.png" alt="Generate Pairing Code dialog" /></p>
+</li>
+<li>
+<p><strong>Rescan services.</strong> Reloads access data and machine services from
+the hub. Use after changing an agent's <code>telad.yaml</code> so newly
+advertised services show up in the matrix.</p>
+</li>
+<li>
+<p><strong>Export audit...</strong> Downloads a JSON snapshot of the hub's access
+state: every identity, their grants, the machines they apply to,
+and the services each grant allows. Useful for compliance and
+for diffing access state over time.</p>
+</li>
+</ul>
+<h4 id="the-matrix"><a class="header" href="#the-matrix">The matrix</a></h4>
+<p>The matrix is the main working area. Rows are identities (in By
+machine) or machines (in By identity); columns are the three
+permission flags and a <em>Connect services</em> column.</p>
+<p>Implicit-role rows (owner, admin, viewer) render at full visual weight
+with locked checkboxes. An owner or admin row has every permission
+ticked because the role confers implicit all-access; the locked state
+makes it clear this is a property of the role, not a per-machine
+grant. A viewer row has all checkboxes unticked because viewer is
+read-only console access with no session privileges. These rows do
+not have Revoke actions, because the role is the source of truth;
+changing it goes through <em>Change role...</em> on the By identity detail
+header.</p>
+<p>Explicit (user-role) rows are interactive. Ticking a checkbox stages
+a grant; unticking one stages its removal. A per-row <strong>Revoke</strong>
+button stages the removal of every permission for that identity on
+that machine in one click; once staged, the row shows the pending
+revoke with a strikethrough and a red left border, and the Revoke
+button flips to <strong>Undo</strong> so the operator can back out.</p>
+<p>Every staged change is marked in two ways: the affected row picks up
+an amber left border and a <em>pending</em> label next to its name, and the
+sidebar item for that row's machine (or identity) picks up the same
+<em>pending</em> indicator. Save and Undo in the toolbar are both enabled
+whenever the pending set is non-empty.</p>
+<h4 id="the-connect-services-column"><a class="header" href="#the-connect-services-column">The Connect services column</a></h4>
+<p>The <em>Connect services</em> column shows which services the identity can
+reach on the machine when the Connect permission is granted. An
+unfiltered grant reads <em>All services</em> in muted italics. A filtered
+grant renders the first three service chips inline; longer filters
+collapse the remainder into a <code>+N more</code> link that opens a small
+read-only popover listing every service in the filter. The popover
+never edits; it dismisses on outside click, Escape, scroll inside
+the detail pane, or a re-click on the trigger. Edit and view paths
+are kept separate by design so an operator scanning a filter for a
+specific service cannot wander into the edit flow by mistake.</p>
+<p>When the row's connect permission is inherited from the wildcard
+<code>*</code> ACL (the hub cascades connect and manage from the wildcard
+entry to every machine that has no explicit grant), the cell shows
+a <code>via *</code> marker followed by the wildcard's services. The connect
+checkbox in that case is checked and disabled with a tooltip that
+points the operator at the wildcard row in the rail; per-machine
+overrides are not possible because the underlying ACL model has no
+deny semantic.</p>
+<p><img src="guide/../screens/telavisor-access-wildcard.png" alt="Wildcard ACL inheritance shown in the matrix" /></p>
+<p>The per-row <strong>Edit...</strong> button opens a dialog to narrow or widen the
+filter. The dialog offers two scopes:</p>
+<ul>
+<li><strong>Allow all services.</strong> Removes any filter. The identity can reach
+every service the agent advertises.</li>
+<li><strong>Restrict to specific services.</strong> For a specific machine, shows a
+checkbox list of the services the machine advertises, pre-ticked
+to match the current filter. For the wildcard <code>*</code> machine, shows a
+free-text comma-separated input because there is no concrete
+service list to enumerate.</li>
+</ul>
+<p>Applying a restricted filter stages the change; Save commits it.
+Per-service access control is a v0.15 feature; on older hubs the
+dialog opens in a disabled state with a note explaining that the hub
+must be upgraded before the filter can be used.</p>
+<h4 id="save-and-conflicts"><a class="header" href="#save-and-conflicts">Save and conflicts</a></h4>
+<p>Save fires one write per staged change, in parallel. Each write
+carries the target identity's version as an <code>If-Match</code> precondition,
+which the hub checks before applying the change. If another operator
+modified any of those identities between load and save, the affected
+writes return <code>412 Precondition Failed</code> and a conflict dialog opens
+listing the rows that drifted.</p>
+<p>The dialog offers three recovery paths:</p>
+<ul>
+<li><strong>Reload.</strong> Discards pending changes and reloads the server state.
+Re-apply the changes you still want; this time the writes will
+carry fresh versions.</li>
+<li><strong>Discard my changes.</strong> Drops the pending batch and closes the
+dialog without reloading. Use when you realize the batch is no
+longer what you want.</li>
+<li><strong>Force overwrite instead.</strong> A muted link in the dialog body that
+retries the conflicting writes with no <code>If-Match</code>, overwriting the
+other operator's edits on those rows. A second confirmation is
+required because this is destructive.</li>
+</ul>
+<p>Writes that did not conflict are already committed by the time the
+dialog opens; only the conflicting rows are still pending.</p>
+<h4 id="the-by-identity-detail-header"><a class="header" href="#the-by-identity-detail-header">The By identity detail header</a></h4>
+<p>When a user-role identity is selected in By identity, the detail
+header has an action cluster for identity-level operations:</p>
+<ul>
+<li><strong>Rename.</strong> Renames the identity. The token is unchanged; only the
+human-readable label moves.</li>
+<li><strong>Change role...</strong> Opens a role picker with <em>User</em>, <em>Admin</em>,
+<em>Viewer</em>, and <em>Owner</em>. Selecting <em>Owner</em> prompts a second
+confirmation because owner confers full control of the hub,
+including the power to demote or delete any other admin. A
+last-owner guard on the hub refuses to demote the only owner
+identity, so an operator who selects a different role for the
+sole owner sees an error in the modal; the recovery is to
+promote a peer to owner first, then try again.</li>
+<li><strong>Rotate token.</strong> Issues a new token for the identity and shows it
+once. The previous token stops working immediately.</li>
+<li><strong>Delete identity.</strong> Removes the identity and scrubs every ACL
+entry that referenced its token. Owner identities cannot be
+deleted.</li>
+</ul>
+<p>For owner, admin, and viewer rows, the detail pane shows an
+explanatory card instead of a matrix. Owner and admin have implicit
+all-machine access that is not manageable per-machine; viewer is
+read-only console access with no machine permissions at all.</p>
+<p><img src="guide/../screens/telavisor-access-by-identity-owner.png" alt="By identity view, owner identity selected" /></p>
 <h3 id="remotes"><a class="header" href="#remotes">Remotes</a></h3>
 <p>The Remotes tab manages hub directory endpoints for short name
 resolution. This is the desktop equivalent of the <code>tela remote</code> family
@@ -2208,7 +2400,8 @@ credential file. A <em>Clear All</em> button at the bottom removes every
 stored credential. Both actions ask for confirmation.</p>
 <p>Removing a credential entry does not invalidate the token on the hub.
 It only removes the local copy. To revoke a token on the hub, use the
-<a href="guide/telavisor.html#tokens">Tokens view</a> on the hub itself.</p>
+<a href="guide/telavisor.html#access">Access</a> tab and either delete the identity or rotate its
+token.</p>
 <p>The credentials file is stored at:</p>
 <div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Path</th></tr></thead><tbody>
 <tr><td>Windows</td><td><code>%APPDATA%\tela\credentials.yaml</code></td></tr>
@@ -2320,24 +2513,6 @@ application remains running in the background and can be restored
 by clicking the tray icon. Without this setting, closing the window
 quits the application.</li>
 </ul>
-<h3 id="updates"><a class="header" href="#updates">Updates</a></h3>
-<ul>
-<li><strong>Check for updates automatically.</strong> When checked, TelaVisor checks
-for new versions at startup against the configured release channel.</li>
-<li><strong>Release channel.</strong> A dropdown that selects which release channel
-TelaVisor and the <code>tela</code> CLI follow for self-update: <code>dev</code>, <code>beta</code>,
-<code>stable</code>, or any custom channel you have configured. The preference
-is stored in the user credential store (<code>~/.tela/credentials.yaml</code>
-on Unix, <code>%APPDATA%\tela\credentials.yaml</code> on Windows) and shared
-with the <code>tela</code> CLI; running <code>tela channel set &lt;name&gt;</code> from a shell
-and changing this dropdown are equivalent. Hubs and agents have
-their own release channels, configured separately in their YAML
-files, through the <em>Release channel</em> controls in
-<a href="guide/telavisor.html#hub-settings">Hub Settings</a> and the agent
-<a href="guide/telavisor.html#management-and-danger-zone">Management</a> card, or from a shell via
-<code>telahubd channel set &lt;name&gt;</code> and <code>telad channel set &lt;name&gt;</code>
-directly on those machines.</li>
-</ul>
 <p><img src="guide/../screens/telavisor-app-settings2.png" alt="Application Settings, scrolled" /></p>
 <h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
 <ul>
@@ -2364,8 +2539,8 @@ an orange warning icon appears in the title bar. Clicking the icon
 opens an update dialog that shows current and latest versions for each
 binary, with per-binary <em>Update</em> and <em>Install</em> buttons.</p>
 <p>The update dialog is the same workflow as the
-<a href="guide/telavisor.html#installed-tools">Installed Tools table in Client Settings</a>, exposed
-as a one-click affordance from the title bar so you do not have to
+<a href="guide/telavisor.html#updates">Installed Tools table on the Updates tab</a>, exposed as a
+one-click affordance from the title bar so you do not have to
 navigate to find it. The dialog also has <em>Remind Later</em> (hides the
 indicator until the next restart) and <em>Skip This Version</em> (hides the
 indicator until a newer version is released) options.</p>
@@ -2559,7 +2734,7 @@ tela admin agent update -hub &lt;hub-name&gt; -machine &lt;machine-id&gt;
 <p>The hub or agent downloads the new binary from its configured channel, verifies it, and restarts. For agents the restart goes through whatever process supervision they're under (Docker, Windows SCM, systemd, launchd, or none). For hubs the same applies.</p>
 <h3 id="self-update-from-telavisor"><a class="header" href="#self-update-from-telavisor">Self-update from TelaVisor</a></h3>
 <p>The Software row in each Management card has an <code>Update to vX.Y.Z</code> button when the binary is behind. Clicking it triggers the same admin-API path as above and polls the binary's reported version until it changes, so the table reflects the actual installed version.</p>
-<p>For locally installed services, the Installed Tools card on Client Settings has Update buttons that delegate to the elevated service process (TelaVisor itself does not need to be elevated to update an elevated service binary -- the running service updates itself from the inside, then the process supervisor restarts it against the new binary).</p>
+<p>For locally installed services, the Installed Tools table on the Updates tab has Update buttons that delegate to the elevated service process (TelaVisor itself does not need to be elevated to update an elevated service binary -- the running service updates itself from the inside, then the process supervisor restarts it against the new binary).</p>
 <h2 id="bootstrapping-a-fresh-box"><a class="header" href="#bootstrapping-a-fresh-box">Bootstrapping a fresh box</a></h2>
 <p>The first time you put Tela on a machine, you don't have a <code>tela</code>/<code>telad</code>/<code>telahubd</code> binary yet, so you can't use any of the self-update commands. You need to download one binary by hand, then let it self-update from the channel manifest forever after.</p>
 <h3 id="one-liner-from-a-linux-shell"><a class="header" href="#one-liner-from-a-linux-shell">One-liner from a Linux shell</a></h3>
@@ -5074,10 +5249,11 @@ regardless of semver comparison.</p>
 <tr><td>Path gateway</td><td>HTTP</td><td><code>telad</code></td><td>HTTP requests, routed by URL path to local services</td><td>URL path only</td></tr>
 <tr><td>Bridge gateway</td><td>TCP</td><td><code>telad</code> (bridge mode)</td><td>TCP streams from the tunnel to LAN-reachable machines</td><td>None</td></tr>
 <tr><td>Upstream gateway</td><td>TCP</td><td><code>telad</code></td><td>Outbound dependency calls rerouted to different targets</td><td>None</td></tr>
-<tr><td>Relay gateway</td><td>WireGuard</td><td><code>telahubd</code></td><td>Opaque WireGuard ciphertext between a paired client and agent</td><td>None</td></tr>
+<tr><td>Relay gateway (single-hop)</td><td>WireGuard</td><td><code>telahubd</code></td><td>Opaque WireGuard ciphertext between a paired client and agent</td><td>None</td></tr>
+<tr><td>Relay gateway (multi-hop)</td><td>WireGuard</td><td><code>telahubd</code></td><td>Opaque WireGuard ciphertext between a client and an agent registered on a <em>different</em> hub</td><td>None</td></tr>
 </tbody></table>
 </div>
-<p>A fifth instance, the multi-hop relay gateway, bridges sessions across more than one hub. It is the same primitive as the existing single-hop relay applied recursively: a hub that receives a paired session forwards it to an agent registered with a different hub, remaining blind to the payload at every hop. This is on the <a href="https://github.com/paulmooreparks/tela/blob/main/ROADMAP-1.0.md">1.0 roadmap</a> under "Relay gateway."</p>
+<p>A fifth instance, the multi-hop relay gateway, bridges sessions across more than one hub. It is the same primitive as the single-hop relay applied recursively: a hub that receives a paired session forwards it to an agent registered with a different hub, remaining blind to the payload at every hop. Each forwarding hub decrements a one-byte hop count (TTL) in the shared 7-byte frame header and drops the frame if the count reaches zero, which prevents forwarding loops without a routing protocol. The operator configures which destination hubs a bridging hub will dial via a <code>bridges:</code> section in <code>telahubd.yaml</code>; the bridging hub advertises the reachable machines through its own <code>/api/status</code> with a <code>reachableThrough</code> pointer so clients know which hub they are really talking to. For the full specification see <a href="https://github.com/paulmooreparks/tela/blob/main/DESIGN-relay-gateway.md">DESIGN-relay-gateway.md</a>.</p>
 <h2 id="why-the-rule-matters"><a class="header" href="#why-the-rule-matters">Why the rule matters</a></h2>
 <p>Every instance of the gateway primitive is content-blind except where the layer requires it. The path gateway is the one exception: it must read the URL path to route correctly. It reads nothing else. It does not authenticate, it does not transform, and it does not inspect request bodies or responses. Authentication is the hub's job, enforced before the session is established. Application-level auth is the application's job.</p>
 <p>This division of responsibility is what makes each gateway instance composable. A path gateway behind a relay gateway (the hub) behind a multi-hop relay has additive security properties at each layer. The blind-relay property of the hub does not require the path gateway to be blind; it requires only that each component know its layer and nothing else.</p>
@@ -5683,6 +5859,7 @@ telahubd update -h | -? | -help | --help     # print help
 </div>
 <p><strong>Agent management and pairing</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/api/admin/agents/{machine}</code></td><td>Lightweight presence probe: returns <code>id</code>, <code>agentConnected</code>, <code>lastSeen</code> without the full <code>/api/status</code> payload</td></tr>
 <tr><td>GET/POST</td><td><code>/api/admin/agents/{machine}/{action}</code></td><td>Proxy management request to agent</td></tr>
 <tr><td>POST</td><td><code>/api/admin/pair-code</code></td><td>Generate a pairing code</td></tr>
 <tr><td>POST</td><td><code>/api/pair</code></td><td>Exchange a pairing code for a token (no auth required)</td></tr>
@@ -6311,7 +6488,7 @@ tela channel sources set mychannel https://hub.example.net/channels/
 </tbody></table>
 </div>
 <p>These three concepts form a hierarchy. A token proves identity. The role on that token controls hub-level access. Machine permissions control what that token can do on each individual machine.</p>
-<h2 id="tokens-2"><a class="header" href="#tokens-2">Tokens</a></h2>
+<h2 id="tokens-1"><a class="header" href="#tokens-1">Tokens</a></h2>
 <p>A token is a credential. It is a 64-character hex string (32 random bytes) that acts as both the authentication secret and the lookup key. Each token has:</p>
 <ul>
 <li><strong>ID</strong>: A human-readable name (e.g., "alice", "paul-laptop", "barn-agent"). This is what you see in the UI and CLI. It has no security function.</li>
@@ -6418,7 +6595,8 @@ Deny (403 Forbidden)
       "tokenPreview": "abc123...",
       "machines": [
         {"machineId": "*", "permissions": ["register", "connect", "manage"]}
-      ]
+      ],
+      "version": 1
     },
     {
       "id": "alice",
@@ -6427,7 +6605,9 @@ Deny (403 Forbidden)
       "machines": [
         {"machineId": "*", "permissions": ["connect"]},
         {"machineId": "barn", "permissions": ["manage"]}
-      ]
+      ],
+      "version": 7,
+      "wildcardInherited": ["connect"]
     },
     {
       "id": "barn-agent",
@@ -6435,11 +6615,14 @@ Deny (403 Forbidden)
       "tokenPreview": "ghi789...",
       "machines": [
         {"machineId": "barn", "permissions": ["register"]}
-      ]
+      ],
+      "version": 1
     }
   ]
 }
 </code></pre>
+<p><code>version</code> is a per-identity monotonic counter the hub bumps on every mutation. Clients pass it back as <code>If-Match: "&lt;version&gt;"</code> on subsequent mutations; the hub returns <code>412 Precondition Failed</code> when the value is stale, with the current entry in the response body so the caller can diff. The same value also rides on the <code>ETag</code> response header. Clients that omit <code>If-Match</code> skip the check (force overwrite).</p>
+<p><code>wildcardInherited</code> (and the optional <code>wildcardInheritedServices</code>) report which permissions the wildcard <code>*</code> ACL cascades to every machine that has no explicit grant. The hub's <code>canConnect</code> and <code>canManage</code> check the wildcard as a fallback; surfacing the cascade here lets clients render the effective per-machine state without re-implementing the cascade rules. Owner, admin, and viewer identities receive role-based implicit access rather than ACL-based cascade; for them the field is empty and the implicit grant is represented by a synthetic <code>*</code> entry in <code>machines</code>.</p>
 <p>The CLI equivalent:</p>
 <pre><code>$ tela admin access
 IDENTITY      ROLE     MACHINES
@@ -6450,11 +6633,11 @@ barn-agent    user     barn: register
 <p>The unified access API is the recommended way to view and modify permissions. The full endpoint reference:</p>
 <div class="table-wrapper"><table><thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/api/admin/access</code></td><td>List all access entries</td></tr>
-<tr><td>GET</td><td><code>/api/admin/access/{id}</code></td><td>Get one entry</td></tr>
-<tr><td>PATCH</td><td><code>/api/admin/access/{id}</code></td><td>Rename identity</td></tr>
-<tr><td>DELETE</td><td><code>/api/admin/access/{id}</code></td><td>Remove identity and all permissions</td></tr>
-<tr><td>PUT</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Set permissions on a machine</td></tr>
-<tr><td>DELETE</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Revoke all permissions on a machine</td></tr>
+<tr><td>GET</td><td><code>/api/admin/access/{id}</code></td><td>Get one entry (with <code>ETag</code>)</td></tr>
+<tr><td>PATCH</td><td><code>/api/admin/access/{id}</code></td><td>Rename identity (<code>id</code>) and/or change role (<code>role</code>); honors <code>If-Match</code>. A last-owner guard returns <code>409 Conflict</code> on any attempt to demote the sole owner.</td></tr>
+<tr><td>DELETE</td><td><code>/api/admin/access/{id}</code></td><td>Remove identity and all permissions; honors <code>If-Match</code></td></tr>
+<tr><td>PUT</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Set permissions on a machine; honors <code>If-Match</code></td></tr>
+<tr><td>DELETE</td><td><code>/api/admin/access/{id}/machines/{m}</code></td><td>Revoke all permissions on a machine; honors <code>If-Match</code></td></tr>
 </tbody></table>
 </div>
 <h2 id="common-tasks"><a class="header" href="#common-tasks">Common tasks</a></h2>
@@ -7666,6 +7849,28 @@ to 400, 500, 600, and 700. Italic and underline are not used for emphasis.</p>
 <tr><td>Monospace</td><td>12px</td><td>400-600</td><td>Version strings, paths, IDs, code, terminal.</td></tr>
 </tbody></table>
 </div>
+<h3 id="annotation-text-primitives"><a class="header" href="#annotation-text-primitives">Annotation text primitives</a></h3>
+<p>These classes carry the muted-and-subordinate look that explanatory
+copy uses everywhere in TDL: descriptions under headings, loading
+placeholders, hints next to controls, empty-state hints. Every one of
+them MUST have a top-level CSS rule. A class that lives only as a
+scoped descendant rule (<code>.some-pane .my-class { ... }</code>) inherits
+default body styling outside its scope and renders inconsistently the
+moment another pane uses it. Several painful regressions traced back
+to exactly this gap; do not reintroduce it.</p>
+<div class="table-wrapper"><table><thead><tr><th>Class</th><th>Use</th></tr></thead><tbody>
+<tr><td><code>.section-desc</code></td><td>Description paragraph immediately below an h1/h2 page heading.</td></tr>
+<tr><td><code>.hint</code></td><td>Annotation that sits next to or below a form control.</td></tr>
+<tr><td><code>.empty-hint</code></td><td>Empty-state message inside a list or sidebar.</td></tr>
+<tr><td><code>.loading</code></td><td>Transient placeholder shown while a pane waits on data.</td></tr>
+<tr><td><code>.tools-service-label</code></td><td>Small italic muted label paired with a tool name.</td></tr>
+<tr><td><code>.update-note</code></td><td>One-paragraph contextual note inside the update overlay.</td></tr>
+</tbody></table>
+</div>
+<p>The shorthand: if you add <code>class="something-desc"</code> or
+<code>class="something-hint"</code> in markup, add a global CSS rule for it
+before committing. Scoped descendant rules layered on top of the
+global are fine; the global must exist first.</p>
 <h2 id="buttons"><a class="header" href="#buttons">Buttons</a></h2>
 <p>Every content-area button shares an <strong>elevation invariant</strong>: a 1px border, a
 non-zero drop shadow, and a fill that contrasts with the card it sits on. The
@@ -8183,6 +8388,14 @@ stack that assigns ascending z-index per push, or give each nested overlay
 a strictly higher z-index than its parent. A confirmation dialog hidden
 behind its parent is a serious bug: from the user's perspective, clicking
 Cancel appears to do nothing.</li>
+<li><strong>The body owns the gutter.</strong> The 20px interior inset belongs to
+<code>.modal-body</code>, never to a child class like a form, a wrapper div, or a
+state-specific block. Every direct child (form, bail-out state, result
+rows, settings groups, copyable command blocks) inherits the gutter for
+free, which means a new state pattern added later cannot accidentally
+render edge-to-edge. Modals that contain a full-width structural element
+like a top tab bar opt out with the <code>.modal-body-flush</code> modifier and
+provide their own gutter inside (typically on <code>.tab-content</code>).</li>
 </ul>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
 <p>Tables use uppercase-muted headers, muted row separators, and a hover highlight
@@ -8511,8 +8724,8 @@ require manual dismissal so the user has time to read and act on the error.</p>
 </code></pre>
 <p>An empty state explains what the user sees (or doesn't see) and includes a
 pointer to the action the user should take next. An empty sidebar with the
-text "No agents registered. Pair Agent to add one." is a good empty state. An
-empty sidebar with no text is not.</p>
+text "No agents registered. Use Generate to onboard one." is a good empty
+state. An empty sidebar with no text is not.</p>
 <h2 id="progress-and-code"><a class="header" href="#progress-and-code">Progress and code</a></h2>
 <pre><code class="language-css">.progress {
   background: var(--surface-alt);

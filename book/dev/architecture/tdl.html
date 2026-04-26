@@ -321,6 +321,28 @@ to 400, 500, 600, and 700. Italic and underline are not used for emphasis.</p>
 <tr><td>Monospace</td><td>12px</td><td>400-600</td><td>Version strings, paths, IDs, code, terminal.</td></tr>
 </tbody></table>
 </div>
+<h3 id="annotation-text-primitives"><a class="header" href="#annotation-text-primitives">Annotation text primitives</a></h3>
+<p>These classes carry the muted-and-subordinate look that explanatory
+copy uses everywhere in TDL: descriptions under headings, loading
+placeholders, hints next to controls, empty-state hints. Every one of
+them MUST have a top-level CSS rule. A class that lives only as a
+scoped descendant rule (<code>.some-pane .my-class { ... }</code>) inherits
+default body styling outside its scope and renders inconsistently the
+moment another pane uses it. Several painful regressions traced back
+to exactly this gap; do not reintroduce it.</p>
+<div class="table-wrapper"><table><thead><tr><th>Class</th><th>Use</th></tr></thead><tbody>
+<tr><td><code>.section-desc</code></td><td>Description paragraph immediately below an h1/h2 page heading.</td></tr>
+<tr><td><code>.hint</code></td><td>Annotation that sits next to or below a form control.</td></tr>
+<tr><td><code>.empty-hint</code></td><td>Empty-state message inside a list or sidebar.</td></tr>
+<tr><td><code>.loading</code></td><td>Transient placeholder shown while a pane waits on data.</td></tr>
+<tr><td><code>.tools-service-label</code></td><td>Small italic muted label paired with a tool name.</td></tr>
+<tr><td><code>.update-note</code></td><td>One-paragraph contextual note inside the update overlay.</td></tr>
+</tbody></table>
+</div>
+<p>The shorthand: if you add <code>class="something-desc"</code> or
+<code>class="something-hint"</code> in markup, add a global CSS rule for it
+before committing. Scoped descendant rules layered on top of the
+global are fine; the global must exist first.</p>
 <h2 id="buttons"><a class="header" href="#buttons">Buttons</a></h2>
 <p>Every content-area button shares an <strong>elevation invariant</strong>: a 1px border, a
 non-zero drop shadow, and a fill that contrasts with the card it sits on. The
@@ -838,6 +860,14 @@ stack that assigns ascending z-index per push, or give each nested overlay
 a strictly higher z-index than its parent. A confirmation dialog hidden
 behind its parent is a serious bug: from the user's perspective, clicking
 Cancel appears to do nothing.</li>
+<li><strong>The body owns the gutter.</strong> The 20px interior inset belongs to
+<code>.modal-body</code>, never to a child class like a form, a wrapper div, or a
+state-specific block. Every direct child (form, bail-out state, result
+rows, settings groups, copyable command blocks) inherits the gutter for
+free, which means a new state pattern added later cannot accidentally
+render edge-to-edge. Modals that contain a full-width structural element
+like a top tab bar opt out with the <code>.modal-body-flush</code> modifier and
+provide their own gutter inside (typically on <code>.tab-content</code>).</li>
 </ul>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
 <p>Tables use uppercase-muted headers, muted row separators, and a hover highlight
@@ -1166,8 +1196,8 @@ require manual dismissal so the user has time to read and act on the error.</p>
 </code></pre>
 <p>An empty state explains what the user sees (or doesn't see) and includes a
 pointer to the action the user should take next. An empty sidebar with the
-text "No agents registered. Pair Agent to add one." is a good empty state. An
-empty sidebar with no text is not.</p>
+text "No agents registered. Use Generate to onboard one." is a good empty
+state. An empty sidebar with no text is not.</p>
 <h2 id="progress-and-code"><a class="header" href="#progress-and-code">Progress and code</a></h2>
 <pre><code class="language-css">.progress {
   background: var(--surface-alt);
