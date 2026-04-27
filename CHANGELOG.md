@@ -21,6 +21,7 @@ patch-level dev builds are too granular to list individually.
 ### Changed
 - DESIGN.md section 6.3 (Frame Format) now points at DESIGN-relay-gateway.md section 2 as the authoritative source for the 7-byte v1 relay frame header layout. The earlier 12-byte aspirational struct in this section was never implemented.
 - DESIGN.md section 6.5 (Tokens) now describes the actual static-secret token model rather than the JWT/browser-flow aspiration. The replacement structured-token system is tracked under issue #24.
+- ROADMAP-1.0.md "Cert pinning" section now documents the scope decision for 1.0: pinning ships for the `tela CLI -> hub` and bridge-gateway dials; `TelaVisor -> portal` and `portal -> hub` pinning are deliberately out of scope. Reasoning lives in the new [DESIGN-cert-pinning-portal.md](DESIGN-cert-pinning-portal.md): defaulting to pinned would brick users on corporate networks with MITM proxies, the HPKP retrospective is the load-bearing argument against client-side pinning at scale, and the portal -> hub leg is already authenticated by a rotatable admin token at the application layer (strictly better than a pinned leaf cert). Closes #23 against this scope.
 
 ## [0.15] - 2026-04-27
 

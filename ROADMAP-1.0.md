@@ -90,11 +90,15 @@ Open issues:
 - [#21](https://github.com/paulmooreparks/tela/issues/21) — Document channel multiplexing as non-goal for v1
 - [#22](https://github.com/paulmooreparks/tela/issues/22) — Document the "no public Go API at 1.0" decision
 
-### Cert pinning
+### Cert pinning — **shipped (scoped) for 1.0**
 
-Today `tela` and TelaVisor trust whatever TLS certificate the hub presents. Pinning closes the MITM class of attack by tying a remote entry to a specific certificate fingerprint, with TOFU on first connect and explicit confirmation on change.
+Tela and TelaVisor used to trust whatever TLS certificate the hub presented. Pinning closes the MITM class of attack by tying a remote entry to a specific certificate fingerprint, with TOFU on first connect and explicit refusal on mismatch.
 
-Tracked as a single bundled issue with full scope: [#23](https://github.com/paulmooreparks/tela/issues/23).
+What ships at 1.0 (PRs #72 and #73): SHA-256 SPKI pinning on `tela CLI -> hub` (every hub-bound WebSocket and HTTPS path), and on the bridge gateway's `telahubd -> destination hub` dial. Pin storage is per-hub in `~/.tela/credentials.yaml`, `hubs.yaml`, and `telahubd.yaml` (under `bridges[]`). CLI surface: `tela pin <hub-url> [fingerprint]` and `tela login -pin`. TOFU on first connect captures and logs the fingerprint; mismatch refuses the connection with `certpin.ErrMismatch`.
+
+What is deliberately **out of scope** for 1.0: `TelaVisor -> portal` pinning and `portal -> hub` pinning enforced by the portal. The reasoning, including the HPKP retrospective and the Awan Saya commercial considerations, is documented in [DESIGN-cert-pinning-portal.md](DESIGN-cert-pinning-portal.md). Short version: defaulting to pinned would brick legitimate users on corporate networks with MITM proxies, every cert rotation would become a coordinated rollout, and the threat (rogue CA mints a cert for the portal's domain) is mitigated more effectively by Certificate Transparency monitoring on the portal-operator side than by client-side pinning. The portal -> hub leg is authenticated at the application layer by the admin token, which is rotatable, scoped, and revocable -- a strictly better surface than a pinned TLS leaf cert for that hop.
+
+Issue [#23](https://github.com/paulmooreparks/tela/issues/23) closes against this scope. Optional opt-in TelaVisor-side pinning for self-hosted portal deployments is reachable post-1.0 without protocol changes; see DESIGN-cert-pinning-portal.md §6.
 
 ### Session tokens
 
