@@ -11,6 +11,8 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+## [0.15] - 2026-04-27
+
 ### Added
 - TelaVisor has a new **Updates** tab in Clients mode (between Files and Client Settings) that consolidates everything related to local-binary update lifecycle. The tab header carries a *Check automatically* checkbox and a *Check Now* button; the body has a Release Channel card with the channel dropdown that drives both TelaVisor and the tela CLI (single shared preference in `~/.tela/credentials.yaml`), and an Installed Tools card with the full versions table for TelaVisor, the tela CLI, and any local telad/telahubd binaries. Channel Sources (custom channel URLs that feed every channel dropdown in the app) stays in Client Settings and the Updates tab links out to it. The topbar warning indicator continues to open its own update modal; indicator and tab share state so installing from either surface clears the other.
 - TelaVisor has a new **Access** peer tab (between Agents and Remotes) that replaces the old Tokens and Access sub-views under Hubs. The page has two projections of the same data: **By machine** shows a machine rail and an identity matrix for the selected machine; **By identity** shows an identity rail and a machine matrix for the selected identity. The view toggle persists across sessions. Both views read and write a shared pending-change set, so toggling between them never loses staged work. The toolbar has Undo, Save, Add Identity, Pair Code, Rescan services, and Export audit; the By identity detail header has Rename, Change role, Rotate token, and Delete identity.
