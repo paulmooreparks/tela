@@ -15,10 +15,20 @@ import (
 	"github.com/paulmooreparks/tela/internal/service"
 )
 
-// Credential holds a hub-associated auth token and optional identity label.
+// Credential holds a hub-associated auth token, optional identity
+// label, and optional TLS certificate pin.
 type Credential struct {
 	Token    string `yaml:"token"`
 	Identity string `yaml:"identity,omitempty"`
+
+	// Pin is the SHA-256 SPKI fingerprint of the hub's TLS certificate,
+	// formatted as "sha256:<lowercase hex>" (see internal/certpin).
+	// When set, the dialer refuses connections whose presented
+	// certificate does not match. Empty means no pin is enforced
+	// (the connection trusts whatever the system CA roots accept).
+	// First-connect TOFU flows capture the value here for later
+	// verification.
+	Pin string `yaml:"pin,omitempty"`
 }
 
 // Store is the on-disk representation of credentials.yaml.
@@ -171,6 +181,42 @@ func LookupToken(hubURL string) string {
 	}
 
 	return ""
+}
+
+// LookupPin returns the TLS certificate pin (SHA-256 SPKI fingerprint
+// formatted as "sha256:<hex>") for a hub URL, by checking the user
+// then system credential stores. Returns empty string if no pin is
+// configured for the hub. Same lookup path as LookupToken.
+func LookupPin(hubURL string) string {
+	userStore, err := Load(UserPath())
+	if err == nil && userStore != nil {
+		if cred, ok := userStore.Get(hubURL); ok && cred.Pin != "" {
+			return cred.Pin
+		}
+	}
+	systemStore, err := Load(SystemPath())
+	if err == nil && systemStore != nil {
+		if cred, ok := systemStore.Get(hubURL); ok && cred.Pin != "" {
+			return cred.Pin
+		}
+	}
+	return ""
+}
+
+// SetPin updates the TLS certificate pin on the user-level credential
+// store for the given hub URL. The credential entry is created if it
+// does not already exist. Returns an error from Load or Save if either
+// fails. The pin string is stored as-is; callers that need format
+// validation should use the certpin.Parse helper before calling.
+func SetPin(hubURL, pin string) error {
+	store, err := Load(UserPath())
+	if err != nil {
+		return err
+	}
+	cred, _ := store.Get(hubURL)
+	cred.Pin = pin
+	store.Set(hubURL, cred)
+	return store.Save(UserPath())
 }
 
 // NormalizeHubURL normalizes a hub URL for consistent lookup.

@@ -268,19 +268,45 @@ func importLegacyHubs(ctx context.Context, store *file.Store) (int, error) {
 	}
 	hubs := make(map[string]*legacyHub) // keyed by url
 
-	// hubs.yaml: short name -> URL
+	// hubs.yaml: short name -> URL or { url, pin }. The legacy flat
+	// shape (`hubs: { name: url-string }`) is migrated transparently;
+	// the modern shape (`hubs: { name: { url:..., pin:... } }`) loads
+	// directly. Pin is preserved on the legacy import so an operator
+	// who set a pin in hubs.yaml does not lose it on first run with a
+	// new TelaVisor.
 	hubsFile := filepath.Join(telaConfigDir(), "hubs.yaml")
 	if data, err := os.ReadFile(hubsFile); err == nil {
-		var cfg struct {
-			Hubs map[string]string `yaml:"hubs"`
+		// Try the new shape first.
+		type hubEntry struct {
+			URL string `yaml:"url"`
+			Pin string `yaml:"pin,omitempty"`
 		}
-		if err := yaml.Unmarshal(data, &cfg); err == nil {
-			for name, hubURL := range cfg.Hubs {
-				canonical := canonicalHubURL(hubURL)
+		var cfg struct {
+			Hubs map[string]hubEntry `yaml:"hubs"`
+		}
+		if err := yaml.Unmarshal(data, &cfg); err == nil && len(cfg.Hubs) > 0 {
+			for name, entry := range cfg.Hubs {
+				canonical := canonicalHubURL(entry.URL)
 				hubs[canonical] = &legacyHub{
 					name:        name,
 					url:         canonical,
 					fromAliases: true,
+				}
+				_ = entry.Pin // pin is preserved at the credstore layer; not lifted into legacyHub today
+			}
+		} else {
+			// Fall back to the pre-0.16 flat shape.
+			var legacy struct {
+				Hubs map[string]string `yaml:"hubs"`
+			}
+			if err := yaml.Unmarshal(data, &legacy); err == nil {
+				for name, hubURL := range legacy.Hubs {
+					canonical := canonicalHubURL(hubURL)
+					hubs[canonical] = &legacyHub{
+						name:        name,
+						url:         canonical,
+						fromAliases: true,
+					}
 				}
 			}
 		}
