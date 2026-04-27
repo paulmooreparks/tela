@@ -199,9 +199,21 @@
 <li><strong>ID</strong>: A human-readable name (e.g., "alice", "paul-laptop", "barn-agent"). This is what you see in the UI and CLI. It has no security function.</li>
 <li><strong>Token value</strong>: The secret. Stored in the hub's config file. Never shown in full after creation (the API returns only an 8-character preview).</li>
 <li><strong>Role</strong>: One of four values (see below).</li>
+<li><strong>IssuedAt</strong>: Timestamp the token was created. Defaulted to "now" on first load for any pre-0.16 entry that lacks it, then persisted.</li>
+<li><strong>ExpiresAt</strong> (optional): Timestamp after which the token stops authenticating. Absent means the token never expires on its own.</li>
+<li><strong>RevokedAt</strong> (optional): Timestamp the token was revoked. Set by <code>tela admin tokens revoke</code>; cleared by a subsequent rotate. The entry stays in config so the audit trail is preserved.</li>
 </ul>
-<p>Tokens are created with <code>tela admin add-token</code> (remote) or <code>telahubd user add</code> (local). The pairing flow also creates tokens automatically.</p>
-<p>When auth is enabled (at least one token exists), every API request must include a valid token. When no tokens exist, the hub runs in open mode and all operations are permitted.</p>
+<p>Tokens are created with <code>tela admin tokens add</code> (remote, with optional <code>-expires</code>) or <code>telahubd user add</code> (local). The pairing flow also creates tokens automatically.</p>
+<p>When auth is enabled (at least one token exists), every API request must include a valid token. When no tokens exist, the hub runs in open mode and all operations are permitted. A token that is revoked or past its expiry is rejected immediately, even if it appears in the config file with the right value.</p>
+<h3 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h3>
+<p>Tokens have three terminal-ish states beyond simple deletion:</p>
+<div class="table-wrapper"><table><thead><tr><th>Operation</th><th>Effect</th><th>Endpoint</th></tr></thead><tbody>
+<tr><td><strong>Rotate</strong></td><td>Replaces the token value, refreshes <code>IssuedAt</code>, clears any <code>RevokedAt</code>. The role and any <code>ExpiresAt</code> are preserved. Use this to refresh a credential after suspected exposure or to re-enable a previously revoked identity.</td><td><code>POST /api/admin/rotate/{id}</code></td></tr>
+<tr><td><strong>Revoke</strong></td><td>Sets <code>RevokedAt = now</code>. The entry stays in <code>auth.tokens</code> so the identity, role, and history remain visible in the UI and audit log. The hub denies the token immediately on the next request.</td><td><code>POST /api/admin/tokens/{id}/revoke</code></td></tr>
+<tr><td><strong>Delete</strong></td><td>Removes the entry entirely. Use sparingly; prefer revoke when the audit trail matters.</td><td><code>DELETE /api/admin/access/{id}</code></td></tr>
+</tbody></table>
+</div>
+<p>The hub refuses to revoke or demote the only owner token (409 Conflict). Re-issuing a revoked identity is a rotate, not a separate "unrevoke" verb: rotation refreshes the credential and clears the revocation in one step.</p>
 <h2 id="roles"><a class="header" href="#roles">Roles</a></h2>
 <p>A role is a label on a token that controls hub-level API access. There are four roles:</p>
 <div class="table-wrapper"><table><thead><tr><th>Role</th><th>Hub-level access</th><th>Machine-level access</th></tr></thead><tbody>
