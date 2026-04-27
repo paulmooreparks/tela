@@ -644,12 +644,7 @@ func resolveServiceNames(servicesFlag, hubURL, machineID, token string) ([]portM
 func fetchHubStatusWithToken(hubURL, token string) (*hubStatusResponse, error) {
 	apiURL := wsToHTTP(hubURL) + "/api/status"
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{},
-		},
-	}
+	client := pinAwareHTTPClient(hubURL, 10*time.Second)
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %w", err)
@@ -1774,8 +1769,41 @@ func handleBridgedClient(ctx context.Context, bridge *tunnelBridge, localConn ne
 // not match. Plain ws:// connections (no TLS) bypass pinning since
 // there is nothing to verify.
 func pinAwareDialer(hubURL string) websocket.Dialer {
+	return websocket.Dialer{
+		HandshakeTimeout: wsDialTimeout,
+		TLSClientConfig: &tls.Config{
+			VerifyConnection: pinVerifier(hubURL),
+		},
+	}
+}
+
+// pinAwareHTTPClient returns an *http.Client whose TLS handshake
+// enforces the credstore pin for hubURL the same way pinAwareDialer
+// does. Use this for hub-bound HTTP traffic (admin API, /api/status,
+// /api/pair). Channel-manifest downloads and other non-hub URLs
+// should use a plain http.Client; the channel manifest's SHA-256
+// hash already covers download integrity.
+//
+// timeout is applied to the returned client; pass 0 for the
+// http.Client default (no timeout). Each call constructs a fresh
+// client; for high-frequency callers, cache the result per hub URL.
+func pinAwareHTTPClient(hubURL string, timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				VerifyConnection: pinVerifier(hubURL),
+			},
+		},
+	}
+}
+
+// pinVerifier returns the tls.Config.VerifyConnection callback that
+// implements the TOFU-or-enforce pin logic for a given hub URL.
+// Shared by pinAwareDialer (WebSocket) and pinAwareHTTPClient (REST).
+func pinVerifier(hubURL string) func(tls.ConnectionState) error {
 	expectedPin := credstore.LookupPin(hubURL)
-	verify := func(cs tls.ConnectionState) error {
+	return func(cs tls.ConnectionState) error {
 		if expectedPin == "" {
 			captured := certpin.CaptureChain(cs)
 			if captured != "" {
@@ -1785,12 +1813,6 @@ func pinAwareDialer(hubURL string) websocket.Dialer {
 			return nil
 		}
 		return certpin.Verify(cs, expectedPin)
-	}
-	return websocket.Dialer{
-		HandshakeTimeout: wsDialTimeout,
-		TLSClientConfig: &tls.Config{
-			VerifyConnection: verify,
-		},
 	}
 }
 
@@ -3544,7 +3566,8 @@ func cmdPair(args []string) {
 		os.Exit(1)
 	}
 
-	resp, err := http.Post(httpURL+"/api/pair", "application/json", strings.NewReader(string(data)))
+	pairClient := pinAwareHTTPClient(hubURL, 30*time.Second)
+	resp, err := pairClient.Post(httpURL+"/api/pair", "application/json", strings.NewReader(string(data)))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: could not reach hub: %v\n", err)
 		os.Exit(1)

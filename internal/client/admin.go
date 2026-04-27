@@ -11,7 +11,6 @@ package client
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -156,11 +156,25 @@ func adminTokenDefault() string {
 	return os.Getenv("TELA_TOKEN")
 }
 
-// adminClient is a shared HTTP client for admin API calls, avoiding a
-// new client (and TLS handshake) per request.
-var adminClient = &http.Client{
-	Timeout:   10 * time.Second,
-	Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+// adminClientCache holds one *http.Client per hub URL. Each client is
+// configured with a TLS verification callback that enforces the
+// credstore-recorded pin for that hub (or logs the captured
+// fingerprint on TOFU). Caching across calls keeps the TLS connection
+// pool warm so tela admin commands that issue several requests share
+// one handshake. See pinAwareHTTPClient in client.go for the shape.
+var adminClientCache sync.Map
+
+// adminHTTPClient returns a pin-aware *http.Client for the given hub
+// URL, constructing it on first use and caching it for the lifetime
+// of the process. The cache key is the canonicalized hub URL (the
+// same key credstore uses for pin lookup).
+func adminHTTPClient(hubURL string) *http.Client {
+	if c, ok := adminClientCache.Load(hubURL); ok {
+		return c.(*http.Client)
+	}
+	c := pinAwareHTTPClient(wsToHTTP(hubURL), 10*time.Second)
+	actual, _ := adminClientCache.LoadOrStore(hubURL, c)
+	return actual.(*http.Client)
 }
 
 // adminHTTP performs an HTTP request against the hub's admin API.
@@ -187,7 +201,7 @@ func adminHTTP(method, hubURL, path, token string, body any) (int, map[string]an
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := adminClient.Do(req)
+	resp, err := adminHTTPClient(hubURL).Do(req)
 	if err != nil {
 		return 0, nil, fmt.Errorf("could not reach hub: %w", err)
 	}

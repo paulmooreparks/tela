@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -121,4 +122,83 @@ func TestPinAwareDialer_TOFUWithoutPin(t *testing.T) {
 		t.Fatalf("TOFU dial without pin should succeed: %v", err)
 	}
 	conn.Close()
+}
+
+// startTLSStatusServer stands up a TLS HTTP server that serves a
+// 200 OK response on any GET. Returns the https URL and the leaf
+// cert pin so HTTP-client tests can assert pin enforcement against
+// real TLS handshakes.
+func startTLSStatusServer(t *testing.T) (httpsURL, pin string, cleanup func()) {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	pin = certpin.Capture(srv.Certificate())
+	return srv.URL, pin, srv.Close
+}
+
+// TestPinAwareHTTPClient_AcceptsMatchingPin verifies that
+// pinAwareHTTPClient honors the credstore pin and lets a matching
+// HTTP request succeed.
+func TestPinAwareHTTPClient_AcceptsMatchingPin(t *testing.T) {
+	withTempCredstore(t)
+	httpsURL, pin, cleanup := startTLSStatusServer(t)
+	defer cleanup()
+
+	if err := credstore.SetPin(httpsURL, pin); err != nil {
+		t.Fatalf("SetPin: %v", err)
+	}
+
+	client := pinAwareHTTPClient(httpsURL, 5*time.Second)
+	client.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
+	resp, err := client.Get(httpsURL)
+	if err != nil {
+		t.Fatalf("Get with matching pin failed: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestPinAwareHTTPClient_RefusesMismatchedPin verifies that an HTTP
+// request fails when the configured pin does not match the server's
+// certificate, with the error wrapping certpin.ErrMismatch.
+func TestPinAwareHTTPClient_RefusesMismatchedPin(t *testing.T) {
+	withTempCredstore(t)
+	httpsURL, _, cleanup := startTLSStatusServer(t)
+	defer cleanup()
+
+	wrongPin := "sha256:" + strings.Repeat("ab", 32)
+	if err := credstore.SetPin(httpsURL, wrongPin); err != nil {
+		t.Fatalf("SetPin: %v", err)
+	}
+
+	client := pinAwareHTTPClient(httpsURL, 5*time.Second)
+	client.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
+	_, err := client.Get(httpsURL)
+	if err == nil {
+		t.Fatal("Get with mismatched pin should have failed")
+	}
+	if !errors.Is(err, certpin.ErrMismatch) {
+		t.Errorf("Get error %v does not wrap certpin.ErrMismatch", err)
+	}
+}
+
+// TestPinAwareHTTPClient_TOFUWithoutPin verifies that with no pin
+// configured, the HTTP request succeeds (TOFU mode).
+func TestPinAwareHTTPClient_TOFUWithoutPin(t *testing.T) {
+	withTempCredstore(t)
+	httpsURL, _, cleanup := startTLSStatusServer(t)
+	defer cleanup()
+
+	client := pinAwareHTTPClient(httpsURL, 5*time.Second)
+	client.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
+	resp, err := client.Get(httpsURL)
+	if err != nil {
+		t.Fatalf("TOFU Get without pin should succeed: %v", err)
+	}
+	resp.Body.Close()
 }
