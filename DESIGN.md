@@ -274,26 +274,43 @@ WebSocket is chosen because it works through corporate proxies, locked-down netw
 
 **Compression caveat:** Disabling compression means all tunneled data traverses the wire at full size. For bandwidth-heavy protocols like RDP, this is acceptable because RDP applies its own compression internally. For other protocols, the bandwidth cost of no compression is the explicit tradeoff for simplicity and side-channel resistance. If this becomes a bottleneck in production, compression may be revisited as an opt-in feature in a future phase, applied only to the data payload (never to headers or control messages).
 
-## 6.2 Multiplexing
+## 6.2 Multiplexing (v1: single-channel)
 
-One WebSocket, many logical channels. Each channel carries a single TCP stream or control stream.
+**v1 ships single-channel.** One WebSocket carries one session.
+Multiplexing multiple sessions over a single connection is not part
+of v1 and is reserved for a hypothetical v2.
 
-### Channel Types
+The relay frame header (see [DESIGN-relay-gateway.md](DESIGN-relay-gateway.md)
+section 2) already includes a 4-byte `session_id` field that is
+constant for the life of the connection in v1. The field exists so
+that future multiplexing can be added without a wire-format change:
+a v2 client could open one WebSocket and multiplex N sessions over
+it, demultiplexing inbound frames by `session_id`, without breaking
+v1 peers (which continue to see one session per connection).
 
-- Control
-- Heartbeat
-- TCP data
-- File transfer (Phase 2)
-- Metrics/logs (Phase 3)
+### Why single-channel for v1
 
-### Channel Lifecycle
+A multiplexing experiment landed on `main` between commits efeafac
+and 14a731f and was reverted after dogfood issues. The complexity
+of correctly serializing N sessions over one connection (head-of-line
+blocking, fairness, framing accidents under reconnect) outweighed
+the benefit at this stage of the project. The session_id reservation
+in the wire format keeps the door open without committing to it.
 
-1. Hub allocates channel ID.
-2. Hub sends `open` control message.
-3. Agent or Helper acknowledges.
-4. Data flows.
-5. Either side sends `close`.
-6. Channel is freed.
+### What this means for clients and agents
+
+- Each `tela connect` to a machine opens exactly one WebSocket to the
+  hub. Connecting to N machines opens N WebSockets.
+- Each agent registration uses one persistent control WebSocket
+  (`telad`'s ControlWS). Per-session WebSockets are opened on demand
+  for each pairing, one per session.
+- The bridging hub (relay gateway) opens one outbound WebSocket per
+  bridged session.
+
+A v2 implementation that adds multiplexing would consume the
+reserved `session_id` field, but v1 implementations (which keep
+`session_id` constant) would continue to interoperate as long as
+v2 negotiates multiplexing as a capability rather than assuming it.
 
 ## 6.3 Frame Format
 
@@ -314,107 +331,433 @@ Multiplexed channels (the `channel_id` field in the earlier draft)
 are not a v1 feature; see the channel-multiplexing scope decision
 in ROADMAP-1.0.md.
 
-## 6.4 Control Messages
+## 6.4 Control Messages (v1)
 
-JSON, additive-only, tolerant of unknown fields.
+Control messages are JSON text frames carried over the same WebSocket
+the relay frames travel on. They are additive: receivers MUST ignore
+fields they do not recognize so the protocol can grow without breaking
+older peers.
 
-### Agent Handshake
+Every control message has a `type` field that selects the message
+shape. The full envelope (the union of all known fields, optional
+where not relevant to a given type) is defined in
+[`internal/agent/agent.go`](internal/agent/agent.go) as
+`controlMessage` and in [`internal/hub/hub.go`](internal/hub/hub.go)
+as `signalingMsg`. The two types track each other.
 
-Agent → Hub:
+### 6.4.1 Protocol version negotiation
+
+`register` and `connect` carry an optional `protocolVersion` integer
+field naming the v1 protocol (the only published version). A receiver
+that sees a value it does not recognize MAY refuse the connection;
+the absence of the field is treated as `protocolVersion: 1` for
+backward compatibility with pre-1.0 binaries that did not send it.
+
+### 6.4.2 Agent registration
+
+Agent → Hub (over the agent's persistent control WebSocket, immediately
+after WS upgrade):
+
 ```json
-{ "type": "hello", "agentId": "abc123", "version": 1, "publicKey": "..." }
+{
+  "type": "register",
+  "protocolVersion": 1,
+  "agentId": "<uuid>",
+  "machineRegistrationId": "<uuid>",
+  "machineName": "barn",
+  "displayName": "BARN",
+  "hostname": "barn.local",
+  "os": "linux",
+  "agentVersion": "v0.16.0",
+  "tags": ["production", "us-west"],
+  "location": "Owl's Nest",
+  "owner": "alice",
+  "token": "<connect-token-or-pair-redeemed-token>",
+  "ports": [22, 3389],
+  "services": [
+    { "port": 22, "proto": "tcp", "name": "SSH", "description": "" },
+    { "port": 3389, "proto": "tcp", "name": "RDP", "description": "" }
+  ],
+  "capabilities": {
+    "shares": [{ "name": "legacy", "writable": true, "allowDelete": true }],
+    "management": true
+  }
+}
 ```
 
-Hub → Agent:
+`agentId` is the stable per-installation UUID generated by `telad`
+on first start and persisted in `telad.state`. `machineRegistrationId`
+is the stable per-machine UUID; one telad install can register
+multiple machines, each with its own registration ID. The composite
+key `(agentId, machineName)` selects an entry in the hub's machines
+map; the `machineRegistrationId` index handles renames so a machine
+keeps its hub-side identity across name changes. The `token` is
+authenticated against the hub's per-machine ACL via the `register`
+permission (see [ACCESS-MODEL.md](ACCESS-MODEL.md)).
+
+Hub → Agent (response):
+
 ```json
-{ "type": "welcome", "hubId": "hub01" }
+{
+  "type": "registered",
+  "machineId": "<machineKey>",
+  "defaultUpdate": {
+    "channel": "stable",
+    "sources": { "stable": "https://...", "beta": "https://..." }
+  }
+}
 ```
 
-Agent → Hub:
+`defaultUpdate` is optional and carries the hub's recommended channel
+and sources for the agent. Agents merge it into their local update
+config with local entries winning on conflict. See
+[DESIGN-channel-sources.md](DESIGN-channel-sources.md).
+
+### 6.4.3 Client connect
+
+Client → Hub (over the client's WebSocket, immediately after WS
+upgrade):
+
 ```json
-{ "type": "ready" }
+{
+  "type": "connect",
+  "protocolVersion": 1,
+  "machineId": "barn",
+  "token": "<connect-token>",
+  "wgPubKey": "<base64 Curve25519 public key>",
+  "ports": [22, 3389]
+}
 ```
 
-Agent authentication uses Ed25519 signatures (see §12.1). No session token is involved.
+The client identifies the target machine by name in the `machineId`
+field (same field name the agent uses on `register`, but here it
+carries the machine name not the machine UUID). The `token` is
+authenticated against the hub's per-machine ACL via the `connect`
+permission, with optional service filtering (see
+[ACCESS-MODEL.md](ACCESS-MODEL.md) on the `services` filter).
+`wgPubKey` is the client's ephemeral WireGuard public key for the
+session. `ports` is an optional preferred-port list; the hub may
+narrow the offered services to this list per the per-token services
+filter.
 
-### Helper Handshake
+### 6.4.4 Session setup signalling
 
-Helper → Hub:
+After the hub matches a client to a machine, it runs the following
+four-message setup over the existing control WebSockets:
+
+1. Hub → Agent (control WS): `{ "type": "session-request", "sessionId": "<hex>" }`
+2. Agent → Hub (per-session WS, freshly opened): `{ "type": "session-join", "sessionId": "<hex>", "machineId": "<name>", "token": "<token>" }`
+3. Hub → Agent (per-session WS): `{ "type": "session-start", "wgPubKey": "<client WG pubkey>" }`
+4. Agent → Hub (per-session WS): `{ "type": "wg-pubkey", "wgPubKey": "<agent ephemeral WG pubkey>" }` — the hub relays this to the client
+
+After step 4 the hub also sends `{ "type": "ready", "sessionIdx": N }`
+to the client where `N` is the per-machine session index used to
+derive the WireGuard subnet (`10.77.N.1` for the agent,
+`10.77.N.2` for the client).
+
+The two ends now have each other's WireGuard public keys. The
+WireGuard Noise_IK handshake proceeds end-to-end over the relay path
+as binary frames carrying the 7-byte v1 frame header (see
+[DESIGN-relay-gateway.md](DESIGN-relay-gateway.md) section 2 for the
+header layout, section 3.4 for the bridged case).
+
+### 6.4.5 Transport upgrade signalling
+
+After session setup, the hub may offer transport upgrades:
+
 ```json
-{ "type": "hello", "sessionToken": "xyz789", "version": 1 }
+{
+  "type": "udp-offer",
+  "sessionId": "<hex>",
+  "port": 41820,
+  "host": "hub.example.com",
+  "token": "<8-byte UDP relay token, hex-encoded>"
+}
 ```
 
-Hub → Helper:
+Sent to both the agent and the client (with their respective tokens).
+On receipt, each side probes UDP to the hub at `host:port` and, if
+successful, switches WireGuard datagrams from the WebSocket to UDP
+relay. Format on the UDP path is `[8-byte token][7-byte frame header][WireGuard datagram]`.
+
 ```json
-{ "type": "welcome", "assignedPort": 0 }
+{
+  "type": "peer-endpoint",
+  "sessionId": "<hex>",
+  "host": "203.0.113.42",
+  "port": 51820
+}
 ```
 
-Helper → Hub:
+Sent to both peers after the hub mediates STUN. On receipt, each side
+attempts a direct UDP path to the peer (hole-punching). On success,
+WireGuard datagrams travel directly between agent and client without
+the hub on the data path, format `[7-byte frame header][WireGuard datagram]`.
+
+Both upgrades are opportunistic: failure leaves the session on
+WebSocket relay (the always-available baseline). Both can be
+attempted on a bridged session (each leg negotiates independently
+with its hub; see [DESIGN-relay-gateway.md](DESIGN-relay-gateway.md)
+section 6.1).
+
+### 6.4.6 Session teardown
+
+Either side can end a session by sending:
+
 ```json
-{ "type": "ready" }
+{ "type": "session-end", "sessionId": "<hex>", "message": "<reason>" }
 ```
 
-Helper authentication uses the single-use session token issued by the browser flow (see §6.5). The token is invalidated immediately after validation.
+The hub propagates teardown to the other side. Bridged sessions
+propagate `session-end` across the bridge connection so both hops
+tear down cleanly.
 
-### Required Messages
+### 6.4.7 Errors
 
-`hello`, `welcome`, `ready`, `open`, `close`, `error`, `heartbeat`
+```json
+{ "type": "error", "message": "<short human-readable reason>" }
+```
 
-### Optional Messages
+Sent in either direction. The hub closes the connection after
+sending an `error` for an authentication or precondition failure;
+clients and agents reconnect with backoff.
 
-`capabilities`, `metadata`, `serviceList`, `fileTransferInit` (Phase 2)
+### 6.4.8 Liveness
 
-> **Implementation note (§6.4):** The current implementation uses a different control message set than the spec above. The spec describes the target protocol; the implementation uses a simpler signalling model that evolved during development.
->
-> Actual message types in the current implementation:
-> - **Agent → Hub:** `register` (with machineId, ports, services, metadata, token, wgPubKey)
-> - **Hub → Agent:** `registered` (confirmation)
-> - **Client → Hub:** `connect` (with machineId, wgPubKey, token)
-> - **Hub → Agent:** `session-request` (informs agent of pending client)
-> - **Agent → Hub:** `session-join` (agent opens a per-session WebSocket)
-> - **Hub → Agent:** `session-start` (carries client's WG public key)
-> - **Agent → Hub:** `wg-pubkey` (agent's ephemeral WG public key, relayed to client)
-> - **Hub → Both:** `udp-offer` (UDP relay token, port, and optional host)
-> - **Hub → Both:** `peer-endpoint` (STUN-discovered endpoint for direct P2P)
-> - **Hub → Both:** `session-end` (session teardown)
-> - **Either → Hub:** `error`
-> - **Agent/Client:** `ready` (used after WireGuard setup)
->
-> The spec's `hello`/`welcome` handshake, `open`/`close` channel lifecycle, and `heartbeat` frame type are not yet implemented. Heartbeats are handled via WebSocket ping/pong frames (20s/45s intervals).
+Two complementary mechanisms protect against silent peer death:
 
-## 6.5 Session Tokens
+1. **WebSocket ping/pong** (per-connection, hop-by-hop). The hub
+   sends a WS ping every 10 seconds on each control WebSocket
+   (agent control WS, bridge WS). A pong resets a 30-second read
+   deadline; absent pong tears down the connection. See
+   `runKeepalive` in `internal/hub/hub.go` and the bridge pinger in
+   `internal/hub/bridge.go`.
 
-Session tokens are short-lived, single-use JWTs (HS256 or EdDSA) containing: user ID, agent ID, expiration, nonce, permissions.
+2. **In-band session keepalive** (per-session, end-to-end). The
+   client periodically sends a CONTROL frame (frame header `flags`
+   bit 0 = 1) with payload byte `0x01` (keepalive request). The far
+   end echoes payload `0x02` (keepalive response). If no response
+   arrives within the keepalive timeout (default 45 seconds), the
+   session is considered dead. See `relay.ControlKeepaliveReq` in
+   [`internal/relay/frame.go`](internal/relay/frame.go) and the
+   discussion in [DESIGN-relay-gateway.md](DESIGN-relay-gateway.md)
+   section 3.7.
 
-### Token Lifecycle
+Both mechanisms are required: WS ping detects per-hop TCP-level
+failures (a middlebox silently dropping the connection); in-band
+keepalive detects end-to-end session-level failures on bridged paths
+where every WS hop is healthy but the chain is broken.
 
-1. Browser requests token from Hub.
-2. Hub validates user session and issues signed token.
-3. Browser provides token to the helper (via command-line arguments or `tela://` URI).
-4. Helper connects to Hub with token.
-5. Hub validates token.
-6. Token is invalidated immediately.
+### 6.4.9 Mediated agent management
 
-## 6.6 Backward Compatibility
+The hub forwards admin requests to agents over the existing control
+WebSocket as `mgmt-request` / `mgmt-response` pairs:
 
-### Hard Rules
+Hub → Agent (on the control WS):
 
-- No field removals.
-- No field renames.
-- No reordering of struct fields.
-- No change to binary frame header.
-- No change to handshake sequence.
-- No change to channel lifecycle.
+```json
+{
+  "type": "mgmt-request",
+  "requestId": "<random hex>",
+  "action": "config-get",
+  "payload": { ... action-specific JSON ... }
+}
+```
 
-### Additive Changes (Allowed)
+Agent → Hub (response):
 
-New control message types, new optional fields, new channel types, new capabilities.
+```json
+{
+  "type": "mgmt-response",
+  "requestId": "<echo>",
+  "ok": true,
+  "payload": { ... action-specific JSON ... }
+}
+```
 
-### Deprecation Policy
+Action names and payloads are documented in
+[DESIGN-remote-admin.md](DESIGN-remote-admin.md). Hub-side dispatch
+is under `/api/admin/agents/{machine}/{action}`; see the lightweight
+presence probe at `/api/admin/agents/{machine}` (no action) for the
+read-only case.
 
-- 18-month support window for old agents.
-- Hub must support multiple protocol versions.
-- Agents must ignore unknown fields.
+### 6.4.10 Proxy keepalive
+
+A single text frame is reserved for keeping idle WebSockets open
+through proxies that drop quiet connections:
+
+```json
+{ "type": "keepalive" }
+```
+
+The hub recognizes and absorbs these (does not relay, does not log).
+Sent on a 60-second cadence from the client side when no other
+traffic has flowed. Distinct from the in-band session keepalive
+(§6.4.8) which is a relay-frame CONTROL payload, not a JSON message.
+
+## 6.5 Tokens (v1)
+
+Tokens in v1 are static, hex-encoded shared secrets. They are
+produced by the hub (auto-generated owner token on first start, or
+through the admin API), distributed to operators by the hub
+administrator (directly, or indirectly via short-lived
+[pairing codes](book/src/guide/credentials.md)), and presented by
+agents and clients on every `register` or `connect` to authorize the
+operation against the hub's per-machine ACL. The hub compares
+tokens with `crypto/subtle.ConstantTimeCompare`; valid tokens have
+no expiration in v1 and are revoked by removing them from the hub
+config (which hot-reloads).
+
+The full role + permission model is documented in
+[ACCESS-MODEL.md](ACCESS-MODEL.md). The token storage and
+distribution model is documented in the
+[Credentials and pairing](book/src/guide/credentials.md) book
+chapter.
+
+### What v1 deliberately does not include
+
+- **No expiration.** Tokens are valid until revoked.
+- **No structured claims.** The token is an opaque secret; identity
+  and permissions live in the hub's ACL keyed on the token's hex
+  value, not in the token itself.
+- **No rotation without operator action.** Rotating a token requires
+  generating a new one and re-distributing it.
+
+These are real gaps. A 1.x cycle will replace the static-secret
+model with structured, revocable, rotatable session tokens; design
+work is tracked as
+[issue #24](https://github.com/paulmooreparks/tela/issues/24). The
+replacement is expected to be backward-compatible with the existing
+ACL model: structured tokens add fields, the hub keeps accepting
+the legacy hex-string form during the transition window per the
+1.x compat policy in §6.6.
+
+## 6.6 Backward Compatibility (1.x policy)
+
+This section describes the compatibility contract Tela commits to
+between minor versions of the 1.x line. It applies from v1.0.0
+forward; pre-1.0 releases reserved the right to break any of these
+rules and frequently did, but everything in this document describes
+what the wire format, REST APIs, configuration files, and CLI surface
+look like at v1.0.0 and what the project will and will not change in
+1.x.
+
+### 6.6.1 Covered surface
+
+The 1.x compatibility contract covers:
+
+| Surface | Stability |
+|---|---|
+| Wire protocol (this section §6) | Backward-compatible only. New fields additive; old peers continue to work. |
+| Relay frame header (DESIGN-relay-gateway.md §2) | Frozen. v2 would use a new magic byte. |
+| REST API on telahubd (`/api/admin/*`, `/api/status`, `/api/history`, `/api/pair`) | Backward-compatible; new endpoints and fields additive. |
+| CLI flags and subcommands on `tela`, `telad`, `telahubd` | Existing flags and subcommands are not removed or repurposed within 1.x. |
+| Configuration YAML (`telad.yaml`, `telahubd.yaml`, `~/.tela/credentials.yaml`, hub `auth` schema) | Field names and shapes preserved. New fields additive with safe defaults. |
+| Channel manifest schema (`dev.json`, `beta.json`, `stable.json`, custom) | Frozen at the shape documented in [`internal/channel/`](internal/channel/). |
+| Pairing code shape (`XXXX-1234`) and redemption flow | Frozen. |
+
+Explicitly NOT covered:
+
+| Surface | Why |
+|---|---|
+| Go packages under `internal/` | Tela ships no public Go API at 1.0. See §6.9. |
+| Hub admin web console HTML/JS | Internal. The same data is exposed through the admin REST API which is covered. |
+| TelaVisor's internal Wails bindings (`cmd/telagui/frontend/wailsjs/`) | Generated; consumed only by TelaVisor. |
+| Log message text and event-history string formats | Stable enough for human eyes; not a parseable contract. |
+| Specific binary download URLs (the actual `releases/download/...` paths) | Resolved through the channel manifest, which is covered. The URLs themselves move when the manifest moves. |
+| Internal database, ring buffer, and on-disk state file shapes | Migrated forward by the binary that owns them. |
+
+### 6.6.2 Hard rules for covered surfaces
+
+- **Receivers ignore unknown fields.** Every JSON parser in the
+  wire-protocol path uses Go's default decoder (which ignores unknown
+  fields). Adding a new field never breaks an older peer.
+- **Senders never remove or rename a field.** Fields go from
+  required-and-used to optional-and-deprecated to documented-as-removed-in-2.0
+  but never disappear within 1.x.
+- **Senders never repurpose a field.** A field that meant X in 1.0
+  cannot mean Y in 1.5 even if no peer ever set it. New meanings
+  require new fields.
+- **The relay frame header is frozen.** The 7-byte layout
+  (magic + hop + flags + session_id) cannot change in 1.x. Adding a
+  new flag bit (bits 1-7 of `flags`) is allowed only if the rule
+  "receivers MUST ignore unknown flag bits" continues to hold.
+- **The CONTROL frame payload-byte registry is forward-compatible.**
+  v1 defines two payload bytes (`0x01` keepalive request, `0x02`
+  keepalive response). New CONTROL types take new payload bytes;
+  receivers ignore CONTROL frames with unknown payload bytes per
+  [DESIGN-relay-gateway.md](DESIGN-relay-gateway.md) section 3.7.
+
+### 6.6.3 Additive changes (allowed in 1.x)
+
+- New control message `type` values. Receivers tolerate unknown
+  types (log and drop, do not close the connection).
+- New optional fields on existing message types. Receivers ignore
+  unknown fields per the JSON decoder default.
+- New REST endpoints under `/api/admin/`. Existing endpoints keep
+  their shape and status code semantics.
+- New configuration YAML fields with safe defaults. Older binaries
+  ignore them; newer binaries treat absence as the documented
+  default.
+- New CLI flags. Existing flags keep their meaning and short forms.
+- New mgmt-request actions. Older agents respond with an error to
+  unknown actions, which the hub's admin proxy surfaces as a 4xx
+  rather than a 5xx.
+
+### 6.6.4 Deprecation procedure
+
+A field, message type, endpoint, flag, or YAML key that is no
+longer the right shape is marked deprecated in the documentation
+and the corresponding code, but kept working for the rest of the
+1.x line. Removal happens at 2.0, never inside 1.x.
+
+Deprecation steps:
+
+1. Add the replacement (the new field, message type, endpoint, etc.).
+2. Update the documentation to recommend the replacement and mark
+   the old form as deprecated, with a note about when the old form
+   was added and a forward pointer to where it goes away.
+3. Continue to accept and produce the old form for the rest of 1.x.
+4. At 2.0, remove the old form.
+
+### 6.6.5 Cross-version compatibility matrix
+
+A 1.x hub MUST accept agents and clients running any 1.y release
+(y &le; x). A 1.x agent or client MUST work against any 1.y hub
+(y &ge; x). The combinations are:
+
+- **Old client + new hub.** The new hub knows everything the old
+  client knows and accepts old-shape messages. New optional fields
+  the client does not send default to their documented defaults.
+- **New client + old hub.** The new client may send fields the old
+  hub does not understand. The old hub ignores them. Features that
+  require hub-side support (a new endpoint, a new mgmt action) are
+  detected by the client either probing for the endpoint or by the
+  hub's `/.well-known/tela` capability advertisement.
+- **Old agent + new hub.** Same as old client + new hub. The new
+  hub treats missing fields per their documented defaults.
+- **New agent + old hub.** Same as new client + old hub.
+
+Specifically, the `protocolVersion` field added in v0.16 is treated
+as `1` when absent so pre-0.16 binaries work unchanged against any
+1.x hub, and pre-0.16 hubs accept the field by ignoring it.
+
+### 6.6.6 The "what about a v2 wire format" question
+
+A v2 wire format would not happen lightly. v1 is committed to
+indefinitely. The relay frame header reserves one byte for `magic`
+(currently `0x54` = 'T') and a second byte for `hop` (currently a
+TTL); a v2 frame format would use a different magic byte so v1 and
+v2 peers can be told apart on the first byte without ambiguity.
+Adding a v2 would require concurrent v1 and v2 support on the hub
+for the rest of v1's deprecation window.
+
+The mid-2020s baseline assumption is that v1 is the only published
+version of the Tela wire protocol for the foreseeable life of the
+project. The protocolVersion field exists not because v2 is planned,
+but because saying "the protocol has a version" is itself a forcing
+function: it commits us to the discipline of explicit numbered
+revisions if we ever do change anything.
 
 ## 6.7 Error Handling
 
@@ -567,6 +910,54 @@ Both transport modes coexist. The Hub does not distinguish between TCP-relay bin
 - Agents that support WireGuard include `wgPubKey` in their registration.
 - Clients detect WireGuard support from the `ready` response.
 - If either side does not support WireGuard, the connection falls back to TCP relay mode.
+
+## 6.9 Public Go API surface (decision: none at 1.0)
+
+Tela ships **no stable Go API at 1.0.** Every package under
+[`internal/`](internal/) is private by Go's import rules and stays
+that way. Embedders who want to consume Tela from another Go program
+have three options, in decreasing order of stability:
+
+1. **The CLI.** Shell out to `tela`, `telad`, or `telahubd`. The CLI
+   surface is covered by the 1.x compatibility contract (§6.6).
+   Flag set, subcommand layout, exit codes, and stdout/stderr shapes
+   are stable. This is the recommended embedding path and the one
+   the project commits to.
+2. **The wire protocol or REST API.** Speak the protocol directly.
+   Both surfaces are covered by §6.6. This is the right choice when
+   shelling out to a separate process is not viable (a custom client
+   that needs to manage many connections from one process, for
+   example) and the embedder is prepared to implement the wire
+   format from the spec in this section.
+3. **A fork.** Vendor the source and import what you need. Without
+   stability promises, but with full access to the implementation.
+   The Apache 2.0 license permits this.
+
+### Why no Go API
+
+The 1.x compat contract is large enough already. Adding a Go package
+surface to it would mean: Tela cannot rename or restructure any
+exported identifier without a major release; Tela cannot tighten
+internal interfaces or split files without breaking embedders;
+every internal abstraction becomes load-bearing for an unknown
+audience. The cost is paid by every refactor, every bug fix, every
+internal cleanup; the benefit accrues only to embedders who could
+have used the CLI or wire protocol instead.
+
+The decision can be revisited at 2.0. Until then, `internal/` means
+internal: subject to change without notice between any two commits,
+not subject to the 1.x compatibility contract.
+
+### What about reflection-based access (the "internal/ trick")
+
+Go's import enforcement of `internal/` is module-scoped, not
+language-level. A determined embedder can vendor the Tela source
+into their own module's `internal/` tree and import the packages.
+This works mechanically but is not a supported path: Tela makes no
+guarantees about those packages' shape between versions, and an
+embedder who relies on it inherits the maintenance burden of every
+breaking change. The supported answer remains the CLI or the wire
+protocol.
 
 ---
 

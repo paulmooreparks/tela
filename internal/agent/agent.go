@@ -247,8 +247,14 @@ type capabilities struct {
 	Management bool                  `json:"management,omitempty"`
 }
 
+// ProtocolVersion is the v1 wire protocol version this binary speaks.
+// Sent on every register message so the hub can record what version
+// of the protocol the agent negotiated. See DESIGN.md section 6.4.1.
+const ProtocolVersion = 1
+
 type controlMessage struct {
 	Type                  string              `json:"type"`
+	ProtocolVersion       int                 `json:"protocolVersion,omitempty"`       // v1 only; absent on receive treated as 1
 	MachineID             string              `json:"machineId,omitempty"`             // session-join and hub responses
 	MachineName           string              `json:"machineName,omitempty"`           // register: display name (replaces machineId on register)
 	AgentID               string              `json:"agentId,omitempty"`               // register: stable agent identity UUID
@@ -2091,6 +2097,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	lg.Printf("connected, registering as: %s (agentId %s)", reg.MachineName, reg.AgentID)
 	regMsg := controlMessage{
 		Type:                  "register",
+		ProtocolVersion:       ProtocolVersion,
 		MachineName:           reg.MachineName,
 		AgentID:               reg.AgentID,
 		MachineRegistrationID: reg.MachineRegistrationID,

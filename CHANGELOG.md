@@ -11,6 +11,14 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+### Added
+- **Protocol freeze track.** DESIGN.md section 6 has been rewritten to document the v1 wire protocol as the frozen specification, replacing the v0.4 aspirational text it carried since the project's early days. The shipped control message set (`register`, `connect`, `session-request`, `session-join`, `session-start`, `wg-pubkey`, `udp-offer`, `peer-endpoint`, `session-end`, `error`, `mgmt-request`/`mgmt-response`, `keepalive`) is now documented with full JSON schemas; the relay frame header (already specified in DESIGN-relay-gateway.md section 2) is referenced as authoritative; multiplexing is documented as a v1 non-goal with the `session_id` field reserved for a hypothetical v2; the static-token model is documented with a forward pointer to the issue #24 rework; the 1.x backward-compatibility policy is spelled out (covered surface, hard rules, additive policy, deprecation procedure, cross-version compat matrix); and the no-public-Go-API decision is documented as DESIGN.md section 6.9. Closes #19, #20, #21, #22.
+- **Wire-protocol version negotiation.** Agents and clients now send `protocolVersion: 1` on their `register` and `connect` messages. The hub records the value per agent and surfaces it on `/api/status` as `machines[].protocolVersion`. Pre-0.16 binaries that omit the field are treated as `protocolVersion: 1` per the v1.x cross-version compat policy; the field is fully additive and backward-compatible. Closes #18.
+
+### Changed
+- DESIGN.md section 6.3 (Frame Format) now points at DESIGN-relay-gateway.md section 2 as the authoritative source for the 7-byte v1 relay frame header layout. The earlier 12-byte aspirational struct in this section was never implemented.
+- DESIGN.md section 6.5 (Tokens) now describes the actual static-secret token model rather than the JWT/browser-flow aspiration. The replacement structured-token system is tracked under issue #24.
+
 ## [0.15] - 2026-04-27
 
 ### Added
