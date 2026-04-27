@@ -219,23 +219,36 @@
 </ul>
 <p><strong>Schema:</strong></p>
 <pre><code class="language-yaml">hubs:
-  &lt;alias&gt;: &lt;ws-or-wss-url&gt;
+  &lt;alias&gt;:
+    url: &lt;ws-or-wss-url&gt;
+    pin: sha256:&lt;hex&gt;          # optional TLS SPKI pin
 </code></pre>
 <ul>
 <li><code>hubs</code> is a mapping/dictionary.</li>
 <li>Alias lookup is <strong>case-sensitive</strong> (e.g. <code>OwlsNest</code> and <code>owlsnest</code> are different).</li>
-<li>The URL is used <strong>exactly as written</strong>. (Unlike portal entries, it is not converted from <code>https://</code> → <code>wss://</code>.)</li>
+<li>The <code>url</code> is used <strong>exactly as written</strong>. (Unlike portal entries, it is not converted from <code>https://</code> → <code>wss://</code>.)</li>
+<li><code>pin</code>, when set, is the SHA-256 hash of the hub's TLS leaf certificate's Subject Public Key Info (SPKI), formatted as <code>sha256:&lt;lowercase hex&gt;</code>. The dialer refuses connections whose presented certificate does not match this pin. Set with <code>tela login &lt;url&gt; -pin &lt;fingerprint&gt;</code> or <code>tela pin &lt;url&gt; &lt;fingerprint&gt;</code>. See the <em>credentials.yaml</em> section below for the full pin model.</li>
 </ul>
 <p><strong>Example (local dev):</strong></p>
 <pre><code class="language-yaml">hubs:
-  local: ws://localhost
-  gohub-local: ws://localhost
+  local:
+    url: ws://localhost
+  gohub-local:
+    url: ws://localhost
 </code></pre>
-<p><strong>Example (production):</strong></p>
+<p><strong>Example (production with TLS pin):</strong></p>
+<pre><code class="language-yaml">hubs:
+  owlsnest:
+    url: wss://tela.awansaya.net
+    pin: sha256:1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789abcdef0123456789
+  gohub:
+    url: wss://gohub.parkscomputing.com
+</code></pre>
+<p><strong>Pre-0.16 flat shape (still accepted on read):</strong></p>
 <pre><code class="language-yaml">hubs:
   owlsnest: wss://tela.awansaya.net
-  gohub: wss://gohub.parkscomputing.com
 </code></pre>
+<p>The flat <code>&lt;alias&gt;: &lt;url&gt;</code> shape is migrated transparently when read. New entries written by <code>tela login</code> or by editing the file should use the structured shape so they can carry a <code>pin</code> field.</p>
 <h3 id="creating-hubsyaml"><a class="header" href="#creating-hubsyaml">Creating <code>hubs.yaml</code></a></h3>
 <ol>
 <li>Create the config directory:
@@ -287,6 +300,7 @@
   wss://hub.example.com:
     token: 7bf042ceb070136fec15fdd49797c486225fbe62b6cfd3bb4649f04b32446d62
     identity: alice
+    pin: sha256:1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789abcdef0123456789
 
 # Optional: which release channel the tela client (and TelaVisor) follows
 # for self-update. Accepts dev (default), beta, stable, or a custom channel
@@ -300,7 +314,8 @@ update:
 <p>Notes:</p>
 <ul>
 <li>The <code>hubs</code> mapping stores credentials by hub URL (normalized: trailing slashes removed, schemes lowercased).</li>
-<li><code>token</code> is required; <code>identity</code> is optional but helpful for tracking.</li>
+<li><code>token</code> is required; <code>identity</code> and <code>pin</code> are optional.</li>
+<li><code>pin</code>, when set, is the SHA-256 hash of the hub's TLS leaf certificate's Subject Public Key Info (SPKI), formatted as <code>sha256:&lt;lowercase hex&gt;</code>. The dialer refuses connections whose presented certificate's SPKI does not match. Pinning the SPKI (rather than the whole certificate) survives certificate renewal with the same key, which is the desired behavior. Manage with <code>tela login &lt;url&gt; -pin &lt;fingerprint&gt;</code> or the standalone <code>tela pin &lt;url&gt; [fingerprint]</code> command (no fingerprint = inspect, fingerprint = set, <code>-clear</code> = remove). On a successful TOFU connect to a hub with no pin configured, <code>tela connect</code> logs the captured fingerprint and the exact <code>tela pin ...</code> command to enforce it.</li>
 <li>File permissions: 0600 (user-level) or 0644 (system-level, for SYSTEM account read access).</li>
 <li>The <code>update</code> block is read by <code>tela channel</code>, <code>tela update</code>, and TelaVisor's
 Application Settings → Release channel selector. It is the <em>client's</em> channel
@@ -603,9 +618,11 @@ bridges:
   - hubId: remote-hub              # identifier of the remote hub
     url: wss://remote-hub.example.com
     token: &lt;token&gt;                 # auth token on the remote hub
+    pin: sha256:1a2b3c4d...         # optional TLS SPKI pin for the destination hub
     maxHops: 3                     # maximum relay hops (default 0 = unlimited)
     machines: [web01, db01]        # machines to bridge to the remote hub
 </code></pre>
+<p>The <code>bridges[].pin</code> field, when set, is the SHA-256 SPKI pin (<code>sha256:&lt;lowercase hex&gt;</code>) of the destination hub's TLS leaf certificate. The bridge dial refuses connections whose certificate's SPKI does not match. With no pin configured, the standard CA chain validation applies; the captured fingerprint is logged on the first successful bridge dial so the operator can copy it back into this config to enforce pinning. See <a href="DESIGN-relay-gateway.html">DESIGN-relay-gateway.md</a> §5.4 for the design discussion.</p>
 <h3 id="core-fields"><a class="header" href="#core-fields">Core fields</a></h3>
 <ul>
 <li><code>port</code>, <code>udpPort</code>, <code>udpHost</code>, <code>name</code>, <code>wwwDir</code>: same as the corresponding env vars.</li>

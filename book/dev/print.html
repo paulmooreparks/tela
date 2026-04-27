@@ -180,7 +180,7 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>This edition documents Tela v0.16.0-dev.2.</em></p>
+<p><em>This edition documents Tela v0.16.0-dev.3.</em></p>
 <p>Tela is a connectivity fabric. It is a small set of programs that lets one
 machine reach a TCP service on another machine through an encrypted tunnel,
 without either side opening an inbound port, installing a virtual private
@@ -646,6 +646,32 @@ For the CLI surface of each binary, see <a href="guide/reference.html">Appendix 
 <pre><code class="language-bash">tela logout wss://hub.example.com
 sudo telad logout -hub wss://hub.example.com
 </code></pre>
+<h2 id="pinning-a-hubs-tls-certificate"><a class="header" href="#pinning-a-hubs-tls-certificate">Pinning a hub's TLS certificate</a></h2>
+<p>Tokens prove that the bearer is allowed to talk to a hub. They do not prove that the connection is <em>actually reaching that hub</em> and not a rogue proxy in the middle. Tela addresses that with TLS certificate pinning: a per-hub fingerprint stored alongside the token, checked on every <code>tela connect</code>, refused on mismatch.</p>
+<p>The fingerprint is the SHA-256 hash of the hub's TLS leaf certificate's Subject Public Key Info (SPKI), formatted as <code>sha256:&lt;lowercase hex&gt;</code>. Pinning the SPKI rather than the whole certificate means certificate renewal with the same key does not break the pin. Key rotation does break the pin, which is the point: a key rotation is exactly the case where the operator should re-confirm the change.</p>
+<h3 id="first-connect-tofu"><a class="header" href="#first-connect-tofu">First connect (TOFU)</a></h3>
+<p>The first time <code>tela connect</code> succeeds against a hub with no pin configured, it logs the captured fingerprint and the exact command to enforce it next time:</p>
+<pre><code>hub wss://hub.example.com presented certificate sha256:1a2b...3456 (no pin configured;
+run 'tela pin wss://hub.example.com sha256:1a2b...3456' to enforce it)
+</code></pre>
+<p>If you want the connection refused on any future certificate change, copy the fingerprint and pin it:</p>
+<pre><code class="language-bash">tela pin wss://hub.example.com sha256:1a2b...3456
+</code></pre>
+<h3 id="inspect-change-or-remove-a-pin"><a class="header" href="#inspect-change-or-remove-a-pin">Inspect, change, or remove a pin</a></h3>
+<pre><code class="language-bash">tela pin wss://hub.example.com                       # show the current pin
+tela pin wss://hub.example.com sha256:newfingerprint # update (use after a deliberate key rotation)
+tela pin wss://hub.example.com -clear                # remove (return to plain CA-chain trust)
+</code></pre>
+<h3 id="pinning-at-credential-creation-time"><a class="header" href="#pinning-at-credential-creation-time">Pinning at credential-creation time</a></h3>
+<pre><code class="language-bash">tela login wss://hub.example.com -pin sha256:1a2b...3456
+</code></pre>
+<p>Useful when the operator gives you both the token and the expected fingerprint up front (out-of-band, e.g. a chat message or a printed handout for an air-gapped onboarding).</p>
+<h3 id="what-a-pin-mismatch-looks-like"><a class="header" href="#what-a-pin-mismatch-looks-like">What a pin mismatch looks like</a></h3>
+<pre><code>$ tela connect -hub wss://hub.example.com -machine prod-db
+websocket dial failed: ... certpin: presented certificate does not match
+pinned fingerprint: got sha256:9999..., want sha256:1a2b...
+</code></pre>
+<p>The connection is refused before any token, machine name, or other secret is sent. If this happens unexpectedly, do not update the pin until you have confirmed the change with the hub operator out-of-band.</p>
 <h2 id="pairing-codes"><a class="header" href="#pairing-codes">Pairing codes</a></h2>
 <p>A pairing code is a short, single-use code that a hub administrator generates for a user or agent. The recipient redeems it for a permanent token without ever seeing or handling the raw token value. Codes expire between 10 minutes and 7 days after generation.</p>
 <h3 id="generating-a-code-administrator"><a class="header" href="#generating-a-code-administrator">Generating a code (administrator)</a></h3>
@@ -5917,23 +5943,36 @@ telahubd update -h | -? | -help | --help     # print help
 </ul>
 <p><strong>Schema:</strong></p>
 <pre><code class="language-yaml">hubs:
-  &lt;alias&gt;: &lt;ws-or-wss-url&gt;
+  &lt;alias&gt;:
+    url: &lt;ws-or-wss-url&gt;
+    pin: sha256:&lt;hex&gt;          # optional TLS SPKI pin
 </code></pre>
 <ul>
 <li><code>hubs</code> is a mapping/dictionary.</li>
 <li>Alias lookup is <strong>case-sensitive</strong> (e.g. <code>OwlsNest</code> and <code>owlsnest</code> are different).</li>
-<li>The URL is used <strong>exactly as written</strong>. (Unlike portal entries, it is not converted from <code>https://</code> → <code>wss://</code>.)</li>
+<li>The <code>url</code> is used <strong>exactly as written</strong>. (Unlike portal entries, it is not converted from <code>https://</code> → <code>wss://</code>.)</li>
+<li><code>pin</code>, when set, is the SHA-256 hash of the hub's TLS leaf certificate's Subject Public Key Info (SPKI), formatted as <code>sha256:&lt;lowercase hex&gt;</code>. The dialer refuses connections whose presented certificate does not match this pin. Set with <code>tela login &lt;url&gt; -pin &lt;fingerprint&gt;</code> or <code>tela pin &lt;url&gt; &lt;fingerprint&gt;</code>. See the <em>credentials.yaml</em> section below for the full pin model.</li>
 </ul>
 <p><strong>Example (local dev):</strong></p>
 <pre><code class="language-yaml">hubs:
-  local: ws://localhost
-  gohub-local: ws://localhost
+  local:
+    url: ws://localhost
+  gohub-local:
+    url: ws://localhost
 </code></pre>
-<p><strong>Example (production):</strong></p>
+<p><strong>Example (production with TLS pin):</strong></p>
+<pre><code class="language-yaml">hubs:
+  owlsnest:
+    url: wss://tela.awansaya.net
+    pin: sha256:1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789abcdef0123456789
+  gohub:
+    url: wss://gohub.parkscomputing.com
+</code></pre>
+<p><strong>Pre-0.16 flat shape (still accepted on read):</strong></p>
 <pre><code class="language-yaml">hubs:
   owlsnest: wss://tela.awansaya.net
-  gohub: wss://gohub.parkscomputing.com
 </code></pre>
+<p>The flat <code>&lt;alias&gt;: &lt;url&gt;</code> shape is migrated transparently when read. New entries written by <code>tela login</code> or by editing the file should use the structured shape so they can carry a <code>pin</code> field.</p>
 <h3 id="creating-hubsyaml"><a class="header" href="#creating-hubsyaml">Creating <code>hubs.yaml</code></a></h3>
 <ol>
 <li>Create the config directory:
@@ -5985,6 +6024,7 @@ telahubd update -h | -? | -help | --help     # print help
   wss://hub.example.com:
     token: 7bf042ceb070136fec15fdd49797c486225fbe62b6cfd3bb4649f04b32446d62
     identity: alice
+    pin: sha256:1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789abcdef0123456789
 
 # Optional: which release channel the tela client (and TelaVisor) follows
 # for self-update. Accepts dev (default), beta, stable, or a custom channel
@@ -5998,7 +6038,8 @@ update:
 <p>Notes:</p>
 <ul>
 <li>The <code>hubs</code> mapping stores credentials by hub URL (normalized: trailing slashes removed, schemes lowercased).</li>
-<li><code>token</code> is required; <code>identity</code> is optional but helpful for tracking.</li>
+<li><code>token</code> is required; <code>identity</code> and <code>pin</code> are optional.</li>
+<li><code>pin</code>, when set, is the SHA-256 hash of the hub's TLS leaf certificate's Subject Public Key Info (SPKI), formatted as <code>sha256:&lt;lowercase hex&gt;</code>. The dialer refuses connections whose presented certificate's SPKI does not match. Pinning the SPKI (rather than the whole certificate) survives certificate renewal with the same key, which is the desired behavior. Manage with <code>tela login &lt;url&gt; -pin &lt;fingerprint&gt;</code> or the standalone <code>tela pin &lt;url&gt; [fingerprint]</code> command (no fingerprint = inspect, fingerprint = set, <code>-clear</code> = remove). On a successful TOFU connect to a hub with no pin configured, <code>tela connect</code> logs the captured fingerprint and the exact <code>tela pin ...</code> command to enforce it.</li>
 <li>File permissions: 0600 (user-level) or 0644 (system-level, for SYSTEM account read access).</li>
 <li>The <code>update</code> block is read by <code>tela channel</code>, <code>tela update</code>, and TelaVisor's
 Application Settings → Release channel selector. It is the <em>client's</em> channel
@@ -6301,9 +6342,11 @@ bridges:
   - hubId: remote-hub              # identifier of the remote hub
     url: wss://remote-hub.example.com
     token: &lt;token&gt;                 # auth token on the remote hub
+    pin: sha256:1a2b3c4d...         # optional TLS SPKI pin for the destination hub
     maxHops: 3                     # maximum relay hops (default 0 = unlimited)
     machines: [web01, db01]        # machines to bridge to the remote hub
 </code></pre>
+<p>The <code>bridges[].pin</code> field, when set, is the SHA-256 SPKI pin (<code>sha256:&lt;lowercase hex&gt;</code>) of the destination hub's TLS leaf certificate. The bridge dial refuses connections whose certificate's SPKI does not match. With no pin configured, the standard CA chain validation applies; the captured fingerprint is logged on the first successful bridge dial so the operator can copy it back into this config to enforce pinning. See <a href="guide/DESIGN-relay-gateway.html">DESIGN-relay-gateway.md</a> §5.4 for the design discussion.</p>
 <h3 id="core-fields"><a class="header" href="#core-fields">Core fields</a></h3>
 <ul>
 <li><code>port</code>, <code>udpPort</code>, <code>udpHost</code>, <code>name</code>, <code>wwwDir</code>: same as the corresponding env vars.</li>
