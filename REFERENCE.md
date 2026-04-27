@@ -1146,10 +1146,11 @@ tela admin access remove <id>                            # delete identity entir
 **Tokens** (token identity CRUD):
 
 ```bash
-tela admin tokens list                                   # list all token identities
-tela admin tokens add <id> [-role owner|admin]           # create a token identity (returned once)
-tela admin tokens remove <id>                            # remove a token identity
-tela admin rotate <id>                                   # regenerate a token (standalone command)
+tela admin tokens list                                   # list all token identities (id/role/status/expires/issued)
+tela admin tokens add <id> [-role owner|admin] [-expires <when>]  # create a token (returned once); -expires accepts RFC3339 or 30d/4w/1y
+tela admin tokens revoke <id>                            # mark identity revoked (entry preserved for audit; rotate to re-enable)
+tela admin tokens remove <id>                            # delete a token identity entirely (prefer revoke)
+tela admin rotate <id>                                   # regenerate a token; refreshes issuedAt and clears any prior revocation
 ```
 
 **Portals** (portal registrations on the hub):

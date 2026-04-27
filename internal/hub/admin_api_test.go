@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // These tests exercise admin_api.go's view builder with the globals
@@ -289,6 +290,286 @@ func TestAdminPatchAccess_RejectsUnknownRole(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	handleAdminAccess(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+// ── POST /api/admin/tokens/{id}/revoke ────────────────────────────
+
+func TestAdminRevokeToken_MarksRevokedNoDelete(t *testing.T) {
+	// Revocation is audit-trail-preserving: the entry stays in the
+	// config with RevokedAt set, and the auth checks reject it on
+	// every subsequent call. The endpoint returns 200 with the
+	// revocation timestamp.
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+		},
+	})
+	defer restore()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/tokens/alice/revoke", nil)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	rr := httptest.NewRecorder()
+	handleAdminTokenAction(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	// Alice must still be in the slice (audit trail) but RevokedAt set.
+	var found *tokenEntry
+	for i := range globalCfg.Auth.Tokens {
+		if globalCfg.Auth.Tokens[i].ID == "alice" {
+			found = &globalCfg.Auth.Tokens[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("alice was deleted from the config; revoke must preserve the audit entry")
+	}
+	if found.RevokedAt == nil {
+		t.Error("RevokedAt was not set on the entry")
+	}
+	if rr.Header().Get("ETag") == "" {
+		t.Error("expected ETag on successful revoke")
+	}
+}
+
+func TestAdminRevokeToken_BlocksAuthAfterRevoke(t *testing.T) {
+	// After revocation, the token can no longer pass any auth check.
+	// This is the primary guarantee of the feature: revocation
+	// propagates within one request, not minutes.
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+			Machines: map[string]machineACL{
+				"barn": {ConnectTokens: []connectGrant{{Token: "tok-alice"}}},
+			},
+		},
+	})
+	defer restore()
+
+	if !globalAuth.canConnect("tok-alice", "barn") {
+		t.Fatal("precondition: alice should be able to connect before revocation")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/tokens/alice/revoke", nil)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	rr := httptest.NewRecorder()
+	handleAdminTokenAction(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("revoke returned %d; want 200", rr.Code)
+	}
+
+	// Reload the auth store from the now-mutated config so the change
+	// is visible. Production hubs do this through the persistConfig +
+	// hot-reload path; the test exercises the same downstream effect.
+	globalAuth.reload(&globalCfg.Auth)
+
+	if globalAuth.canConnect("tok-alice", "barn") {
+		t.Error("revoked token still passed canConnect; revocation did not propagate")
+	}
+}
+
+func TestAdminRevokeToken_RefusesLastOwner(t *testing.T) {
+	// Same shape as the patch-access last-owner guard. If the only
+	// owner is revoked, no one can manage the hub. The endpoint
+	// returns 409 with a clear message.
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+		},
+	})
+	defer restore()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/tokens/owner/revoke", nil)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	rr := httptest.NewRecorder()
+	handleAdminTokenAction(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rr.Code)
+	}
+	respBody, _ := io.ReadAll(rr.Body)
+	var resp map[string]string
+	_ = json.Unmarshal(respBody, &resp)
+	if !strings.Contains(resp["error"], "last remaining owner") {
+		t.Errorf("error = %q, want one mentioning the last-owner guard", resp["error"])
+	}
+}
+
+func TestAdminRevokeToken_IdempotentSecondCall(t *testing.T) {
+	// Calling revoke twice on the same identity returns 200 with
+	// status "already-revoked" and does not change RevokedAt. This
+	// keeps automation that retries on transient errors safe.
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+		},
+	})
+	defer restore()
+
+	doRevoke := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/admin/tokens/alice/revoke", nil)
+		req.Header.Set("Authorization", "Bearer tok-owner")
+		rr := httptest.NewRecorder()
+		handleAdminTokenAction(rr, req)
+		return rr
+	}
+
+	first := doRevoke()
+	if first.Code != http.StatusOK {
+		t.Fatalf("first revoke status = %d, want 200", first.Code)
+	}
+	var firstResp map[string]any
+	_ = json.NewDecoder(first.Body).Decode(&firstResp)
+	if firstResp["status"] != "revoked" {
+		t.Errorf("first revoke status = %q, want \"revoked\"", firstResp["status"])
+	}
+
+	second := doRevoke()
+	if second.Code != http.StatusOK {
+		t.Fatalf("second revoke status = %d, want 200", second.Code)
+	}
+	var secondResp map[string]any
+	_ = json.NewDecoder(second.Body).Decode(&secondResp)
+	if secondResp["status"] != "already-revoked" {
+		t.Errorf("second revoke status = %q, want \"already-revoked\"", secondResp["status"])
+	}
+}
+
+// ── POST /api/admin/rotate/{id} (session-token interactions) ──────
+
+func TestAdminRotate_RefreshesIssuedAtAndClearsRevocation(t *testing.T) {
+	// Rotation is the "re-enable + new credential" operation. It
+	// generates a new token, resets IssuedAt to now, and clears any
+	// prior RevokedAt so an admin can rotate a revoked identity back
+	// into service without a separate unrevoke step.
+	resetAccessVersions()
+	pastIssue := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	revokedTime := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice", IssuedAt: &pastIssue, RevokedAt: &revokedTime},
+			},
+		},
+	})
+	defer restore()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/rotate/alice", nil)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	rr := httptest.NewRecorder()
+	handleAdminRotate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var found *tokenEntry
+	for i := range globalCfg.Auth.Tokens {
+		if globalCfg.Auth.Tokens[i].ID == "alice" {
+			found = &globalCfg.Auth.Tokens[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("alice missing after rotate")
+	}
+	if found.RevokedAt != nil {
+		t.Error("rotation should clear RevokedAt")
+	}
+	if found.IssuedAt == nil || !found.IssuedAt.After(pastIssue) {
+		t.Errorf("rotation should refresh IssuedAt; got %v, want after %v", found.IssuedAt, pastIssue)
+	}
+	if found.Token == "tok-alice" {
+		t.Error("rotation should generate a new token value")
+	}
+}
+
+// ── POST /api/admin/tokens with expiry ────────────────────────────
+
+func TestAdminAddToken_RecordsExpiresAt(t *testing.T) {
+	// The -expires flag flows through as RFC3339 in the request body
+	// and the hub stores the parsed time.Time in the entry.
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+			},
+		},
+	})
+	defer restore()
+
+	body := strings.NewReader(`{"id":"bob","expiresAt":"2027-01-01T00:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/tokens", body)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	handleAdminTokens(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var found *tokenEntry
+	for i := range globalCfg.Auth.Tokens {
+		if globalCfg.Auth.Tokens[i].ID == "bob" {
+			found = &globalCfg.Auth.Tokens[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("new identity not created")
+	}
+	if found.ExpiresAt == nil {
+		t.Fatal("ExpiresAt was not recorded")
+	}
+	want := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	if !found.ExpiresAt.Equal(want) {
+		t.Errorf("ExpiresAt = %v, want %v", found.ExpiresAt, want)
+	}
+	if found.IssuedAt == nil {
+		t.Error("IssuedAt should be set on a newly-created token")
+	}
+}
+
+func TestAdminAddToken_RejectsMalformedExpiresAt(t *testing.T) {
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+			},
+		},
+	})
+	defer restore()
+
+	body := strings.NewReader(`{"id":"bob","expiresAt":"next tuesday"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/tokens", body)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	handleAdminTokens(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rr.Code)

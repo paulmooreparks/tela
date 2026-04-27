@@ -2466,8 +2466,9 @@ func Run(ctx context.Context, listenAddr string, addrCh chan<- string) error {
 	mux.HandleFunc("/api/admin/status", handleAPIStatus)   // alias so admin proxy can reach it
 	mux.HandleFunc("/api/admin/history", handleAPIHistory) // alias so admin proxy can reach it
 	mux.HandleFunc("/api/admin/tokens", handleAdminTokens)
-	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate)   // /api/admin/rotate/{id}
-	mux.HandleFunc("/api/admin/portals/", handleAdminPortals) // DELETE /api/admin/portals/{name}
+	mux.HandleFunc("/api/admin/tokens/", handleAdminTokenAction) // /api/admin/tokens/{id}/{action}: revoke
+	mux.HandleFunc("/api/admin/rotate/", handleAdminRotate)      // /api/admin/rotate/{id}
+	mux.HandleFunc("/api/admin/portals/", handleAdminPortals)    // DELETE /api/admin/portals/{name}
 	mux.HandleFunc("/api/admin/portals", handleAdminPortals)
 	mux.HandleFunc("/api/admin/pair-code", handleAdminPairCode)
 	mux.HandleFunc("/api/admin/access/", handleAdminAccess)
