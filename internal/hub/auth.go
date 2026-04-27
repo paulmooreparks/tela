@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,10 +23,44 @@ type authConfig struct {
 }
 
 // tokenEntry defines a named identity that may interact with the hub.
+//
+// IssuedAt, ExpiresAt, and RevokedAt are session-token metadata (issue
+// #24). All three are optional; the absence of ExpiresAt means the
+// token never expires, and the absence of RevokedAt means the token
+// is still in force. Pre-0.16 tokenEntry rows on disk have none of
+// these fields; the loader defaults IssuedAt to now on first parse so
+// downstream code can rely on the field being non-nil after newAuthStore
+// returns. The values use *time.Time (pointer) rather than time.Time so
+// the YAML omitempty tag drops absent fields cleanly.
 type tokenEntry struct {
-	ID      string `yaml:"id"`                // human-friendly label
-	Token   string `yaml:"token"`             // secret hex value
-	HubRole string `yaml:"hubRole,omitempty"` // "owner" | "admin" | (empty = user)
+	ID        string     `yaml:"id"`                  // human-friendly label
+	Token     string     `yaml:"token"`               // secret hex value
+	HubRole   string     `yaml:"hubRole,omitempty"`   // "owner" | "admin" | (empty = user)
+	IssuedAt  *time.Time `yaml:"issuedAt,omitempty"`  // when the token was first issued (UTC)
+	ExpiresAt *time.Time `yaml:"expiresAt,omitempty"` // optional expiry; absent = never
+	RevokedAt *time.Time `yaml:"revokedAt,omitempty"` // optional revocation; absent = active
+}
+
+// isRevoked reports whether the entry has been administratively
+// revoked. Revoked entries stay in the config (the audit trail) but
+// every auth check against them returns false.
+func (e *tokenEntry) isRevoked() bool {
+	return e != nil && e.RevokedAt != nil
+}
+
+// isExpired reports whether the entry's expiry has passed. Entries
+// without an ExpiresAt are never expired.
+func (e *tokenEntry) isExpired(now time.Time) bool {
+	return e != nil && e.ExpiresAt != nil && now.After(*e.ExpiresAt)
+}
+
+// isValid reports whether the entry is currently usable for auth
+// checks. Equivalent to "not revoked and not expired."
+func (e *tokenEntry) isValid(now time.Time) bool {
+	if e == nil {
+		return false
+	}
+	return !e.isRevoked() && !e.isExpired(now)
 }
 
 // machineACL controls which tokens may register or connect to a specific machine.
@@ -86,6 +121,11 @@ type authStore struct {
 
 // newAuthStore builds a runtime authStore from an authConfig.
 // Returns a disabled (open) store when cfg is nil or has no tokens.
+//
+// Token entries that lack an IssuedAt timestamp (pre-0.16 configs)
+// have IssuedAt defaulted to now in-memory. The mutation is on the
+// tokenEntry pointed at by cfg.Tokens, so the next config save persists
+// the value automatically. No migration code path is required.
 func newAuthStore(cfg *authConfig) *authStore {
 	s := &authStore{
 		byToken:  make(map[string]*tokenEntry),
@@ -95,8 +135,13 @@ func newAuthStore(cfg *authConfig) *authStore {
 		return s // disabled → open hub
 	}
 	s.enabled = true
+	now := time.Now().UTC()
 	for i := range cfg.Tokens {
 		e := &cfg.Tokens[i]
+		if e.IssuedAt == nil {
+			t := now
+			e.IssuedAt = &t
+		}
 		if e.Token != "" {
 			s.byToken[e.Token] = e
 		}
@@ -107,6 +152,26 @@ func newAuthStore(cfg *authConfig) *authStore {
 	return s
 }
 
+// validEntry returns the tokenEntry for token if it's a known,
+// non-revoked, non-expired token. Returns nil otherwise. Centralizes
+// the revoked/expired check so every auth-decision function can rely
+// on a single source of truth.
+//
+// Caller must hold s.mu (read or write).
+func (s *authStore) validEntry(token string) *tokenEntry {
+	if token == "" {
+		return nil
+	}
+	e, ok := s.byToken[token]
+	if !ok {
+		return nil
+	}
+	if !e.isValid(time.Now()) {
+		return nil
+	}
+	return e
+}
+
 // isEnabled reports whether auth enforcement is active.
 func (s *authStore) isEnabled() bool {
 	s.mu.RLock()
@@ -114,14 +179,17 @@ func (s *authStore) isEnabled() bool {
 	return s.enabled
 }
 
-// identityID returns the human-friendly ID for a token, or "" if unknown.
+// identityID returns the human-friendly ID for a token, or "" if
+// unknown, revoked, or expired. Revoked entries return "" so callers
+// that log "(identity: %s)" do not surface stale identity claims for
+// rejected tokens.
 func (s *authStore) identityID(token string) string {
 	if token == "" {
 		return ""
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if e, ok := s.byToken[token]; ok {
+	if e := s.validEntry(token); e != nil {
 		return e.ID
 	}
 	return ""
@@ -134,8 +202,8 @@ func (s *authStore) isOwnerOrAdmin(token string) bool {
 	if !s.enabled {
 		return false
 	}
-	e, ok := s.byToken[token]
-	return ok && (e.HubRole == "owner" || e.HubRole == "admin")
+	e := s.validEntry(token)
+	return e != nil && (e.HubRole == "owner" || e.HubRole == "admin")
 }
 
 // canRegister returns true when the token may register machineID.
@@ -150,7 +218,7 @@ func (s *authStore) canRegister(token, machineID string) bool {
 	if !s.enabled {
 		return true
 	}
-	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
+	if e := s.validEntry(token); e != nil && (e.HubRole == "owner" || e.HubRole == "admin") {
 		return true
 	}
 	acl, hasACL := s.machines[machineID]
@@ -159,11 +227,18 @@ func (s *authStore) canRegister(token, machineID string) bool {
 		return false
 	}
 	if acl.RegisterToken != "" {
-		return subtle.ConstantTimeCompare([]byte(acl.RegisterToken), []byte(token)) == 1
+		// The explicit registerToken must match AND the token must be a
+		// valid (non-revoked, non-expired) entry. Constant-time compare
+		// keeps the original timing-attack resistance; the validity
+		// check happens after for the same reason it does in the other
+		// helpers.
+		if subtle.ConstantTimeCompare([]byte(acl.RegisterToken), []byte(token)) != 1 {
+			return false
+		}
+		return s.validEntry(token) != nil
 	}
-	// ACL entry exists, no registerToken restriction → any known token may register
-	_, known := s.byToken[token]
-	return known
+	// ACL entry exists, no registerToken restriction → any valid token may register
+	return s.validEntry(token) != nil
 }
 
 // canConnect returns true when the token may open a session to machineID.
@@ -180,8 +255,16 @@ func (s *authStore) canConnect(token, machineID string) bool {
 	if !s.enabled {
 		return true
 	}
-	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
+	if e := s.validEntry(token); e != nil && (e.HubRole == "owner" || e.HubRole == "admin") {
 		return true
+	}
+	// For non-owner/admin tokens, the token must be valid AND appear in
+	// a machine-specific or wildcard connect grant. Revoked or expired
+	// tokens fail the validEntry check even if they still appear in an
+	// ACL list (those entries become dormant once the token is revoked
+	// rather than requiring an ACL cleanup pass).
+	if s.validEntry(token) == nil {
+		return false
 	}
 	if _, ok := findConnectGrant(s.machines[machineID].ConnectTokens, token); ok {
 		return true
@@ -211,7 +294,7 @@ func (s *authStore) connectServicesFilter(token, machineID string) (names []stri
 	if !s.enabled {
 		return nil, false
 	}
-	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin" || e.HubRole == "viewer") {
+	if e := s.validEntry(token); e != nil && (e.HubRole == "owner" || e.HubRole == "admin" || e.HubRole == "viewer") {
 		return nil, false
 	}
 	if g, ok := findConnectGrant(s.machines[machineID].ConnectTokens, token); ok {
@@ -240,8 +323,12 @@ func (s *authStore) canManage(token, machineID string) bool {
 	if !s.enabled {
 		return true
 	}
-	if e, ok := s.byToken[token]; ok && (e.HubRole == "owner" || e.HubRole == "admin") {
+	if e := s.validEntry(token); e != nil && (e.HubRole == "owner" || e.HubRole == "admin") {
 		return true
+	}
+	// Token must be valid before its appearance in a manage list counts.
+	if s.validEntry(token) == nil {
+		return false
 	}
 	if inTokenList(s.machines[machineID].ManageTokens, token) {
 		return true
@@ -271,8 +358,8 @@ func (s *authStore) isViewer(token string) bool {
 	if !s.enabled {
 		return false
 	}
-	e, ok := s.byToken[token]
-	return ok && e.HubRole == "viewer"
+	e := s.validEntry(token)
+	return e != nil && e.HubRole == "viewer"
 }
 
 // consoleViewerToken returns the token value of the first viewer-role
@@ -370,8 +457,13 @@ func (s *authStore) reload(cfg *authConfig) {
 		return
 	}
 	s.enabled = true
+	now := time.Now().UTC()
 	for i := range cfg.Tokens {
 		e := &cfg.Tokens[i]
+		if e.IssuedAt == nil {
+			t := now
+			e.IssuedAt = &t
+		}
 		if e.Token != "" {
 			s.byToken[e.Token] = e
 		}

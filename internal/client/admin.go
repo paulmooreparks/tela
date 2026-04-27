@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -331,7 +332,7 @@ func cmdAdminListTokens(args []string) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tROLE\tTOKEN PREVIEW")
+	fmt.Fprintln(w, "ID\tROLE\tSTATUS\tEXPIRES\tISSUED\tTOKEN PREVIEW")
 	for _, t := range tokens {
 		entry, ok := t.(map[string]any)
 		if !ok {
@@ -340,7 +341,24 @@ func cmdAdminListTokens(args []string) {
 		id, _ := entry["id"].(string)
 		role, _ := entry["role"].(string)
 		preview, _ := entry["tokenPreview"].(string)
-		fmt.Fprintf(w, "%s\t%s\t%s\n", id, role, preview)
+		issued, _ := entry["issuedAt"].(string)
+		expires, _ := entry["expiresAt"].(string)
+		revoked, _ := entry["revokedAt"].(string)
+		status := "active"
+		if revoked != "" {
+			status = "revoked"
+		} else if expires != "" {
+			if exp, err := time.Parse(time.RFC3339, expires); err == nil && time.Now().After(exp) {
+				status = "expired"
+			}
+		}
+		if expires == "" {
+			expires = "-"
+		}
+		if issued == "" {
+			issued = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", id, role, status, expires, issued, preview)
 	}
 	w.Flush()
 }
@@ -352,12 +370,13 @@ func cmdAdminAddToken(args []string) {
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
 	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
 	role := fs.String("role", "", "Role: owner, admin, or omit for user")
+	expires := fs.String("expires", "", "Optional expiry. Accepts RFC3339 (2027-01-01T00:00:00Z) or a relative duration (30d, 90d, 1y).")
 	fs.Parse(permuteArgs(fs, args))
 	_ = hubURL
 	_ = token
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela admin add-token <id> -hub <hub> -token <token> [-role owner|admin]")
+		fmt.Fprintln(os.Stderr, "Usage: tela admin add-token <id> -hub <hub> -token <token> [-role owner|admin] [-expires <when>]")
 		os.Exit(1)
 	}
 	id := fs.Arg(0)
@@ -366,6 +385,14 @@ func cmdAdminAddToken(args []string) {
 	body := map[string]string{"id": id}
 	if *role != "" {
 		body["role"] = *role
+	}
+	if *expires != "" {
+		expiresAt, err := parseExpires(*expires)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		body["expiresAt"] = expiresAt.UTC().Format(time.RFC3339)
 	}
 
 	status, result, err := adminHTTP("POST", hub, "/api/admin/tokens", tok, body)
@@ -380,11 +407,44 @@ func cmdAdminAddToken(args []string) {
 	if *role != "" {
 		fmt.Printf(" (role: %s)", *role)
 	}
+	if *expires != "" {
+		fmt.Printf(" (expires: %s)", body["expiresAt"])
+	}
 	fmt.Println()
 	fmt.Printf("  Token: %s\n", newToken)
 	fmt.Println()
 	fmt.Println("SAVE THIS TOKEN -- it will not be shown again.")
 	fmt.Println("Change is already active (no hub restart needed).")
+}
+
+// parseExpires accepts either an RFC3339 timestamp or a small set of
+// relative durations: <N>d (days), <N>w (weeks), <N>y (years). Returns
+// the absolute expiry time. Useful so operators can write
+// "tela admin tokens add bob -expires 90d" without computing a date.
+func parseExpires(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	if len(s) < 2 {
+		return time.Time{}, fmt.Errorf("invalid -expires value %q (want RFC3339 or <N>d / <N>w / <N>y)", s)
+	}
+	unit := s[len(s)-1]
+	nstr := s[:len(s)-1]
+	n, err := strconv.Atoi(nstr)
+	if err != nil || n <= 0 {
+		return time.Time{}, fmt.Errorf("invalid -expires value %q (want RFC3339 or <N>d / <N>w / <N>y)", s)
+	}
+	now := time.Now().UTC()
+	switch unit {
+	case 'd':
+		return now.AddDate(0, 0, n), nil
+	case 'w':
+		return now.AddDate(0, 0, 7*n), nil
+	case 'y':
+		return now.AddDate(n, 0, 0), nil
+	default:
+		return time.Time{}, fmt.Errorf("invalid -expires unit %q (want d, w, or y)", string(unit))
+	}
 }
 
 // ── tela admin remove-token ────────────────────────────────────────
@@ -445,6 +505,48 @@ func cmdAdminRotate(args []string) {
 	fmt.Println()
 	fmt.Println("SAVE THIS TOKEN -- it will not be shown again.")
 	fmt.Println("Change is already active (no hub restart needed).")
+}
+
+// ── tela admin tokens revoke ───────────────────────────────────────
+
+// cmdAdminRevokeToken marks an identity revoked without deleting it.
+// The identity stays in the audit trail; every auth check using the
+// revoked token returns false. Re-enable a revoked identity by
+// rotating it (which clears RevokedAt and issues a fresh token).
+func cmdAdminRevokeToken(args []string) {
+	fs := flag.NewFlagSet("admin tokens revoke", flag.ExitOnError)
+	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
+	token := fs.String("token", adminTokenDefault(), "Admin token (env: TELA_OWNER_TOKEN)")
+	fs.Parse(permuteArgs(fs, args))
+	_ = hubURL
+	_ = token
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: tela admin tokens revoke <id> -hub <hub> -token <token>")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Marks the identity revoked. The entry stays in the audit trail; every auth")
+		fmt.Fprintln(os.Stderr, "check against the revoked token returns false. Re-enable by rotating the")
+		fmt.Fprintln(os.Stderr, "token: 'tela admin tokens rotate <id>' issues a fresh token and clears the")
+		fmt.Fprintln(os.Stderr, "revocation. To delete an identity entirely, use 'tela admin tokens remove'.")
+		os.Exit(1)
+	}
+	id := fs.Arg(0)
+	hub, tok := adminParseHubAndToken(fs)
+
+	status, result, err := adminHTTP("POST", hub, "/api/admin/tokens/"+url.PathEscape(id)+"/revoke", tok, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	adminCheckError(status, result)
+
+	switch result["status"] {
+	case "already-revoked":
+		fmt.Printf("Identity '%s' was already revoked at %v.\n", id, result["revokedAt"])
+	default:
+		fmt.Printf("Revoked identity '%s' at %v.\n", id, result["revokedAt"])
+		fmt.Println("Change is already active (no hub restart needed).")
+	}
 }
 
 // ── tela admin list-portals ──────────────────────────────────────
@@ -688,9 +790,11 @@ func cmdAdminRemovePortal(args []string) {
 func cmdAdminTokens(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, `Usage:
-  tela admin tokens list                       List all token identities
-  tela admin tokens add <id> [-role <role>]    Create a new token identity
-  tela admin tokens remove <id>                Remove a token identity`)
+  tela admin tokens list                                List all token identities
+  tela admin tokens add <id> [-role <r>] [-expires <w>] Create a new token identity
+  tela admin tokens rotate <id>                         Issue a fresh token (also clears revocation)
+  tela admin tokens revoke <id>                         Mark identity revoked (audit-trail-preserving)
+  tela admin tokens remove <id>                         Delete identity entirely (no audit trail)`)
 		os.Exit(1)
 	}
 	switch args[0] {
@@ -698,6 +802,10 @@ func cmdAdminTokens(args []string) {
 		cmdAdminListTokens(args[1:])
 	case "add":
 		cmdAdminAddToken(args[1:])
+	case "rotate":
+		cmdAdminRotate(args[1:])
+	case "revoke":
+		cmdAdminRevokeToken(args[1:])
 	case "remove", "rm":
 		cmdAdminRemoveToken(args[1:])
 	default:

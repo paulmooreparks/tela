@@ -118,9 +118,12 @@ func findTokenEntryInCfg(id string) *tokenEntry {
 // ── GET /api/admin/tokens ──────────────────────────────────────────
 
 type adminTokenView struct {
-	ID           string `json:"id"`
-	Role         string `json:"role"`
-	TokenPreview string `json:"tokenPreview"`
+	ID           string     `json:"id"`
+	Role         string     `json:"role"`
+	TokenPreview string     `json:"tokenPreview"`
+	IssuedAt     *time.Time `json:"issuedAt,omitempty"`
+	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
+	RevokedAt    *time.Time `json:"revokedAt,omitempty"`
 }
 
 // ── POST /api/admin/tokens ─────────────────────────────────────────
@@ -128,6 +131,12 @@ type adminTokenView struct {
 type adminAddRequest struct {
 	ID   string `json:"id"`
 	Role string `json:"role,omitempty"` // "owner" | "admin" | "" (user)
+
+	// ExpiresAt is an optional ISO-8601 / RFC3339 expiry timestamp. When
+	// set, the hub stores it on the token entry and rejects auth checks
+	// that arrive after the moment. When omitted, the token never
+	// expires (the v1 default; matches the pre-0.16 behavior).
+	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
 // adminAddToken returns an inline JSON map {id, role, token, version}
@@ -178,6 +187,9 @@ func adminListTokens(w http.ResponseWriter, r *http.Request) {
 			ID:           t.ID,
 			Role:         role,
 			TokenPreview: preview,
+			IssuedAt:     t.IssuedAt,
+			ExpiresAt:    t.ExpiresAt,
+			RevokedAt:    t.RevokedAt,
 		})
 	}
 
@@ -224,10 +236,30 @@ func adminAddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse the optional expiry timestamp. RFC3339 matches what
+	// time.Time marshals to JSON (and to YAML on persist), so the round
+	// trip is clean.
+	var expiresAt *time.Time
+	if req.ExpiresAt != "" {
+		t, err := time.Parse(time.RFC3339, req.ExpiresAt)
+		if err != nil {
+			adminCorsHeaders(w, r)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "expiresAt must be RFC3339 (e.g. 2027-01-01T00:00:00Z)"})
+			return
+		}
+		t = t.UTC()
+		expiresAt = &t
+	}
+
+	now := time.Now().UTC()
 	globalCfg.Auth.Tokens = append(globalCfg.Auth.Tokens, tokenEntry{
-		ID:      req.ID,
-		Token:   token,
-		HubRole: req.Role,
+		ID:        req.ID,
+		Token:     token,
+		HubRole:   req.Role,
+		IssuedAt:  &now,
+		ExpiresAt: expiresAt,
 	})
 
 	if err := persistConfig(); err != nil {
@@ -306,7 +338,16 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "token generation failed"})
 		return
 	}
+	// Rotation refreshes the credential: the token value changes, the
+	// issuance timestamp resets to now, and any prior revocation is
+	// cleared (rotation re-enables the identity). The role and expiry,
+	// if any, are preserved -- the operator rotates a credential, they
+	// do not re-decide policy. To change role or expiry, use the
+	// dedicated PATCH endpoint or revoke + create a new identity.
+	now := time.Now().UTC()
 	entry.Token = newToken
+	entry.IssuedAt = &now
+	entry.RevokedAt = nil
 
 	// Cascade token change through machine ACLs
 	for name, acl := range globalCfg.Auth.Machines {
@@ -344,6 +385,132 @@ func handleAdminRotate(w http.ResponseWriter, r *http.Request) {
 		"id":      id,
 		"token":   newToken,
 		"version": newVersion,
+	})
+}
+
+// ── POST /api/admin/tokens/{id}/{action} ─────────────────────────
+//
+// Per-identity action endpoint. Currently implements `revoke`, which
+// marks the token entry as revoked without deleting it. Revoked
+// entries stay in the audit trail; every auth check against them
+// returns false. Re-enabling a revoked identity is done by rotating
+// it (which clears RevokedAt and issues a fresh token); see
+// handleAdminRotate.
+//
+// Unrelated actions on /api/admin/tokens/{id}/... can be wired in
+// here by extending the action switch.
+
+func handleAdminTokenAction(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodPost {
+		adminCorsHeaders(w, r)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := requireOwnerOrAdmin(w, r); !ok {
+		return
+	}
+
+	// Path: /api/admin/tokens/{id}/{action}
+	rest := strings.TrimPrefix(r.URL.Path, "/api/admin/tokens/")
+	parts := strings.SplitN(rest, "/", 2)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		adminCorsHeaders(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "expected /api/admin/tokens/{id}/{action}"})
+		return
+	}
+	id := parts[0]
+	action := parts[1]
+
+	switch action {
+	case "revoke":
+		adminRevokeToken(w, r, id)
+	default:
+		adminCorsHeaders(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unknown action: " + action})
+	}
+}
+
+func adminRevokeToken(w http.ResponseWriter, r *http.Request, id string) {
+	globalCfgMu.Lock()
+	defer globalCfgMu.Unlock()
+
+	entry := findTokenEntryInCfg(id)
+	if entry == nil {
+		adminCorsHeaders(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "identity not found"})
+		return
+	}
+
+	// Last-owner guard: refuse to revoke the only owner. Without this,
+	// an admin could lock the hub by revoking the last owner identity
+	// (since admin-but-not-owner can call this endpoint per
+	// requireOwnerOrAdmin).
+	if entry.HubRole == "owner" {
+		owners := 0
+		for _, t := range globalCfg.Auth.Tokens {
+			if t.HubRole == "owner" && !t.isRevoked() {
+				owners++
+			}
+		}
+		if owners <= 1 {
+			adminCorsHeaders(w, r)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]string{"error": "cannot revoke the last remaining owner; promote another identity to owner first"})
+			return
+		}
+	}
+
+	if ifm, ok := parseIfMatch(r); ok {
+		current := ensureAccessVersion(id)
+		if ifm != current {
+			writeAccessConflict(w, r, id, current, buildAccessEntry(*entry))
+			return
+		}
+	}
+
+	if entry.isRevoked() {
+		// Idempotent no-op: report current state.
+		adminCorsHeaders(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"status":    "already-revoked",
+			"id":        id,
+			"revokedAt": entry.RevokedAt,
+		})
+		return
+	}
+
+	now := time.Now().UTC()
+	entry.RevokedAt = &now
+
+	if err := persistConfig(); err != nil {
+		log.Printf("[hub] admin: persist error: %v", err)
+	}
+
+	newVersion := bumpAccessVersion(id)
+	log.Printf("[hub] admin: revoked identity %q", id)
+
+	adminCorsHeaders(w, r)
+	setETag(w, newVersion)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":    "revoked",
+		"id":        id,
+		"revokedAt": now,
+		"version":   newVersion,
 	})
 }
 
@@ -534,6 +701,16 @@ type accessEntry struct {
 	Role         string          `json:"role"`
 	TokenPreview string          `json:"tokenPreview"`
 	Machines     []machineAccess `json:"machines"`
+	// IssuedAt, ExpiresAt, RevokedAt are session-token metadata. All
+	// three are optional; absent fields are omitted from the JSON
+	// response per omitempty. RevokedAt being set means the token is
+	// rejected by every auth check; ExpiresAt being in the past has
+	// the same effect. Clients display these to surface token state
+	// to operators (Access tab in TelaVisor; tela admin tokens list
+	// in the CLI).
+	IssuedAt  *time.Time `json:"issuedAt,omitempty"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 	// Version is the identity's current monotonic version counter. Clients
 	// echo it back as If-Match on mutating requests to detect drift. See
 	// internal/hub/access_version.go for lifecycle details.
@@ -646,6 +823,9 @@ func buildAccessEntry(t tokenEntry) accessEntry {
 		Role:         role,
 		TokenPreview: preview,
 		Machines:     []machineAccess{},
+		IssuedAt:     t.IssuedAt,
+		ExpiresAt:    t.ExpiresAt,
+		RevokedAt:    t.RevokedAt,
 		Version:      ensureAccessVersion(t.ID),
 	}
 

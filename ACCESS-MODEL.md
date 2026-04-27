@@ -21,10 +21,25 @@ A token is a credential. It is a 64-character hex string (32 random bytes) that 
 - **ID**: A human-readable name (e.g., "alice", "paul-laptop", "barn-agent"). This is what you see in the UI and CLI. It has no security function.
 - **Token value**: The secret. Stored in the hub's config file. Never shown in full after creation (the API returns only an 8-character preview).
 - **Role**: One of four values (see below).
+- **IssuedAt**: Timestamp the token was created. Defaulted to "now" on first load for any pre-0.16 entry that lacks it, then persisted.
+- **ExpiresAt** (optional): Timestamp after which the token stops authenticating. Absent means the token never expires on its own.
+- **RevokedAt** (optional): Timestamp the token was revoked. Set by `tela admin tokens revoke`; cleared by a subsequent rotate. The entry stays in config so the audit trail is preserved.
 
-Tokens are created with `tela admin add-token` (remote) or `telahubd user add` (local). The pairing flow also creates tokens automatically.
+Tokens are created with `tela admin tokens add` (remote, with optional `-expires`) or `telahubd user add` (local). The pairing flow also creates tokens automatically.
 
-When auth is enabled (at least one token exists), every API request must include a valid token. When no tokens exist, the hub runs in open mode and all operations are permitted.
+When auth is enabled (at least one token exists), every API request must include a valid token. When no tokens exist, the hub runs in open mode and all operations are permitted. A token that is revoked or past its expiry is rejected immediately, even if it appears in the config file with the right value.
+
+### Lifecycle
+
+Tokens have three terminal-ish states beyond simple deletion:
+
+| Operation | Effect | Endpoint |
+|-----------|--------|----------|
+| **Rotate** | Replaces the token value, refreshes `IssuedAt`, clears any `RevokedAt`. The role and any `ExpiresAt` are preserved. Use this to refresh a credential after suspected exposure or to re-enable a previously revoked identity. | `POST /api/admin/rotate/{id}` |
+| **Revoke** | Sets `RevokedAt = now`. The entry stays in `auth.tokens` so the identity, role, and history remain visible in the UI and audit log. The hub denies the token immediately on the next request. | `POST /api/admin/tokens/{id}/revoke` |
+| **Delete** | Removes the entry entirely. Use sparingly; prefer revoke when the audit trail matters. | `DELETE /api/admin/access/{id}` |
+
+The hub refuses to revoke or demote the only owner token (409 Conflict). Re-issuing a revoked identity is a rotate, not a separate "unrevoke" verb: rotation refreshes the credential and clears the revocation in one step.
 
 ## Roles
 
