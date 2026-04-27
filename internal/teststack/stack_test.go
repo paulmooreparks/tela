@@ -75,6 +75,47 @@ func TestStackSmokeMultipleMachines(t *testing.T) {
 	}
 }
 
+// TestRegisterReportsProtocolVersion verifies that an agent built from
+// the current source sends protocolVersion=1 on register and that the
+// hub records it in /api/status. This locks in the v1 protocol version
+// negotiation contract documented in DESIGN.md section 6.4.1.
+func TestRegisterReportsProtocolVersion(t *testing.T) {
+	stack := New(t)
+	stack.AddMachine("barn", []uint16{22})
+	stack.WaitAgentRegistered("barn", 5*time.Second)
+
+	resp, err := http.Get(stack.HubHTTP() + "/api/status")
+	if err != nil {
+		t.Fatalf("GET /api/status: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("GET /api/status: status %d", resp.StatusCode)
+	}
+	var payload struct {
+		Machines []struct {
+			ID              string `json:"id"`
+			ProtocolVersion int    `json:"protocolVersion,omitempty"`
+		} `json:"machines"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/status: %v", err)
+	}
+	var found bool
+	for _, m := range payload.Machines {
+		if m.ID != "barn" {
+			continue
+		}
+		found = true
+		if m.ProtocolVersion != 1 {
+			t.Errorf("machine %q: protocolVersion = %d, want 1", m.ID, m.ProtocolVersion)
+		}
+	}
+	if !found {
+		t.Fatalf("machine \"barn\" not present in /api/status response")
+	}
+}
+
 // TestStackClientConnectsAndBindsListener verifies that the client
 // half of the harness can dial the in-process hub, complete the
 // WireGuard handshake against the in-process agent, and bind a local

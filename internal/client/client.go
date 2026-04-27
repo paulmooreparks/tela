@@ -105,16 +105,22 @@ const (
 )
 
 type controlMessage struct {
-	Type       string   `json:"type"`
-	MachineID  string   `json:"machineId,omitempty"`
-	Message    string   `json:"message,omitempty"`
-	WGPubKey   string   `json:"wgPubKey,omitempty"`
-	Ports      []uint16 `json:"ports,omitempty"`
-	Token      string   `json:"token,omitempty"`
-	Port       int      `json:"port,omitempty"` // single port (udp-offer)
-	Host       string   `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
-	SessionIdx int      `json:"sessionIdx,omitempty"`
+	Type            string   `json:"type"`
+	ProtocolVersion int      `json:"protocolVersion,omitempty"` // v1 only; absent on receive treated as 1
+	MachineID       string   `json:"machineId,omitempty"`
+	Message         string   `json:"message,omitempty"`
+	WGPubKey        string   `json:"wgPubKey,omitempty"`
+	Ports           []uint16 `json:"ports,omitempty"`
+	Token           string   `json:"token,omitempty"`
+	Port            int      `json:"port,omitempty"` // single port (udp-offer)
+	Host            string   `json:"host,omitempty"` // explicit UDP host (when hub is behind proxy)
+	SessionIdx      int      `json:"sessionIdx,omitempty"`
 }
+
+// ProtocolVersion is the v1 wire protocol version this binary speaks.
+// Sent on every connect message so the hub can record what version of
+// the protocol the client negotiated. See DESIGN.md section 6.4.1.
+const ProtocolVersion = 1
 
 // Well-known port names for friendly display.
 var portNames = map[uint16]string{
@@ -1782,7 +1788,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping,
 	logVerbose("client pubkey: %s...", pubKeyHex[:8])
 
 	// Send connect request with our public key and token
-	connectMsg := controlMessage{Type: "connect", MachineID: machineID, WGPubKey: pubKeyHex, Token: token}
+	connectMsg := controlMessage{Type: "connect", ProtocolVersion: ProtocolVersion, MachineID: machineID, WGPubKey: pubKeyHex, Token: token}
 	if len(overrideMappings) > 0 {
 		// Hint to the hub which service port(s) this session intends to use.
 		// (When not provided, the hub treats the session as covering all advertised services.)

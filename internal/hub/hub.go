@@ -382,20 +382,21 @@ type machineEntry struct {
 	MachineRegistrationID string // hub-local UUID generated on first registration of this agentId
 
 	// Display metadata (updated on each registration)
-	MachineName  string // operator-assigned name from telad.yaml (display label)
-	Ports        []int
-	Services     []serviceDesc
-	Token        string
-	RegisteredAt time.Time
-	LastSeen     time.Time
-	DisplayName  string
-	Hostname     string
-	OS           string
-	AgentVersion string
-	Tags         []string
-	Location     string
-	Owner        string
-	Capabilities map[string]interface{}
+	MachineName     string // operator-assigned name from telad.yaml (display label)
+	Ports           []int
+	Services        []serviceDesc
+	Token           string
+	RegisteredAt    time.Time
+	LastSeen        time.Time
+	DisplayName     string
+	Hostname        string
+	OS              string
+	AgentVersion    string
+	ProtocolVersion int // wire protocol version reported by the agent on register; 0 means pre-v1 binary that did not send it (treated as 1)
+	Tags            []string
+	Location        string
+	Owner           string
+	Capabilities    map[string]interface{}
 }
 
 type serviceDesc struct {
@@ -726,6 +727,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		Hostname              *string                `json:"hostname"`
 		OS                    *string                `json:"os"`
 		AgentVersion          *string                `json:"agentVersion"`
+		ProtocolVersion       int                    `json:"protocolVersion,omitempty"`
 		Tags                  []string               `json:"tags"`
 		Location              *string                `json:"location"`
 		Owner                 *string                `json:"owner"`
@@ -777,6 +779,9 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		if entry.AgentVersion != "" {
 			sm.AgentVersion = &entry.AgentVersion
+		}
+		if entry.ProtocolVersion > 0 {
+			sm.ProtocolVersion = entry.ProtocolVersion
 		}
 		if entry.Location != "" {
 			sm.Location = &entry.Location
@@ -1057,6 +1062,7 @@ var upgrader = websocket.Upgrader{
 // JSON messages from agents and clients during signaling.
 type signalingMsg struct {
 	Type                  string        `json:"type"`
+	ProtocolVersion       int           `json:"protocolVersion,omitempty"`       // v1 only; absent on receive treated as 1 per DESIGN.md §6.4.1
 	MachineID             string        `json:"machineId,omitempty"`             // session-join / client connect (machine name)
 	MachineName           string        `json:"machineName,omitempty"`           // register: display name
 	AgentID               string        `json:"agentId,omitempty"`               // register: stable agent identity UUID
@@ -1322,6 +1328,13 @@ func handleRegister(ws *safeConn, state *wsState, msg *signalingMsg) {
 	}
 	if msg.AgentVersion != "" {
 		entry.AgentVersion = msg.AgentVersion
+	}
+	// Capture protocol version. Agents that pre-date the field (pre-0.16)
+	// send 0; treat that as 1 per the §6.6.5 cross-version compat policy.
+	if msg.ProtocolVersion > 0 {
+		entry.ProtocolVersion = msg.ProtocolVersion
+	} else if entry.ProtocolVersion == 0 {
+		entry.ProtocolVersion = 1
 	}
 	if msg.Tags != nil {
 		entry.Tags = msg.Tags
