@@ -3,7 +3,7 @@
 // Renders a small footer at the bottom of the mdBook sidebar showing the
 // book's version and an edition switcher to the other channels.
 //
-// The v0.14.0 and stable placeholders are
+// The v0.15.0 and stable placeholders are
 // substituted by .github/workflows/docs.yml at build time. For local
 // `mdbook serve` these placeholders render as literal strings, which is
 // acceptable; local authors do not see the version UI.
@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var scrollbox = document.querySelector('.sidebar-scrollbox');
     if (!scrollbox) return;
 
-    var version = 'v0.14.0';
+    var version = 'v0.15.0';
     var channel = 'stable';
 
     var footer = document.createElement('div');
