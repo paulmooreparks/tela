@@ -398,17 +398,30 @@ grants it separately).
 
 ### 5.4 TLS trust on the outbound bridge dial
 
-Hub-A dials the destination hub over `wss://` and inherits the
-system CA trust store for certificate validation. This matches the
-client dial model today. When cert pinning lands (see
-[ROADMAP-1.0.md](ROADMAP-1.0.md), issue #23), the bridge dial should
-use the same pinning mechanism clients use: the destination hub's
-certificate fingerprint stored alongside the bridge config, TOFU on
-first dial, explicit operator confirmation on change. Designed so
-both dial paths share one implementation; the bridge is just another
-caller of the pinning-aware dialer. v1 ships with system-CA trust
-only; cert pinning will be added to bridge dials in the same commit
-series that adds it to client dials.
+Hub-A dials the destination hub over `wss://`. By default the dial
+inherits the system CA trust store for certificate validation. The
+bridge config also accepts an optional `pin` field carrying the
+destination hub's TLS leaf certificate SPKI fingerprint, formatted
+as `sha256:<lowercase hex>`. When set, the bridge dial refuses
+connections whose presented certificate's SPKI does not match,
+short-circuiting the CA chain entirely.
+
+```yaml
+bridges:
+  - hubId: prod-asia
+    url: wss://prod-asia.example.com
+    token: <bridge-token>
+    pin: sha256:1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789abcdef0123456789
+    machines: [prod-db, prod-web]
+```
+
+The same pinning library
+([`internal/certpin`](internal/certpin/certpin.go)) is used by the
+client dial in `tela connect`, so a hub-to-hub bridge gets the same
+trust guarantees an operator-driven client dial does. With no pin
+configured, the captured fingerprint is logged on the first
+successful bridge dial so the operator can copy it back into the
+config to enforce pinning.
 
 ## 6. Transport Upgrade on Bridged Sessions
 

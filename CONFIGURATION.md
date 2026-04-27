@@ -44,28 +44,45 @@ Resolution order in the CLI:
 
 ```yaml
 hubs:
-  <alias>: <ws-or-wss-url>
+  <alias>:
+    url: <ws-or-wss-url>
+    pin: sha256:<hex>          # optional TLS SPKI pin
 ```
 
 - `hubs` is a mapping/dictionary.
 - Alias lookup is **case-sensitive** (e.g. `OwlsNest` and `owlsnest` are different).
-- The URL is used **exactly as written**. (Unlike portal entries, it is not converted from `https://` → `wss://`.)
+- The `url` is used **exactly as written**. (Unlike portal entries, it is not converted from `https://` → `wss://`.)
+- `pin`, when set, is the SHA-256 hash of the hub's TLS leaf certificate's Subject Public Key Info (SPKI), formatted as `sha256:<lowercase hex>`. The dialer refuses connections whose presented certificate does not match this pin. Set with `tela login <url> -pin <fingerprint>` or `tela pin <url> <fingerprint>`. See the *credentials.yaml* section below for the full pin model.
 
 **Example (local dev):**
 
 ```yaml
 hubs:
-  local: ws://localhost
-  gohub-local: ws://localhost
+  local:
+    url: ws://localhost
+  gohub-local:
+    url: ws://localhost
 ```
 
-**Example (production):**
+**Example (production with TLS pin):**
+
+```yaml
+hubs:
+  owlsnest:
+    url: wss://tela.awansaya.net
+    pin: sha256:1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789abcdef0123456789
+  gohub:
+    url: wss://gohub.parkscomputing.com
+```
+
+**Pre-0.16 flat shape (still accepted on read):**
 
 ```yaml
 hubs:
   owlsnest: wss://tela.awansaya.net
-  gohub: wss://gohub.parkscomputing.com
 ```
+
+The flat `<alias>: <url>` shape is migrated transparently when read. New entries written by `tela login` or by editing the file should use the structured shape so they can carry a `pin` field.
 
 ### Creating `hubs.yaml`
 
@@ -126,6 +143,7 @@ hubs:
   wss://hub.example.com:
     token: 7bf042ceb070136fec15fdd49797c486225fbe62b6cfd3bb4649f04b32446d62
     identity: alice
+    pin: sha256:1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789abcdef0123456789
 
 # Optional: which release channel the tela client (and TelaVisor) follows
 # for self-update. Accepts dev (default), beta, stable, or a custom channel
@@ -140,7 +158,8 @@ update:
 Notes:
 
 - The `hubs` mapping stores credentials by hub URL (normalized: trailing slashes removed, schemes lowercased).
-- `token` is required; `identity` is optional but helpful for tracking.
+- `token` is required; `identity` and `pin` are optional.
+- `pin`, when set, is the SHA-256 hash of the hub's TLS leaf certificate's Subject Public Key Info (SPKI), formatted as `sha256:<lowercase hex>`. The dialer refuses connections whose presented certificate's SPKI does not match. Pinning the SPKI (rather than the whole certificate) survives certificate renewal with the same key, which is the desired behavior. Manage with `tela login <url> -pin <fingerprint>` or the standalone `tela pin <url> [fingerprint]` command (no fingerprint = inspect, fingerprint = set, `-clear` = remove). On a successful TOFU connect to a hub with no pin configured, `tela connect` logs the captured fingerprint and the exact `tela pin ...` command to enforce it.
 - File permissions: 0600 (user-level) or 0644 (system-level, for SYSTEM account read access).
 - The `update` block is read by `tela channel`, `tela update`, and TelaVisor's
   Application Settings → Release channel selector. It is the *client's* channel
@@ -476,9 +495,12 @@ bridges:
   - hubId: remote-hub              # identifier of the remote hub
     url: wss://remote-hub.example.com
     token: <token>                 # auth token on the remote hub
+    pin: sha256:1a2b3c4d...         # optional TLS SPKI pin for the destination hub
     maxHops: 3                     # maximum relay hops (default 0 = unlimited)
     machines: [web01, db01]        # machines to bridge to the remote hub
 ```
+
+The `bridges[].pin` field, when set, is the SHA-256 SPKI pin (`sha256:<lowercase hex>`) of the destination hub's TLS leaf certificate. The bridge dial refuses connections whose certificate's SPKI does not match. With no pin configured, the standard CA chain validation applies; the captured fingerprint is logged on the first successful bridge dial so the operator can copy it back into this config to enforce pinning. See [DESIGN-relay-gateway.md](DESIGN-relay-gateway.md) §5.4 for the design discussion.
 
 ### Core fields
 

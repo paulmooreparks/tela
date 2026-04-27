@@ -24,6 +24,7 @@ package hub
 
 import (
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -33,6 +34,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/paulmooreparks/tela/internal/certpin"
 	"github.com/paulmooreparks/tela/internal/relay"
 )
 
@@ -41,6 +43,7 @@ type bridgeConfig struct {
 	HubID    string   `yaml:"hubId"`
 	URL      string   `yaml:"url"`               // wss://... WebSocket URL of the destination hub
 	Token    string   `yaml:"token"`             // connect token on the destination hub
+	Pin      string   `yaml:"pin,omitempty"`     // optional TLS SPKI pin (sha256:<hex>) for the destination hub; refuses mismatched certs per DESIGN-relay-gateway.md §5.4
 	MaxHops  uint8    `yaml:"maxHops,omitempty"` // relay TTL; 0 means relay.DefaultMaxHops
 	Machines []string `yaml:"machines"`          // machine names reachable via this bridge
 }
@@ -116,7 +119,28 @@ func handleBridgeConnect(clientSC *safeConn, state *wsState, msg *signalingMsg, 
 	}
 
 	// Open outbound WebSocket to Hub-B (bridge leg).
-	dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
+	// Pin-aware dialer: refuse the bridge dial if the destination hub's
+	// TLS SPKI does not match bc.Pin (when configured). With no pin
+	// configured, the standard CA chain validation applies; the
+	// captured fingerprint is logged so the operator can pin it via
+	// the bridges entry in telahubd.yaml. See
+	// DESIGN-relay-gateway.md §5.4.
+	pinExpected := bc.Pin
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 15 * time.Second,
+		TLSClientConfig: &tls.Config{
+			VerifyConnection: func(cs tls.ConnectionState) error {
+				if pinExpected == "" {
+					if captured := certpin.CaptureChain(cs); captured != "" {
+						log.Printf("[hub] bridge to %s presented certificate %s (no pin configured for hubId %s; record it in telahubd.yaml under bridges[].pin to enforce)",
+							bc.URL, captured, bc.HubID)
+					}
+					return nil
+				}
+				return certpin.Verify(cs, pinExpected)
+			},
+		},
+	}
 	bridgeConn, _, err := dialer.Dial(bc.URL, nil)
 	if err != nil {
 		log.Printf("[hub] bridge dial %s: %v", bc.URL, err)

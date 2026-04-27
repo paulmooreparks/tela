@@ -215,3 +215,65 @@ func TestRemoveOnNilHubs(t *testing.T) {
 		t.Error("Remove on nil Hubs should report false, not panic")
 	}
 }
+
+// ── TLS pin field ─────────────────────────────────────────────────
+
+func TestPinFieldRoundTrip(t *testing.T) {
+	path := tempStorePath(t)
+	pinValue := "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+	original := &Store{
+		Hubs: map[string]Credential{
+			"wss://hub.example.com": {Token: "tok-1", Identity: "alice", Pin: pinValue},
+			"wss://nopin.example":   {Token: "tok-2"},
+		},
+	}
+	if err := original.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := loaded.Hubs["wss://hub.example.com"].Pin; got != pinValue {
+		t.Errorf("pin roundtrip mismatch: got %q, want %q", got, pinValue)
+	}
+	if loaded.Hubs["wss://hub.example.com"].Token != "tok-1" {
+		t.Errorf("token preserved alongside pin: %+v", loaded.Hubs["wss://hub.example.com"])
+	}
+	if loaded.Hubs["wss://nopin.example"].Pin != "" {
+		t.Errorf("hubs without pin should load with empty Pin: got %q", loaded.Hubs["wss://nopin.example"].Pin)
+	}
+}
+
+func TestPinOmitemptyOnSave(t *testing.T) {
+	path := tempStorePath(t)
+	original := &Store{
+		Hubs: map[string]Credential{
+			"wss://nopin.example": {Token: "tok-1"},
+		},
+	}
+	if err := original.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	for _, line := range []string{"pin:", "pin "} {
+		if containsTok(string(data), line) {
+			t.Errorf("YAML should omit empty pin field, got:\n%s", string(data))
+			break
+		}
+	}
+}
+
+func containsTok(haystack, needle string) bool {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}

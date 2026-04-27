@@ -64,6 +64,7 @@ import (
 	"golang.zx2c4.com/wireguard/tun/netstack"
 	"gopkg.in/yaml.v3"
 
+	"github.com/paulmooreparks/tela/internal/certpin"
 	"github.com/paulmooreparks/tela/internal/credstore"
 	"github.com/paulmooreparks/tela/internal/relay"
 	"github.com/paulmooreparks/tela/internal/service"
@@ -176,6 +177,8 @@ func Main() {
 		cmdLogin(os.Args[2:])
 	case "logout":
 		cmdLogout(os.Args[2:])
+	case "pin":
+		cmdPin(os.Args[2:])
 	case "pair":
 		cmdPair(os.Args[2:])
 	case "admin":
@@ -218,6 +221,7 @@ Commands:
   remote    Manage hub directory remotes (add, remove, list)
   login     Store hub credentials in the credential store
   logout    Remove hub credentials from the credential store
+  pin       Show or set the TLS certificate pin for a hub
   pair      Exchange a pairing code for a hub connect token
   admin     Remote hub administration: access (RBAC), tokens, portals, pairing
             codes, hub lifecycle, and per-agent management. Run
@@ -1761,11 +1765,44 @@ func handleBridgedClient(ctx context.Context, bridge *tunnelBridge, localConn ne
 	wg.Wait()
 }
 
+// pinAwareDialer returns a websocket.Dialer configured to enforce the
+// TLS certificate pin recorded for hubURL in the credential store, if
+// any. With no pin configured (the TOFU first-connect path), it logs
+// the presented leaf certificate's SPKI fingerprint so the operator
+// can pin it via `tela pin <hub-url> <fingerprint>`. With a pin
+// configured, it refuses connections whose certificate's SPKI does
+// not match. Plain ws:// connections (no TLS) bypass pinning since
+// there is nothing to verify.
+func pinAwareDialer(hubURL string) websocket.Dialer {
+	expectedPin := credstore.LookupPin(hubURL)
+	verify := func(cs tls.ConnectionState) error {
+		if expectedPin == "" {
+			captured := certpin.CaptureChain(cs)
+			if captured != "" {
+				log.Printf("hub %s presented certificate %s (no pin configured; run 'tela pin %s %s' to enforce it)",
+					hubURL, captured, hubURL, captured)
+			}
+			return nil
+		}
+		return certpin.Verify(cs, expectedPin)
+	}
+	return websocket.Dialer{
+		HandshakeTimeout: wsDialTimeout,
+		TLSClientConfig: &tls.Config{
+			VerifyConnection: verify,
+		},
+	}
+}
+
 func runSession(hubURL, machineID, token string, overrideMappings []portMapping, bridge *tunnelBridge) error {
 	log.Printf("connecting to hub: %s", hubURL)
 
-	// Connect to Hub via WebSocket
-	dialer := websocket.Dialer{HandshakeTimeout: wsDialTimeout}
+	// Connect to Hub via WebSocket. The dialer enforces the configured
+	// TLS pin (if any) and logs the leaf certificate's SPKI fingerprint
+	// in TOFU mode (no pin configured) so the operator can pin it via
+	// `tela pin <hub-url> <fingerprint>`. See internal/certpin and the
+	// credstore Pin field for the storage contract.
+	dialer := pinAwareDialer(hubURL)
 	wsConn, _, err := dialer.Dial(hubURL, nil)
 	if err != nil {
 		log.Printf("websocket dial failed: %v", err)
@@ -2785,8 +2822,52 @@ func envOrDefault(key, fallback string) string {
 // ── Hub alias config ───────────────────────────────────────────────
 
 // hubsConfig is the schema for ~/.tela/hubs.yaml (or %APPDATA%\tela\hubs.yaml).
+//
+// The Hubs map keys hubs by short name. Each entry carries a URL and
+// an optional TLS certificate pin (SHA-256 SPKI fingerprint, format
+// "sha256:<hex>"; see internal/certpin). When the pin is set, the
+// dialer refuses connections whose certificate's SPKI does not match.
 type hubsConfig struct {
-	Hubs map[string]string `yaml:"hubs"`
+	Hubs map[string]hubEntry `yaml:"hubs"`
+}
+
+// hubEntry is one entry in hubs.yaml. URL is required; Pin is
+// optional. Pre-0.16 hubs.yaml files used a flat name-to-URL mapping
+// (map[string]string); a custom UnmarshalYAML on hubsConfig migrates
+// that legacy shape transparently for one release. The legacy shape
+// is removed at 1.0 per ROADMAP-1.0.md.
+type hubEntry struct {
+	URL string `yaml:"url"`
+	Pin string `yaml:"pin,omitempty"`
+}
+
+// UnmarshalYAML on hubsConfig handles the pre-0.16 flat shape
+// (`hubs: { name: url }`) by migrating each string value to
+// `hubEntry{URL: value}`. The new shape (`hubs: { name: { url:..., pin:... } }`)
+// loads through the default decoder.
+func (c *hubsConfig) UnmarshalYAML(value *yaml.Node) error {
+	// Try the new shape first.
+	type rawHubsConfig struct {
+		Hubs map[string]hubEntry `yaml:"hubs"`
+	}
+	var newShape rawHubsConfig
+	if err := value.Decode(&newShape); err == nil {
+		c.Hubs = newShape.Hubs
+		return nil
+	}
+	// Fall back to the legacy flat shape.
+	type legacyHubsConfig struct {
+		Hubs map[string]string `yaml:"hubs"`
+	}
+	var legacy legacyHubsConfig
+	if err := value.Decode(&legacy); err != nil {
+		return err
+	}
+	c.Hubs = make(map[string]hubEntry, len(legacy.Hubs))
+	for name, url := range legacy.Hubs {
+		c.Hubs[name] = hubEntry{URL: url}
+	}
+	return nil
 }
 
 // remoteEntry is a named hub directory endpoint (like a git remote).
@@ -2840,7 +2921,7 @@ func loadHubsConfig() (*hubsConfig, error) {
 		return nil, fmt.Errorf("invalid config %s: %w", hubsConfigPath(), err)
 	}
 	if cfg.Hubs == nil {
-		cfg.Hubs = make(map[string]string)
+		cfg.Hubs = make(map[string]hubEntry)
 	}
 	return &cfg, nil
 }
@@ -3100,8 +3181,8 @@ func resolveHubURL(value string) (string, error) {
 		}
 		return "", fmt.Errorf("hub %q not found (remotes unreachable, not in %s; known: %s)", value, hubsConfigPath(), strings.Join(known, ", "))
 	}
-	logVerbose("resolved hub alias %q via local config → %s", value, hubURL)
-	return hubURL, nil
+	logVerbose("resolved hub alias %q via local config → %s", value, hubURL.URL)
+	return hubURL.URL, nil
 }
 
 // mustResolveHub resolves a hub alias, exiting on error.
@@ -3282,15 +3363,25 @@ func cmdRemoteList() {
 
 func cmdLogin(args []string) {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	pinFlag := fs.String("pin", "", "TLS certificate pin (sha256:<hex>) to enforce on this hub")
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: tela login <hub-url>")
-		fmt.Fprintln(os.Stderr, "Stores a hub authentication token in ~/.tela/credentials.yaml")
+		fmt.Fprintln(os.Stderr, "Usage: tela login <hub-url> [-pin sha256:<hex>]")
+		fmt.Fprintln(os.Stderr, "Stores a hub authentication token in ~/.tela/credentials.yaml.")
+		fmt.Fprintln(os.Stderr, "An optional -pin value records the SHA-256 SPKI fingerprint of the hub's")
+		fmt.Fprintln(os.Stderr, "TLS certificate. With a pin set, future connects refuse mismatched certs.")
 		os.Exit(1)
 	}
 
 	hubURL := ensureWSScheme(fs.Arg(0))
+
+	if *pinFlag != "" {
+		if _, err := certpin.Parse(*pinFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid -pin value: %v\n", err)
+			os.Exit(1)
+		}
+	}
 
 	// Prompt for token
 	reader := bufio.NewReader(os.Stdin)
@@ -3313,13 +3404,88 @@ func cmdLogin(args []string) {
 		fmt.Fprintf(os.Stderr, "Error loading credentials: %v\n", err)
 		os.Exit(1)
 	}
-	store.Set(hubURL, credstore.Credential{Token: token, Identity: identity})
+	cred := credstore.Credential{Token: token, Identity: identity}
+	if *pinFlag != "" {
+		cred.Pin = certpin.Normalize(*pinFlag)
+	} else {
+		// Preserve any existing pin so re-running login does not silently
+		// drop it. A separate `tela pin` subcommand handles add/clear.
+		if existing, ok := store.Get(hubURL); ok {
+			cred.Pin = existing.Pin
+		}
+	}
+	store.Set(hubURL, cred)
 	if err := store.Save(credstore.UserPath()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving credentials: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Credentials stored for %s\n", hubURL)
+	if cred.Pin != "" {
+		fmt.Printf("Credentials stored for %s (pin: %s)\n", hubURL, cred.Pin)
+	} else {
+		fmt.Printf("Credentials stored for %s\n", hubURL)
+	}
+}
+
+func cmdPin(args []string) {
+	fs := flag.NewFlagSet("pin", flag.ExitOnError)
+	clearFlag := fs.Bool("clear", false, "remove the pin for this hub (accept any valid certificate)")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage:")
+		fmt.Fprintln(os.Stderr, "  tela pin <hub-url>                  Show the pin currently set for hub-url")
+		fmt.Fprintln(os.Stderr, "  tela pin <hub-url> <fingerprint>    Set or update the pin")
+		fmt.Fprintln(os.Stderr, "  tela pin <hub-url> -clear           Remove the pin")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Fingerprint format: sha256:<64-hex-chars> (the leaf certificate's SPKI hash).")
+		fmt.Fprintln(os.Stderr, "When `tela connect` succeeds against a hub with no pin, it logs the")
+		fmt.Fprintln(os.Stderr, "fingerprint so you can copy it into this command to enforce pinning.")
+		os.Exit(1)
+	}
+
+	hubURL := ensureWSScheme(fs.Arg(0))
+
+	// Inspect mode: no fingerprint, no -clear -> print current pin.
+	if fs.NArg() == 1 && !*clearFlag {
+		pin := credstore.LookupPin(hubURL)
+		if pin == "" {
+			fmt.Printf("No pin configured for %s\n", hubURL)
+			return
+		}
+		fmt.Println(pin)
+		return
+	}
+
+	// Clear mode.
+	if *clearFlag {
+		if fs.NArg() != 1 {
+			fmt.Fprintln(os.Stderr, "Error: -clear takes no fingerprint argument")
+			os.Exit(1)
+		}
+		if err := credstore.SetPin(hubURL, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "Error clearing pin: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Pin cleared for %s\n", hubURL)
+		return
+	}
+
+	// Set mode.
+	if fs.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "Error: expected exactly one fingerprint argument")
+		os.Exit(1)
+	}
+	pin := certpin.Normalize(fs.Arg(1))
+	if _, err := certpin.Parse(pin); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := credstore.SetPin(hubURL, pin); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving pin: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Pin set for %s: %s\n", hubURL, pin)
 }
 
 func cmdLogout(args []string) {

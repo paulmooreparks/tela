@@ -1318,6 +1318,23 @@ File data is transferred through the WireGuard tunnel using a chunked protocol w
 
 `tela login <url>` and `tela logout <url>` are legacy commands for storing and removing hub credentials. They predate `tela remote` and serve a different purpose: `tela login` stores a hub token in the credential store (`credentials.yaml`), while `tela remote add` stores a remote entry for hub name resolution (`config.yaml`). Both are still functional.
 
+`tela login` accepts an optional `-pin sha256:<hex>` flag for pinning the hub's TLS certificate at credential creation time. See *Cert pinning* below.
+
+#### Cert pinning
+
+Tela can pin a hub's TLS certificate so a rogue proxy, compromised CA, or DNS hijack cannot silently MITM the connection. Pin storage is the SHA-256 hash of the hub's leaf certificate's Subject Public Key Info (SPKI), formatted as `sha256:<lowercase hex>`. Pinning the SPKI rather than the whole certificate survives certificate renewal with the same key, which is the desired behavior — a key rotation is exactly when the operator should be re-prompted to confirm the change.
+
+```
+tela pin <hub-url>                     # show the pin currently set for hub-url
+tela pin <hub-url> <fingerprint>       # set or update the pin
+tela pin <hub-url> -clear              # remove the pin
+tela login <hub-url> -pin <fingerprint> # set the pin at credential-creation time
+```
+
+When `tela connect` succeeds against a hub with no pin configured, it logs the captured fingerprint and the exact `tela pin ...` command to enforce it. When a pin is configured, mismatched certificates fail the connection with a clear `certpin: presented certificate does not match pinned fingerprint` error.
+
+Pin storage is per-hub-URL in `~/.tela/credentials.yaml` under each hub entry's `pin` field. Pins also flow through `hubs.yaml` for short-name lookup (the `hubs.<name>.pin` field), and through `telahubd.yaml` for the bridge gateway's outbound dial (the `bridges[].pin` field). See [CONFIGURATION.md](CONFIGURATION.md) for the YAML schemas.
+
 ### Connection profiles
 
 A connection profile is a YAML file that defines multiple hub/machine connections in a single document. When you run `tela connect -profile <name>`, all connections launch in parallel, each with its own WireGuard tunnel and auto-reconnect. This lets you open tunnels to machines across different hubs with a single command.
