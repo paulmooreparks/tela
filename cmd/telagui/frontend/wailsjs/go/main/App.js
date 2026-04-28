@@ -18,8 +18,8 @@ export function AdminChangeRole(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AdminChangeRole'](arg1, arg2, arg3, arg4);
 }
 
-export function AdminCreateToken(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AdminCreateToken'](arg1, arg2, arg3);
+export function AdminCreateToken(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AdminCreateToken'](arg1, arg2, arg3, arg4);
 }
 
 export function AdminDeleteToken(arg1, arg2) {
@@ -48,6 +48,10 @@ export function AdminRenameAccess(arg1, arg2, arg3, arg4) {
 
 export function AdminRevokeMachineAccess(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AdminRevokeMachineAccess'](arg1, arg2, arg3, arg4);
+}
+
+export function AdminRevokeToken(arg1, arg2) {
+  return window['go']['main']['App']['AdminRevokeToken'](arg1, arg2);
 }
 
 export function AdminRotateToken(arg1, arg2) {

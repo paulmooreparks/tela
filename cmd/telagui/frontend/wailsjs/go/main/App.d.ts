@@ -10,7 +10,7 @@ export function AdminAPICall(arg1:string,arg2:string,arg3:string,arg4:string):Pr
 
 export function AdminChangeRole(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
-export function AdminCreateToken(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function AdminCreateToken(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AdminDeleteToken(arg1:string,arg2:string):Promise<string>;
 
@@ -25,6 +25,8 @@ export function AdminListTokens(arg1:string):Promise<string>;
 export function AdminRenameAccess(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AdminRevokeMachineAccess(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function AdminRevokeToken(arg1:string,arg2:string):Promise<string>;
 
 export function AdminRotateToken(arg1:string,arg2:string):Promise<string>;
 

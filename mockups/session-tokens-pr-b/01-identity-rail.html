@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Mockup: Access tab - identity rail with session-token metadata</title>
+<link rel="stylesheet" href="../../cmd/telagui/frontend/src/style.css">
+<style>
+  /* Mockup harness only -- not part of the PR. The real Access tab
+     lives inside the app shell, which we approximate here with a
+     two-column grid that matches accessLoadData()'s layout. */
+  body { padding: 20px; background: var(--bg); }
+  .mockup-frame {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; max-width: 1200px; margin: 0 auto;
+    overflow: hidden;
+  }
+  .mockup-toolbar {
+    display: flex; gap: 8px; padding: 12px 16px;
+    border-bottom: 1px solid var(--border); background: var(--surface-alt);
+    align-items: center;
+  }
+  .mockup-toolbar .spacer { flex: 1; }
+  .mockup-toolbar .access-view-toggle { margin-left: 16px; }
+  .mockup-body { display: grid; grid-template-columns: 280px 1fr; min-height: 540px; }
+  .access-rail {
+    border-right: 1px solid var(--border); background: var(--surface-alt);
+    padding: 8px 0; overflow-y: auto;
+  }
+  .access-rail-item {
+    padding: 10px 14px; border-left: 3px solid transparent;
+    cursor: pointer; display: flex; flex-direction: column; gap: 4px;
+  }
+  .access-rail-item:hover { background: var(--surface); }
+  .access-rail-item.active { border-left-color: var(--accent); background: var(--surface); }
+  .access-rail-row { display: flex; align-items: center; gap: 8px; }
+  .access-rail-name { font-weight: 600; font-size: 13px; flex: 1; }
+  .access-rail-meta { font-size: 11px; color: var(--text-muted); }
+  .access-rail-item.is-revoked .access-rail-name,
+  .access-rail-item.is-revoked .chip-role-user,
+  .access-rail-item.is-revoked .chip-role-admin,
+  .access-rail-item.is-revoked .chip-role-viewer,
+  .access-rail-item.is-revoked .chip-role-owner {
+    text-decoration: line-through; color: var(--text-muted);
+  }
+  .access-detail { padding: 20px 24px; overflow-y: auto; }
+  /* Mockup label band so it's obvious which surface is which. */
+  .mockup-tag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-muted); padding: 4px 8px; background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+  }
+  /* The new lifecycle meta line under the token preview. */
+  .access-lifecycle-meta {
+    font-size: 11px; color: var(--text-muted); margin-top: 4px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .access-lifecycle-meta .sep { color: var(--border); }
+</style>
+</head>
+<body>
+
+<div class="mockup-frame">
+  <div class="mockup-tag">Mockup A1 - Access tab, By identity view (dark theme)</div>
+
+  <div class="mockup-toolbar">
+    <select title="Hub" style="padding: 6px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px;">
+      <option>devhub.local</option>
+    </select>
+    <button class="btn btn-sm">Undo</button>
+    <button class="btn btn-sm btn-primary">Save</button>
+    <button class="btn btn-sm">Add Identity</button>
+    <button class="btn btn-sm">Pair Code</button>
+    <span class="spacer"></span>
+    <div class="access-view-toggle">
+      <button class="access-view-btn">By machine</button>
+      <button class="access-view-btn active">By identity</button>
+    </div>
+  </div>
+
+  <div class="mockup-body">
+
+    <!-- IDENTITY RAIL: status pills are the new bit -->
+    <div class="access-rail">
+      <div class="access-rail-item">
+        <div class="access-rail-row">
+          <span class="access-rail-name">owner</span>
+          <span class="chip chip-role-owner">owner</span>
+        </div>
+        <div class="access-rail-meta">issued 6 mo ago</div>
+      </div>
+
+      <div class="access-rail-item active">
+        <div class="access-rail-row">
+          <span class="access-rail-name">alice</span>
+          <span class="chip chip-role-user">user</span>
+        </div>
+        <div class="access-rail-meta">issued 12 d ago</div>
+      </div>
+
+      <div class="access-rail-item">
+        <div class="access-rail-row">
+          <span class="access-rail-name">ci-bot</span>
+          <span class="chip chip-role-user">user</span>
+          <span class="chip chip-cap-info" title="Token expires May 28, 2026">expires May 28</span>
+        </div>
+        <div class="access-rail-meta">issued 2 d ago</div>
+      </div>
+
+      <div class="access-rail-item is-revoked">
+        <div class="access-rail-row">
+          <span class="access-rail-name">old-laptop</span>
+          <span class="chip chip-role-user">user</span>
+          <span class="chip chip-cap-no">revoked</span>
+        </div>
+        <div class="access-rail-meta">revoked 1 h ago</div>
+      </div>
+
+      <div class="access-rail-item">
+        <div class="access-rail-row">
+          <span class="access-rail-name">monitoring</span>
+          <span class="chip chip-role-viewer">viewer</span>
+          <span class="chip chip-cap-no" title="Expired Apr 22, 2026">expired</span>
+        </div>
+        <div class="access-rail-meta">issued 6 mo ago</div>
+      </div>
+
+      <div class="access-rail-item">
+        <div class="access-rail-row">
+          <span class="access-rail-name">paul-laptop</span>
+          <span class="chip chip-role-admin">admin</span>
+        </div>
+        <div class="access-rail-meta">issued 4 mo ago</div>
+      </div>
+    </div>
+
+    <!-- DETAIL: alice (active, not revoked, not expired) -->
+    <div class="access-detail">
+      <header class="access-detail-header">
+        <div>
+          <h2>alice <span class="chip chip-role-user">user</span></h2>
+          <div class="access-token-preview">tk_8f2a91c4...</div>
+          <div class="access-lifecycle-meta">
+            <span>issued 2026-04-16</span>
+            <span class="sep">&middot;</span>
+            <span>expires never</span>
+          </div>
+        </div>
+        <div class="access-detail-actions">
+          <button type="button" class="btn btn-sm">Rename</button>
+          <button type="button" class="btn btn-sm">Change role&hellip;</button>
+          <button type="button" class="btn btn-sm">Rotate token</button>
+          <button type="button" class="btn btn-sm">Revoke&hellip;</button>
+          <button type="button" class="btn btn-sm btn-danger">Delete identity</button>
+        </div>
+      </header>
+      <p class="hint">Per-machine permissions for this identity. Toggle to stage changes; press <strong>Save</strong> in the toolbar to commit.</p>
+
+      <table class="access-matrix">
+        <thead>
+          <tr>
+            <th>Machine</th>
+            <th class="access-col-check">Connect</th>
+            <th class="access-col-check">Register</th>
+            <th class="access-col-check">Manage</th>
+            <th>Connect services</th>
+            <th class="access-matrix-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="access-matrix-row">
+            <td><strong>barn</strong><div class="access-matrix-meta">linux/amd64</div></td>
+            <td class="access-matrix-check"><input type="checkbox" checked></td>
+            <td class="access-matrix-check"><input type="checkbox"></td>
+            <td class="access-matrix-check"><input type="checkbox"></td>
+            <td><span class="chip chip-cap-info">all services</span></td>
+            <td><button class="btn btn-sm">Edit&hellip;</button></td>
+          </tr>
+          <tr class="access-matrix-row">
+            <td><strong>web01</strong><div class="access-matrix-meta">linux/arm64</div></td>
+            <td class="access-matrix-check"><input type="checkbox" checked></td>
+            <td class="access-matrix-check"><input type="checkbox"></td>
+            <td class="access-matrix-check"><input type="checkbox" checked></td>
+            <td><span class="chip chip-cap-info">2 services</span></td>
+            <td><button class="btn btn-sm">Edit&hellip;</button></td>
+          </tr>
+          <tr class="access-matrix-row access-matrix-row-wildcard">
+            <td><strong>* (wildcard)</strong></td>
+            <td class="access-matrix-check"><input type="checkbox"></td>
+            <td class="access-matrix-check"><input type="checkbox"></td>
+            <td class="access-matrix-check"><input type="checkbox"></td>
+            <td><span class="chip chip-cap-info">all services</span></td>
+            <td><button class="btn btn-sm">Edit&hellip;</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- Same surface, but identity is REVOKED -->
+
+<div class="mockup-frame" style="margin-top: 24px;">
+  <div class="mockup-tag">Mockup A2 - Same surface, identity is revoked</div>
+  <div class="mockup-body">
+    <div class="access-rail">
+      <div class="access-rail-item active is-revoked">
+        <div class="access-rail-row">
+          <span class="access-rail-name">old-laptop</span>
+          <span class="chip chip-role-user">user</span>
+          <span class="chip chip-cap-no">revoked</span>
+        </div>
+        <div class="access-rail-meta">revoked 1 h ago</div>
+      </div>
+    </div>
+    <div class="access-detail">
+      <header class="access-detail-header">
+        <div>
+          <h2 style="text-decoration: line-through; color: var(--text-muted);">old-laptop <span class="chip chip-role-user">user</span></h2>
+          <div class="access-token-preview" style="text-decoration: line-through;">tk_3c81ee1b...</div>
+          <div class="access-lifecycle-meta">
+            <span>issued 2025-10-12</span>
+            <span class="sep">&middot;</span>
+            <span style="color: var(--danger); font-weight: 600;">revoked 2026-04-28 13:02 UTC</span>
+          </div>
+        </div>
+        <div class="access-detail-actions">
+          <button type="button" class="btn btn-sm">Rename</button>
+          <button type="button" class="btn btn-sm">Change role&hellip;</button>
+          <button type="button" class="btn btn-sm btn-primary">Rotate token (re-enables)</button>
+          <button type="button" class="btn btn-sm" disabled style="opacity: 0.5;">Revoked</button>
+          <button type="button" class="btn btn-sm btn-danger">Delete identity</button>
+        </div>
+      </header>
+      <p class="hint">This identity is revoked. The entry is preserved for the audit trail. Press <strong>Rotate token</strong> to issue a new credential and re-enable this identity, or <strong>Delete identity</strong> to remove it entirely.</p>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

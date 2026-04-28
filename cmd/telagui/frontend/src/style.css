@@ -2189,6 +2189,55 @@ input:disabled, select:disabled, textarea:disabled, button:disabled { opacity: 0
   color: var(--text-muted); font-size: 11px; font-family: var(--mono); margin-top: 4px;
 }
 
+/* Lifecycle meta line under the token preview in the identity detail
+   header: "issued 2026-04-16 · expires 2026-05-28 · revoked ...".
+   Sub-spans use .lifecycle-bad to flag revoked/expired states in the
+   danger color so they read at a glance without needing a separate
+   chip. */
+.access-lifecycle-meta {
+  font-size: 11px; color: var(--text-muted); margin-top: 4px;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.access-lifecycle-meta .sep { color: var(--border); }
+.access-lifecycle-meta .lifecycle-bad { color: var(--danger); font-weight: 600; }
+
+/* Revoked-identity treatment in the detail header: the title and
+   token preview render with a strikethrough so the operator sees the
+   identity is in a terminal state. The lifecycle meta line stays
+   readable (no strikethrough) because it carries the revoke
+   timestamp, which is the most useful piece of info on the page. */
+.access-detail-header.is-revoked h2,
+.access-detail-header.is-revoked .access-token-preview {
+  text-decoration: line-through; color: var(--text-muted);
+}
+.access-detail-header.is-revoked h2 .chip { text-decoration: line-through; }
+
+/* Rail-side revoked treatment matches the detail header. */
+.access-sidebar-item.is-revoked .access-sidebar-primary { color: var(--text-muted); }
+.access-sidebar-item.is-revoked .access-sidebar-primary > .chip:not(.chip-cap-no) {
+  text-decoration: line-through;
+}
+
+/* Revoke-confirm modal summary block. Mirrors the docker-token-value
+   visual but as a definition list so identity / token / issued are
+   labelled. */
+.revoke-summary {
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px 14px; margin: 12px 0;
+  font-size: 13px;
+}
+.revoke-summary dt {
+  color: var(--text-muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.revoke-summary dd { margin: 2px 0 8px 0; font-family: var(--mono); }
+.revoke-summary dd:last-child { margin-bottom: 0; }
+
+/* Optional-field marker shown next to a label, e.g. the Expires
+   field in the Add Identity modal. Reads as a soft annotation rather
+   than a separate sentence under the label. */
+.optional-tag { font-weight: 400; color: var(--text-muted); }
+
 /* Access matrix: identity x permission x service filter table. Used by
    both By machine and By identity views; they swap the row identity
    between "identity on this machine" and "machine for this identity". */

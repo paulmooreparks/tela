@@ -1559,10 +1559,31 @@ func (a *App) AdminListTokens(hubName string) string {
 	return string(data)
 }
 
-// AdminCreateToken creates a new token identity on a hub.
-func (a *App) AdminCreateToken(hubName, id, role string) string {
-	body, _ := json.Marshal(map[string]string{"id": id, "role": role})
-	data, err := a.adminProxyCall(hubName, "POST", "tokens", body)
+// AdminCreateToken creates a new token identity on a hub. expiresAt,
+// when non-empty, is forwarded as the optional expiresAt field on the
+// admin add-token request. The frontend parses its shorthand input
+// (30d / 4w / 1y / RFC3339) into RFC3339 before calling, so the wire
+// shape here is always RFC3339 or empty.
+func (a *App) AdminCreateToken(hubName, id, role, expiresAt string) string {
+	body := map[string]string{"id": id, "role": role}
+	if strings.TrimSpace(expiresAt) != "" {
+		body["expiresAt"] = expiresAt
+	}
+	bodyBytes, _ := json.Marshal(body)
+	data, err := a.adminProxyCall(hubName, "POST", "tokens", bodyBytes)
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return string(data)
+}
+
+// AdminRevokeToken marks an identity revoked on a hub. The entry stays
+// in the hub config (audit trail). Rotate refreshes the credential and
+// clears the revocation in one step. The hub returns 409 if this would
+// revoke the only owner; the response body's error field surfaces in
+// the modal.
+func (a *App) AdminRevokeToken(hubName, id string) string {
+	data, err := a.adminProxyCall(hubName, "POST", "tokens/"+url.PathEscape(id)+"/revoke", nil)
 	if err != nil {
 		return `{"error":"` + err.Error() + `"}`
 	}

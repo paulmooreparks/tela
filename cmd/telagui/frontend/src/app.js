@@ -5134,27 +5134,102 @@ function submitCreateToken(event) {
   event.preventDefault();
   var id = document.getElementById('new-token-id').value.trim();
   var selectedRole = document.getElementById('new-token-role').value;
+  var expiresInput = document.getElementById('new-token-expires').value.trim();
   if (!id) return;
   // Backend treats an empty role as "user" (the default). The dropdown
   // shows "User" for clarity; we normalize to "" on the wire because
   // the backend's role validation rejects the literal "user".
   var wireRole = (selectedRole === 'user') ? '' : selectedRole;
 
-  goApp.AdminCreateToken(currentAdminHub, id, wireRole).then(function (raw) {
+  var errEl = document.getElementById('create-token-error');
+  errEl.classList.add('hidden');
+
+  var expiresWire = '';
+  if (expiresInput) {
+    var parsed = parseExpiresInput(expiresInput);
+    if (!parsed) {
+      errEl.textContent = 'Invalid expiry. Use 30d, 4w, 1y, or an RFC 3339 timestamp.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    expiresWire = parsed;
+  }
+
+  goApp.AdminCreateToken(currentAdminHub, id, wireRole, expiresWire).then(function (raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { data = {}; }
     if (data.error) {
-      var errEl = document.getElementById('create-token-error');
       errEl.textContent = data.error;
       errEl.classList.remove('hidden');
       return;
     }
     closeModal('create-token-modal');
     if (data.token) {
-      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, 'Identity: ' + id + ' | Role: ' + formatRole(selectedRole));
+      var meta = 'Identity: ' + id + ' | Role: ' + formatRole(selectedRole);
+      if (expiresWire) meta += ' | Expires: ' + formatLifecycleDate(expiresWire);
+      showResultModal('Token Created', 'Copy this token now. It will not be shown again.', data.token, meta);
     }
     accessReload();
   });
+}
+
+// parseExpiresInput accepts the same shorthand the CLI accepts:
+// "30d", "4w", "1y" relative durations, or an RFC 3339 timestamp.
+// Returns the absolute time as RFC 3339 (the wire shape the backend
+// expects on adminAddRequest.expiresAt), or "" if the input is invalid.
+function parseExpiresInput(s) {
+  s = (s || '').trim();
+  if (!s) return '';
+  var m = /^(\d+)([dwy])$/i.exec(s);
+  if (m) {
+    var n = parseInt(m[1], 10);
+    if (!isFinite(n) || n <= 0) return '';
+    var ms;
+    switch (m[2].toLowerCase()) {
+      case 'd': ms = n * 24 * 60 * 60 * 1000; break;
+      case 'w': ms = n * 7 * 24 * 60 * 60 * 1000; break;
+      case 'y': ms = n * 365 * 24 * 60 * 60 * 1000; break;
+      default: return '';
+    }
+    return new Date(Date.now() + ms).toISOString();
+  }
+  // RFC 3339: let Date.parse validate. Reject obviously-bad inputs.
+  var t = Date.parse(s);
+  if (isNaN(t)) return '';
+  return new Date(t).toISOString();
+}
+
+// formatLifecycleDate renders an RFC 3339 timestamp as a short
+// local-date string for display in the rail and detail meta line.
+// Returns "" for empty / invalid input so callers can chain it
+// without a guard.
+function formatLifecycleDate(s) {
+  if (!s) return '';
+  var t = Date.parse(s);
+  if (isNaN(t)) return '';
+  var d = new Date(t);
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// formatLifecycleDateTime is the long form, used in the detail meta
+// line for revoked/expired identities so the operator sees the wall
+// time of the event, not just the date.
+function formatLifecycleDateTime(s) {
+  if (!s) return '';
+  var t = Date.parse(s);
+  if (isNaN(t)) return '';
+  var d = new Date(t);
+  return d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+}
+
+// isExpired returns true when an RFC 3339 timestamp is in the past.
+// Used to render the rail status pill as "expired" rather than the
+// upcoming-expiry "expires <date>" form.
+function isExpired(s) {
+  if (!s) return false;
+  var t = Date.parse(s);
+  if (isNaN(t)) return false;
+  return t <= Date.now();
 }
 
 function deleteToken(id) {
@@ -7760,17 +7835,40 @@ function renderAccessSidebarIdentities(list) {
     var dirty = accessIdentityDirty(e.id);
     var roleLabel = formatRole(e.role);
     var summary = accessIdentitySummary(e);
-    html += '<div class="access-sidebar-item' + (isActive ? ' active' : '') +
+    var lifecyclePill = identityLifecyclePill(e);
+    var itemClass = 'access-sidebar-item';
+    if (isActive) itemClass += ' active';
+    if (e.revokedAt) itemClass += ' is-revoked';
+    html += '<div class="' + itemClass +
       '" onclick="accessSelectIdentity(\'' + escAttr(e.id) + '\')">'
       + '<div class="access-sidebar-primary">'
       + escHtml(e.id)
       + ' <span class="chip">' + escHtml(roleLabel) + '</span>'
+      + lifecyclePill
       + (dirty ? '<span class="access-sidebar-dirty">&bull; pending</span>' : '')
       + '</div>'
       + '<div class="access-sidebar-secondary">' + escHtml(summary) + '</div>'
       + '</div>';
   });
   list.innerHTML = html || '<p class="empty-hint">No identities on this hub.</p>';
+}
+
+// identityLifecyclePill returns the rail-side status pill HTML for an
+// identity. Revocation wins over expiry; expiry-in-the-past renders
+// "expired"; expiry-in-the-future renders "expires <short-date>"; an
+// active identity with no expiry returns "" so the rail stays clean.
+function identityLifecyclePill(e) {
+  if (e.revokedAt) {
+    return ' <span class="chip chip-cap-no" title="Revoked ' + escAttr(formatLifecycleDateTime(e.revokedAt)) + '">revoked</span>';
+  }
+  if (e.expiresAt) {
+    if (isExpired(e.expiresAt)) {
+      return ' <span class="chip chip-cap-no" title="Expired ' + escAttr(formatLifecycleDate(e.expiresAt)) + '">expired</span>';
+    }
+    var short = formatLifecycleDate(e.expiresAt);
+    return ' <span class="chip chip-cap-info" title="Expires ' + escAttr(short) + '">expires ' + escHtml(short) + '</span>';
+  }
+  return '';
 }
 
 // accessIdentitySummary produces the secondary-line text in the
@@ -8157,18 +8255,41 @@ function renderAccessDetailByIdentity(pane) {
     pane.innerHTML = '<div class="access-detail-empty">Identity ' + escHtml(id) + ' not found.</div>';
     return;
   }
-  var html = '<header class="access-detail-header">';
+  var revoked = !!entry.revokedAt;
+  var expired = !revoked && entry.expiresAt && isExpired(entry.expiresAt);
+  var headerClass = 'access-detail-header';
+  if (revoked) headerClass += ' is-revoked';
+
+  var rotateLabel = revoked ? 'Rotate token (re-enables)' : 'Rotate token';
+  var rotateClass = revoked ? 'btn btn-sm btn-primary' : 'btn btn-sm';
+
+  var html = '<header class="' + headerClass + '">';
   html += '<div><h2>' + escHtml(entry.id) + ' <span class="chip">' + escHtml(formatRole(entry.role)) + '</span></h2>';
   html += '<div class="access-token-preview">' + escHtml(entry.tokenPreview || '') + '</div>';
+  html += renderAccessLifecycleMeta(entry);
   html += '</div>';
   html += '<div class="access-detail-actions">'
     + '<button type="button" class="btn btn-sm" onclick="accessRenameIdentity(\'' + escAttr(entry.id) + '\')">Rename</button>'
     + '<button type="button" class="btn btn-sm" onclick="accessChangeRole(\'' + escAttr(entry.id) + '\')">Change role&hellip;</button>'
-    + '<button type="button" class="btn btn-sm" onclick="accessRotateIdentityToken(\'' + escAttr(entry.id) + '\')">Rotate token</button>';
+    + '<button type="button" class="' + rotateClass + '" onclick="accessRotateIdentityToken(\'' + escAttr(entry.id) + '\')">' + rotateLabel + '</button>';
+  if (revoked) {
+    html += '<button type="button" class="btn btn-sm" disabled title="This identity is already revoked. Rotate to re-enable.">Revoked</button>';
+  } else {
+    html += '<button type="button" class="btn btn-sm" onclick="accessRevokeIdentity(\'' + escAttr(entry.id) + '\')">Revoke&hellip;</button>';
+  }
   if (entry.role !== 'owner') {
     html += '<button type="button" class="btn btn-sm btn-danger" onclick="accessDeleteIdentity(\'' + escAttr(entry.id) + '\')">Delete identity</button>';
   }
   html += '</div></header>';
+
+  if (revoked) {
+    html += '<p class="hint">This identity is revoked. The entry is preserved for the audit trail. Press <strong>Rotate token</strong> to issue a new credential and re-enable this identity, or <strong>Delete identity</strong> to remove it entirely.</p>';
+    pane.innerHTML = html;
+    return;
+  }
+  if (expired) {
+    html += '<p class="hint">This identity\'s token has expired. The hub denies it on every request. Press <strong>Rotate token</strong> to issue a fresh credential (the new token has no expiry unless you set one in the hub config).</p>';
+  }
 
   if (entry.role === 'owner' || entry.role === 'admin') {
     html += '<p class="hint">Implicit all-access. ' + escHtml(formatRole(entry.role)) +
@@ -8635,6 +8756,71 @@ function accessRotateIdentityToken(id) {
 function accessDeleteIdentity(id) {
   currentAdminHub = accessState.hub;
   if (typeof deleteToken === 'function') deleteToken(id);
+}
+
+// accessRevokeIdentity opens the themed revoke-confirm modal for the
+// given identity. The actual call to AdminRevokeToken is fired by
+// submitRevokeIdentity once the operator confirms; the modal surfaces
+// backend errors (notably the last-owner 409) inline rather than
+// closing on failure.
+function accessRevokeIdentity(id) {
+  currentAdminHub = accessState.hub;
+  var entry = accessEntryFor(id);
+  if (!entry) return;
+  document.getElementById('revoke-identity-name').textContent = id;
+  document.getElementById('revoke-identity-id').textContent = id;
+  document.getElementById('revoke-identity-role').textContent = formatRole(entry.role);
+  document.getElementById('revoke-identity-role').className = 'chip chip-role-' + (entry.role || 'user');
+  document.getElementById('revoke-identity-token').textContent = entry.tokenPreview || '';
+  document.getElementById('revoke-identity-issued').textContent = entry.issuedAt
+    ? formatLifecycleDate(entry.issuedAt) : 'unknown';
+  var errEl = document.getElementById('revoke-identity-error');
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+  // Stash the target so the submit handler does not need to re-parse.
+  document.getElementById('revoke-identity-modal').setAttribute('data-target-id', id);
+  document.getElementById('revoke-identity-modal').classList.remove('hidden');
+}
+
+function submitRevokeIdentity() {
+  var modal = document.getElementById('revoke-identity-modal');
+  var id = modal.getAttribute('data-target-id') || '';
+  if (!id) return;
+  var errEl = document.getElementById('revoke-identity-error');
+  errEl.classList.add('hidden');
+
+  goApp.AdminRevokeToken(currentAdminHub, id).then(function (raw) {
+    var data;
+    try { data = JSON.parse(raw || '{}'); } catch (e) { data = {}; }
+    if (data.error) {
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    closeModal('revoke-identity-modal');
+    accessLoadData();
+  });
+}
+
+// renderAccessLifecycleMeta renders the small "issued ... · expires
+// ... · revoked ..." line under the token preview in the detail
+// header. Always renders issued (defaulted server-side); appends
+// expires and revoked only when present.
+function renderAccessLifecycleMeta(e) {
+  var parts = [];
+  if (e.issuedAt) {
+    parts.push('<span>issued ' + escHtml(formatLifecycleDate(e.issuedAt)) + '</span>');
+  }
+  if (e.expiresAt) {
+    var expLabel = isExpired(e.expiresAt) ? 'expired ' : 'expires ';
+    var expClass = isExpired(e.expiresAt) ? ' class="lifecycle-bad"' : '';
+    parts.push('<span' + expClass + '>' + expLabel + escHtml(formatLifecycleDate(e.expiresAt)) + '</span>');
+  }
+  if (e.revokedAt) {
+    parts.push('<span class="lifecycle-bad">revoked ' + escHtml(formatLifecycleDateTime(e.revokedAt)) + '</span>');
+  }
+  if (parts.length === 0) return '';
+  return '<div class="access-lifecycle-meta">' + parts.join('<span class="sep">&middot;</span>') + '</div>';
 }
 
 // ── Edit services modal ───────────────────────────────────────────
