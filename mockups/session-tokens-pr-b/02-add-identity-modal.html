@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Mockup: Add Identity modal with Expires field</title>
+<link rel="stylesheet" href="../../cmd/telagui/frontend/src/style.css">
+<style>
+  body {
+    padding: 0; margin: 0; min-height: 100vh;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* Modal-overlay/dialog rules already in style.css. Keep the mockup
+     visible (don't apply .hidden) so the dialog renders. */
+  .modal-overlay {
+    position: relative; inset: auto; background: transparent;
+    display: block; padding: 40px;
+  }
+  .mockup-tag {
+    text-align: center; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div>
+  <div class="mockup-tag">Mockup B - Add Identity modal with new optional Expires field</div>
+  <div class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Add Identity</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form>
+          <div class="form-group">
+            <label for="new-token-id">Identity</label>
+            <input type="text" id="new-token-id" placeholder="e.g., alice, ci-bot, monitoring" value="">
+          </div>
+          <div class="form-group">
+            <label for="new-token-role">Role</label>
+            <select id="new-token-role">
+              <option>User</option>
+              <option>Admin</option>
+              <option>Viewer</option>
+            </select>
+          </div>
+
+          <!-- NEW FIELD -->
+          <div class="form-group">
+            <label for="new-token-expires">Expires <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></label>
+            <input type="text" id="new-token-expires" placeholder="never" value="">
+            <div class="hint" style="margin-top: 4px;">
+              Leave empty for no expiry. Accepts <code>30d</code>, <code>4w</code>, <code>1y</code>, or an RFC 3339 timestamp like <code>2026-12-31T00:00:00Z</code>. The identity stops authenticating after this time; rotate to refresh.
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Mockup: Revoke Identity confirmation modal</title>
+<link rel="stylesheet" href="../../cmd/telagui/frontend/src/style.css">
+<style>
+  body {
+    padding: 0; margin: 0; min-height: 100vh;
+    background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 32px; padding: 40px;
+  }
+  .modal-overlay {
+    position: relative; inset: auto; background: transparent;
+    display: block;
+  }
+  .mockup-tag {
+    text-align: center; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+  .revoke-summary {
+    background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 14px; margin: 12px 0;
+    font-size: 13px;
+  }
+  .revoke-summary dt { color: var(--text-muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em; }
+  .revoke-summary dd { margin: 2px 0 8px 0; font-family: var(--mono); }
+  .revoke-summary dd:last-child { margin-bottom: 0; }
+</style>
+</head>
+<body>
+
+<!-- Variant 1: normal confirm -->
+<div>
+  <div class="mockup-tag">Mockup C1 - Revoke confirm (normal)</div>
+  <div class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Revoke <code>old-laptop</code>?</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>The identity will stop authenticating immediately. The entry stays in the hub config so the audit trail is preserved.</p>
+
+        <dl class="revoke-summary">
+          <dt>Identity</dt><dd>old-laptop <span class="chip chip-role-user">user</span></dd>
+          <dt>Token</dt><dd>tk_3c81ee1b...</dd>
+          <dt>Issued</dt><dd>2025-10-12</dd>
+        </dl>
+
+        <p class="hint">To re-enable this identity later, press <strong>Rotate token</strong> in the detail header. Rotation refreshes the credential and clears the revocation in one step.</p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn">Cancel</button>
+          <button type="submit" class="btn btn-danger">Revoke identity</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Variant 2: last-owner refused (after backend 409) -->
+<div>
+  <div class="mockup-tag">Mockup C2 - Revoke refused: last owner</div>
+  <div class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Revoke <code>owner</code>?</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="error-msg" style="margin-bottom: 12px;">
+          The hub refused this revoke: <code>owner</code> is the only owner-role token on this hub. Revoking it would leave the hub unmanageable.
+        </div>
+        <p class="hint">Add another owner token first, or change this token's role to admin or user before revoking. The hub never lets you remove the last owner.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
