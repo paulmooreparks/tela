@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-11T13:00:10Z",
+  "generatedAt": "2026-07-11T13:50:36Z",
   "current": {
     "stable": { "version": "v0.15.0", "url": "/book/",     "releasedAt": "2026-04-27" },
     "beta":   { "version": "v0.15.0-beta.3",   "url": "/book/beta/", "releasedAt": "2026-04-27" },
-    "dev":    { "version": "v0.16.0-dev.13",    "url": "/book/dev/",  "releasedAt": "2026-07-11" }
+    "dev":    { "version": "v0.16.0-dev.14",    "url": "/book/dev/",  "releasedAt": "2026-07-11" }
   },
   "archive": [
     {"version":"v0.15.0","url":"/book/archive/v0.15.0/","releasedAt":"2026-04-27"},
