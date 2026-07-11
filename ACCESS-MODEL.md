@@ -207,6 +207,12 @@ The unified access API is the recommended way to view and modify permissions. Th
 | PUT | `/api/admin/access/{id}/machines/{m}` | Set permissions on a machine; honors `If-Match` |
 | DELETE | `/api/admin/access/{id}/machines/{m}` | Revoke all permissions on a machine; honors `If-Match` |
 
+### Service-scoped connect grants
+
+The `PUT /api/admin/access/{id}/machines/{m}` body accepts an optional `services` list alongside `permissions` (mirrored in config as `auth.machines.<name>.connectTokens[*].services`). The list scopes the `connect` permission only: a connect token carrying a `services` filter sees only the named services when it connects to the agent, and `register` and `manage` ignore the field. Omitting `services` means all services, matching pre-0.15 behavior.
+
+Because an older hub silently ignores the unknown `services` field and would grant unfiltered connect access, `tela admin access grant <id> <machine> connect -services <names>` probes the hub's `/.well-known/tela` capabilities first and refuses to send the grant unless the hub advertises `per-service-access-control` (v0.15.0 and later). There is no override flag; to send an unfiltered grant, omit `-services`. See #27 and COMPAT-0.15.md.
+
 ## Common tasks
 
 **Grant a user connect access to a machine:**
