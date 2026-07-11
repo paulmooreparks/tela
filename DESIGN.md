@@ -1130,7 +1130,7 @@ The browser UI performs **orchestration only**:
   - command-line arguments shown to the user, or
   - a `tela://` custom URI scheme if the helper has been registered (optional, not required).
 - Display ephemeral `localhost:<port>` once the helper reports back via a short-lived polling endpoint or WebSocket.
-- Optionally provide in-browser fallback clients (SSH/RDP/terminal).
+- ~~Optionally provide in-browser fallback clients (SSH/RDP/terminal).~~ *Removed by decision 2026-07-11 (issue #28): the in-browser fallback was never built and is struck from the design. See ROADMAP-1.0.md, "In-browser fallback."*
 
 ## 9.2 Non-Responsibilities
 
@@ -1215,11 +1215,13 @@ The browser is not in the data path. It only requests the session token, launche
 
 ## 10.5 Fallback Modes
 
+> **Removed by decision 2026-07-11 (issue #28).** The in-browser RDP/SSH fallback described below was never implemented and is struck from the design. The tela client is zero-admin and zero-install, which covers the locked-down-environment case this section was written for. See ROADMAP-1.0.md, "In-browser fallback." The original text is retained for the record:
+
 If the helper cannot execute (locked-down environment blocks downloads or execution):
 
-- Browser launches in-browser RDP/SSH client via WebRTC DataChannel + WebAssembly.
-- Performance is lower; no local-client mode.
-- User is informed that local-client mode is unavailable.
+- ~~Browser launches in-browser RDP/SSH client via WebRTC DataChannel + WebAssembly.~~
+- ~~Performance is lower; no local-client mode.~~
+- ~~User is informed that local-client mode is unavailable.~~
 
 ---
 
@@ -1328,7 +1330,7 @@ Ephemeral keypairs are generated per session; no long-term WireGuard keys are st
 
 ### Fails Closed In Presence Of
 
-- **TLS-intercepting corporate proxies**: certificate pinning will cause connection failure (correct security behavior). Users in these environments must use the in-browser fallback.
+- **TLS-intercepting corporate proxies**: certificate pinning will cause connection failure (correct security behavior). There is no fallback path through an intercepting proxy; the in-browser fallback that this line once pointed at was removed by decision 2026-07-11 (issue #28).
 
 ### Does Not Protect Against
 
@@ -1407,7 +1409,9 @@ Browser can close once the helper is running. No VPN. No admin rights.
 
 ## 14.3 In-Browser Fallback
 
-If the helper cannot run, the browser launches an in-browser RDP/SSH client. Performance is lower. No local-client mode.
+> **Removed by decision 2026-07-11 (issue #28).** Never implemented; struck from the design. See section 10.5 and ROADMAP-1.0.md, "In-browser fallback."
+
+~~If the helper cannot run, the browser launches an in-browser RDP/SSH client. Performance is lower. No local-client mode.~~
 
 ---
 
@@ -1961,7 +1965,7 @@ This keeps the CLI ergonomic for daily use while preserving full URL support for
 - **Scope creep** → mitigated by Tela/Awan Saya separation.
 - **Identity complexity** → mitigated by deferring to Cloudflare Access.
 - **MeshCentral drift** → mitigated by explicit integration boundary (§5).
-- **Helper execution blocks** → mitigated by in-browser fallback (§10.5).
+- **Helper execution blocks** → the in-browser fallback once named here was removed by decision 2026-07-11 (issue #28); the mitigation is the zero-admin, zero-install tela client itself (§10.2).
 
 ---
 

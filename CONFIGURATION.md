@@ -258,6 +258,7 @@ dns:
 | `services[].remote` | * | Remote port number to forward |
 | `services[].local` | No | Local port to bind (defaults to `remote`) |
 | `services[].name` | * | Service name to resolve via the hub API |
+| `services[].hooks` | Reserved | Reserved for a future post-connect hooks feature (decision 2026-07-11, issue #39); do not use this key for any other purpose. The design record, including the mandatory trust and execution guardrails, lives in ROADMAP-1.0.md under "Per-service post-connect hooks." |
 
 \* Each service entry needs either `remote` or `name`, not both.
 

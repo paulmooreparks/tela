@@ -275,22 +275,22 @@ Session index is monotonically incrementing per machine (1-254 max).
 Admin API changes take effect immediately via `authStore.reload()` and are
 persisted to YAML. No hub restart needed for token/ACL/portal changes.
 
-### Portal architecture (spec written, extraction not yet started)
-The portal protocol is now specified in [DESIGN-portal.md](DESIGN-portal.md).
+### Portal architecture (ratified 2026-07-11; extraction shipped)
+The portal protocol is specified in [DESIGN-portal.md](DESIGN-portal.md).
 It is the wire-level contract every Tela portal must implement: ten or so
-endpoints, two auth modes, a documented JSON shape per response. Awan Saya
-matches this spec; the planned `internal/portal` Go package will too.
-The spec carves the portal contract out from the SaaS surface (accounts,
-orgs, billing, signup) so a single-user portal can implement only the
-contract.
+endpoints, two auth modes, a documented JSON shape per response. The spec
+carves the portal contract out from the SaaS surface (accounts, orgs,
+billing, signup) so a single-user portal can implement only the contract.
 
-The full plan for extraction lives under "Portal architecture: one
-protocol, many hosts" in ROADMAP-1.0.md and goes: extract `internal/portal`
-with pluggable storage, add a TelaVisor "Portal mode" that runs the
-file-backed store in-process, keep Awan Saya as the Postgres reference
-implementation. The spec has four open questions in section 14 that need
-to be resolved before extraction. Read DESIGN-portal.md before touching
-any portal-related code.
+The extraction is done: `internal/portal` implements the protocol with
+pluggable storage, `internal/portal/store/file` is the zero-dependency
+single-user store, `cmd/telaportal` is the standalone fourth binary, and
+TelaVisor has a Portal mode that runs the file-backed store in-process.
+TelaVisor is the local portal. Awan Saya remains the multi-org reference
+frontend; a `store/postgres` adapter for `internal/portal` is planned but
+not yet built. The spec's original open questions are resolved in its
+section 13. Read DESIGN-portal.md before touching any portal-related
+code.
 
 ### Release channels
 Tela ships through three channels: `dev` (every commit to main), `beta`
