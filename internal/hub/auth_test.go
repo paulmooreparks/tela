@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"reflect"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -205,6 +206,21 @@ func TestCanRegister_ACLEntryWithoutRegisterTokenAllowsKnownTokens(t *testing.T)
 	}
 }
 
+func TestCanRegister_EmptyTokenDenied(t *testing.T) {
+	// Enabled store with a permissive ACL: "barn" has no registerToken, so
+	// canRegister reaches the "any known token may register" branch, and a
+	// wildcard connect grant is present. validEntry("") is the only guard
+	// between an empty caller token and that branch; it must return nil.
+	acls := map[string]machineACL{
+		"*":    {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+	}
+	s := makeStore(stdTokens(), acls)
+	if s.canRegister("", "barn") {
+		t.Error("empty token should be denied register even against a permissive ACL")
+	}
+}
+
 // ── canConnect ─────────────────────────────────────────────────────
 
 func TestCanConnect_DisabledAlwaysAllows(t *testing.T) {
@@ -275,6 +291,19 @@ func TestCanConnect_PerMachineAndWildcardCombine(t *testing.T) {
 	}
 }
 
+func TestCanConnect_EmptyTokenDenied(t *testing.T) {
+	// Enabled store with a wildcard connect grant. validEntry("") returns
+	// nil and short-circuits before any grant lookup, so the empty token is
+	// denied even though the wildcard grant would otherwise be permissive.
+	acls := map[string]machineACL{
+		"*": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+	}
+	s := makeStore(stdTokens(), acls)
+	if s.canConnect("", "barn") {
+		t.Error("empty token should be denied connect even against a wildcard grant")
+	}
+}
+
 // ── canManage ──────────────────────────────────────────────────────
 
 func TestCanManage_DisabledAlwaysAllows(t *testing.T) {
@@ -329,6 +358,19 @@ func TestCanManage_WildcardACL(t *testing.T) {
 	}
 	if s.canManage(tokenUser2, "barn") {
 		t.Error("user not in wildcard manage list should be denied")
+	}
+}
+
+func TestCanManage_EmptyTokenDenied(t *testing.T) {
+	// Enabled store with a wildcard manage grant. validEntry("") returns
+	// nil and short-circuits before the manage-list lookup, so the empty
+	// token is denied even though the wildcard grant is permissive.
+	acls := map[string]machineACL{
+		"*": {ManageTokens: []string{tokenUser1}},
+	}
+	s := makeStore(stdTokens(), acls)
+	if s.canManage("", "barn") {
+		t.Error("empty token should be denied manage even against a wildcard grant")
 	}
 }
 
@@ -705,6 +747,36 @@ func TestConnectServicesFilter_AuthDisabled_NeverFilters(t *testing.T) {
 	}
 }
 
+// TestConnectServicesFilter_RevokedTokenStillFiltersByCurrentImplementation
+// is a characterization test, not a correctness assertion. Per Decision D1
+// on card tela-13, connectServicesFilter (auth.go) does not call validEntry
+// on the grant-holder before consulting findConnectGrant; only the
+// owner/admin/viewer bypass path checks validity. A revoked token that
+// still appears in a machine's ConnectTokens therefore continues to return
+// its service filter here. In production this is masked because every
+// caller gates on canViewMachine/canConnect first, both of which deny the
+// revoked token before connectServicesFilter is reached. This test pins the
+// current behavior so any future change to the function is a deliberate,
+// reviewed diff rather than a silent regression. Hardening
+// connectServicesFilter with its own validEntry guard is a follow-on card.
+func TestConnectServicesFilter_RevokedTokenStillFiltersByCurrentImplementation(t *testing.T) {
+	now := time.Now().UTC()
+	tokens := stdTokens()
+	tokens[2].RevokedAt = &now // revoke alice
+	acls := map[string]machineACL{
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1, Services: []string{"SSH"}}}},
+	}
+	s := makeStore(tokens, acls)
+
+	names, filtered := s.connectServicesFilter(tokenUser1, "barn")
+	if !filtered {
+		t.Fatal("current implementation returns filtered=true for a revoked grant-holder; see Decision D1")
+	}
+	if !reflect.DeepEqual(names, []string{"SSH"}) {
+		t.Errorf("filter names = %v, want [SSH] (characterization of current behavior)", names)
+	}
+}
+
 // ── connectGrant helpers ─────────────────────────────────────────
 
 func TestFindConnectGrant_MatchesByTokenConstantTime(t *testing.T) {
@@ -761,5 +833,50 @@ func TestReplaceConnectGrantToken_PreservesServices(t *testing.T) {
 	}
 	if !reflect.DeepEqual(grants, want) {
 		t.Errorf("after rotation grants = %v, want %v", grants, want)
+	}
+}
+
+// ── near-miss token comparison ─────────────────────────────────────
+//
+// Every token comparison in auth.go goes through subtle.ConstantTimeCompare,
+// which returns 0 immediately when the two byte slices differ in length.
+// These tests pin that no prefix-extended or truncated near-miss token
+// slips through a partial or substring match. See Gap Matrix section D.
+
+func TestInTokenList_DifferentLengthNoPartialMatch(t *testing.T) {
+	list := []string{"tok-user-1"}
+	// Target is the real value plus a suffix (a superset string). A
+	// length mismatch must not be treated as a match.
+	if inTokenList(list, "tok-user-1-extra") {
+		t.Error("a prefix-extended token must not match a shorter list entry")
+	}
+	// A proper prefix of the real value must not match either.
+	if inTokenList(list, "tok-user-") {
+		t.Error("a truncated token must not match a longer list entry")
+	}
+}
+
+func TestFindConnectGrant_DifferentLengthNoPartialMatch(t *testing.T) {
+	grants := []connectGrant{{Token: "tok-user-1"}}
+	if _, ok := findConnectGrant(grants, "tok-user-1-extra"); ok {
+		t.Error("a prefix-extended token must not match a shorter grant token")
+	}
+	if _, ok := findConnectGrant(grants, "tok-user-"); ok {
+		t.Error("a truncated token must not match a longer grant token")
+	}
+}
+
+func TestCanRegister_ExplicitRegisterTokenNearMissDenied(t *testing.T) {
+	acls := map[string]machineACL{
+		"barn": {RegisterToken: "tok-user-1"},
+	}
+	s := makeStore(stdTokens(), acls)
+	// A superset of the real registerToken must be denied.
+	if s.canRegister("tok-user-1-extra", "barn") {
+		t.Error("a prefix-extended token must not match registerToken")
+	}
+	// A proper prefix of the real registerToken must be denied.
+	if s.canRegister("tok-user-", "barn") {
+		t.Error("a truncated token must not match registerToken")
 	}
 }

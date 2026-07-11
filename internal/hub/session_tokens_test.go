@@ -222,3 +222,180 @@ func TestRevokedEntry_StaysInConfig(t *testing.T) {
 		t.Error("RevokedAt was cleared from the persisted entry")
 	}
 }
+
+// ── revocation/expiry on the explicit-grant (non-bypass) path ───────
+//
+// The tests above exercise the owner/admin bypass branch of canRegister,
+// canConnect, and canManage. The cases below pin the explicit-grant and
+// wildcard branches: a token that appears by value in a machine ACL must
+// still be rejected once it is revoked or expired, because validEntry
+// short-circuits the value match. See GitHub #7 Gap Matrix section A.
+
+func TestCanRegister_ExplicitRegisterTokenRevoked(t *testing.T) {
+	now := time.Now().UTC()
+	tokens := stdTokens()
+	tokens[2].RevokedAt = &now // revoke alice
+	acls := map[string]machineACL{
+		"barn": {RegisterToken: tokenUser1},
+	}
+	s := makeStore(tokens, acls)
+
+	// The token value still equals RegisterToken exactly, but revocation
+	// must short-circuit that match (auth.go canRegister validity check).
+	if s.canRegister(tokenUser1, "barn") {
+		t.Error("revoked token matching registerToken should not pass canRegister")
+	}
+}
+
+func TestCanRegister_ExplicitRegisterTokenExpired(t *testing.T) {
+	past := time.Now().Add(-time.Hour).UTC()
+	tokens := stdTokens()
+	tokens[2].ExpiresAt = &past // expire alice
+	acls := map[string]machineACL{
+		"barn": {RegisterToken: tokenUser1},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canRegister(tokenUser1, "barn") {
+		t.Error("expired token matching registerToken should not pass canRegister")
+	}
+}
+
+func TestCanRegister_ACLEntryWithoutRegisterTokenDeniesExpiredToken(t *testing.T) {
+	past := time.Now().Add(-time.Hour).UTC()
+	tokens := stdTokens()
+	tokens[2].ExpiresAt = &past // expire alice
+	// ACL exists but has no registerToken, so canRegister takes the "any
+	// known token may register" branch; that branch still requires a
+	// valid entry.
+	acls := map[string]machineACL{
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canRegister(tokenUser1, "barn") {
+		t.Error("expired token should not pass the any-known-token register branch")
+	}
+}
+
+func TestCanManage_DeniesRevokedNonAdminGrant(t *testing.T) {
+	now := time.Now().UTC()
+	tokens := stdTokens()
+	tokens[2].RevokedAt = &now // revoke alice
+	acls := map[string]machineACL{
+		"barn": {ManageTokens: []string{tokenUser1}},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canManage(tokenUser1, "barn") {
+		t.Error("revoked token in a machine manage grant should not pass canManage")
+	}
+}
+
+func TestCanManage_DeniesExpiredNonAdminGrant(t *testing.T) {
+	past := time.Now().Add(-time.Hour).UTC()
+	tokens := stdTokens()
+	tokens[2].ExpiresAt = &past // expire alice
+	acls := map[string]machineACL{
+		"barn": {ManageTokens: []string{tokenUser1}},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canManage(tokenUser1, "barn") {
+		t.Error("expired token in a machine manage grant should not pass canManage")
+	}
+}
+
+func TestCanManage_DeniesRevokedWildcardGrant(t *testing.T) {
+	now := time.Now().UTC()
+	tokens := stdTokens()
+	tokens[2].RevokedAt = &now // revoke alice
+	acls := map[string]machineACL{
+		"*": {ManageTokens: []string{tokenUser1}},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canManage(tokenUser1, "barn") {
+		t.Error("revoked token in the wildcard manage grant should not pass canManage")
+	}
+}
+
+func TestCanConnect_DeniesRevokedWildcardGrant(t *testing.T) {
+	now := time.Now().UTC()
+	tokens := stdTokens()
+	tokens[2].RevokedAt = &now // revoke alice
+	acls := map[string]machineACL{
+		"*": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canConnect(tokenUser1, "barn") {
+		t.Error("revoked token in the wildcard connect grant should not pass canConnect")
+	}
+}
+
+func TestCanConnect_DeniesExpiredWildcardGrant(t *testing.T) {
+	past := time.Now().Add(-time.Hour).UTC()
+	tokens := stdTokens()
+	tokens[2].ExpiresAt = &past // expire alice
+	acls := map[string]machineACL{
+		"*": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canConnect(tokenUser1, "barn") {
+		t.Error("expired token in the wildcard connect grant should not pass canConnect")
+	}
+}
+
+// ── canViewMachine composition under revocation/expiry ──────────────
+//
+// canViewMachine is isViewer(token) || canConnect(token, machineID).
+// Both branches call validEntry internally; the tests below prove the
+// composition denies revoked/expired tokens rather than relying on an
+// absent ACL to produce the false result. See Gap Matrix section B.
+
+func TestCanViewMachine_DeniesRevokedViewer(t *testing.T) {
+	now := time.Now().UTC()
+	tokens := stdTokens()
+	tokens[4].RevokedAt = &now // revoke the viewer
+	s := makeStore(tokens, nil)
+
+	// False because the isViewer bypass fails first (validEntry rejects
+	// the revoked token), then the canConnect fallthrough also denies:
+	// the viewer holds no connect grant and is revoked either way. It is
+	// not that there happens to be no ACL; the viewer bypass is gone.
+	if s.canViewMachine(tokenViewer, "any-machine") {
+		t.Error("revoked viewer should not be able to view any machine")
+	}
+}
+
+func TestCanViewMachine_DeniesExpiredViewer(t *testing.T) {
+	past := time.Now().Add(-time.Hour).UTC()
+	tokens := stdTokens()
+	tokens[4].ExpiresAt = &past // expire the viewer
+	s := makeStore(tokens, nil)
+
+	// Same reasoning as the revoked case: the isViewer bypass fails on the
+	// expiry check before the canConnect fallthrough is reached.
+	if s.canViewMachine(tokenViewer, "any-machine") {
+		t.Error("expired viewer should not be able to view any machine")
+	}
+}
+
+func TestCanViewMachine_DeniesRevokedConnectGrant(t *testing.T) {
+	now := time.Now().UTC()
+	tokens := stdTokens()
+	tokens[2].RevokedAt = &now // revoke alice
+	// Non-viewer token whose only path to view is the canConnect
+	// fallthrough. Revoking it must break the composition, not just the
+	// delegate: this exercises canViewMachine's second branch directly.
+	acls := map[string]machineACL{
+		"barn": {ConnectTokens: []connectGrant{{Token: tokenUser1}}},
+	}
+	s := makeStore(tokens, acls)
+
+	if s.canViewMachine(tokenUser1, "barn") {
+		t.Error("revoked token with a connect grant should not be able to view the machine")
+	}
+}
