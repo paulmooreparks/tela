@@ -4209,6 +4209,19 @@ func ResetForTesting() {
 // going through a YAML round-trip on disk.
 type Config = hubConfig
 
+// AuthConfig is an alias for the package's internal authConfig type.
+// Exported only so external test packages (internal/teststack callers)
+// can seed tokens into a hub.Config without a YAML round-trip. It carries
+// no behavior of its own; it is a compile-time visibility widening on the
+// same footing as the Config alias above.
+type AuthConfig = authConfig
+
+// TokenEntry is an alias for the package's internal tokenEntry type.
+// Exported for the same reason as AuthConfig: external test packages need
+// to construct seeded token identities to exercise the admin API over a
+// real hub. No behavior change.
+type TokenEntry = tokenEntry
+
 // LoadConfig reads and parses a hub YAML config file from disk. Returns
 // a *Config that can be passed to SetTestConfig and Run().
 func LoadConfig(path string) (*Config, error) {
