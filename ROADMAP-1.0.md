@@ -36,7 +36,7 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 
 ### Tests
 
-The harness exists and several packages carry real coverage, but the security-critical paths (auth store, admin API, wsbind transport, WG reconnect) still need their suites before 1.0 locks the access model and wire protocol.
+The harness exists and the security-critical paths (auth store, admin API, wsbind transport, WG reconnect) now carry real suites, and a CI coverage gate keeps them from silently eroding before 1.0 locks the access model and wire protocol.
 
 Already done:
 - [x] `internal/teststack`: the in-process hub + agent + client harness (`New(t)` returns a running triple with cleanup), with smoke tests for registration, client connect with listener bind, multi-machine, protocol version reporting, bridged sessions, and reset-between-runs. Both #6 acceptance boxes are now closed: `Stack.Close()` runs a goroutine-leak check (baseline captured in `NewWithConfig`, enforced in CI), and two other suites consume the harness over real HTTP (`internal/hub/admin_api_e2e_test.go` and `internal/portal/teststack_test.go`).
@@ -47,14 +47,16 @@ Already done:
 - [x] `internal/hub` session-token lifecycle and protocol-version tests
 - [x] `internal/portal`, `store/file`, `portalclient`, and `portalaggregate` tests, including the portal conformance harness
 
-Open issues:
-- [#7](https://github.com/paulmooreparks/tela/issues/7) — Auth store unit tests
-- [#8](https://github.com/paulmooreparks/tela/issues/8) — Admin API endpoint tests
-- [#9](https://github.com/paulmooreparks/tela/issues/9) — Ring buffer history tests
-- [#10](https://github.com/paulmooreparks/tela/issues/10) — Portal registration and sync-token flow tests
-- [#11](https://github.com/paulmooreparks/tela/issues/11) — WireGuard handshake-on-reconnect end-to-end test
-- [#12](https://github.com/paulmooreparks/tela/issues/12) — wsbind transport test (WS, UDP relay, direct UDP)
-- [#13](https://github.com/paulmooreparks/tela/issues/13) — Coverage gate (release criterion; tracks the others)
+The security-boundary test wave is complete:
+- [x] [#7](https://github.com/paulmooreparks/tela/issues/7): Auth store unit tests
+- [x] [#8](https://github.com/paulmooreparks/tela/issues/8): Admin API endpoint tests
+- [x] [#9](https://github.com/paulmooreparks/tela/issues/9): Ring buffer history tests
+- [x] [#10](https://github.com/paulmooreparks/tela/issues/10): Portal registration and sync-token flow tests
+- [x] [#11](https://github.com/paulmooreparks/tela/issues/11): WireGuard handshake-on-reconnect end-to-end test
+- [x] [#12](https://github.com/paulmooreparks/tela/issues/12): wsbind transport test (WS, UDP relay, direct UDP)
+- [x] [#13](https://github.com/paulmooreparks/tela/issues/13): Coverage gate (release criterion; tracks the others)
+
+Coverage floors for the security-critical package set (`internal/hub`, `internal/wsbind`, `internal/certpin`, `internal/credstore`, `internal/client`) are enforced in CI via `tools/covcheck` against `tools/covcheck/floors.yaml`; the 1.0 milestone can point at `.github/workflows/ci.yml` going red on any regression below the recorded floor. `internal/client`'s floor is currently an anti-deletion backstop rather than a true erosion gate, because package-level dilution makes a higher number meaningless there; card tela-71 makes its security paths properly gateable and then ratchets the floor.
 
 ### Release engineering — **complete**
 
@@ -299,7 +301,7 @@ This is the order I would do things in if I were running the project, biased tow
 
 1. **CI and automated releases**: done. See "Release engineering" above.
 2. **Test harness for end-to-end scenarios**: done in substance (`internal/teststack`); leak-detection and adoption residuals ride the test wave.
-3. **Tests for the auth and access paths**: in flight. The security-boundary suites (#7, #8) lead the board's test wave; #9 through #13 follow.
+3. **Tests for the auth and access paths**: done. The security-boundary suites (#7, #8) and the rest of the test wave (#9 through #12) landed, and #13 wired the CI coverage gate (`tools/covcheck`) that keeps the security-critical packages from eroding.
 4. **Per-service access control**: done, including the fixed client-side guard.
 5. **Cert pinning**: done, scoped per DESIGN-cert-pinning-portal.md.
 6. **Relay gateway design and v1 wire format alignment**: done; shipped in the 0.6 cycle with the TTL field in the frozen frame.
