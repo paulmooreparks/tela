@@ -116,9 +116,9 @@ Tracked as a single bundled issue: [#25](https://github.com/paulmooreparks/tela/
 
 ## Scope decisions for 1.0
 
-These are the four ambitions a reader can reasonably project onto Tela that the project has not committed to in writing. Each one needs a written decision before 1.0, because the difference between "deferred" and "non-goal" is the difference between a healthy roadmap and a permanent expectations gap. The premise of this document is that whatever ships at 1.0 becomes a permanent maintenance burden; the same applies to whatever Tela promises *not* to be.
+These are the ambitions a reader can reasonably project onto Tela. Each one needed a written decision before 1.0, because the difference between "deferred" and "non-goal" is the difference between a healthy roadmap and a permanent expectations gap. The premise of this document is that whatever ships at 1.0 becomes a permanent maintenance burden; the same applies to whatever Tela promises *not* to be.
 
-For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 path looks like if it is deferred.**
+**As of 2026-07-11, every entry below carries its decision.** For each item: what it is, the decision and its reasoning, and what the post-1.0 path looks like where it is deferred.
 
 ### Routed mesh networking
 - [x] Decision: **non-goal for 1.0.** Post-1.0 only if real-world utility is demonstrated against the existing transport upgrade cascade.
@@ -128,41 +128,37 @@ For each item: **what it is, why it is or is not in 1.0, and what the post-1.0 p
 - If post-1.0 work on mesh is ever picked up: sketch what it would take (routing table, multi-hop key exchange, NAT traversal beyond the current STUN cascade) and what `protocolVersion` would carry it.
 
 ### Hub federation
-
-Tracked: [#49](https://github.com/paulmooreparks/tela/issues/49) — decision pending (deferred to 1.x, or non-goal forever).
+- [x] Decision (2026-07-11): **deferred to 1.x.** Tracked as [#49](https://github.com/paulmooreparks/tela/issues/49), closed by this writeup.
 - Today, identity is hub-scoped. A user with a token on hub A has no relationship to hub B unless they hold a separate token there. The portal layer (Awan Saya) papers over this for end users but does not fix it at the protocol level.
-- If deferred: define what federation means at the protocol level (cross-hub trust, identity assertion format, revocation propagation) and what it would do to the access model.
-- If non-goal: document that federation is the portal's job, not the hub's, and that operators who need it should run a portal.
+- What deferral means: through the 1.x line, the portal contract ([DESIGN-portal.md](DESIGN-portal.md)) is the one place cross-hub identity is reconciled, and operators who need cross-hub identity run a portal. Federation stays on the table as a protocol-level feature for a future cycle, not a rejected ambition.
+- The definition work owed when federation is picked up: the cross-hub trust model, the identity assertion format, revocation propagation between hubs, and what all three do to the access model. None of that lands before the access model freezes at 1.0, which is exactly why it waits: federation designed under freeze pressure would lock in the wrong shapes.
 
 ### Single sign-on (SSO/OIDC/SAML)
-
-Tracked: [#50](https://github.com/paulmooreparks/tela/issues/50) — decision pending (deferred to 1.x, or non-goal forever).
+- [x] Decision (2026-07-11): **the portal's job, permanently.** The hub will only ever speak its own token format. Tracked as [#50](https://github.com/paulmooreparks/tela/issues/50), closed by this writeup.
 - The hub today uses bearer tokens issued by an admin. There is no integration with external identity providers (OpenID Connect, Security Assertion Markup Language, Lightweight Directory Access Protocol). The team-cloud and fleet tiers in the introduction lean on this; a real organization will not provision users by hand.
-- If deferred: pick one identity protocol to support first (OIDC is the obvious candidate), and document the contract (which claims map to which roles, how revocation works, how the hub validates tokens).
-- If non-goal: document that SSO is the portal's job and the hub will only ever speak its own token format, and explain why.
+- Why the hub never grows an identity-provider dependency: the hub is the security boundary of the system, and its trust model has to stay small enough to audit end to end. Every IdP integration imports someone else's token semantics, claim mapping, clock behavior, and revocation latency into that boundary. The portal is where organizational identity already lives (accounts, orgs, teams, memberships), so protocol-wise it is the natural place for OIDC to land when demand materializes: the portal authenticates the human against the IdP and provisions hub tokens through the admin API, which is a surface the hub already exposes and already audits.
+- The security model document (#42) owes a paragraph setting this expectation for fleet-tier evaluators: hub-native OIDC is not coming, and the supported pattern is IdP at the portal, tokens at the hub.
 
 ### Kernel TUN mode (exit node, full IP routing)
-
-Tracked: [#51](https://github.com/paulmooreparks/tela/issues/51) — decision leaning "deferred post-1.0 with a sketched plan"; formal writeup still owed.
+- [x] Decision (2026-07-11): **deferred post-1.0, with the two-mode plan below as the published path.** TCP-only userspace operation is an intentional 1.0 tradeoff, not an oversight: it is the property that buys zero-admin, zero-driver installation on both ends. Tracked as [#51](https://github.com/paulmooreparks/tela/issues/51), closed by this writeup.
 - Tela currently runs WireGuard entirely in userspace via gVisor netstack. This is the property that eliminates the need for admin rights, kernel drivers, and TUN devices. It also limits Tela to TCP-only tunneling with no OS-level network interface.
 - An optional kernel TUN mode would use wireguard-go's `tun.CreateTUN()` instead of `netstack.CreateNetTUN()`. The wireguard-go library already ships both constructors. The result: a real network interface, full IP routing (UDP, ICMP, multicast), exit-node support (route all system traffic through a remote machine), and kernel-speed packet processing. The cost: one-time admin/root elevation to create the TUN device.
 - **The two-mode model.** Userspace mode (default, no admin, TCP only) and kernel mode (opt-in, elevation required, full IP). Same hub, same agent protocol, same access model, same management tools. A fleet could mix both modes. A user could run userspace on a locked-down corporate laptop and kernel mode on a home machine.
 - **Why this matters.** The combination of both modes covers two populations that no single tool covers today: users who cannot install Tailscale on their corporate laptop (userspace mode), and users who want Tailscale's capabilities but self-hosted with their own hub and management UI (kernel mode).
 - **Implementation scope.** A `-tun` flag on `tela` and `telad` that switches the constructor. The real work is platform-specific route table management, DNS interception for exit-node mode, elevation prompts, and graceful TUN interface cleanup on exit.
 - **Android client.** An Android client would likely use kernel mode by default (Android's VpnService API provides a TUN interface without root). This is a natural extension of the same two-mode model.
-- If deferred past 1.x: document explicitly that Tela is TCP-only by design and that the userspace tradeoff is intentional, with a pointer to this roadmap item for the kernel-mode plan.
+- User-facing docs state the tradeoff plainly: Tela is TCP-only by design in userspace mode, and this roadmap item is the pointer for the kernel-mode plan.
 
 ### Multi-tenant hub
-
-Tracked: [#52](https://github.com/paulmooreparks/tela/issues/52) — decision pending (deferred to 1.x, or non-goal forever).
+- [x] Decision (2026-07-11): **deferred to 1.x.** Tracked as [#52](https://github.com/paulmooreparks/tela/issues/52), closed by this writeup.
 - Today the answer to "I have multiple teams" is "run multiple hubs." This is fine at small scale and starts to bite at the fleet tier. A multi-tenant hub would let one process serve multiple isolated organizations with separate identity, ACL, and history surfaces.
-- If deferred: define what isolation means (config, storage, audit log, admin API) and how operators would migrate from "one hub per team" to "tenants on a shared hub."
-- If non-goal: document that the project's recommended scaling pattern is hub-per-tenant, and that the portal layer is what stitches them together for end users.
+- Through 1.x, the recommended scaling pattern stays hub-per-tenant with the portal layer stitching hubs together for end users. Process-boundary isolation is also the stronger isolation story: a tenant cannot leak into another tenant's config, audit log, or session table when they do not share a process.
+- The definition work owed when multi-tenancy is picked up: what isolation means for config, storage, the audit log, and the admin API, plus the migration path from "one hub per team" to "tenants on a shared hub." The audit-log retention work (#25) and any storage changes should keep this in peripheral vision so 1.x multi-tenancy does not require unwinding them.
 
 ### Portal architecture: one protocol, many hosts
-
-Tracked: [#53](https://github.com/paulmooreparks/tela/issues/53) (priority:high) — decision pending; first deliverable if pursued is the portal protocol spec ([#47](https://github.com/paulmooreparks/tela/issues/47)).
-- **The question.** Today the portal exists as one thing: Awan Saya, a Node.js + PostgreSQL web app. There is no portal protocol spec, no Go portal package, and no way for TelaVisor to "be" a portal for personal use. A natural-feeling user request is "let TelaVisor host the portal so I have one-stop shopping that scales from solo to enterprise without two implementations." The naive answer (embed Awan Saya in TelaVisor) is wrong. The right answer requires extracting a portal protocol and a portal service from Awan Saya first.
+- [x] Decision (2026-07-11): **ratified as built. TelaVisor is the local portal.** The extraction ran the plan below to completion: the protocol spec is [DESIGN-portal.md](DESIGN-portal.md), the `internal/portal` package with the pluggable file store shipped, `telaportal` exists as the fourth binary, and TelaVisor gained Portal mode. Tracked as [#53](https://github.com/paulmooreparks/tela/issues/53), closed by this writeup; the contract spec issue ([#47](https://github.com/paulmooreparks/tela/issues/47)) reduces to publishing DESIGN-portal.md in the book.
+- Residuals tracked separately, not blockers for this decision: the Awan Saya device-code endpoints and approval page, the Awan Saya identity-amendment migration, and the `store/postgres` adapter for `internal/portal`.
+- **The question, as originally posed.** The portal existed as one thing: Awan Saya, a Node.js + PostgreSQL web app. There was no portal protocol spec, no Go portal package, and no way for TelaVisor to "be" a portal for personal use. A natural-feeling user request is "let TelaVisor host the portal so I have one-stop shopping that scales from solo to enterprise without two implementations." The naive answer (embed Awan Saya in TelaVisor) is wrong. The right answer requires extracting a portal protocol and a portal service from Awan Saya first.
 - **The shape.** Three layers stacked, currently bundled in Awan Saya:
   1. **Directory protocol.** `/.well-known/tela`, `/api/hubs`, the sync-token registration flow. This is the portal contract -- a small wire format that any portal must speak.
   2. **Identity store.** Accounts, organizations, teams, hub memberships, permissions. Today this is Postgres-backed in Awan Saya. A single-user portal does not need any of this beyond "the user."
@@ -181,8 +177,14 @@ Tracked: [#53](https://github.com/paulmooreparks/tela/issues/53) (priority:high)
   - **Clients / Infrastructure / Fleet**: leans into the fabric framing but "Fleet" is overloaded ("many agents" vs "many hubs") and probably worse.
   Lean toward Clients / Operations / Directory unless a better label set turns up during the actual work.
 - **Why this is the right cut, in one paragraph.** Tela's architecture is "many small things speaking small wire protocols." The hub does not bundle the agent; the agent does not bundle the client. Adding a portal that *actually* bundles the directory, the multi-org store, the web frontend, and the desktop frontend into one process would be the first time the project broke its own composition rule. Extracting the portal service the same way -- small Go package, swappable storage backend, multiple frontends -- keeps the rule and gets the "TelaVisor is one-stop shopping" outcome at the same time, *for free*, because the desktop frontend is just one of the things that can talk to the portal API. The personal-use case where the portal service runs inside TelaVisor is then a deployment topology, not a fork in the codebase.
-- **What this depends on.** This decision interacts with **Hub federation** and **Multi-tenant hub** above. If federation is non-goal, the portal becomes the only place cross-hub identity is reconciled, which raises the stakes for the protocol spec. If multi-tenant hub is deferred, the portal-stitching-many-hubs pattern remains the recommended scaling story for at least 1.x.
-- **The first concrete step when we come back.** Write the portal protocol spec doc. Not code. The spec is what prevents the two-implementation drift. Once it exists, the extraction work is mechanical.
+- **What this depends on.** This decision interacts with **Hub federation** and **Multi-tenant hub** above. With federation deferred to 1.x, the portal is the only place cross-hub identity is reconciled through the 1.x line, which is why the protocol spec carries the weight it does. With multi-tenant hub also deferred, the portal-stitching-many-hubs pattern is the recommended scaling story for at least 1.x.
+- **How it actually went.** The spec was written first (DESIGN-portal.md), exactly as planned, and the extraction followed: `internal/portal` with the file store, the conformance harness, `telaportal`, and TelaVisor Portal mode. The `telahubd portal serve` host and the `store/postgres` adapter remain unbuilt options within the same architecture. The mode-rename question resolved itself: Portal shipped as a third mode alongside Clients and Infrastructure, and no rename proved necessary.
+
+### Local names (deterministic loopback addresses, `.tela` DNS)
+- [x] Decision (2026-07-11): **deferred to 1.x.** Previously untracked in this roadmap; recorded here so the 1.0 scope statement is complete.
+- The design ([DESIGN-local-names.md](DESIGN-local-names.md)) gives each connected machine a deterministic loopback address in 127.88.0.0/16 (Layer 1) and a stable name via an embedded DNS resolver (Layer 2), so users reach services at names and standard ports instead of `localhost:NNNNN`.
+- Layer 1 was implemented and then reverted in the 0.10 cycle after Windows loopback shadowing broke local services ([DESIGN-service-routing.md](DESIGN-service-routing.md) is the post-mortem). Re-landing a reverted feature late in the 1.0 cycle is risk without a forcing function, and nothing in the frozen 1.0 surfaces depends on it.
+- Port-number ergonomics remain the 1.0 behavior. The design doc is retained as the 1.x plan; its open questions (name suffix, collision policy, coexistence with port bindings) get answered when the work is picked up, and its stale status markers are being corrected separately.
 
 ---
 
@@ -203,8 +205,7 @@ What it explicitly does not include:
 Remaining work tracked against #26 before it closes: a book chapter teaching the gateway family with the relay gateway as a shipped instance. The two implementation gaps flagged in the design-doc critical review (self-bridge detection at config load, WS ping/pong on the bridge leg) have landed.
 
 ### In-browser fallback
-
-Tracked: [#28](https://github.com/paulmooreparks/tela/issues/28) (priority:low) — decide ship-or-remove. Suggested default: document removal.
+- [x] Decision (2026-07-11): **removed.** The in-browser RDP/SSH fallback client described in early DESIGN.md drafts was never built and is struck from the design; the DESIGN.md sections that described it now carry removal notes. The tela client is already zero-admin and zero-install, which was the itch the fallback was meant to scratch. Tracked as [#28](https://github.com/paulmooreparks/tela/issues/28), closed by this writeup.
 
 ### Structured logging
 
@@ -254,7 +255,7 @@ Tracked: [#38](https://github.com/paulmooreparks/tela/issues/38) — help text c
 
 ### Per-service post-connect hooks
 
-Tracked: [#39](https://github.com/paulmooreparks/tela/issues/39) (priority:low) — decision item, not a commitment. Captured here so the schema design can reserve the `hooks:` namespace under each service in the profile YAML even if the feature does not ship for 1.0.
+- [x] Decision (2026-07-11): **not in 1.0.** Wrapper scripting around `tela connect` is the documented pattern, and the `hooks:` namespace under each service in the profile YAML is reserved now (see CONFIGURATION.md) so the feature can land in a 1.x cycle without a schema migration. If it ever ships, all three guardrails below land in the same commit. Tracked as [#39](https://github.com/paulmooreparks/tela/issues/39), closed by this writeup. The analysis below is retained as the design record.
 - **The idea.** Each service entry in a connection profile gets an optional `hooks:` list. Each hook specifies a `when` (`connected` / `disconnected` / `error`), a `run` mode (`once-per-session` / `once-per-process` / `on-every-connect`), an optional `detach: true` for long-running processes, an optional `timeout`, and a `command:` array. When the listener for the service comes up (or goes down, or errors), tela runs the configured commands. Use cases: auto-launch a terminal/RDP/database client against the new local listener, run a health check against the tunneled service to confirm end-to-end reachability, send a desktop notification, kick off provisioning scripts.
 - **Why it might be worth doing.** The thing every user does *after* a successful connection is a manual ritual: open a terminal and run `ssh localhost -p 10022`, fire up `mstsc /v:localhost:13389`, point a database GUI at `localhost:15432`. Profiles already capture the connection shape but stop at "the listener is up." A post-connect hook closes the loop. The architectural fit is clean: profiles already drive `tela connect`, the reconnect loop already knows when a session transitions to "connected", and the schema change is one new field on the existing service block.
 - **Why it might not be worth doing.** Everything in the previous paragraph can be solved by scripting outside tela today: write a wrapper shell script, run `tela connect -profile ... &`, wait for the listener (poll, or sleep), then run your post-connect commands. The feature buys ergonomics, not capability. The cost is non-trivial because executing arbitrary user-supplied commands is a category of feature with sharp edges (see below).
@@ -317,7 +318,7 @@ This is the order I would do things in if I were running the project, biased tow
 9. **Security model document and troubleshooting guide** — the two most important user-facing docs you don't have yet
 10. **Relay gateway implementation** — once the wire format and design are locked in step 6, the implementation work (hub outbound mode, directory schema, audit log entries, documentation chapter) can run in parallel with the polish steps
 11. **Then start polishing** — mobile UX, installers, package managers, structured logging, metrics, rate limiting, graceful shutdown, agent identity
-12. **Make and publish the scope decisions** — routed mesh, hub federation, SSO/OIDC, multi-tenant hub. Deferred or rejected, but written down. This is the step that converts ambient ambiguity into a permanent commitment, and it has to happen before the tag, not after, or the decisions get made by accident in the first issue thread that asks for one of them.
+12. **Make and publish the scope decisions**: done 2026-07-11. Routed mesh, hub federation, SSO/OIDC, kernel TUN, multi-tenant hub, portal architecture, in-browser fallback, post-connect hooks, and local names all carry written decisions in the scope-decisions section above. This was the step that converts ambient ambiguity into a permanent commitment, and it landed before the tag.
 
 ---
 
