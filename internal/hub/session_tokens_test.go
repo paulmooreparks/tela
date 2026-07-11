@@ -53,27 +53,24 @@ func TestTokenEntry_NilIsNotValid(t *testing.T) {
 	}
 }
 
-// ── newAuthStore migration ──────────────────────────────────────────
+// ── newAuthStore: pre-0.16 entries keep IssuedAt nil ────────────────
 
-// TestNewAuthStore_DefaultsIssuedAt confirms the migration path: a
-// pre-0.16 token entry on disk that lacks IssuedAt has it defaulted
-// to now() in-memory. The mutation is on the cfg.Tokens entry so the
-// next config save persists the value automatically.
-func TestNewAuthStore_DefaultsIssuedAt(t *testing.T) {
+// TestNewAuthStore_LeavesIssuedAtNilForPre016 confirms that an entry
+// loaded from a pre-0.16 config (no IssuedAt on disk) keeps IssuedAt
+// nil in memory. Synthesizing a value at load time would be misleading
+// (every pre-existing token would appear to have been issued at the
+// moment the new binary started up). The truthful display is "unknown
+// / pre-0.16," which the CLI and TelaVisor both render as blank.
+func TestNewAuthStore_LeavesIssuedAtNilForPre016(t *testing.T) {
 	tokens := []tokenEntry{
 		{ID: "alice", Token: tokenUser1}, // no IssuedAt -- pre-0.16 shape
 	}
 	cfg := &authConfig{Tokens: tokens}
-	before := time.Now().UTC()
 	_ = newAuthStore(cfg)
-	after := time.Now().UTC()
 
-	if cfg.Tokens[0].IssuedAt == nil {
-		t.Fatal("newAuthStore should default IssuedAt for entries that lack it")
-	}
-	got := *cfg.Tokens[0].IssuedAt
-	if got.Before(before) || got.After(after.Add(time.Second)) {
-		t.Errorf("IssuedAt = %v, want between %v and %v", got, before, after)
+	if cfg.Tokens[0].IssuedAt != nil {
+		t.Errorf("newAuthStore synthesized IssuedAt = %v for a pre-0.16 entry; want nil",
+			*cfg.Tokens[0].IssuedAt)
 	}
 }
 

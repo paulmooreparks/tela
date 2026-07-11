@@ -21,7 +21,7 @@ A token is a credential. It is a 64-character hex string (32 random bytes) that 
 - **ID**: A human-readable name (e.g., "alice", "paul-laptop", "barn-agent"). This is what you see in the UI and CLI. It has no security function.
 - **Token value**: The secret. Stored in the hub's config file. Never shown in full after creation (the API returns only an 8-character preview).
 - **Role**: One of four values (see below).
-- **IssuedAt**: Timestamp the token was created. Defaulted to "now" on first load for any pre-0.16 entry that lacks it, then persisted.
+- **IssuedAt**: Timestamp the token was created. Optional. Pre-0.16 entries on disk lack this field and keep it absent (a synthesized "loaded today" timestamp would be misleading); rotating such an entry populates IssuedAt with the rotation time, which is genuinely accurate.
 - **ExpiresAt** (optional): Timestamp after which the token stops authenticating. Absent means the token never expires on its own.
 - **RevokedAt** (optional): Timestamp the token was revoked. Set by `tela admin tokens revoke`; cleared by a subsequent rotate. The entry stays in config so the audit trail is preserved.
 

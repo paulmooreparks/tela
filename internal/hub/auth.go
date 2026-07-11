@@ -28,10 +28,14 @@ type authConfig struct {
 // #24). All three are optional; the absence of ExpiresAt means the
 // token never expires, and the absence of RevokedAt means the token
 // is still in force. Pre-0.16 tokenEntry rows on disk have none of
-// these fields; the loader defaults IssuedAt to now on first parse so
-// downstream code can rely on the field being non-nil after newAuthStore
-// returns. The values use *time.Time (pointer) rather than time.Time so
-// the YAML omitempty tag drops absent fields cleanly.
+// these fields and stay that way: the loader does not synthesize an
+// IssuedAt for them, because a fabricated timestamp (the moment the
+// new binary started up) is misleading. New tokens (created via
+// add-token or pairing) get IssuedAt at creation time; rotating a
+// pre-0.16 token populates IssuedAt with the rotation time, which is
+// genuinely correct (the credential really was issued then). The
+// values use *time.Time (pointer) rather than time.Time so the YAML
+// omitempty tag drops absent fields cleanly.
 type tokenEntry struct {
 	ID        string     `yaml:"id"`                  // human-friendly label
 	Token     string     `yaml:"token"`               // secret hex value
@@ -121,11 +125,6 @@ type authStore struct {
 
 // newAuthStore builds a runtime authStore from an authConfig.
 // Returns a disabled (open) store when cfg is nil or has no tokens.
-//
-// Token entries that lack an IssuedAt timestamp (pre-0.16 configs)
-// have IssuedAt defaulted to now in-memory. The mutation is on the
-// tokenEntry pointed at by cfg.Tokens, so the next config save persists
-// the value automatically. No migration code path is required.
 func newAuthStore(cfg *authConfig) *authStore {
 	s := &authStore{
 		byToken:  make(map[string]*tokenEntry),
@@ -135,13 +134,8 @@ func newAuthStore(cfg *authConfig) *authStore {
 		return s // disabled → open hub
 	}
 	s.enabled = true
-	now := time.Now().UTC()
 	for i := range cfg.Tokens {
 		e := &cfg.Tokens[i]
-		if e.IssuedAt == nil {
-			t := now
-			e.IssuedAt = &t
-		}
 		if e.Token != "" {
 			s.byToken[e.Token] = e
 		}
@@ -457,13 +451,8 @@ func (s *authStore) reload(cfg *authConfig) {
 		return
 	}
 	s.enabled = true
-	now := time.Now().UTC()
 	for i := range cfg.Tokens {
 		e := &cfg.Tokens[i]
-		if e.IssuedAt == nil {
-			t := now
-			e.IssuedAt = &t
-		}
 		if e.Token != "" {
 			s.byToken[e.Token] = e
 		}
