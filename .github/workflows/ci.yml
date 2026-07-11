@@ -11,6 +11,9 @@
 #   - All tests pass (go test ./...)
 #   - go.mod and go.sum are tidy (no missing or extraneous deps)
 #   - The code is gofmt-clean
+#   - Security-critical packages (internal/hub, internal/wsbind,
+#     internal/certpin, internal/credstore, internal/client) hold their
+#     coverage floor (tools/covcheck against tools/covcheck/floors.yaml)
 #
 # When this should be expanded:
 #   - When the test suite gets large enough that the matrix needs
@@ -74,8 +77,11 @@ jobs:
       - name: Vet all packages
         run: go vet ./...
 
-      - name: Run tests
-        run: go test -race -count=1 ./...
+      - name: Run tests with coverage
+        run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Enforce coverage floors for security-critical packages
+        run: go run ./tools/covcheck -profile=coverage.out -floors=tools/covcheck/floors.yaml
 
   build-cross-platform:
     name: Cross-compile sanity check

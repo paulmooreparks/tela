@@ -1,0 +1,43 @@
+# Coverage floors for Tela's security-critical packages (Andoneer tela-19,
+# GitHub #13). Keyed by full Go import path. covcheck fails the build when a
+# package's statement coverage (covered_stmts / total_stmts, summed from the
+# go test coverage profile) drops below its floor.
+#
+# Ratchet policy: floors only go UP, never down, and only in the same PR that
+# raises the package's actual measured coverage. Do not lower a floor to make a
+# regression pass. If coverage legitimately drops (for example, dead-code
+# deletion shrinks the denominator so a stable number looks like a drop), the
+# PR that lowers a floor must show the before/after go test -cover numbers that
+# justify the new floor.
+#
+# Floor formula: floor_percent = max(1, floor(measured_percent) - 2).
+# Baseline measured at origin/main 9647179 on 2026-07-11 with:
+#   go test -covermode=count -coverprofile=coverage.out \
+#     ./internal/hub/... ./internal/wsbind/... ./internal/certpin/... \
+#     ./internal/credstore/... ./internal/client/...
+# CI re-measures with -covermode=atomic under -race; the per-package
+# percentages are identical to the count-mode local run.
+#
+#   internal/hub        measured 27.4%   -> floor 25
+#   internal/wsbind     measured 77.9%   -> floor 75
+#   internal/certpin    measured 100.0%  -> floor 98
+#   internal/credstore  measured 49.3%   -> floor 47
+#   internal/client     measured 1.4%    -> floor 1 (clamp; see note below)
+#
+# internal/client's floor of 1 is an ANTI-DELETION BACKSTOP, not an erosion
+# gate. Package-level coverage reads 1.4% because six large untested concerns
+# (mount, fileshare, dns, loopback, channel, update) share the package with the
+# well-tested pin-aware dial and capability-guard paths, so the unclamped
+# formula would yield 0: a floor that can never fail, for exactly the package
+# whose #27 history motivates this gate. Clamped to 1, the floor fails the
+# build if the client's test files are deleted or skipped (measured drops to
+# 0.0%); ordinary erosion within the tested paths is admittedly invisible at
+# this granularity. Card tela-71 (Gateable Client Security-Path Coverage) makes
+# the client's security paths properly gateable and then ratchets this floor.
+# This is a documented interim posture, not an accepted end state.
+packages:
+  github.com/paulmooreparks/tela/internal/hub: 25
+  github.com/paulmooreparks/tela/internal/wsbind: 75
+  github.com/paulmooreparks/tela/internal/certpin: 98
+  github.com/paulmooreparks/tela/internal/credstore: 47
+  github.com/paulmooreparks/tela/internal/client: 1
