@@ -3099,6 +3099,14 @@ func registerWithPortal(portalURL, adminToken, regHubName, regHubURL, viewerToke
 		"name": regHubName,
 		"url":  regHubURL,
 	}
+	// DESIGN-portal.md section 3.2 requires hubId in context-1
+	// (hub-bootstrap) registration bodies. The hub already emits its
+	// stable hubId on /.well-known/tela and /api/status; include it here
+	// too when known so the portal does not have to fall back to a
+	// well-known lookup on the registering hub.
+	if hubID != "" {
+		payload["hubId"] = hubID
+	}
 	if viewerToken != "" {
 		payload["viewerToken"] = viewerToken
 	}
