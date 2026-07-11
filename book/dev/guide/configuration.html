@@ -404,6 +404,7 @@ dns:
 <tr><td><code>services[].remote</code></td><td>*</td><td>Remote port number to forward</td></tr>
 <tr><td><code>services[].local</code></td><td>No</td><td>Local port to bind (defaults to <code>remote</code>)</td></tr>
 <tr><td><code>services[].name</code></td><td>*</td><td>Service name to resolve via the hub API</td></tr>
+<tr><td><code>services[].hooks</code></td><td>Reserved</td><td>Reserved for a future post-connect hooks feature (decision 2026-07-11, issue #39); do not use this key for any other purpose. The design record, including the mandatory trust and execution guardrails, lives in ROADMAP-1.0.md under "Per-service post-connect hooks."</td></tr>
 </tbody></table>
 </div>
 <p>* Each service entry needs either <code>remote</code> or <code>name</code>, not both.</p>
