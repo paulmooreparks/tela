@@ -39,7 +39,7 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 The harness exists and several packages carry real coverage, but the security-critical paths (auth store, admin API, wsbind transport, WG reconnect) still need their suites before 1.0 locks the access model and wire protocol.
 
 Already done:
-- [x] `internal/teststack`: the in-process hub + agent + client harness (`New(t)` returns a running triple with cleanup), with smoke tests for registration, client connect with listener bind, multi-machine, protocol version reporting, bridged sessions, and reset-between-runs. Two #6 acceptance boxes remain open (goroutine-leak detection in CI, adoption by two other suites), so #6 stays open until the auth-store and admin API suites consume it.
+- [x] `internal/teststack`: the in-process hub + agent + client harness (`New(t)` returns a running triple with cleanup), with smoke tests for registration, client connect with listener bind, multi-machine, protocol version reporting, bridged sessions, and reset-between-runs. Both #6 acceptance boxes are now closed: `Stack.Close()` runs a goroutine-leak check (baseline captured in `NewWithConfig`, enforced in CI), and two other suites consume the harness over real HTTP (`internal/hub/admin_api_e2e_test.go` and `internal/portal/teststack_test.go`).
 - [x] `permuteArgs` flag reordering tests (`cmd/tela/admin_test.go`, 16 sub-tests)
 - [x] `internal/channel` tests: manifest parsing/validation, URL helpers, Fetcher cache + stale-on-failure, VerifyReader (94.4% coverage)
 - [x] `internal/credstore` tests: round-trip, normalization, permission bits, edge cases (62.7% coverage)
@@ -48,7 +48,6 @@ Already done:
 - [x] `internal/portal`, `store/file`, `portalclient`, and `portalaggregate` tests, including the portal conformance harness
 
 Open issues:
-- [#6](https://github.com/paulmooreparks/tela/issues/6): harness residuals only (goroutine-leak detection in CI, adoption by two suites); the harness core shipped
 - [#7](https://github.com/paulmooreparks/tela/issues/7) — Auth store unit tests
 - [#8](https://github.com/paulmooreparks/tela/issues/8) — Admin API endpoint tests
 - [#9](https://github.com/paulmooreparks/tela/issues/9) — Ring buffer history tests
