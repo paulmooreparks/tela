@@ -367,6 +367,146 @@ func (s *Stack) Connect(machineID string, localPort, remotePort uint16) {
 	}()
 }
 
+// ConnectTunnelOnly opens an in-process tela client session against
+// machineID with no port mappings: no local listener is bound and no
+// tunnel forwarding is attempted, so the client's netstack never issues
+// an inner TCP dial. See the reconnect test's design-decision note for
+// why: a forwarded flow hangs forever in this single-process harness
+// (the same limitation TestStackClientConnectsAndBindsListener
+// documents). ConnectTunnelOnly exercises session establishment (WS
+// connect, WireGuard keygen, hub pairing, wg-pubkey/ready exchange,
+// dev.Up()) and reconnection without touching that broken inner-dial
+// path. The session lives until the stack closes.
+func (s *Stack) ConnectTunnelOnly(machineID string) {
+	s.t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	prevCancel := s.cancel
+	s.cancel = func() {
+		cancel()
+		if prevCancel != nil {
+			prevCancel()
+		}
+	}
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		err := client.Connect(ctx, client.ConnectOptions{
+			HubURL:    s.hubURL,
+			MachineID: machineID,
+		})
+		if err != nil && ctx.Err() == nil {
+			s.t.Errorf("teststack: client.Connect (tunnel-only): %v", err)
+		}
+	}()
+}
+
+// WaitSessionCount polls /api/status until machineID's sessionCount
+// equals want, or fails the test after timeout. It is the synchronization
+// point for hub-observed session teardown (want=0) and re-pairing
+// (want=1) around a reconnect. No fixed sleeps; every wait is a bounded
+// poll against the hub's live status.
+func (s *Stack) WaitSessionCount(machineID string, want int, timeout time.Duration) {
+	s.t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	url := s.hubHTTP + "/api/status"
+	var last int = -1
+	for time.Now().Before(deadline) {
+		got, ok := s.sessionCount(url, machineID)
+		if ok {
+			last = got
+			if got == want {
+				return
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	s.t.Fatalf("teststack: sessionCount for %q did not reach %d within %s (last observed %d)",
+		machineID, want, timeout, last)
+}
+
+// sessionCount returns machineID's sessionCount from /api/status and
+// whether the machine was present in the response.
+func (s *Stack) sessionCount(url, machineID string) (int, bool) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return 0, false
+	}
+	var payload struct {
+		Machines []struct {
+			ID           string `json:"id"`
+			SessionCount int    `json:"sessionCount"`
+		} `json:"machines"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return 0, false
+	}
+	for _, m := range payload.Machines {
+		if m.ID == machineID {
+			return m.SessionCount, true
+		}
+	}
+	return 0, false
+}
+
+// WaitHistoryEventCount polls /api/history until at least want events of
+// type event are recorded for machineID, or fails the test after timeout.
+// Each successful hub-side pairSession call records exactly one
+// "client-connect" event, so this proves a NEW pairing happened, not just
+// that the client believes it reconnected.
+func (s *Stack) WaitHistoryEventCount(machineID, event string, want int, timeout time.Duration) {
+	s.t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	url := s.hubHTTP + "/api/history"
+	last := 0
+	for time.Now().Before(deadline) {
+		got := s.historyEventCount(url, machineID, event)
+		last = got
+		if got >= want {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	s.t.Fatalf("teststack: history events of type %q for %q did not reach %d within %s (last observed %d)",
+		event, machineID, want, timeout, last)
+}
+
+// historyEventCount returns how many events of type event are recorded
+// for machineID in /api/history.
+func (s *Stack) historyEventCount(url, machineID, event string) int {
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return 0
+	}
+	var payload struct {
+		Events []struct {
+			MachineID string `json:"machineId"`
+			Event     string `json:"event"`
+		} `json:"events"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range payload.Events {
+		if e.MachineID == machineID && e.Event == event {
+			n++
+		}
+	}
+	return n
+}
+
 // StartLocalEcho starts a TCP echo server bound to 127.0.0.1 on a
 // random port and returns the port it picked. Used by tests as the
 // "real" service the agent forwards to. The listener is closed when
@@ -463,17 +603,29 @@ func (s *Stack) Close() {
 }
 
 // SkipLeakCheck disables Close()'s goroutine-leak assertion for this Stack.
-// It is reserved for the single in-process configuration where a residual
+// It is reserved for the in-process configurations where a residual
 // goroutine is a known, documented harness limitation rather than a defect
-// in the code under test: the client-tunnel path (Connect) drives gvisor's
-// netstack and the client/agent WireGuard session loops, and in a single OS
-// process the inner gvisor TCP handshake never completes (the same
-// limitation TestStackClientConnectsAndBindsListener documents). That path
-// leaves a gvisor worker plus a hub-side handleConnect retry goroutine
-// (a 30s time.Sleep) that outlive Close()'s context cancellation and the
-// leak-check grace window. The production, separate-process path does not
-// hit this. Do not call SkipLeakCheck to paper over a real leak in new
-// harness consumers; the whole point of the check is to catch those.
+// in the code under test. Two such configurations are documented today:
+//
+//   - The client-tunnel path (Connect) drives gvisor's netstack and the
+//     client/agent WireGuard session loops, and in a single OS process the
+//     inner gvisor TCP handshake never completes (the same limitation
+//     TestStackClientConnectsAndBindsListener documents). That path leaves a
+//     gvisor worker plus a hub-side handleConnect retry goroutine (a 30s
+//     time.Sleep) that outlive Close()'s context cancellation and the
+//     leak-check grace window.
+//
+//   - The no-forwarding session path (ConnectTunnelOnly, used by
+//     TestStackHandshakeOnReconnect) never opens a forwarded flow, so it
+//     avoids the gvisor worker, but it still spawns the hub-side
+//     handleConnect agent-join timeout guard: an uncancellable 30s
+//     time.Sleep started on every client connect (hub.go:1499). One such
+//     guard per session established is still sleeping at teardown, past the
+//     leak-check grace window.
+//
+// The production, separate-process path does not hit either case. Do not
+// call SkipLeakCheck to paper over a real leak in new harness consumers;
+// the whole point of the check is to catch those.
 func (s *Stack) SkipLeakCheck() {
 	s.skipLeakCheck = true
 }

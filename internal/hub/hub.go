@@ -4257,3 +4257,56 @@ func SetTestConfig(cfg *Config) {
 func SetUDPPortForTesting(p int) {
 	udpPort.Store(int32(p))
 }
+
+// DisconnectClientSessionForTesting closes the hub-side WebSocket for the
+// active client session on machineID (the operator-assigned machine name,
+// e.g. "barn"), simulating a session severed by the hub: a dropped
+// connection, an operator kick, a mid-session hub restart, without
+// touching the agent's control channel or the client process. It sends a
+// graceful close frame (CloseGoingAway) before closing the socket,
+// mirroring the pattern already used in handleDisconnect's "agent" case.
+//
+// Closing sess.ClientWS makes the hub's own per-connection reader loop for
+// that socket error out and run handleDisconnect's "client" branch, which
+// removes the session from entry.Sessions (dropping sessionCount) and
+// notifies the agent side with session-end. gorilla/websocket documents
+// Close and WriteControl as safe to call concurrently with a blocked
+// ReadMessage, so calling this from a test goroutine while the reader loop
+// is parked in ReadMessage is race-safe by contract.
+//
+// Returns false if machineID is not registered or has no active session.
+// If more than one session is active, an arbitrary one is closed; the
+// teststack callers this exists for only ever drive one session per
+// machine.
+//
+// Test-only: exported for internal/teststack. Never called by production code.
+func DisconnectClientSessionForTesting(machineID string) bool {
+	machinesMu.RLock()
+	agentID := machinesByName[machineID]
+	machinesMu.RUnlock()
+	if agentID == "" {
+		return false
+	}
+	machinesMu.RLock()
+	entry := machines[agentID]
+	machinesMu.RUnlock()
+	if entry == nil {
+		return false
+	}
+
+	entry.mu.Lock()
+	var sess *clientSession
+	for _, s := range entry.Sessions {
+		sess = s
+		break
+	}
+	entry.mu.Unlock()
+	if sess == nil || sess.ClientWS == nil {
+		return false
+	}
+
+	sess.ClientWS.WriteMessage(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseGoingAway, "test-forced disconnect"))
+	sess.ClientWS.Close()
+	return true
+}
