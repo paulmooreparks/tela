@@ -4,7 +4,7 @@ This is the living document tracking what is required to ship Tela 1.0. It is no
 
 The premise: once we ship 1.0, we will maintain backward compatibility religiously. That means any cruft, any half-finished surface, any unversioned protocol field becomes a permanent maintenance burden. The goal of this document is to make sure that what gets locked in at 1.0 is what we actually want to live with.
 
-**Status as of 2026-04-17:** Roughly **0.6 — 0.7** of a 1.0 release. The hard architectural work is mostly done. The testable, shippable, signable, supportable infrastructure around it is mostly not done.
+**Status as of 2026-07-11:** Roughly **0.75 to 0.8** of a 1.0 release. Since the April snapshot: cert pinning shipped (scoped), structured session tokens shipped, the protocol froze (protocolVersion negotiation plus the v1 spec in DESIGN.md section 6), per-service access control landed and its client-side guard was fixed end to end, the portal architecture shipped (internal/portal, telaportal, TelaVisor Portal mode), the test harness exists, and every scope decision below carries a written ruling. The remaining mass is the test suites, code signing, audit retention, observability, the user-facing book chapters, and the launch surface.
 
 Granular work is tracked in GitHub Issues under [milestone `1.0`](https://github.com/paulmooreparks/tela/milestone/2). This document holds the narrative and design rationale; the milestone holds state. When a task ships, its issue closes; keep this doc for the "why" around each track, not the "what's left."
 
@@ -36,15 +36,19 @@ These are non-negotiable. A 1.0 without them would be embarrassing or actively u
 
 ### Tests
 
-Tela has solid architecture but almost no automated test coverage. The security-critical paths (auth store, admin API, wsbind transport, WG reconnect) need tests before 1.0 locks the access model and wire protocol.
+The harness exists and several packages carry real coverage, but the security-critical paths (auth store, admin API, wsbind transport, WG reconnect) still need their suites before 1.0 locks the access model and wire protocol.
 
 Already done:
+- [x] `internal/teststack`: the in-process hub + agent + client harness (`New(t)` returns a running triple with cleanup), with smoke tests for registration, client connect with listener bind, multi-machine, protocol version reporting, bridged sessions, and reset-between-runs. Two #6 acceptance boxes remain open (goroutine-leak detection in CI, adoption by two other suites), so #6 stays open until the auth-store and admin API suites consume it.
 - [x] `permuteArgs` flag reordering tests (`cmd/tela/admin_test.go`, 16 sub-tests)
 - [x] `internal/channel` tests: manifest parsing/validation, URL helpers, Fetcher cache + stale-on-failure, VerifyReader (94.4% coverage)
 - [x] `internal/credstore` tests: round-trip, normalization, permission bits, edge cases (62.7% coverage)
+- [x] `internal/certpin` tests (pin parse/normalize/verify, TOFU capture) and `internal/client` pinning + capability-probe tests
+- [x] `internal/hub` session-token lifecycle and protocol-version tests
+- [x] `internal/portal`, `store/file`, `portalclient`, and `portalaggregate` tests, including the portal conformance harness
 
 Open issues:
-- [#6](https://github.com/paulmooreparks/tela/issues/6) — Test harness: in-process hub + agent + client end-to-end
+- [#6](https://github.com/paulmooreparks/tela/issues/6): harness residuals only (goroutine-leak detection in CI, adoption by two suites); the harness core shipped
 - [#7](https://github.com/paulmooreparks/tela/issues/7) — Auth store unit tests
 - [#8](https://github.com/paulmooreparks/tela/issues/8) — Admin API endpoint tests
 - [#9](https://github.com/paulmooreparks/tela/issues/9) — Ring buffer history tests
@@ -75,20 +79,9 @@ Open issues:
 - [#16](https://github.com/paulmooreparks/tela/issues/16) — Document the signing process reproducibly
 - [#17](https://github.com/paulmooreparks/tela/issues/17) — CI integration for tag-push releases
 
-### Protocol freeze
+### Protocol freeze (complete)
 
-The wire protocol is currently unversioned and the Go package surface has not been deliberated. Once 1.0 ships, both get locked in for the entire 1.x line. Two forcing-function decisions have to land before protocol freeze, not after.
-
-**Channel multiplexing: decision made — single-channel in v1.** The mux experiment on `main` (commits efeafac → 14a731f) was reverted after dogfood issues. V1 ships single-channel; multiplexing is deferred to a hypothetical v2 if ever. Writeup tracked as an issue.
-
-**Public Go API surface: decision made — Option B, everything stays `internal/`.** The 1.x compat promise covers CLI flags, config YAML, wire protocol, REST API, and channel manifest schema. It does NOT cover Go `internal/` packages. Documentation writeup tracked as an issue.
-
-Open issues:
-- [#18](https://github.com/paulmooreparks/tela/issues/18) — Add `protocolVersion` field to register and connect control messages (forcing function, priority:high)
-- [#19](https://github.com/paulmooreparks/tela/issues/19) — Document v1 wire format as the frozen specification (forcing function, priority:high)
-- [#20](https://github.com/paulmooreparks/tela/issues/20) — Document backward-compatibility policy for 1.x
-- [#21](https://github.com/paulmooreparks/tela/issues/21) — Document channel multiplexing as non-goal for v1
-- [#22](https://github.com/paulmooreparks/tela/issues/22) — Document the "no public Go API at 1.0" decision
+The freeze landed in the 0.16 cycle. `register` and `connect` carry `protocolVersion: 1` with pre-0.16 binaries treated as v1 (#18); DESIGN.md section 6 is the frozen v1 wire specification with full message schemas and the relay frame referenced to DESIGN-relay-gateway.md section 2 (#19); section 6.6 is the 1.x backward-compatibility policy with the covered and not-covered surfaces spelled out (#20); section 6.2 records single-channel as the v1 shape with the mux experiment preserved as a deferred sketch and `session_id` reserved for a hypothetical v2 (#21); section 6.9 records the no-public-Go-API decision, Option B, everything stays `internal/` (#22). All five issues are closed. From here, wire changes are additive-only per 6.6 until a v2 bump.
 
 ### Cert pinning — **shipped (scoped) for 1.0**
 
@@ -100,11 +93,9 @@ What is deliberately **out of scope** for 1.0: `TelaVisor -> portal` pinning and
 
 Issue [#23](https://github.com/paulmooreparks/tela/issues/23) closes against this scope. Optional opt-in TelaVisor-side pinning for self-hosted portal deployments is reachable post-1.0 without protocol changes; see DESIGN-cert-pinning-portal.md §6.
 
-### Session tokens
+### Session tokens (shipped in the 0.16 cycle)
 
-Shared-secret tokens today carry no identity claim, no expiry, no scope, and can only be revoked by editing YAML and restarting. For 1.0: structured tokens (identity, role, iat, exp, scope), centralized revocation checked per request, rotation without config edits, and clean migration from the existing format.
-
-Tracked as a single bundled issue: [#24](https://github.com/paulmooreparks/tela/issues/24).
+Token entries now carry optional `issuedAt`, `expiresAt`, and `revokedAt` metadata; every auth check denies revoked or expired tokens per request; `POST /api/admin/tokens/{id}/revoke` revokes without deleting (audit trail preserved, last-owner 409 guard); rotation refreshes `issuedAt` and clears `revokedAt`, doubling as the unrevoke path; `tela admin tokens` gained `-expires`, `revoke`, and lifecycle columns; TelaVisor's Access tab surfaces the lifecycle with revoke and rotate-to-re-enable. Pre-0.16 entries migrate transparently and keep `issuedAt` blank rather than synthesized. Issue [#24](https://github.com/paulmooreparks/tela/issues/24) is closed. The remaining token ambitions from the original sketch (scope claims beyond role, signed token formats) are 1.x material under the additive rules, not 1.0 debt.
 
 ### Audit log retention
 
@@ -204,6 +195,10 @@ What it explicitly does not include:
 
 Remaining work tracked against #26 before it closes: a book chapter teaching the gateway family with the relay gateway as a shipped instance. The two implementation gaps flagged in the design-doc critical review (self-bridge detection at config load, WS ping/pong on the bridge leg) have landed.
 
+### telaproject.org launch site (in scope for 1.0, ruled 2026-07-11)
+
+The 1.0 launch ships with the telaproject.org landing site and the book's move under a `/book/` path, per [DESIGN-telaproject-site.md](DESIGN-telaproject-site.md). Previously untracked here; the operator ruled it into 1.0 scope. The site build, the canonical shared TDL stylesheet extraction, and the one-shot migration tied to the v1.0.0 cut are tracked on the project board; the design doc's open questions (canonical host, download detection, feed) get resolved at spec time.
+
 ### In-browser fallback
 - [x] Decision (2026-07-11): **removed.** The in-browser RDP/SSH fallback client described in early DESIGN.md drafts was never built and is struck from the design; the DESIGN.md sections that described it now carry removal notes. The tela client is already zero-admin and zero-install, which was the itch the fallback was meant to scratch. Tracked as [#28](https://github.com/paulmooreparks/tela/issues/28), closed by this writeup.
 
@@ -213,17 +208,13 @@ Tracked: [#29](https://github.com/paulmooreparks/tela/issues/29) — migrate fro
 
 ### Operational fixes
 
-- [#30](https://github.com/paulmooreparks/tela/issues/30) — Graceful HTTP shutdown (`server.Shutdown(ctx)` with drain timeout)
+- [x] [#30](https://github.com/paulmooreparks/tela/issues/30): Graceful HTTP shutdown shipped in the 0.12 cycle (`shutdownTimeout` config, drain logging, two-signal escalation); closed
 - [#31](https://github.com/paulmooreparks/tela/issues/31) — Rate limiting on the admin API (token bucket per identity per endpoint)
 - [#32](https://github.com/paulmooreparks/tela/issues/32) — Hot reload for non-auth config, or documented restart requirement
 
-### Per-service access control
+### Per-service access control (shipped, guard fixed)
 
-Tracked: [#27](https://github.com/paulmooreparks/tela/issues/27) (priority:high) — access-model schema-freeze forcing function.
-
-Today the `connect` permission is all-or-nothing at the machine level. If alice has `connect` on `barn`, she sees every port the agent exposes -- SSH, RDP, Jellyfin, a local admin panel, everything. There is no way to say "alice can reach Jellyfin but not SSH." The workaround (register the same physical machine under multiple names with different port sets) works but is ugly and fragile.
-
-This needs to be fixed before 1.0 because the access model is getting frozen. Adding service-scoped grants after 1.0 is an API and config schema change that has to be backward compatible -- much harder than doing it now. The model adds an optional `services:` filter to `connect` grants; no filter means all services (backward compatible), a filter restricts the client to the named services at session setup time. Filtering is by service name, not port; enforced on the hub, not the agent. Design detail and scope in the issue.
+The `services:` filter on `connect` grants shipped in the 0.15 cycle (the access-model schema-freeze forcing function): no filter means all services, a filter restricts the client to the named services, enforced on the hub at session setup, filtered by service name rather than port. The client-side capability guard that refuses service-scoped grants against pre-0.15 hubs was found non-functional during board reconciliation (the probe dialed the raw `ws://` URL over HTTP, refusing every grant unconditionally) and fixed in the 0.16 cycle with fail-closed semantics and a regression test. ACCESS-MODEL.md documents the filter and the guard. Issue [#27](https://github.com/paulmooreparks/tela/issues/27) is closed; COMPAT-0.15.md tracks the remaining operator-warning boxes (release-note boilerplate, book upgrade note).
 
 ### Agent identity
 
@@ -305,19 +296,19 @@ Also added since this roadmap was first written:
 
 ## Suggested execution order
 
-This is the order I would do things in if I were running the project, biased toward unblocking everything else first and leaving polish for the end.
+This is the order I would do things in if I were running the project, biased toward unblocking everything else first and leaving polish for the end. Status as of 2026-07-11: steps 1 through 7 and 12 are done; the remaining work is steps 8 through 11 plus the launch surface.
 
-1. **CI and automated releases** — without this, every other improvement is fragile
-2. **Test harness for end-to-end scenarios** — unlocks confident refactoring of everything else
-3. **Tests for the auth and access paths** — these are the security boundary
-4. **Per-service access control** — access model schema change; must land before the model freezes at 1.0, not after
-5. **Cert pinning** — the trust anchor that everything else relies on
-6. **Relay gateway design and v1 wire format alignment** — hub-to-hub transit is the defining feature for the *fleet* tier and the only 1.0 item that forces specific bits into the wire format (the TTL field). Design must be done before the protocol freeze, not after, or it has to wait for v2.
-7. **Protocol freeze with version field and v1 spec** — once locked, you can iterate freely
-8. **Code signing for Windows and macOS** — without this, downloads are scary
-9. **Security model document and troubleshooting guide** — the two most important user-facing docs you don't have yet
-10. **Relay gateway implementation** — once the wire format and design are locked in step 6, the implementation work (hub outbound mode, directory schema, audit log entries, documentation chapter) can run in parallel with the polish steps
-11. **Then start polishing** — mobile UX, installers, package managers, structured logging, metrics, rate limiting, graceful shutdown, agent identity
+1. **CI and automated releases**: done. See "Release engineering" above.
+2. **Test harness for end-to-end scenarios**: done in substance (`internal/teststack`); leak-detection and adoption residuals ride the test wave.
+3. **Tests for the auth and access paths**: in flight. The security-boundary suites (#7, #8) lead the board's test wave; #9 through #13 follow.
+4. **Per-service access control**: done, including the fixed client-side guard.
+5. **Cert pinning**: done, scoped per DESIGN-cert-pinning-portal.md.
+6. **Relay gateway design and v1 wire format alignment**: done; shipped in the 0.6 cycle with the TTL field in the frozen frame.
+7. **Protocol freeze with version field and v1 spec**: done. DESIGN.md section 6 is the frozen reference.
+8. **Code signing for Windows and macOS**: next. Certificate procurement is the long pole; start it before anything else in this list.
+9. **Security model document and troubleshooting guide**: the two most important user-facing docs still missing.
+10. **Relay gateway book chapter**: the last item holding #26 open; docs work, parallel with everything.
+11. **Then the rest**: audit retention, structured logging, metrics, rate limiting, agent identity, installers, package managers, UX polish, and the telaproject.org launch site.
 12. **Make and publish the scope decisions**: done 2026-07-11. Routed mesh, hub federation, SSO/OIDC, kernel TUN, multi-tenant hub, portal architecture, in-browser fallback, post-connect hooks, and local names all carry written decisions in the scope-decisions section above. This was the step that converts ambient ambiguity into a permanent commitment, and it landed before the tag.
 
 ---

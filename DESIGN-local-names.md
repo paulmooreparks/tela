@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for 1.0. Not yet implemented.
+Deferred to 1.x by scope decision on 2026-07-11 (see ROADMAP-1.0.md, "Local names"). Layer 1 was implemented and then reverted in the 0.10 cycle after Windows loopback shadowing broke local services; [DESIGN-service-routing.md](DESIGN-service-routing.md) is the post-mortem. Nothing in this document is currently in the tree. It is retained as the 1.x design; the open questions get answered when that work starts.
 
 ## The problem
 
@@ -167,12 +167,14 @@ tela dns prefix 127.88      # set new prefix
 ```
 
 The `127.0.0.0/8` range is entirely loopback on all three platforms.
-Binding to `127.88.x.x` does not require creating a new interface or
-adding a route. On Linux and macOS, any address in `127.0.0.0/8` is
-reachable immediately. On Windows, only `127.0.0.1` is reachable by
-default; additional loopback addresses require adding them with
-`netsh interface ip add address "Loopback" 127.88.x.x 255.255.255.255`
-or equivalent. This requires elevation.
+Binding to `127.88.x.x` does not require creating a new interface,
+adding a route, or elevating: the platform table below is the verified
+behavior, and the 0.10 implementation bound these addresses on Windows
+without any `netsh` alias step. What killed the implementation was not
+binding but shadowing: listeners on non-default loopback addresses
+interacted badly with local services on Windows, which is what the 0.10
+revert recorded (see [DESIGN-service-routing.md](DESIGN-service-routing.md)).
+Any 1.x revival has to solve the shadowing behavior, not elevation.
 
 #### Platform behavior
 
@@ -306,14 +308,16 @@ service when the resolver is running:
 
 ## What changes in the codebase
 
+The Layer 1 rows below were implemented in the 0.9/0.10 cycle and reverted in 0.10; none of this code is in the current tree. The table records what the implementation touched, as a map for the 1.x revival.
+
 | Area | Change | Status |
 |------|--------|--------|
-| `internal/client/` | Loopback address computation, `bindLoopbackListener`, profile YAML `dns` and `address` fields | Done |
-| `internal/client/` | Windows loopback alias management (`loopback_windows.go`, `loopback_unix.go`) | Done |
-| `internal/client/control.go` | `BoundService.BindAddr` and `service_bound` event includes `bindAddr` | Done |
-| `cmd/telagui/app.go` | `LoopbackAddr` Wails binding for frontend address computation | Done |
-| `cmd/telagui/frontend/` | Status tab, Profiles tab, YAML preview use addresses instead of remapped ports | Done |
-| Awan Saya profile builder | `loopbackAddr()` JS, address display, YAML without `local:` lines, port-clash logic removed | Done |
+| `internal/client/` | Loopback address computation, `bindLoopbackListener`, profile YAML `dns` and `address` fields | Reverted in 0.10 |
+| `internal/client/` | Windows loopback alias management (`loopback_windows.go`, `loopback_unix.go`) | Reverted in 0.10 |
+| `internal/client/control.go` | `BoundService.BindAddr` and `service_bound` event includes `bindAddr` | Reverted in 0.10 |
+| `cmd/telagui/app.go` | `LoopbackAddr` Wails binding for frontend address computation | Reverted in 0.10 |
+| `cmd/telagui/frontend/` | Status tab, Profiles tab, YAML preview use addresses instead of remapped ports | Reverted in 0.10 |
+| Awan Saya profile builder | `loopbackAddr()` JS, address display, YAML without `local:` lines, port-clash logic removed | Reverted in 0.10 |
 | `cmd/telad/` | No changes. The agent is unaware of client-side name resolution | N/A |
 | `cmd/telahubd/` | No changes. The hub is unaware of client-side name resolution | N/A |
 
@@ -365,8 +369,12 @@ run the one-time system resolver setup.
    entirely? The existing mode is still useful for tools that do not
    support custom DNS (rare but possible).
 
-4. **Windows Loopback Adapter.** An alternative to `netsh` alias
-   management on Windows is installing a Loopback Adapter via
-   `devcon.exe` or `pnputil`. This survives reboots more reliably but
-   requires a device driver. Evaluate whether the `netsh` approach is
-   sufficient.
+4. **Windows loopback shadowing.** The 0.10 implementation proved that
+   binding `127.88.x.x` works without elevation on all three platforms;
+   what forced the revert was Windows loopback shadowing between
+   listeners on non-default loopback addresses and local services
+   ([DESIGN-service-routing.md](DESIGN-service-routing.md)). Any 1.x
+   revival starts by characterizing that behavior precisely and either
+   avoiding the shadowed configurations or detecting them. The earlier
+   question here about `netsh` aliases versus a Loopback Adapter driver
+   was moot even in 0.10: no alias step was needed for binding.
