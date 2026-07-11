@@ -90,6 +90,8 @@ type Bind struct {
 	// STUN / hole-punch signaling
 	stunCh  chan []byte       // STUN binding responses routed here by udpReader
 	punchCh chan *net.UDPAddr // hole-punch probe signals from udpReader
+
+	stunAddr string // test-only override for the STUN server address; empty means use stunServer
 }
 
 // New creates a Bind using the given WebSocket connection.
@@ -395,7 +397,11 @@ func (b *Bind) STUNDiscover() (string, error) {
 	binary.BigEndian.PutUint32(req[4:8], stunMagicCookie)
 	copy(req[8:20], txID)
 
-	stunAddr, err := net.ResolveUDPAddr("udp4", stunServer)
+	serverAddr := stunServer
+	if b.stunAddr != "" {
+		serverAddr = b.stunAddr
+	}
+	stunAddr, err := net.ResolveUDPAddr("udp4", serverAddr)
 	if err != nil {
 		return "", fmt.Errorf("resolve STUN server: %w", err)
 	}
@@ -626,17 +632,19 @@ func (b *Bind) SendControlFrame(payload []byte) error {
 }
 
 // StartSessionKeepalive starts a goroutine that sends periodic in-band
-// session keepalive requests (CONTROL frame, payload 0x01) and calls
-// closeFn if no response arrives within relay.KeepaliveTimeout.
+// session keepalive requests (CONTROL frame, payload 0x01) every interval
+// and calls closeFn if no response arrives within timeout. Production passes
+// relay.KeepaliveInterval and relay.KeepaliveTimeout; the parameters exist so
+// tests can drive the loop on a short clock.
 //
 // Returns (respCh, stop):
 //   - respCh: the caller sends on this channel when a keepalive response (0x02) is received.
 //   - stop: call to cancel the keepalive goroutine.
-func (b *Bind) StartSessionKeepalive(closeFn func()) (chan<- struct{}, func()) {
+func (b *Bind) StartSessionKeepalive(closeFn func(), interval, timeout time.Duration) (chan<- struct{}, func()) {
 	respCh := make(chan struct{}, 1)
 	stop := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(relay.KeepaliveInterval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		var lastReqAt time.Time
 		waiting := false
@@ -645,7 +653,7 @@ func (b *Bind) StartSessionKeepalive(closeFn func()) (chan<- struct{}, func()) {
 			case <-stop:
 				return
 			case <-ticker.C:
-				if waiting && time.Since(lastReqAt) >= relay.KeepaliveTimeout {
+				if waiting && time.Since(lastReqAt) >= timeout {
 					closeFn()
 					return
 				}

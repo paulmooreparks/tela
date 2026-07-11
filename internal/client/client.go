@@ -2003,7 +2003,7 @@ persistent_keepalive_interval=25
 	keepaliveRespCh, stopKeepalive := bind.StartSessionKeepalive(func() {
 		log.Printf("session keepalive timeout -- tearing down")
 		wsConn.Close()
-	})
+	}, relay.KeepaliveInterval, relay.KeepaliveTimeout)
 	defer stopKeepalive()
 
 	// Start reader goroutine: WebSocket binary → wsBind.RecvCh
