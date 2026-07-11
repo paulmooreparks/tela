@@ -366,7 +366,7 @@ For confirmed bugs, open an [issue](https://github.com/paulmooreparks/tela/issue
 - [ACCESS-MODEL.md](ACCESS-MODEL.md) -- How tokens, roles, and machine permissions work together
 - [REFERENCE.md](REFERENCE.md) -- Comprehensive reference for all three CLIs, configuration, and APIs
 - [CONFIGURATION.md](CONFIGURATION.md) -- Configuration file schemas for hubs.yaml, telad.yaml, telahubd.yaml, and portal config
-- [DESIGN.md](DESIGN.md) -- Architecture specification
+- [DESIGN.md](DESIGN.md) -- Architecture specification, including the frozen v1 wire-protocol specification (section 6) and the 1.x backward-compatibility policy (section 6.6)
 - [IMPLEMENTATION.md](IMPLEMENTATION.md) -- Deployment runbook
 - [TODO.md](TODO.md) -- Roadmap
 - [STATUS.md](STATUS.md) -- Design-to-implementation traceability matrix
