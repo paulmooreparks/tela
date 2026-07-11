@@ -37,6 +37,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -64,6 +65,25 @@ func init() {
 	telelog.Init("test", out)
 }
 
+// Leak-check tuning. checkGoroutineLeak polls the live goroutine count
+// against the per-Stack baseline for up to leakCheckGrace, sampling every
+// leakCheckPoll, and allows leakCheckTolerance goroutines of headroom.
+//
+// The tolerance is 2 because hub.Run starts exactly two background
+// goroutines that outlive the hub's context: runKeepalive and
+// runUDPSessionReaper both loop on a time.Ticker with no quit channel, so
+// context cancellation does not stop them (they are process-lifetime hub
+// goroutines, one pair per hub, absorbed into the next Stack's baseline).
+// The baseline is captured before hub.Run, so those two never appear in it
+// and the tolerance is what keeps a clean hub-only teardown green. Any leak
+// beyond that pair (client-tunnel session loops, gvisor netstack workers,
+// relay dial loops) is what this check is here to catch.
+const (
+	leakCheckGrace     = 2 * time.Second
+	leakCheckPoll      = 50 * time.Millisecond
+	leakCheckTolerance = 2
+)
+
 // Stack is one in-process hub + one in-process agent. Tests construct
 // it via New(t), exercise it through the helper methods, and let
 // t.Cleanup tear it down.
@@ -71,6 +91,17 @@ type Stack struct {
 	t      *testing.T
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// goroutineBaseline is runtime.NumGoroutine() captured at the top of
+	// NewWithConfig, before any harness goroutine is launched. Close()
+	// compares the live count against this to catch goroutines spawned
+	// inside hub.Run/agent.Run/client.Connect that the wg does not track.
+	goroutineBaseline int
+
+	// skipLeakCheck suppresses Close()'s goroutine-leak assertion. Set only
+	// via SkipLeakCheck for the one in-process configuration where a leak is
+	// a documented harness limitation, not a defect. See SkipLeakCheck.
+	skipLeakCheck bool
 
 	tempDir   string
 	hubAddr   string
@@ -112,6 +143,7 @@ func New(t *testing.T) *Stack {
 // random ports so concurrent tests do not collide.
 func NewWithConfig(t *testing.T, cfg *hub.Config) *Stack {
 	t.Helper()
+	baseline := runtime.NumGoroutine()
 
 	tempDir, err := os.MkdirTemp("", "tela-stack-*")
 	if err != nil {
@@ -119,9 +151,10 @@ func NewWithConfig(t *testing.T, cfg *hub.Config) *Stack {
 	}
 
 	s := &Stack{
-		t:         t,
-		tempDir:   tempDir,
-		agentYAML: filepath.Join(tempDir, "telad.yaml"),
+		t:                 t,
+		goroutineBaseline: baseline,
+		tempDir:           tempDir,
+		agentYAML:         filepath.Join(tempDir, "telad.yaml"),
 	}
 	s.startHubWithConfig(cfg)
 	t.Cleanup(s.Close)
@@ -417,4 +450,53 @@ func (s *Stack) Close() {
 	// Remove the temp directory. Best-effort; ignore errors so test
 	// teardown does not mask the real test failure.
 	_ = os.RemoveAll(s.tempDir)
+
+	// Enforce that every goroutine the harness spawned has unwound. This
+	// is the GitHub #6 leak-detection gate: unlike the wg-wait above, it
+	// also catches goroutines started inside hub.Run/agent.Run/client.Connect
+	// (gvisor netstack workers, WireGuard session loops, relay dial loops)
+	// that the wg never tracked. Suppressed only for the documented
+	// in-process client-tunnel limitation (see SkipLeakCheck).
+	if !s.skipLeakCheck {
+		checkGoroutineLeak(s.t, s.goroutineBaseline)
+	}
+}
+
+// SkipLeakCheck disables Close()'s goroutine-leak assertion for this Stack.
+// It is reserved for the single in-process configuration where a residual
+// goroutine is a known, documented harness limitation rather than a defect
+// in the code under test: the client-tunnel path (Connect) drives gvisor's
+// netstack and the client/agent WireGuard session loops, and in a single OS
+// process the inner gvisor TCP handshake never completes (the same
+// limitation TestStackClientConnectsAndBindsListener documents). That path
+// leaves a gvisor worker plus a hub-side handleConnect retry goroutine
+// (a 30s time.Sleep) that outlive Close()'s context cancellation and the
+// leak-check grace window. The production, separate-process path does not
+// hit this. Do not call SkipLeakCheck to paper over a real leak in new
+// harness consumers; the whole point of the check is to catch those.
+func (s *Stack) SkipLeakCheck() {
+	s.skipLeakCheck = true
+}
+
+// checkGoroutineLeak polls the live goroutine count against baseline plus
+// leakCheckTolerance for up to leakCheckGrace. It returns as soon as the
+// count settles within tolerance. If the grace window elapses first it
+// fails the test (t.Errorf, not t.Logf: this is the enforcement point) and
+// dumps every live goroutine's stack for diagnosis.
+func checkGoroutineLeak(t *testing.T, baseline int) {
+	t.Helper()
+	limit := baseline + leakCheckTolerance
+	deadline := time.Now().Add(leakCheckGrace)
+	for {
+		if n := runtime.NumGoroutine(); n <= limit {
+			return
+		} else if time.Now().After(deadline) {
+			buf := make([]byte, 1<<20)
+			written := runtime.Stack(buf, true)
+			t.Errorf("teststack: goroutine leak: %d goroutines after Close, want <= %d (baseline %d)\n%s",
+				n, limit, baseline, buf[:written])
+			return
+		}
+		time.Sleep(leakCheckPoll)
+	}
 }
