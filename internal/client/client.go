@@ -3002,7 +3002,12 @@ type telaWellKnown struct {
 // use this for client-side capability checks before sending requests
 // that depend on newer hub behavior.
 func fetchHubCapabilities(baseURL, token string) ([]string, error) {
-	wkURL := strings.TrimRight(baseURL, "/") + "/.well-known/tela"
+	// baseURL is typically a ws://wss:// hub reference (resolveHubURL
+	// yields that form for every -hub value the CLI accepts). Go's
+	// default HTTP transport only knows http/https, so route through
+	// wsToHTTP first, mirroring adminHTTP. wsToHTTP also trims the
+	// trailing slash, so no separate TrimRight is needed here.
+	wkURL := wsToHTTP(baseURL) + "/.well-known/tela"
 	req, err := http.NewRequest("GET", wkURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)

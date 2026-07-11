@@ -1616,6 +1616,29 @@ func cmdAdminAccess(args []string) {
 	w.Flush()
 }
 
+// checkServicesCapability probes the hub's advertised capabilities and
+// returns a non-nil, multi-line, actionable error when a service-scoped
+// grant is not safe to send: either the hub could not be probed
+// (unreachable, non-200, malformed body), or it was probed successfully
+// but does not advertise "per-service-access-control" (a pre-0.15 hub).
+// Returns nil when the probe succeeds and the capability is present.
+// See #27 and COMPAT-0.15.md.
+func checkServicesCapability(hub, tok string) error {
+	caps, err := fetchHubCapabilities(hub, tok)
+	if err != nil {
+		return fmt.Errorf("could not probe hub capabilities at %s: %w\n"+
+			"       -services requires confirming the hub supports per-service access control.\n"+
+			"       Fix the hub connectivity or re-run without -services.", hub, err)
+	}
+	if !hubHasCapability(caps, "per-service-access-control") {
+		return fmt.Errorf("the hub at %s does not support per-service access control.\n"+
+			"       Sending -services to this hub would be silently ignored and\n"+
+			"       would grant ALL-service access instead of the filter you asked for.\n"+
+			"       Upgrade the hub to v0.15.0 or later, or re-run without -services.", hub)
+	}
+	return nil
+}
+
 func cmdAdminAccessGrant(args []string) {
 	fs := flag.NewFlagSet("admin access grant", flag.ExitOnError)
 	hubURL := fs.String("hub", envOrDefault("TELA_HUB", ""), "Hub URL (env: TELA_HUB)")
@@ -1669,21 +1692,11 @@ func cmdAdminAccessGrant(args []string) {
 	// Capability check: refuse to send a filtered grant to a hub that
 	// cannot honor it. Older hubs silently discard unknown request-body
 	// fields, which would turn `-services Jellyfin` into an unfiltered
-	// grant -- a security-relevant cliff for the operator. See #27 and
+	// grant, a security-relevant cliff for the operator. See #27 and
 	// COMPAT-0.15.md.
 	if len(services) > 0 {
-		caps, err := fetchHubCapabilities(hub, tok)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: could not probe hub capabilities at %s: %v\n", hub, err)
-			fmt.Fprintln(os.Stderr, "       -services requires confirming the hub supports per-service access control.")
-			fmt.Fprintln(os.Stderr, "       Fix the hub connectivity or re-run without -services.")
-			os.Exit(1)
-		}
-		if !hubHasCapability(caps, "per-service-access-control") {
-			fmt.Fprintln(os.Stderr, "Error: the hub at", hub, "does not support per-service access control.")
-			fmt.Fprintln(os.Stderr, "       Sending -services to this hub would be silently ignored and")
-			fmt.Fprintln(os.Stderr, "       would grant ALL-service access instead of the filter you asked for.")
-			fmt.Fprintln(os.Stderr, "       Upgrade the hub to v0.15.0 or later, or re-run without -services.")
+		if cerr := checkServicesCapability(hub, tok); cerr != nil {
+			fmt.Fprintln(os.Stderr, "Error:", cerr)
 			os.Exit(1)
 		}
 	}

@@ -86,7 +86,7 @@ note itself.
 
 ### Status
 
-- [ ] Client-side version check implemented in `tela admin access grant`
+- [x] Client-side version check implemented in `tela admin access grant`
 - [ ] Release-note boilerplate drafted for v0.15.0
 - [ ] Book chapter updated to describe the new filter and the upgrade
       order
