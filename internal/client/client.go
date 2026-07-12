@@ -55,6 +55,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -129,11 +130,79 @@ var portNames = map[uint16]string{
 	5900: "VNC", 8080: "HTTP", 8443: "HTTPS",
 }
 
-var verbose bool
-var tunnelMTU = defaultMTU
+// verbose and tunnelMTU are package globals that ResetForTesting clears, so
+// both are synchronized (atomics) to stay race-free against the teststack
+// teardown while in-flight session goroutines still read them (card tela-79).
+var verbose atomic.Bool
+var tunnelMTU atomic.Int32
 
-// stopCh is closed to signal graceful shutdown (used in service mode).
-var stopCh chan struct{}
+func init() {
+	tunnelMTU.Store(defaultMTU)
+}
+
+// stopCh is closed to signal graceful shutdown (used in service mode). All
+// access is routed through stopMu and the helpers below so the teststack
+// teardown (ResetForTesting) can run concurrently with in-flight reconnect
+// and session goroutines without a data race (card tela-79). A nil channel
+// blocks forever in a select, which is the intended shutdown-not-armed state.
+var (
+	stopMu       sync.RWMutex
+	stopCh       chan struct{}
+	stopChClosed bool
+)
+
+// stopChan returns the current stop channel under a read lock. A nil return
+// blocks forever in a select, exactly like reading a nil global directly.
+func stopChan() chan struct{} {
+	stopMu.RLock()
+	defer stopMu.RUnlock()
+	return stopCh
+}
+
+// newStopCh unconditionally installs a fresh stop channel and returns it.
+// Used by the entry points that own the shutdown lifecycle (Main and the
+// service runners).
+func newStopCh() chan struct{} {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	stopCh = make(chan struct{})
+	stopChClosed = false
+	return stopCh
+}
+
+// ensureStopCh installs a fresh stop channel only when none is set and
+// returns the current channel. It closes the check-then-assign TOCTOU window
+// that the plain accessors cannot express against a concurrent reset.
+func ensureStopCh() chan struct{} {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	if stopCh == nil {
+		stopCh = make(chan struct{})
+		stopChClosed = false
+	}
+	return stopCh
+}
+
+// closeStopCh closes the current stop channel if it is set and not already
+// closed. The closed flag under the same lock keeps the single-closer
+// contract intact and makes a double close a no-op instead of a panic, which
+// replaces the ad-hoc select-default guards the bridge goroutines used.
+func closeStopCh() {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	if stopCh != nil && !stopChClosed {
+		close(stopCh)
+		stopChClosed = true
+	}
+}
+
+// clearStopCh drops the stop channel reference. Used only by ResetForTesting.
+func clearStopCh() {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	stopCh = nil
+	stopChClosed = false
+}
 
 // Main is the entry point for the tela client binary. The cmd/tela
 // shim calls this; tests do not -- they call Connect() directly with
@@ -304,15 +373,16 @@ func cmdConnect(args []string) {
 	localPort := fs.Int("port", 0, "Local TCP port (legacy; prefer -ports)")
 	targetPort := fs.Int("target-port", 0, "Target port on daemon (legacy; with -port)")
 	mtuOverride := fs.Int("mtu", 0, "WireGuard tunnel MTU (env: TELA_MTU; default 1100)")
-	fs.BoolVar(&verbose, "v", false, "Verbose logging")
+	verboseFlag := fs.Bool("v", false, "Verbose logging")
 	fs.Parse(args)
+	verbose.Store(*verboseFlag)
 
 	// Resolve MTU: flag > env > default
 	if *mtuOverride > 0 {
-		tunnelMTU = *mtuOverride
+		tunnelMTU.Store(int32(*mtuOverride))
 	} else if v := os.Getenv("TELA_MTU"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			tunnelMTU = n
+			tunnelMTU.Store(int32(n))
 		}
 	}
 
@@ -341,13 +411,13 @@ func cmdConnect(args []string) {
 		os.Exit(1)
 	}
 
-	stopCh = make(chan struct{})
+	newStopCh()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
 		log.Println("shutting down")
-		close(stopCh)
+		closeStopCh()
 	}()
 
 	// Create persistent listeners that survive session reconnects.
@@ -356,7 +426,7 @@ func cmdConnect(args []string) {
 	var bridge *tunnelBridge
 	if len(mappings) > 0 {
 		bridge = newTunnelBridge()
-		closeListeners := bindPersistentListeners(mappings, *machineID, *hubURL, bridge, stopCh)
+		closeListeners := bindPersistentListeners(mappings, *machineID, *hubURL, bridge, stopChan())
 		defer closeListeners()
 	}
 
@@ -373,7 +443,7 @@ func cmdConnect(args []string) {
 
 		// Check for shutdown before reconnecting
 		select {
-		case <-stopCh:
+		case <-stopChan():
 			return
 		default:
 		}
@@ -384,7 +454,7 @@ func cmdConnect(args []string) {
 		// Wait for delay or shutdown, whichever comes first
 		select {
 		case <-time.After(delay):
-		case <-stopCh:
+		case <-stopChan():
 			return
 		}
 		attempt++
@@ -435,7 +505,7 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 		opts.Token = credstore.LookupToken(opts.HubURL)
 	}
 	if opts.Verbose {
-		verbose = true
+		verbose.Store(true)
 	}
 
 	// Convert exported PortMapping to the internal portMapping type.
@@ -449,24 +519,20 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 
 	// Bridge ctx -> the package-level stopCh that runSession and the
 	// listener loop watch. This is the same channel cmdConnect sets up
-	// from a signal handler; we just plumb a context in.
-	if stopCh == nil {
-		stopCh = make(chan struct{})
-	}
+	// from a signal handler; we just plumb a context in. ensureStopCh
+	// installs one only if a lifecycle owner has not already, and
+	// closeStopCh is idempotent under the lock, so no defensive
+	// select-default sentinel is needed here.
+	ensureStopCh()
 	go func() {
 		<-ctx.Done()
-		select {
-		case <-stopCh:
-			// already closed
-		default:
-			close(stopCh)
-		}
+		closeStopCh()
 	}()
 
 	var bridge *tunnelBridge
 	if len(mappings) > 0 {
 		bridge = newTunnelBridge()
-		closeListeners := bindPersistentListeners(mappings, opts.MachineID, opts.HubURL, bridge, stopCh)
+		closeListeners := bindPersistentListeners(mappings, opts.MachineID, opts.HubURL, bridge, stopChan())
 		defer closeListeners()
 	}
 
@@ -482,7 +548,7 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 		}
 
 		select {
-		case <-stopCh:
+		case <-stopChan():
 			return nil
 		default:
 		}
@@ -492,7 +558,7 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 
 		select {
 		case <-time.After(delay):
-		case <-stopCh:
+		case <-stopChan():
 			return nil
 		}
 		attempt++
@@ -502,10 +568,15 @@ func Connect(ctx context.Context, opts ConnectOptions) error {
 // ResetForTesting wipes the package-level mutable state used by the
 // client (stopCh, verbose flag, MTU override). Tests call this from
 // teststack so consecutive runs do not see each other's state.
+//
+// Every field it touches is accessed only through a synchronized accessor
+// or an atomic, mirroring internal/hub.ResetForTesting, so this can run
+// concurrently with stragglers the teststack SkipLeakCheck configurations
+// tolerate without a data race (card tela-79).
 func ResetForTesting() {
-	stopCh = nil
-	verbose = false
-	tunnelMTU = defaultMTU
+	clearStopCh()
+	verbose.Store(false)
+	tunnelMTU.Store(defaultMTU)
 }
 
 // ── Port/service mapping helpers ────────────────────────────────────
@@ -809,23 +880,23 @@ func runProfile(name string) {
 
 	// Apply profile-level MTU if set
 	if profile.MTU > 0 {
-		tunnelMTU = profile.MTU
+		tunnelMTU.Store(int32(profile.MTU))
 	}
 
 	// Only initialize stopCh if not already set (service mode sets it externally).
-	if stopCh == nil {
-		stopCh = make(chan struct{})
+	if stopChan() == nil {
+		newStopCh()
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		go func() {
 			<-sigCh
 			log.Println("shutting down all connections")
-			close(stopCh)
+			closeStopCh()
 		}()
 	}
 
 	// Start the control API server for this profile.
-	cleanupControl := startControlServer(name, stopCh)
+	cleanupControl := startControlServer(name, stopChan())
 	defer cleanupControl()
 
 	log.Printf("loaded profile with %d connection(s)", len(profile.Connections))
@@ -843,7 +914,7 @@ func runProfile(name string) {
 		go func() {
 			select {
 			case <-time.After(2 * time.Second):
-			case <-stopCh:
+			case <-stopChan():
 				return
 			}
 			if err := validateMountPoint(mc.Mount); err != nil {
@@ -950,7 +1021,7 @@ func runProfile(name string) {
 					}
 					log.Printf("[profile:%d] %v", idx, err)
 					select {
-					case <-stopCh:
+					case <-stopChan():
 						log.Printf("[profile:%d] shutdown during service resolution", idx)
 						return
 					default:
@@ -959,7 +1030,7 @@ func runProfile(name string) {
 					log.Printf("[profile:%d] retrying service resolution in %s...", idx, delay.Round(time.Second))
 					select {
 					case <-time.After(delay):
-					case <-stopCh:
+					case <-stopChan():
 						return
 					}
 					resolveAttempt++
@@ -969,7 +1040,7 @@ func runProfile(name string) {
 			var bridge *tunnelBridge
 			if len(maps) > 0 {
 				bridge = newTunnelBridge()
-				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopCh)
+				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopChan())
 				defer closeListeners()
 			}
 
@@ -987,7 +1058,7 @@ func runProfile(name string) {
 
 				// Check for shutdown before reconnecting
 				select {
-				case <-stopCh:
+				case <-stopChan():
 					log.Printf("[profile:%d] shutdown received", idx)
 					return
 				default:
@@ -999,7 +1070,7 @@ func runProfile(name string) {
 				// Wait for delay or shutdown, whichever comes first
 				select {
 				case <-time.After(delay):
-				case <-stopCh:
+				case <-stopChan():
 					log.Printf("[profile:%d] shutdown received", idx)
 					return
 				}
@@ -1938,7 +2009,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping,
 	tunDev, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{netip.MustParseAddr(sessionHelperIP)},
 		nil, // no DNS
-		tunnelMTU,
+		int(tunnelMTU.Load()),
 	)
 	if err != nil {
 		log.Printf("netstack creation failed: %v", err)
@@ -1950,7 +2021,7 @@ func runSession(hubURL, machineID, token string, overrideMappings []portMapping,
 
 	// Create WireGuard device
 	wgVerbose := func(string, ...any) {}
-	if verbose {
+	if verbose.Load() {
 		wgVerbose = log.Printf
 	}
 	logger := &device.Logger{
@@ -2041,7 +2112,7 @@ persistent_keepalive_interval=25
 	if bridge != nil || len(overrideMappings) == 0 {
 		select {
 		case <-done:
-		case <-stopCh:
+		case <-stopChan():
 			wsConn.Close()
 			<-done
 		}
@@ -2107,7 +2178,7 @@ persistent_keepalive_interval=25
 
 	select {
 	case <-done:
-	case <-stopCh:
+	case <-stopChan():
 		wsConn.Close()
 		<-done
 	}
@@ -2340,7 +2411,7 @@ func tryDirectUpgrade(bind *wsbind.Bind, hubURL string) {
 }
 
 func logVerbose(format string, args ...any) {
-	if verbose {
+	if verbose.Load() {
 		log.Printf(format, args...)
 	}
 }
@@ -2608,10 +2679,10 @@ func serviceStatus() {
 func serviceRunDaemon(svcStop <-chan struct{}) {
 	// Bridge service stop channel to the global stopCh so
 	// reconnect loops exit on shutdown.
-	stopCh = make(chan struct{})
+	newStopCh()
 	go func() {
 		<-svcStop
-		close(stopCh)
+		closeStopCh()
 	}()
 
 	telelog.Init("tela", os.Stderr)
@@ -2666,7 +2737,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 			var bridge *tunnelBridge
 			if len(maps) > 0 {
 				bridge = newTunnelBridge()
-				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopCh)
+				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopChan())
 				defer closeListeners()
 			}
 
@@ -2683,7 +2754,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 				}
 
 				select {
-				case <-stopCh:
+				case <-stopChan():
 					log.Printf("[svc:%d] shutdown received", idx)
 					return
 				default:
@@ -2694,7 +2765,7 @@ func serviceRunDaemon(svcStop <-chan struct{}) {
 
 				select {
 				case <-time.After(delay):
-				case <-stopCh:
+				case <-stopChan():
 					log.Printf("[svc:%d] shutdown received", idx)
 					return
 				}
@@ -2730,10 +2801,10 @@ func serviceRun() {
 // serviceRunUserDaemon is the user-mode variant of serviceRunDaemon.
 // It loads config from the user directory instead of the system directory.
 func serviceRunUserDaemon(svcStop <-chan struct{}) {
-	stopCh = make(chan struct{})
+	newStopCh()
 	go func() {
 		<-svcStop
-		close(stopCh)
+		closeStopCh()
 	}()
 
 	telelog.Init("tela", os.Stderr)
@@ -2789,7 +2860,7 @@ func serviceRunUserDaemon(svcStop <-chan struct{}) {
 			var bridge *tunnelBridge
 			if len(maps) > 0 {
 				bridge = newTunnelBridge()
-				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopCh)
+				closeListeners := bindPersistentListeners(maps, mach, hub, bridge, stopChan())
 				defer closeListeners()
 			}
 
@@ -2802,7 +2873,7 @@ func serviceRunUserDaemon(svcStop <-chan struct{}) {
 					return
 				}
 				select {
-				case <-stopCh:
+				case <-stopChan():
 					return
 				default:
 				}
@@ -2810,7 +2881,7 @@ func serviceRunUserDaemon(svcStop <-chan struct{}) {
 				log.Printf("[svc:%d] reconnecting in %s...", idx, delay.Round(time.Second))
 				select {
 				case <-time.After(delay):
-				case <-stopCh:
+				case <-stopChan():
 					return
 				}
 				attempt++
