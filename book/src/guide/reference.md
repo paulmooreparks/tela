@@ -1,4 +1,4 @@
-# Appendix A: CLI reference
+# Appendix A: CLI Reference
 
 Flags, subcommands, environment variables, and config schemas for `tela`,
 `telad`, and `telahubd`. For narrative explanations, see the User Guide and
@@ -30,8 +30,9 @@ tela connect -profile <name>
 | `-v` | | Verbose logging |
 
 When neither `-ports` nor `-services` is specified, all ports the agent
-advertises are forwarded. Each machine gets a deterministic loopback address
-at `localhost:PORT`; each service binds at its configured local port, or a fallback port if that is taken.
+advertises are forwarded. Each service binds on `127.0.0.1` at its
+configured local port (defaulting to the remote port), or at a fallback
+port (the port plus 10000, then plus 10001, and so on) if that is taken.
 
 ### `tela machines`
 
@@ -82,7 +83,7 @@ Remote hub management. Requires an owner or admin token.
 
 Token resolution order: `-token` flag > `TELA_OWNER_TOKEN` > `TELA_TOKEN` > credential store.
 
-**access** -- unified identity and per-machine permissions view
+**access**: unified identity and per-machine permissions view
 
 ```bash
 tela admin access [-hub <hub>] [-token <token>]
@@ -92,7 +93,7 @@ tela admin access rename <id> <new-id>
 tela admin access remove <id>
 ```
 
-**tokens** -- token identity CRUD
+**tokens**: token identity CRUD
 
 ```bash
 tela admin tokens list
@@ -101,7 +102,7 @@ tela admin tokens remove <id>
 tela admin rotate <id>                             # regenerate a token
 ```
 
-**portals** -- portal registrations on the hub
+**portals**: portal registrations on the hub
 
 ```bash
 tela admin portals list
@@ -109,7 +110,7 @@ tela admin portals add <name> -portal-url <url>
 tela admin portals remove <name>
 ```
 
-**pair-code** -- one-time onboarding codes
+**pair-code**: one-time onboarding codes
 
 ```bash
 tela admin pair-code <machine> [-type connect|register] [-expires <duration>] [-machines <list>]
@@ -121,7 +122,7 @@ tela admin pair-code <machine> [-type connect|register] [-expires <duration>] [-
 | `-expires` | `10m` | Duration: `10m`, `1h`, `24h`, `7d` |
 | `-machines` | `*` | Comma-separated machine IDs (connect type only) |
 
-**agent** -- remote management of `telad` through the hub
+**agent**: remote management of `telad` through the hub
 
 ```bash
 tela admin agent list
@@ -134,7 +135,7 @@ tela admin agent channel -machine <id>
 tela admin agent channel -machine <id> set <channel>    # dev, beta, stable, or a custom channel name
 ```
 
-**hub** -- lifecycle management of the hub itself
+**hub**: lifecycle management of the hub itself
 
 ```bash
 tela admin hub status
@@ -233,7 +234,7 @@ Config location when installed as a service:
 tela version
 ```
 
-### Connection profile schema
+### Connection Profile Schema
 
 Profiles define multiple hub/machine connections that launch in parallel with
 `tela connect -profile <name>`.
@@ -263,7 +264,7 @@ connections:
     machine: web01
     agentId: ""                       # stable agent UUID (populated lazily)
     token: ${WEB_TOKEN}               # ${VAR} expansion is supported
-    address: ""                       # override loopback address (must be in 127.0.0.0/8)
+    address: ""                       # per-machine address override for tela dns hosts (127.0.0.0/8)
     services:
       - remote: 22                    # forward by port number
         local: 2201                   # optional local port remap
@@ -293,7 +294,7 @@ connections:
 | `machine` | Yes | Machine name |
 | `agentId` | No | Stable agent UUID; populated lazily, do not set manually |
 | `token` | No | Auth token; `${VAR}` references are expanded from the environment |
-| `address` | No | Loopback address override (must be in `127.0.0.0/8`) |
+| `address` | No | Per-machine address override used by `tela dns hosts` (must be in `127.0.0.0/8`); does not affect connect bindings |
 | `services` | No | Port/service filter; omit to forward all ports |
 | `services[].remote` | * | Remote port number |
 | `services[].local` | No | Local port override (defaults to remote) |
@@ -301,7 +302,7 @@ connections:
 
 \* Each service entry needs either `remote` or `name`, not both.
 
-### Hub name resolution
+### Hub Name Resolution
 
 When `-hub` is a short name (not `ws://` or `wss://`), `tela` resolves it in order:
 
@@ -309,7 +310,7 @@ When `-hub` is a short name (not `ws://` or `wss://`), `tela` resolves it in ord
 2. Local `hubs.yaml` fallback.
 3. Error if unresolved.
 
-### Environment variables
+### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
@@ -321,7 +322,7 @@ When `-hub` is a short name (not `ws://` or `wss://`), `tela` resolves it in ord
 | `TELA_MTU` | WireGuard tunnel MTU (default 1100) |
 | `TELA_MOUNT_PORT` | WebDAV listen port for `tela mount` (default 18080) |
 
-### Config and credential storage
+### Config and Credential Storage
 
 | File | Platform | Path |
 |------|----------|------|
@@ -361,7 +362,7 @@ to local services.
 | `-mtu <n>` | `TELAD_MTU` | `1100` | WireGuard tunnel MTU |
 | `-v` | | | Verbose logging |
 
-### Port spec format
+### Port Spec Format
 
 ```
 port[:name[:description]]
@@ -369,7 +370,7 @@ port[:name[:description]]
 
 Examples: `22`, `22:SSH`, `22:SSH:OpenSSH server`, `22:SSH,3389:RDP`
 
-### Config file (`telad.yaml`)
+### Config File (`telad.yaml`)
 
 ```yaml
 hub: wss://hub.example.com
@@ -416,7 +417,7 @@ machines:
 
 \* Either `ports` or `services` is required. If both are present, `services` takes precedence.
 
-### File share config
+### File Share Config
 
 ```yaml
 shares:
@@ -447,9 +448,8 @@ Each entry in `shares` is a named share. Clients navigate to a share by name bef
 | `allowedExtensions` | `[]` | Whitelist; empty means all allowed |
 | `blockedExtensions` | see above | Blacklist; applied after allowlist |
 
-The deprecated `fileShare:` (singular) key is accepted and synthesized as a share named `legacy`. It will be removed in 1.0.
 
-### Upstream config
+### Upstream Config
 
 ```yaml
 upstreams:
@@ -467,7 +467,7 @@ upstreams:
 | `target` | Yes | Address to forward to (`host:port`) |
 | `name` | No | Label for logging |
 
-### Gateway config
+### Gateway Config
 
 ```yaml
 gateway:
@@ -487,7 +487,7 @@ gateway:
 | `routes[].path` | Yes | URL path prefix; longest match wins |
 | `routes[].target` | Yes | Local port to proxy to |
 
-### `telad service` subcommands
+### `telad service` Subcommands
 
 | Command | Description |
 |---------|-------------|
@@ -529,7 +529,7 @@ telad update -dry-run                     # show what would happen
 telad update -h | -? | -help | --help     # print help
 ```
 
-### Environment variables
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -541,7 +541,7 @@ telad update -h | -? | -help | --help     # print help
 | `TELAD_TARGET_HOST` | `127.0.0.1` | Target host for services |
 | `TELAD_MTU` | `1100` | WireGuard tunnel MTU |
 
-### Credential store
+### Credential Store
 
 Store a token so it does not need to appear in config files or shell history:
 
@@ -572,7 +572,7 @@ relays encrypted traffic, and serves the admin API and web console.
 | `-config <path>` | Path to YAML config file |
 | `-v` | Verbose logging |
 
-### Environment variables
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -586,7 +586,7 @@ relays encrypted traffic, and serves the admin API and web console.
 | `TELAHUBD_PORTAL_TOKEN` | (empty) | Portal admin token for registration (used once, not persisted) |
 | `TELAHUBD_PUBLIC_URL` | (empty) | Hub's own public URL for portal registration |
 
-### Config file (`telahubd.yaml`)
+### Config File (`telahubd.yaml`)
 
 ```yaml
 port: 80
@@ -623,7 +623,7 @@ Config file location when running as a service:
 | Linux/macOS | `/etc/tela/telahubd.yaml` |
 | Windows | `%ProgramData%\Tela\telahubd.yaml` |
 
-### `telahubd user` subcommands
+### `telahubd user` Subcommands
 
 Local token management on the hub machine. All subcommands accept `-config <path>`.
 
@@ -641,7 +641,7 @@ Local token management on the hub machine. All subcommands accept `-config <path
 
 Changes take effect immediately. No hub restart required.
 
-### `telahubd portal` subcommands
+### `telahubd portal` Subcommands
 
 | Command | Description |
 |---------|-------------|
@@ -650,7 +650,7 @@ Changes take effect immediately. No hub restart required.
 | `telahubd portal remove <name>` | Remove a portal registration |
 | `telahubd portal sync` | Push viewer token to all registered portals |
 
-### `telahubd service` subcommands
+### `telahubd service` Subcommands
 
 | Command | Description |
 |---------|-------------|
@@ -685,7 +685,7 @@ telahubd update -dry-run                     # show what would happen
 telahubd update -h | -? | -help | --help     # print help
 ```
 
-### Firewall requirements
+### Firewall Requirements
 
 | Port | Protocol | Notes |
 |------|----------|-------|

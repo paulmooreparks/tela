@@ -1,118 +1,83 @@
-# Education labs
+# Education Labs
 
-## The scenario
+A university computer lab has 30 workstations. Students need to reach their
+assigned machine from home for coursework: remote desktop, SSH, or a
+web-based IDE. The campus VPN is complex to set up, requires IT support for
+every student, and grants access to far more of the campus network than
+students should have.
 
-A university computer lab has 30 Linux workstations. Students need to connect to their assigned machine from home for coursework -- remote desktop, SSH, or a web-based IDE. The campus VPN is complex to set up, requires IT support for every student, and gives access to far more of the campus network than students should have.
-
-With Tela, each lab machine runs `telad` and registers with a lab-specific hub. Each student gets a token scoped to connect to their assigned machine only. Setup for a new student is a pairing code: they run one command to redeem it and they are ready to connect. An instructor token gives access to all machines in the lab for monitoring and support.
-
-From a student's laptop at home:
+With Tela, each lab machine runs `telad` and registers with a lab-specific
+hub. Each student gets access to their assigned machine only. Setup for a
+new student is a pairing code: one command to redeem it and they are ready
+to connect.
 
 ```
 Services available:
-  localhost:3389   → RDP          (lab-machine-07)
+  localhost:3389   → RDP          (lab-pc-07)
 ```
 
-They open Remote Desktop to that address and are on their lab machine. No VPN client. No campus IT ticket. No exposure to the rest of the campus network.
+They open Remote Desktop to that address and are on their lab machine. No
+VPN client, no campus IT ticket, no exposure to the rest of the campus
+network. At the end of the semester, the instructor removes the student
+identities in one pass; the lab machines stay registered for the next
+cohort.
 
-At the end of the semester, the instructor removes all student tokens in one pass. The lab machines stay registered for the next cohort.
+## Topology
 
-## Recommended topology
+One hub per lab or course keeps the blast radius and the roster equally
+small. The lab machines run endpoint agents as OS services, each exposing
+exactly one service (RDP for Windows labs, SSH for Linux labs, or the port
+of a web IDE). A shared agent identity across the lab machines is
+acceptable here; the machines are institutionally owned and identically
+managed, and it keeps imaging simple. Bake `telad` plus a `telad pair`
+step into the machine image and registration becomes part of provisioning.
 
-- **One hub per lab or course** (simple isolation)
-- `telad` on each lab machine (endpoint agent pattern)
+Deployment mechanics: [Run a Hub on the Public Internet](../howto/hub.md),
+[Run an Agent](../howto/telad.md),
+[Run Tela as an OS Service](../howto/services.md).
 
----
+## The Access Model
 
-## Step 1 - Deploy a hub for the lab
-
-1. Deploy the hub and publish it as `wss://lab-hub.example.com`.
-2. Verify hub console and `/api/status` are reachable.
-
-See [Run a hub on the public internet](../howto/hub.md) for the full hub deployment guide.
-
----
-
-## Step 2 - Enable authentication
-
-The hub prints an owner token on first start. Save it, then create identities for lab machines and students:
+The defining constraint is scoping: each student connects to their assigned
+machine and nothing else.
 
 ```bash
-# Create a shared agent token for lab machines
-tela admin tokens add lab-agent -hub wss://lab-hub.example.com -token <owner-token>
-# Save the printed token -- this is <lab-agent-token> used in telad on each lab machine (Step 3)
-
-# Grant the agent permission to register each machine
-tela admin access grant lab-agent lab-pc-017 register -hub wss://lab-hub.example.com -token <owner-token>
-tela admin access grant lab-agent lab-linux-03 register -hub wss://lab-hub.example.com -token <owner-token>
-
-# Create per-student tokens
-tela admin tokens add student-alice -hub wss://lab-hub.example.com -token <owner-token>
-# Save the printed token -- give it to Alice for use with tela connect (Step 4)
-tela admin access grant student-alice lab-pc-017 connect -hub wss://lab-hub.example.com -token <owner-token>
+tela admin tokens add student-alice -hub wss://lab-hub.example.com
+tela admin access grant student-alice lab-pc-07 connect -hub wss://lab-hub.example.com
 ```
 
-See [Run a hub on the public internet](../howto/hub.md) for the full list of `tela admin` commands.
-
----
-
-## Step 3 - Register lab machines
-
-On each lab machine, run `telad`.
-
-Example (Windows lab machine exposing RDP):
-
-```powershell
-telad.exe -hub wss://lab-hub.example.com -machine lab-pc-017 -ports "3389" -token <lab-agent-token>
-```
-
-Example (Linux lab machine exposing SSH):
+Onboard with pairing codes rather than raw tokens. A connect code scoped to
+one machine, generated per student, turns the first lab session into "run
+this one command":
 
 ```bash
-telad -hub wss://lab-hub.example.com -machine lab-linux-03 -ports "22" -token <lab-agent-token>
+tela admin pair-code lab-pc-07 -expires 7d
+# hand the printed 'tela pair' command to the student
 ```
 
-For persistent deployment, install `telad` as an OS service (see [Run Tela as an OS service](../howto/services.md)).
+The 7-day expiry covers add/drop week; unredeemed codes die on their own.
+An instructor identity gets a wildcard connect grant
+(`tela admin access grant instructor '*' connect`) for monitoring and
+support across all lab machines.
 
----
-
-## Step 4 - Student workflow
-
-On the student's machine:
-
-1. Download `tela`.
-2. List machines:
+At semester end, remove the cohort:
 
 ```bash
-tela machines -hub wss://lab-hub.example.com -token <student-token>
+tela admin access remove student-alice -hub wss://lab-hub.example.com
+# ... one per student; the machine registrations are untouched
 ```
 
-3. Connect to the assigned machine:
+The identity list on the hub is the roster; scripting the add and remove
+passes from the enrollment system is a natural next step.
 
-```bash
-tela connect -hub wss://lab-hub.example.com -machine lab-pc-017 -token <student-token>
-```
+## Pitfalls Specific to This Scenario
 
-4. Use the local address shown in the output. For RDP:
-
-```powershell
-mstsc /v:localhost:PORT
-```
-
----
-
-## Operational guidance
-
-- Pre-assign machine names to students.
-- Rotate credentials and policies each term.
-- Expose only RDP/VNC/SSH. Avoid granting broad internal network access.
-
----
-
-## Troubleshooting
-
-### Students can list machines but connect fails
-
-- Confirm the lab machine is online.
-- Confirm RDP/SSH is enabled and listening on the machine.
-- Ensure the lab hub URL supports WebSockets.
+- Student home networks are the wild west, but they only need outbound
+  HTTPS to the hub, which is precisely what home networks allow. Publish
+  the hub on port 443 behind TLS per the hub how-to.
+- RDP login is still campus-account authentication on the lab machine. A
+  student who cannot log in after connecting has an account problem, not a
+  Tela problem; the distinction saves support time.
+- Pre-assign machine names to students and use predictable names
+  (`lab-pc-07`). Grant mistakes with 30 near-identical machines are
+  otherwise inevitable.

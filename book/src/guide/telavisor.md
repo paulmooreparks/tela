@@ -6,7 +6,7 @@ browser, so you can manage connections, hubs, agents, profiles, files, and
 credentials without ever opening a terminal. It runs on Windows, Linux, and
 macOS.
 
-## What TelaVisor is, and what it is not
+## What TelaVisor Is, and What It Is Not
 
 TelaVisor manages the full life cycle of connecting to remote services
 through Tela hubs:
@@ -52,7 +52,7 @@ across all Tela products. The top bar, the mode toggle, the tab bar, the
 toolbar separators, the icon buttons, the modals, and the color system
 that you see in TelaVisor are the canonical examples of TDL.
 
-## Installing and launching
+## Installing and Launching
 
 TelaVisor ships as a single-file native application for each supported
 platform. Download the appropriate build from your configured release
@@ -73,18 +73,19 @@ The application supports light and dark themes. The default is the system
 preference, which you can override in
 [Application Settings](#application-settings).
 
-## The two-mode layout
+## The Two-Mode Layout
 
 TelaVisor uses a two-mode layout. The mode toggle in the center of the
 title bar switches between **Clients** mode and **Infrastructure** mode.
 Each mode has its own tab bar and its own set of features.
 
 - **Clients mode** is for *connecting to remote services*. Its tabs are
-  Status, Profiles, Files, and Client Settings. Read this mode as
+  Status, Profiles, Files, Updates, and Client Settings. Read this mode as
   *everything a user does to use a tunnel*.
 - **Infrastructure mode** is for *administering the system that the
-  tunnels run on*. Its tabs are Hubs, Agents, Remotes, and Credentials.
-  Read this mode as *everything an operator does to keep tunnels working*.
+  tunnels run on*. Its tabs are Hubs, Agents, Access, Remotes, and
+  Credentials. Read this mode as *everything an operator does to keep
+  tunnels working*.
 
 A persistent log panel sits at the bottom of the window across both modes.
 You can drag its top edge to resize it, or click the chevron to collapse
@@ -97,7 +98,7 @@ visit Infrastructure mode. An operator who runs hubs and agents on behalf
 of others spends most of their time in Infrastructure mode. A power user
 moves between both freely.
 
-## Clients mode
+## Clients Mode
 
 ### Status
 
@@ -214,7 +215,7 @@ The Profile Settings panel contains:
 The Profile Settings panel is where you set up things that apply to the
 profile regardless of which machine you are connecting to.
 
-#### Switching profiles
+#### Switching Profiles
 
 The profile dropdown in the toolbar shows every profile in your profile
 directory. Click the dropdown to open the list and select a profile to
@@ -231,7 +232,7 @@ if confirm-disconnect is enabled), then loads the new profile without
 automatically reconnecting. Click the power button in the title bar to
 connect with the new profile.
 
-#### Hub view
+#### Hub View
 
 Clicking a hub in the sidebar shows a summary card for that hub in the
 right panel.
@@ -249,7 +250,7 @@ The hub view is the place to get a quick read on whether the hub has the
 machines you expect. From here you can drill into a specific machine by
 clicking it in the sidebar.
 
-#### Machine view
+#### Machine View
 
 Clicking a machine in the sidebar shows the services that machine
 exposes through the hub.
@@ -308,7 +309,7 @@ enabled. There is no Secure Shell (SSH), no Server Message Block (SMB),
 and no Web Distributed Authoring and Versioning (WebDAV) mount required;
 the file browser talks the file share protocol directly.
 
-#### When the tunnel is down
+#### When the Tunnel Is Down
 
 When the tunnel is not connected, opening the Files tab shows the list
 of machines in the active profile, but the only state you can see is
@@ -320,7 +321,7 @@ You cannot browse files until you connect the profile. The Files tab in
 this state is mostly informational: it tells you which machines are part
 of the active profile and that none of them are reachable yet.
 
-#### When the tunnel is up
+#### When the Tunnel Is Up
 
 When the tunnel is connected, the Files tab shows each machine with its
 file share status: a coloured indicator dot, the machine name, the hub
@@ -341,7 +342,7 @@ read-only in this view. Editing them is done from the
 [Agents tab](#agents) in Infrastructure mode, on a machine where you
 have the manage permission.
 
-#### Browsing files
+#### Browsing Files
 
 Clicking a machine opens its file share in an Explorer-style browser.
 
@@ -528,7 +529,7 @@ The Status field shows whether autostart is currently *Installed* or
 registers a Scheduled Task that triggers at login. On Linux, it writes
 a systemd user unit. On macOS, it installs a LaunchAgent.
 
-## Infrastructure mode
+## Infrastructure Mode
 
 Switching the mode toggle in the title bar to *Infrastructure* changes
 the tab bar to the five administration tabs: Hubs, Agents, Access,
@@ -551,7 +552,7 @@ dropdown, a navigation list of views, and an *Add Hub* button at the
 bottom. The right panel shows the currently selected view for the
 currently selected hub.
 
-#### Hub picker
+#### Hub Picker
 
 The hub picker at the top of the sidebar lists every hub you have
 credentials for. Clicking it opens a dropdown of hub URLs.
@@ -643,7 +644,7 @@ visible to owners and admins:
   `Updated to vX.Y.Z`) and the page re-renders when the hub comes
   back online. The label and disabled state are derived from the
   channel manifest, not from the GitHub `/releases/latest` API, so a
-  hub on `dev` cannot be told to "update to v0.5.0" (the `stable`
+  hub on `dev` cannot be told to "update to v0.15.0" (the `stable`
   HEAD).
 - **Restart.** Requests an immediate graceful restart of the hub
   process.
@@ -726,7 +727,7 @@ currently selected agent. *Undo* and *Save* are enabled when there are
 unsaved changes. *Restart* and *Logs* are always enabled when an agent
 is selected.
 
-#### Agent list
+#### Agent List
 
 When no agent is selected, the right panel is empty with a prompt to
 select one.
@@ -778,7 +779,7 @@ has to land in the agent host's credential store; in that case the
 operator runs `telad pair` directly on the target host, which is the
 flow Generate... is built for.
 
-#### Agent detail
+#### Agent Detail
 
 Selecting an agent in the sidebar shows the agent detail panel on the
 right.
@@ -938,7 +939,7 @@ listed identities as cards, and the Tokens panel that managed
 authentication tokens as a table. Both are gone; this tab is the
 single place to go.
 
-#### Two views of the same data
+#### Two Views of the Same Data
 
 Access opens on one of two projections of the same underlying data:
 
@@ -966,7 +967,7 @@ By machine is the same edit visible in By identity.
 The selected view is persisted to TelaVisor's settings, so reopening
 the tab returns to whichever view the operator last used.
 
-#### The toolbar
+#### The Toolbar
 
 The toolbar across the top of the tab holds the Hub selector and
 every action that operates on the current hub:
@@ -996,7 +997,7 @@ every action that operates on the current hub:
   and the services each grant allows. Useful for compliance and
   for diffing access state over time.
 
-#### The matrix
+#### The Matrix
 
 The matrix is the main working area. Rows are identities (in By
 machine) or machines (in By identity); columns are the three
@@ -1025,7 +1026,7 @@ sidebar item for that row's machine (or identity) picks up the same
 *pending* indicator. Save and Undo in the toolbar are both enabled
 whenever the pending set is non-empty.
 
-#### The Connect services column
+#### The Connect Services Column
 
 The *Connect services* column shows which services the identity can
 reach on the machine when the Connect permission is granted. An
@@ -1065,7 +1066,7 @@ Per-service access control is a v0.15 feature; on older hubs the
 dialog opens in a disabled state with a note explaining that the hub
 must be upgraded before the filter can be used.
 
-#### Save and conflicts
+#### Save and Conflicts
 
 Save fires one write per staged change, in parallel. Each write
 carries the target identity's version as an `If-Match` precondition,
@@ -1090,7 +1091,7 @@ The dialog offers three recovery paths:
 Writes that did not conflict are already committed by the time the
 dialog opens; only the conflicting rows are still pending.
 
-#### The By identity detail header
+#### The By Identity Detail Header
 
 When a user-role identity is selected in By identity, the detail
 header has an action cluster for identity-level operations:
@@ -1182,7 +1183,7 @@ Unix systems and the equivalent restrictive Access Control List (ACL)
 on Windows. The same file is shared with the `tela` CLI, so credentials
 added through TelaVisor are visible to `tela` and vice versa.
 
-## Log panel
+## Log Panel
 
 The log panel is a persistent area at the bottom of the window that
 provides tabbed log output visible across both modes. You can resize it
@@ -1197,7 +1198,7 @@ bottom. Each pane is limited to a configurable maximum number of lines
 (default 5000, configurable in
 [Application Settings](#application-settings)).
 
-### Built-in tabs
+### Built-In Tabs
 
 Three tabs are always present.
 
@@ -1232,7 +1233,7 @@ currently active tab:
 - **Save.** Saves the active tab's content to a file.
 - **Clear.** Clears the active tab.
 
-### Attaching log sources
+### Attaching Log Sources
 
 The `+` button at the right end of the tab strip opens the *attach
 popover*. The popover lists every hub you have credentials for and
@@ -1310,7 +1311,7 @@ The settings are organized into sections.
   log tab in the [Log panel](#log-panel). The default is 5000. Older
   lines are evicted as new ones arrive.
 
-## About dialog
+## About Dialog
 
 The About dialog is opened by clicking the **TelaVisor** title in the
 top-left corner of the title bar, or by clicking the information icon
@@ -1324,7 +1325,7 @@ The dialog is the canonical place to confirm what version of TelaVisor
 and `tela` you are running, and which channels they are configured to
 follow. Use it when filing bug reports.
 
-## Update indicator
+## Update Indicator
 
 When an update is available for any of the binaries TelaVisor manages,
 an orange warning icon appears in the title bar. Clicking the icon
@@ -1343,7 +1344,7 @@ Chocolatey, apt, brew), the self-update mechanism is disabled. Use the
 package manager to update instead. The update indicator will not
 appear in this case.
 
-## Connection status icon
+## Connection Status Icon
 
 The power button in the title bar indicates the current connection
 state at a glance:
@@ -1356,7 +1357,7 @@ You can click the button at any time from any tab to toggle the connection.
 When connected, clicking it disconnects. When disconnected, clicking it
 connects using the current profile.
 
-## System tray
+## System Tray
 
 When *Minimize to tray on close* is enabled in
 [Application Settings](#application-settings), closing the window
@@ -1370,7 +1371,7 @@ again. Right-clicking the tray icon opens a small menu with *Show* and
 The tray feature is useful for keeping a long-running tunnel out of
 the way without committing to installing a system service.
 
-## How TelaVisor works with tela
+## How TelaVisor Works with tela
 
 TelaVisor does not implement WireGuard, gVisor, the hub protocol, the
 agent protocol, or any of the other parts of the Tela fabric directly.
@@ -1407,7 +1408,7 @@ credentials in the local credential file. There is no `tela` child
 process involved in those requests; TelaVisor uses the same hub admin
 endpoints that the CLI's `tela admin` family uses.
 
-## Profile storage
+## Profile Storage
 
 Profiles are stored in the user's application data directory:
 
@@ -1435,7 +1436,7 @@ channel, log lines, attached log tabs) take effect when you click
 *Apply* or *Apply & Close* in the Application Settings dialog and
 persist across restarts.
 
-## Building from source
+## Building from Source
 
 TelaVisor requires [Wails v2](https://wails.io/docs/gettingstarted/installation)
 and its prerequisites: Go 1.25 or newer, Node.js, and the platform

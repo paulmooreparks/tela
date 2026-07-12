@@ -1,8 +1,10 @@
-# What Tela is
+# What Tela Is
 
-As mentioned in the introduction, Tela is a connectivity fabric. The basic operational unit in Tela is a *group*: one hub and all the agents connected to it. A collection of groups is a *fleet*.
+Tela is a connectivity fabric. The basic operational unit in Tela is a
+*group*: one hub and all the agents connected to it. A collection of groups
+is a *fleet*.
 
-## What it solves
+## What It Solves
 
 The classic remote-access problem looks like this. You have a machine
 somewhere: a workstation, a server, a Supervisory Control and Data
@@ -16,7 +18,7 @@ a kernel-mode VPN that requires admin rights to install.
 
 Most existing solutions force a tradeoff:
 
-| Solution | The tax |
+| Solution | The Tax |
 |----------|---------|
 | Traditional VPN | Admin to install on the client, inbound firewall rules on the server, often a kernel driver. |
 | SSH port forwarding | Requires SSH access to a publicly reachable jump host. |
@@ -27,12 +29,12 @@ Most existing solutions force a tradeoff:
 Tela takes the security guarantees of WireGuard and removes the deployment
 friction.
 
-## What makes Tela different
+## What Makes Tela Different
 
 A handful of properties define the design and run through every chapter of
 this book.
 
-### Outbound-only on both ends
+### Outbound-Only on Both Ends
 
 The agent and the client both make outbound connections to the hub.
 Neither needs an inbound firewall rule, port forwarding, dynamic Domain
@@ -40,7 +42,7 @@ Name System (DNS), or a static internet protocol (IP) address. The hub is
 the only component that needs a public address, and it only needs one
 inbound TCP port.
 
-### No kernel driver, no admin rights
+### No Kernel Driver, No Admin Rights
 
 Tela runs WireGuard entirely in userspace through gVisor's network stack.
 There is no TUN device, no kernel module, and no Administrator or root
@@ -48,33 +50,33 @@ requirement on either the agent or the client. This is the property that
 lets Tela work on a managed corporate laptop where you cannot install a
 VPN, and on a locked-down server where you cannot load drivers.
 
-### The hub is a blind relay
+### The Hub Is a Blind Relay
 
 All encryption is end to end between the agent and the client. The hub
 forwards opaque WireGuard ciphertext and cannot read session contents. A
 compromised hub leaks metadata, not data.
 
-### Any TCP service
+### Any TCP Service
 
 Tela tunnels arbitrary TCP. SSH, RDP, HTTP, PostgreSQL, SMB, Virtual
 Network Computing (VNC), or anything else that runs over TCP travels
 through the same tunnel without the hub having to understand the protocol.
 
-### Three transports, automatic fallback
+### Three Transports, Automatic Fallback
 
 The fabric tries direct peer-to-peer first, falls back to a User Datagram
 Protocol (UDP) relay through the hub, and falls back again to a WebSocket
 relay over Transport Layer Security (TLS). Whichever transport is active,
 the WireGuard payload is the same and the hub still cannot decrypt it.
 
-### One binary per role, no runtime dependencies
+### One Binary per Role, No Runtime Dependencies
 
 `tela`, `telad`, and `telahubd` are each a single executable. There is no
 installer, no package to register with the operating system unless you
 choose to run them as services, and no shared library to deploy alongside
 them.
 
-## What grows on top of the fabric
+## What Grows on Top of the Fabric
 
 Connectivity is the substrate. Everything else in this book is something
 the project has built on top of it, in the same repository, with the same
@@ -87,7 +89,7 @@ release process.
 - **Remote administration** of agents and hubs through the same wire as
   data traffic, so you do not need shell access to the host running an
   agent or a hub to manage it.
-- **File sharing** through a sandboxed directory on each agent, with
+- **File sharing** through sandboxed directories on each agent, with
   upload, download, rename, move, and delete operations available from the
   command line, the desktop client, or a Web Distributed Authoring and
   Versioning (WebDAV) mount.
@@ -96,29 +98,29 @@ release process.
   routing one tunnel port to several local services, a bridge-mode agent
   for fronting services on other LAN-reachable machines, outbound
   dependency rerouting for service-to-service calls, and the hub itself as
-  a relay gateway for opaque WireGuard ciphertext between a client and an
-  agent. They share one rule: forward without inspecting beyond what the
-  layer requires. The 1.0 roadmap extends the family with a multi-hop
-  relay gateway that bridges sessions across more than one hub.
+  a relay gateway for opaque WireGuard ciphertext, including relaying
+  between hubs. They share one rule: forward without inspecting beyond
+  what the layer requires.
 - **TelaVisor**, a desktop graphical interface that wraps the client and
   exposes the management features without requiring terminal access.
-- **Self-update through release channels** (dev, beta, stable) with signed
-  manifests, so every binary can update itself in place without an external
-  package manager.
-- **A hub directory protocol** that lets a portal list and discover hubs.
+- **Self-update through release channels** (dev, beta, stable) with
+  hash-verified manifests, so every binary can update itself in place
+  without an external package manager.
+- **A hub directory protocol** that lets a portal list and discover hubs,
+  and a standalone portal binary (`telaportal`) that implements it.
 
 These features are not bolted on. They share the protocol, the access
 model, the configuration system, and the release pipeline of the fabric
 itself.
 
-## What it is not
+## What It Is Not
 
 The word *fabric* invites projection, so a few explicit non-goals are worth
 naming up front.
 
 - **Not a mesh VPN.** There is no overlay network with auto-discovery and
   no agent-to-agent routing as a first-class feature. You connect to one
-  machine at a time. See *A note on the word fabric* below.
+  machine at a time. See *A Note on the Word Fabric* below.
 - **Not a multi-tenant SaaS.** You run the hub yourself. A portal can
   aggregate multiple hubs, but each hub still runs under its own operator's
   control.
@@ -128,12 +130,12 @@ naming up front.
 - **Not a replacement for SSH.** It is a way to *get* SSH (or RDP, or
   PostgreSQL) onto your laptop without configuring port forwarding or VPNs.
 
-The [Topology and addressing](../howto/networking.md#topology-and-addressing)
+The [Topology and Addressing](../howto/networking.md#topology-and-addressing)
 section in the Networking chapter answers specific questions about IP
 addressing, clash avoidance, discoverability, ICMP, agent-to-agent routing,
 and session limits.
 
-## Why three binaries
+## Why Three Binaries
 
 The split is deliberate.
 
@@ -156,7 +158,7 @@ address. They have different lifecycles, different threat models, and
 different update cadences. Bundling them would force shared concerns where
 there are none.
 
-## A note on the word *fabric*
+## A Note on the Word *Fabric*
 
 Tela is a fabric in the leaf-spine sense, not a mesh in the Tailscale
 sense. The hub is the spine. The agents and clients are the leaves. Most
@@ -174,5 +176,5 @@ art that justifies it.
 
 ---
 
-For the architectural details, see [Why a connectivity fabric](../architecture/design.md).
+For the architectural details, see [Why a Connectivity Fabric](../architecture/design.md).
 For installation, see [Installation](installation.md).

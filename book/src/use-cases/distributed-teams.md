@@ -1,12 +1,15 @@
-# Distributed teams
+# Distributed Teams
 
-## The scenario
+Your engineering team is spread across cities and time zones. You have
+shared development and staging infrastructure (databases, internal HTTP
+services, build servers) that team members need to reach from home offices,
+co-working spaces, and laptops on the road.
 
-Your engineering team is spread across multiple cities or time zones. You have shared development and staging infrastructure -- databases, internal HTTP services, build servers -- that team members need to reach from their home offices, co-working spaces, and laptops on the road.
-
-A team VPN works, but it requires a VPN server, client configuration on every laptop, and gives access to the whole network rather than specific services. Tela takes a different approach: each shared resource registers itself with a hub under a named identity, and each team member gets a token scoped to exactly the machines and services their role needs.
-
-When a developer connects, they see only the machines they have been granted access to:
+A team VPN works, but it requires a VPN server, client configuration on
+every laptop, and it grants access to a whole network rather than to
+specific services. Tela inverts that: each shared resource registers itself
+with a hub under a named identity, and each team member gets a token scoped
+to exactly the machines their role needs.
 
 ```
 Services available:
@@ -15,188 +18,80 @@ Services available:
   localhost:8080   → HTTP         (staging-app)
 ```
 
-A new hire gets onboarded with a pairing code -- they redeem it with one command and immediately have access to the right machines. When they leave, their identity is removed and access ends across all machines at once.
+A new hire redeems a pairing code with one command and immediately has the
+right access. When someone leaves, removing one identity ends their access
+to everything at once.
 
-## Design goals for teams
+## Topology
 
-- Avoid distributing IP addresses and per-machine VPN configs.
-- Expose only the services teams need (service-level access, not full-network access).
-- Keep onboarding simple (download one binary, connect).
+Pick a hub strategy first, because it defines your isolation boundaries:
 
----
+- **One hub per environment** (`dev`, `staging`, `prod`) is the right
+  default for a single organization. Different environments get different
+  identity lists and cannot leak into each other.
+- **One hub per site** fits teams organized around physical locations.
+- **One hub per customer** is the MSP pattern; see
+  [MSP and IT Support](msp-it-support.md).
 
-## Step 0 - Pick a hub strategy
+Shared machines run endpoint agents as OS services. A machine that hosts
+several internal HTTP tools is a good candidate for a
+[path gateway](../guide/gateway.md), so the team reaches all of them
+through one port and one origin. For sites with hardware that cannot run
+`telad` (printers, appliances), one bridge agent per site can front them;
+see the gateway pattern in [Run an Agent](../howto/telad.md).
 
-Common approaches:
+## The Access Model
 
-- **One hub per environment**: `dev`, `staging`, `prod`.
-- **One hub per site**: `office-a`, `office-b`, `cloud`.
-- **One hub per customer/tenant** (for MSP-like setups).
-
-Start with **one hub per environment** if you have a single organization.
-
----
-
-## Step 1 - Run the hub(s)
-
-See [Run a hub on the public internet](../howto/hub.md) for the full hub deployment guide, including TLS setup and cloud firewall rules. For a quick start on a host with a public address:
-
-```bash
-telahubd
-```
-
-The hub prints an owner token on first start. Save it. Make each hub reachable over `wss://` (public VM or reverse proxy). Ensure WebSockets work.
-
----
-
-## Step 2 - Set up authentication
-
-Create tokens for agents and developers on each hub:
+The shape that scales: one agent identity per shared machine, one identity
+per human, connect grants that follow roles.
 
 ```bash
-# Create agent tokens (one per telad instance)
-tela admin tokens add telad-dev-db01 -hub wss://dev-hub.example.com -token <owner-token>
-# Save the printed token -- this is <agent-token> used in telad on dev-db01 (Step 3)
+# A shared dev database
+tela admin tokens add agent-dev-db01 -hub wss://dev-hub.example.com
+tela admin access grant agent-dev-db01 dev-db01 register -hub wss://dev-hub.example.com
 
-tela admin tokens add telad-staging-win01 -hub wss://staging-hub.example.com -token <staging-owner-token>
-# Save the printed token -- this is <agent-token> used in telad on staging-win01 (Step 3)
-
-# Grant each agent permission to register its machine
-tela admin access grant telad-dev-db01 dev-db01 register -hub wss://dev-hub.example.com -token <owner-token>
-
-# Create a developer token
-tela admin tokens add alice -hub wss://dev-hub.example.com -token <owner-token>
-# Save the printed token -- give it to Alice for use with tela connect (Step 4)
-tela admin access grant alice dev-db01 connect -hub wss://dev-hub.example.com -token <owner-token>
+# A developer
+tela admin tokens add alice -hub wss://dev-hub.example.com
+tela admin access grant alice dev-db01 connect -hub wss://dev-hub.example.com
+tela admin access grant alice dev-build connect -hub wss://dev-hub.example.com
 ```
 
-See [Run a hub on the public internet](../howto/hub.md) for the full list of `tela admin` commands.
+For the dev hub specifically, a wildcard connect grant
+(`tela admin access grant alice '*' connect`) is a defensible convenience:
+every developer reaches every dev machine, including ones added next month.
+Keep staging grants explicit, and production grants strictly explicit (see
+[Production Access](production-access.md)).
 
----
+**Onboarding** runs on pairing codes, not copied tokens. An admin runs
+`tela admin pair-code dev-db01` (or generates one from TelaVisor's Access
+tab), sends the short-lived code over chat, and the new hire runs the
+printed `tela pair` command. The permanent token lands directly in their
+credential store; nobody ever handles the raw value. See
+[Credentials and Pairing](../guide/credentials.md).
 
-## Step 3 - Register machines with `telad`
+**Offboarding** is `tela admin access remove <id>`, one command per hub.
 
-### Pattern A - Endpoint agents (recommended)
+## Shared Profiles
 
-Run `telad` on each machine you want to expose.
+Build one profile per environment with pinned `local:` ports and
+distribute the YAML file itself (it contains no secrets when tokens live in
+the credential store). Team members drop it into `~/.tela/profiles/`, or
+import it through TelaVisor's Profiles tab, and everyone's `dev-db` is on
+the same local port, which keeps connection strings in wikis and `.env`
+examples true for the whole team.
 
-Example (a Linux server exposing SSH and Postgres):
+Machine naming is part of the same discipline: stable role-based names
+(`staging-web02`, not an IP or a pet name) keep profiles, grants, and
+conversations unambiguous.
 
-```bash
-telad -hub wss://dev-hub.example.com -machine dev-db01 -ports "22,5432" -token <agent-token>
-```
+## Pitfalls Specific to This Scenario
 
-Example (a Windows staging box exposing RDP):
-
-```powershell
-telad.exe -hub wss://staging-hub.example.com -machine staging-win01 -ports "3389" -token <agent-token>
-```
-
-### Pattern B - Site gateway (bridge agent)
-
-Run `telad` on a gateway VM that can reach internal targets.
-
-Example `telad.yaml`:
-
-```yaml
-hub: wss://dev-hub.example.com
-token: "<agent-token>"
-machines:
-  - name: dev-db01
-    services:
-      - port: 22
-        name: SSH
-      - port: 5432
-        name: Postgres
-    target: 10.10.0.15
-  - name: dev-admin
-    services:
-      - port: 8443
-        name: Admin UI
-    target: 10.10.0.25
-```
-
-Run:
-
-```bash
-telad -config telad.yaml
-```
-
----
-
-## Step 4 - Developer workflow with `tela`
-
-On a developer laptop:
-
-1. Download `tela` from GitHub Releases and verify checksums.
-2. List machines:
-
-```bash
-tela machines -hub wss://dev-hub.example.com -token <your-token>
-```
-
-3. List services on a machine:
-
-```bash
-tela services -hub wss://dev-hub.example.com -machine dev-db01 -token <your-token>
-```
-
-4. Connect:
-
-```bash
-tela connect -hub wss://dev-hub.example.com -machine dev-db01 -token <your-token>
-```
-
-5. Use tools against the local address shown in the output:
-
-- SSH:
-
-```bash
-ssh -p PORT localhost
-```
-
-- Postgres (example):
-
-```bash
-psql -h localhost -p PORT -U postgres
-```
-
-**Tip:** Set environment variables to avoid repeating flags:
-
-```bash
-export TELA_HUB=wss://dev-hub.example.com
-export TELA_TOKEN=<your-token>
-tela machines
-tela connect -machine dev-db01
-```
-
----
-
-## Operational guidance
-
-### Naming conventions
-
-- Prefer stable names: `env-roleNN` (example: `staging-web02`).
-- Avoid embedding IPs in names.
-
-### Least privilege
-
-- Expose only required ports.
-- Prefer encrypted service protocols (SSH, TLS).
-
-### Split dev/staging/prod
-
-- Separate hubs are the simplest isolation boundary.
-
----
-
-## Troubleshooting
-
-### A machine is "online" but the service doesn't work
-
-- Endpoint pattern: verify the service is listening on that machine.
-- Gateway pattern: verify the gateway can reach `target:port`.
-
-### WebSocket blocked
-
-- If developers can't reach `wss://` due to corporate proxies, ensure the hub is accessible over standard HTTPS ports and that WebSockets are allowed.
+- Corporate networks and hotel Wi-Fi sometimes proxy or block WebSockets.
+  Publish the hub on standard HTTPS (port 443) behind a reverse proxy, per
+  [Run a Hub on the Public Internet](../howto/hub.md), and connections
+  survive almost any network a laptop lands on.
+- Do not share one identity across the team. Individual identities cost
+  nothing and are the difference between "revoke Bob" and "rotate the
+  token everyone uses and redistribute it."
+- If developers can list a machine but not connect, the machine grant is
+  missing; `tela admin access` shows the whole matrix at a glance.

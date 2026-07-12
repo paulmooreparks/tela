@@ -1,10 +1,15 @@
-# Hub administration
+# Hub Administration
 
-The `tela admin` subcommand manages a hub's tokens, access permissions, agent lifecycle, and portal registrations from the command line. All operations require a token with owner or admin role. Changes take effect immediately and persist to the hub's configuration file. No hub restart is needed.
+The `tela admin` subcommand manages a hub's tokens, access permissions,
+agent lifecycle, and portal registrations from the command line. All
+operations require a token with owner or admin role. Changes take effect
+immediately and persist to the hub's configuration file. No hub restart is
+needed.
 
 ## Authentication
 
-Every `tela admin` command requires a hub URL and an owner or admin token. User-role tokens are rejected. The owner token is printed once when you run `telahubd user bootstrap` and is never displayed again.
+Every `tela admin` command requires a hub URL and an owner or admin token.
+User-role tokens are rejected.
 
 ```bash
 tela admin tokens list -hub wss://hub.example.com -token <owner-token>
@@ -15,9 +20,10 @@ If the token is omitted, `tela` resolves it in this order:
 1. `-token` flag
 2. `TELA_OWNER_TOKEN` environment variable
 3. `TELA_TOKEN` environment variable
-4. Credential store -- the token stored by `tela login` for the hub URL
+4. Credential store: the token stored by `tela login` for the hub URL
 
-In practice, you log in once and omit the token flag on every subsequent command:
+In practice, you log in once and omit the token flag on every subsequent
+command:
 
 ```bash
 tela login wss://hub.example.com
@@ -26,19 +32,33 @@ tela login wss://hub.example.com
 tela admin tokens list -hub wss://hub.example.com
 ```
 
-The `-hub` flag accepts a short name if you have configured remotes, but the full URL is always accepted.
+The `-hub` flag accepts a short name if you have configured remotes, but
+the full URL is always accepted.
 
 ## Concepts
 
-A hub's authorization state has two parts: identities (tokens) and permissions.
+A hub's authorization state has two parts: identities (tokens) and
+permissions.
 
-An **identity** is a named token. It has a role: `owner`, `admin`, or `user` (the default). Owner and admin tokens bypass all machine permission checks. User tokens are subject to per-machine access control. A `viewer` role exists but is reserved for the hub's auto-generated console token; it cannot be assigned when creating tokens.
+An **identity** is a named token. It has a role: `owner`, `admin`, or
+`user` (the default). Owner and admin tokens bypass all machine permission
+checks. User tokens are subject to per-machine access control. A `viewer`
+role also exists for read-only console access; it cannot be chosen when
+creating a token, but an existing identity can be changed to it (see
+[Roles](#roles) below).
 
-**Machine permissions** determine what a user-role token can do on a specific machine: `connect`, `register`, and `manage`. These are stored as entries in the access control list. A wildcard machine ID of `*` applies the permission to all machines.
+**Machine permissions** determine what a user-role token can do on a
+specific machine: `connect`, `register`, and `manage`. These are stored as
+entries in the access control list. A wildcard machine ID of `*` applies
+connect and manage permissions to all machines, including ones registered
+later; register permission is always granted per machine.
 
-The `tokens` resource manages identities. The `access` resource manages the permissions attached to those identities. The `rotate` command replaces the secret value of a token without changing its identity or permissions.
+The `tokens` resource manages identities. The `access` resource manages the
+permissions attached to those identities. The `rotate` command replaces the
+secret value of a token without changing its identity or permissions.
 
-For the formal definition of roles and permissions, see [Appendix C: Access model](../architecture/access-model.md).
+For the formal definition of roles and permissions, see
+[Appendix C: Access Model](../architecture/access-model.md).
 
 ## Tokens
 
@@ -55,9 +75,11 @@ tela admin tokens add <id> -hub wss://hub.example.com -role admin
 tela admin tokens remove <id> -hub wss://hub.example.com
 ```
 
-`tokens add` prints the token value once and never again. Copy it before closing the terminal. If you lose it, use `rotate` to issue a new one.
+`tokens add` prints the token value once and never again. Copy it before
+closing the terminal. If you lose it, use `rotate` to issue a new one.
 
-`tokens remove` deletes the identity and all its machine permissions. There is no soft delete or recovery.
+`tokens remove` deletes the identity and all its machine permissions. There
+is no soft delete or recovery.
 
 The default role for a new identity is `user`.
 
@@ -68,11 +90,18 @@ The default role for a new identity is `user`.
 | `owner` | Full access to all hub operations, including owner-only actions |
 | `admin` | Full access to all hub operations except owner-only actions |
 | `user` | Access to machines governed by per-machine permissions |
-| `viewer` | Read-only access to machines they have connect permission on |
+| `viewer` | Read-only access to hub status and history |
+
+`tokens add` accepts `-role owner` and `-role admin`; new identities cannot
+be created as viewers. To make an identity a viewer, create it as a user
+and change its role afterward (in TelaVisor, the *Change role...* action on
+the Access tab). The hub refuses to demote its only owner; promote another
+identity to owner first.
 
 ## Access
 
-The `access` resource provides a unified view of identities and their per-machine permissions.
+The `access` resource provides a unified view of identities and their
+per-machine permissions.
 
 ```bash
 # List all identities and their permissions
@@ -81,8 +110,11 @@ tela admin access -hub wss://hub.example.com
 # Grant permissions to an identity on a machine
 tela admin access grant <id> <machine> <perms> -hub wss://hub.example.com
 
-# Grant permissions on all machines
+# Grant connect on all machines
 tela admin access grant <id> '*' connect -hub wss://hub.example.com
+
+# Restrict a connect grant to specific services
+tela admin access grant <id> <machine> connect -services ssh,postgres -hub wss://hub.example.com
 
 # Revoke all permissions for an identity on a machine
 tela admin access revoke <id> <machine> -hub wss://hub.example.com
@@ -94,31 +126,44 @@ tela admin access rename <id> <new-id> -hub wss://hub.example.com
 tela admin access remove <id> -hub wss://hub.example.com
 ```
 
-Permissions are specified as a comma-separated list. Valid values are `connect`, `register`, and `manage`.
+Permissions are specified as a comma-separated list. Valid values are
+`connect`, `register`, and `manage`.
 
 ```bash
 # Grant connect and register on a specific machine
 tela admin access grant alice barn connect,register -hub wss://hub.example.com
 ```
 
-A `*` machine ID grants the permission on every machine, including ones registered after the grant is made.
+A `*` machine ID grants connect and manage on every machine, including ones
+registered after the grant is made.
+
+The `-services` flag narrows a connect grant to a named subset of the
+machine's services. It is valid only when `connect` is among the granted
+permissions, and it requires a hub recent enough to support per-service
+access control; against an older hub the command refuses rather than
+silently granting broader access.
 
 ## Rotate
 
-`rotate` generates a new secret value for an existing identity without changing its name, role, or permissions. Use it to revoke a leaked token while keeping the identity intact.
+`rotate` generates a new secret value for an existing identity without
+changing its name, role, or permissions. Use it to revoke a leaked token
+while keeping the identity intact.
 
 ```bash
 tela admin rotate <id> -hub wss://hub.example.com
 ```
 
-The new token value is printed once. The old token stops working immediately.
+The new token value is printed once. The old token stops working
+immediately.
 
-## Pair codes
+## Pair Codes
 
-A pairing code is a short, single-use code that lets you onboard a user or agent without distributing a raw token. The recipient redeems the code to receive a permanent token.
+A pairing code is a short, single-use code that lets you onboard a user or
+agent without distributing a raw token. The recipient redeems the code to
+receive a permanent token.
 
 ```bash
-# Generate a connect code for machine barn (default expiry 24h)
+# Generate a connect code for machine barn (default expiry 10 minutes)
 tela admin pair-code barn -hub wss://hub.example.com
 
 # Set a custom expiry
@@ -131,23 +176,28 @@ tela admin pair-code barn -hub wss://hub.example.com -type register
 tela admin pair-code barn -hub wss://hub.example.com -machines '*'
 ```
 
-The output includes the code and the redemption command to give to the recipient:
+The output includes the code and the redemption command to give to the
+recipient:
 
 ```
 Generated pairing code: ABCD-1234
-Expires: 2026-04-15T10:30:00Z
+Expires: 2026-07-15T10:30:00Z
 
 Client pairing command:
   tela pair -hub wss://hub.example.com -code ABCD-1234
 ```
 
-Codes expire between 10 minutes and 7 days after generation. The `-expires` flag accepts Go duration syntax: `10m`, `24h`, `7d`.
+The default expiry is 10 minutes; the maximum is 7 days. The `-expires`
+flag accepts Go duration syntax plus a `d` suffix for days: `10m`, `24h`,
+`7d`.
 
-For how users and agents redeem codes, see [Credentials and pairing](credentials.md).
+For how users and agents redeem codes, see
+[Credentials and Pairing](credentials.md).
 
 ## Agent
 
-The `agent` resource lets you inspect and manage remote `telad` instances through the hub, without a direct connection to the agent machine.
+The `agent` resource lets you inspect and manage remote `telad` instances
+through the hub, without a direct connection to the agent machine.
 
 ```bash
 # List registered agents
@@ -168,7 +218,6 @@ tela admin agent restart -machine barn -hub wss://hub.example.com
 
 # Trigger a self-update
 tela admin agent update -machine barn -hub wss://hub.example.com
-tela admin agent update -machine barn -hub wss://hub.example.com -version v0.9.1
 
 # Show the agent's current release channel
 tela admin agent channel -machine barn -hub wss://hub.example.com
@@ -177,7 +226,9 @@ tela admin agent channel -machine barn -hub wss://hub.example.com
 tela admin agent channel -machine barn -hub wss://hub.example.com set stable
 ```
 
-Agent management commands are forwarded through the hub to the agent and wait for a response. If the agent is offline or does not respond within 30 seconds, the command returns an error.
+Agent management commands are forwarded through the hub to the agent and
+wait for a response. If the agent is offline or does not respond within 30
+seconds, the command returns an error.
 
 ## Hub
 
@@ -196,7 +247,6 @@ tela admin hub restart -hub wss://hub.example.com
 
 # Trigger a self-update
 tela admin hub update -hub wss://hub.example.com
-tela admin hub update -hub wss://hub.example.com -version v0.9.1
 
 # Show the current release channel
 tela admin hub channel -hub wss://hub.example.com
@@ -207,7 +257,8 @@ tela admin hub channel set stable -hub wss://hub.example.com
 
 ## Portals
 
-Portals are external registries that list hubs for discovery. The `portals` resource manages which portals a hub is registered with.
+Portals are external registries that list hubs for discovery. The `portals`
+resource manages which portals a hub is registered with.
 
 ```bash
 # List registered portals
@@ -220,11 +271,13 @@ tela admin portals add <name> -portal-url <url> -hub wss://hub.example.com
 tela admin portals remove <name> -hub wss://hub.example.com
 ```
 
-Portal changes take effect immediately. The hub begins syncing with a newly added portal without a restart.
+Portal changes take effect immediately. The hub begins syncing with a newly
+added portal without a restart.
 
-## Flag placement
+## Flag Placement
 
-All `tela admin` subcommands accept flags after positional arguments. Both of these are equivalent:
+All `tela admin` subcommands accept flags after positional arguments. Both
+of these are equivalent:
 
 ```bash
 tela admin tokens add alice -hub wss://hub.example.com -role admin

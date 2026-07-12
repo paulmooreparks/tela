@@ -4,61 +4,63 @@
 
 # Getting Started
 
-- [What Tela is](getting-started/what-tela-is.md)
+- [What Tela Is](getting-started/what-tela-is.md)
 - [Installation](getting-started/installation.md)
-- [First connection: hello, hub](getting-started/first-connection.md)
+- [First Connection](getting-started/first-connection.md)
 
 # User Guide
 
-- [The three binaries](guide/three-binaries.md)
-- [Credentials and pairing](guide/credentials.md)
-- [Connection profiles](guide/profiles.md)
-- [Hub directories and portals](guide/directories.md)
-- [The path gateway](guide/gateway.md)
-- [File sharing](guide/file-sharing.md)
+- [The Three Binaries](guide/three-binaries.md)
+- [Credentials and Pairing](guide/credentials.md)
+- [Connection Profiles](guide/profiles.md)
+- [Hub Directories and Portals](guide/directories.md)
+- [The Path Gateway](guide/gateway.md)
+- [File Sharing](guide/file-sharing.md)
 - [Upstreams](guide/upstreams.md)
-- [Hub administration](guide/admin.md)
-- [Hub web console](guide/hub-console.md)
-- [TelaVisor desktop app](guide/telavisor.md)
+- [Hub Administration](guide/admin.md)
+- [Hub Web Console](guide/hub-console.md)
+- [TelaVisor Desktop App](guide/telavisor.md)
 
 # How-to Guides
 
-- [Self-update and release channels](howto/channels.md)
-- [Run a hub on the public internet](howto/hub.md)
-- [Run an agent](howto/telad.md)
-- [Run Tela as an OS service](howto/services.md)
-- [Set up a path-based gateway](howto/gateway.md)
-- [Networking caveats](howto/networking.md)
+- [Self-Update and Release Channels](howto/channels.md)
+- [Run a Hub on the Public Internet](howto/hub.md)
+- [Run an Agent](howto/telad.md)
+- [Run Tela as an OS Service](howto/services.md)
+- [Set Up a Path-Based Gateway](howto/gateway.md)
+- [Networking Caveats](howto/networking.md)
 
 # Use Cases
 
-- [Personal cloud](use-cases/personal-cloud.md)
-- [Private web application](use-cases/private-web-app.md)
-- [Production access](use-cases/production-access.md)
-- [Distributed teams](use-cases/distributed-teams.md)
-- [MSP / IT support](use-cases/msp-it-support.md)
-- [Education labs](use-cases/education-labs.md)
-- [IoT / edge](use-cases/iot-edge.md)
+- [Personal Cloud](use-cases/personal-cloud.md)
+- [Private Web Application](use-cases/private-web-app.md)
+- [Production Access](use-cases/production-access.md)
+- [Distributed Teams](use-cases/distributed-teams.md)
+- [MSP and IT Support](use-cases/msp-it-support.md)
+- [Education Labs](use-cases/education-labs.md)
+- [IoT and Edge Devices](use-cases/iot-edge.md)
 
 # Operations
 
-- [Release process](ops/release-process.md)
+- [Release Process](ops/release-process.md)
+- [Roadmap to 1.0](ops/roadmap.md)
+- [Status: Design vs. Implementation](ops/status.md)
 
 # Design Rationale
 
-- [Why a connectivity fabric](architecture/design.md)
-- [Remote administration](architecture/remote-admin.md)
-- [File sharing](architecture/file-sharing.md)
+- [Why a Connectivity Fabric](architecture/design.md)
+- [Remote Administration](architecture/remote-admin.md)
+- [File Sharing](architecture/file-sharing.md)
 - [Gateways](architecture/gateway.md)
 
 ---
 
 # Appendices
 
-- [A. CLI reference](guide/reference.md)
-- [B. Configuration file reference](guide/configuration.md)
-- [C. Access model](architecture/access-model.md)
-- [D. Portal protocol](architecture/portal-protocol.md)
+- [A. CLI Reference](guide/reference.md)
+- [B. Configuration File Reference](guide/configuration.md)
+- [C. Access Model](architecture/access-model.md)
+- [D. Portal Protocol](architecture/portal-protocol.md)
 - [E. Tela Design Language](architecture/tdl.md)
 - [F. Glossary](glossary.md)
 

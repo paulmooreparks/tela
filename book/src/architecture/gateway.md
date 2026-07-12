@@ -14,13 +14,13 @@ This rule is not a policy choice. It is a structural property of the design. A r
 
 A fifth instance, the multi-hop relay gateway, bridges sessions across more than one hub. It is the same primitive as the single-hop relay applied recursively: a hub that receives a paired session forwards it to an agent registered with a different hub, remaining blind to the payload at every hop. Each forwarding hub decrements a one-byte hop count (TTL) in the shared 7-byte frame header and drops the frame if the count reaches zero, which prevents forwarding loops without a routing protocol. The operator configures which destination hubs a bridging hub will dial via a `bridges:` section in `telahubd.yaml`; the bridging hub advertises the reachable machines through its own `/api/status` with a `reachableThrough` pointer so clients know which hub they are really talking to. For the full specification see [DESIGN-relay-gateway.md](https://github.com/paulmooreparks/tela/blob/main/DESIGN-relay-gateway.md).
 
-## Why the rule matters
+## Why the Rule Matters
 
 Every instance of the gateway primitive is content-blind except where the layer requires it. The path gateway is the one exception: it must read the URL path to route correctly. It reads nothing else. It does not authenticate, it does not transform, and it does not inspect request bodies or responses. Authentication is the hub's job, enforced before the session is established. Application-level auth is the application's job.
 
 This division of responsibility is what makes each gateway instance composable. A path gateway behind a relay gateway (the hub) behind a multi-hop relay has additive security properties at each layer. The blind-relay property of the hub does not require the path gateway to be blind; it requires only that each component know its layer and nothing else.
 
-## The path gateway
+## The Path Gateway
 
 The path gateway is the instance users encounter most often. It is an HTTP reverse proxy that runs inside `telad` on a single tunnel port. It matches incoming HTTP requests by URL path prefix and forwards them to local services.
 
@@ -52,7 +52,7 @@ Routes are matched by longest prefix first. A request to `/api/users` matches `/
 
 The gateway does not terminate TLS (the WireGuard tunnel already provides end-to-end encryption), does not load balance, does not transform requests or responses, and does not authenticate (that is the hub's job). It is a transparent path router.
 
-## Why no changes to the hub or client
+## Why No Changes to the Hub or Client
 
 The gateway is entirely contained within `telad`. The hub sees the gateway port as another port in the registration, no different from any other service. The client connects to port 8080 like any other port. No protocol changes are required, and no hub or client changes are needed.
 

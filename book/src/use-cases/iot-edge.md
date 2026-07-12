@@ -1,12 +1,18 @@
-# IoT and edge devices
+# IoT and Edge Devices
 
-## The scenario
+You have devices deployed in the field: Raspberry Pis running sensor
+software, kiosks at retail locations, industrial controllers at
+manufacturing sites, point-of-sale terminals at customer premises. These
+devices sit behind NATs and firewalls that you do not control and cannot
+configure. Getting SSH access to any of them today means coordinating with
+the site's IT team to open a port, shipping the device back, or driving
+out.
 
-You have devices deployed in the field: Raspberry Pis running sensor software, kiosks at retail locations, industrial controllers at manufacturing sites, point-of-sale terminals at customer premises. These devices sit behind NATs and firewalls that you do not control and cannot configure. Getting SSH access to any of them for maintenance currently requires coordinating with the site's IT team to open a port, or shipping the device back, or driving out.
-
-With Tela, each device runs `telad` and makes an outbound connection to a central hub. From that point, you can SSH into any registered device from your workstation without any firewall changes at the site. The hub never has access to the device's filesystem or credentials -- it only relays the encrypted tunnel.
-
-When you need to reach a device fleet, your workstation sees:
+With Tela, each device (or a small gateway at each site) runs `telad` and
+makes an outbound connection to a central hub. From then on you can reach
+any registered device from your workstation, with no firewall changes at
+the site. The hub never has access to the device's filesystem or
+credentials; it only relays the encrypted tunnel.
 
 ```
 Services available:
@@ -15,171 +21,83 @@ Services available:
   localhost:8080   → HTTP         (controller-plant-a)
 ```
 
-Devices that go offline (power loss, network interruption) reconnect automatically when they come back. You get consistent SSH access regardless of where a device is deployed or what the local network looks like.
+Devices that lose power or network reconnect automatically when they come
+back.
 
-## Choose a deployment pattern
+## Topology
 
-- **Pattern A (Endpoint agent)**: run `telad` on each device.
-- **Pattern B (Site gateway / bridge)**: run one `telad` at the customer site that can reach many devices.
+The endpoint-versus-gateway choice matters more here than in any other
+scenario:
 
-Pattern A is simplest per device. Pattern B reduces software footprint on devices but increases the importance of gateway hardening.
+- **An agent on each device** is simplest per device and survives site
+  network changes. It costs a `telad` process on hardware that may be
+  small; the agent is a single static binary with ARM builds, so a
+  Raspberry Pi class device handles it comfortably. Bake the binary and a
+  systemd unit into the device image
+  ([Run Tela as an OS Service](../howto/services.md)).
+- **A site gateway** (one `telad` fronting many devices at a location)
+  minimizes the footprint on devices that cannot run extra software, at
+  the price of making the gateway a critical asset. Put it in a dedicated
+  subnet, allowlist its egress to the hub URL only, and allowlist its
+  internal reach to exactly the target devices and ports:
 
----
+  ```yaml
+  hub: wss://hub.example.com
+  token: "<site-agent-token>"
+  machines:
+    - name: kiosk-001
+      target: 192.168.10.21
+      services:
+        - port: 22
+          name: SSH
+    - name: kiosk-002
+      target: 192.168.10.22
+      services:
+        - port: 22
+          name: SSH
+  ```
 
-## Step 1 - Run a hub reachable from anywhere
+Fleet-wide software management is where release channels earn their place:
+agents update themselves from a channel manifest, and you can point the
+fleet at a channel you control. See
+[Self-Update and Release Channels](../howto/channels.md).
 
-See [Run a hub on the public internet](../howto/hub.md) for the full deployment guide, including TLS and firewall setup. For a quick start on a host with a public address:
+## The Access Model
 
-```bash
-telahubd
-```
+The tradeoff to decide deliberately: per-device identities or a shared
+fleet identity.
 
-The hub prints an owner token on first start. Save it. Publish the hub as `wss://hub.example.com`.
+- **Per-device identities** give you per-device revocation: a device that
+  is stolen or tampered with can be cut off without touching the rest of
+  the fleet. The cost is provisioning: each device needs its own token or
+  register pairing code at imaging time.
+- **A shared fleet identity** is simpler to provision but means a
+  credential extracted from one compromised device is valid for the whole
+  fleet, and revoking it disconnects everything until re-provisioned.
 
----
+For devices in physically uncontrolled locations (retail kiosks, customer
+premises), per-device identities are worth the provisioning cost.
+Register-type pairing codes make it scriptable: mint one code per device
+(`tela admin pair-code kiosk-042 -type register -expires 7d`) and have the
+provisioning script run `telad pair`, so no long-lived credential ever
+sits in an image.
 
-## Step 2 - Set up authentication
+Operators get their own identities with connect grants, wildcard or scoped
+by region or customer, following the same rules as
+[Production Access](production-access.md).
 
-IoT devices on remote networks should always use authenticated connections:
+## Pitfalls Specific to This Scenario
 
-```bash
-# Create an agent token (one per device, or one shared identity)
-tela admin tokens add device-agent -hub wss://hub.example.com -token <owner-token>
-# Save the printed token -- this is <device-agent-token> used in telad.yaml on each device (Step 3)
-
-# Grant the agent permission to register each device
-tela admin access grant device-agent kiosk-001 register -hub wss://hub.example.com -token <owner-token>
-tela admin access grant device-agent kiosk-002 register -hub wss://hub.example.com -token <owner-token>
-
-# Create an operator token
-tela admin tokens add operator -hub wss://hub.example.com -token <owner-token>
-# Save the printed token -- this is <operator-token> used with tela connect (Step 5)
-tela admin access grant operator kiosk-001 connect -hub wss://hub.example.com -token <owner-token>
-tela admin access grant operator kiosk-002 connect -hub wss://hub.example.com -token <owner-token>
-```
-
-See [Run a hub on the public internet](../howto/hub.md) for the full list of `tela admin` commands.
-
----
-
-## Step 3 - Endpoint pattern: install and run `telad` on a device
-
-### 3.1 Install `telad`
-
-Download a prebuilt `telad` from GitHub Releases and copy the binary to the device.
-
-### 3.2 Create a minimal config
-
-Example `telad.yaml` on the device:
-
-```yaml
-hub: wss://hub.example.com
-token: "<device-agent-token>"
-machines:
-  - name: kiosk-001
-    services:
-      - port: 22
-        name: SSH
-    target: 127.0.0.1
-```
-
-Run:
-
-```bash
-telad -config telad.yaml
-```
-
-### 3.3 Run as a service (recommended)
-
-For persistent operation, install `telad` as a service:
-
-```bash
-telad service install -config telad.yaml
-telad service start
-```
-
-See [Run Tela as an OS service](../howto/services.md) for platform-specific details.
-
----
-
-## Step 4 - Site gateway pattern (bridge many devices)
-
-Run one gateway VM or device at the site. Configure one machine entry per target.
-
-Example `telad.yaml`:
-
-```yaml
-hub: wss://hub.example.com
-token: "<device-agent-token>"
-machines:
-  - name: kiosk-001
-    services:
-      - port: 22
-        name: SSH
-    target: 192.168.10.21
-  - name: kiosk-002
-    services:
-      - port: 22
-        name: SSH
-    target: 192.168.10.22
-```
-
-Run on the gateway:
-
-```bash
-telad -config telad.yaml
-```
-
-Hardening guidance for gateways:
-
-- Put the gateway in a dedicated subnet.
-- Allowlist only required egress (hub URL).
-- Allowlist only required internal targets and ports.
-
----
-
-## Step 5 - Operator workflow with `tela`
-
-From your laptop:
-
-1. Download `tela` from GitHub Releases and verify the checksum.
-2. List machines:
-
-```bash
-tela machines -hub wss://hub.example.com -token <operator-token>
-```
-
-3. Connect to a device:
-
-```bash
-tela connect -hub wss://hub.example.com -machine kiosk-001 -token <operator-token>
-```
-
-4. SSH to the address shown in the output:
-
-```bash
-ssh -p PORT localhost
-```
-
----
-
-## Troubleshooting
-
-### Device flaps online/offline
-
-- Check device power and network stability.
-- Check whether outbound HTTPS is allowed from the device.
-
-### `telad` logs "auth_required"
-
-- Check that the `token:` field is set in `telad.yaml` and the token is valid.
-- Verify the identity has been granted `register` access to the machine.
-
-### SSH connects but authentication fails
-
-- Tela is only the transport. SSH authentication is still handled by the device's SSH server.
-
-### Gateway can't reach targets
-
-- Confirm routing and firewall rules inside the site.
-- Validate `target` addresses from the gateway host itself.
+- **Flapping devices** (online, offline, online) are almost always power or
+  local network stability, not Tela; the agent's reconnect loop is doing
+  its job. Persistent absence usually means the site started blocking
+  outbound HTTPS, which is the one thing the device needs.
+- **SSH connects but authentication fails**: Tela is only the transport;
+  the device's SSH server still enforces its own keys and accounts.
+- **Cellular and metered links**: the idle control connection is
+  lightweight, but remember every remote session rides the site's uplink;
+  the UDP relay transport (hub port 41820) noticeably improves interactive
+  latency when the site allows outbound UDP.
+- Name devices by site and role (`kiosk-store-042`), and use the agent's
+  `tags` and `location` fields so a 500-device fleet stays filterable in
+  TelaVisor and portals.
