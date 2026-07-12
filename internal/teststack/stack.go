@@ -582,7 +582,13 @@ func (s *Stack) Close() {
 		s.t.Logf("teststack: goroutines did not exit within 5s of Close (continuing teardown)")
 	}
 
-	// Clean up package-level state so the next test starts fresh.
+	// Clean up package-level state so the next test starts fresh. These
+	// resets are safe to run even while the SkipLeakCheck configurations'
+	// tolerated straggler goroutines are still live: every package global
+	// each reset touches (hub, agent, and client stop channels, verbose
+	// flags, MTU, and the rest) is accessed only through a synchronized
+	// accessor or an atomic, so a concurrent reader cannot race the reset
+	// (card tela-79).
 	hub.ResetForTesting()
 	agent.ResetForTesting()
 	client.ResetForTesting()

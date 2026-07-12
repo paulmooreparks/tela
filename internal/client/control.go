@@ -318,7 +318,7 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 				time.Sleep(100 * time.Millisecond)
 				log.Println("[control] shutdown requested via control API")
 				log.Println("shutting down all connections")
-				close(stopCh)
+				closeStopCh()
 			}()
 
 		default:
@@ -387,11 +387,12 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, http.StatusOK, map[string]bool{"verbose": verbose})
+			writeJSON(w, http.StatusOK, map[string]bool{"verbose": verbose.Load()})
 		case http.MethodPut:
-			verbose = !verbose
-			log.Printf("[control] verbose logging %s", map[bool]string{true: "enabled", false: "disabled"}[verbose])
-			writeJSON(w, http.StatusOK, map[string]bool{"verbose": verbose})
+			newVerbose := !verbose.Load()
+			verbose.Store(newVerbose)
+			log.Printf("[control] verbose logging %s", map[bool]string{true: "enabled", false: "disabled"}[newVerbose])
+			writeJSON(w, http.StatusOK, map[string]bool{"verbose": newVerbose})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -599,18 +600,18 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 			case "disconnect":
 				log.Println("[control] disconnect requested via WebSocket")
 				log.Println("shutting down all connections")
-				close(stopCh)
+				closeStopCh()
 			case "reconnect":
 				log.Println("[control] reconnect requested via WebSocket")
 				// Placeholder: reconnect logic can be wired up later.
 			case "set_verbose":
 				if cmd.Enabled != nil {
-					verbose = *cmd.Enabled
+					verbose.Store(*cmd.Enabled)
 				} else {
-					verbose = !verbose
+					verbose.Store(!verbose.Load())
 				}
 				log.Printf("[control] verbose logging %s (via WebSocket)",
-					map[bool]string{true: "enabled", false: "disabled"}[verbose])
+					map[bool]string{true: "enabled", false: "disabled"}[verbose.Load()])
 			}
 		}
 		// Reader exited; clean up.

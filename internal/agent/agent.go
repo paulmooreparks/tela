@@ -46,6 +46,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -357,11 +358,76 @@ type registration struct {
 	Gateway               *gatewayConfig
 }
 
-var verbose bool
+// verbose is set from the -v flag and read from many goroutines, so it is
+// an atomic to stay race-free against the teststack reset. tunnelMTU is
+// deliberately left bare: it is written only during Main() flag parsing and
+// read on the session path, never touched by ResetForTesting (card tela-79).
+var verbose atomic.Bool
 var tunnelMTU = defaultMTU
 
-// stopCh is closed to signal graceful shutdown (used in service mode).
-var stopCh chan struct{}
+// stopCh is closed to signal graceful shutdown (used in service mode). All
+// access is routed through stopMu and the helpers below so the teststack
+// teardown (ResetForTesting) can run concurrently with in-flight reconnect
+// and shutdown goroutines without a data race (card tela-79). A nil channel
+// blocks forever in a select, which is the intended shutdown-not-armed state.
+var (
+	stopMu       sync.RWMutex
+	stopCh       chan struct{}
+	stopChClosed bool
+)
+
+// stopChan returns the current stop channel under a read lock. A nil return
+// blocks forever in a select, exactly like reading a nil global directly.
+func stopChan() chan struct{} {
+	stopMu.RLock()
+	defer stopMu.RUnlock()
+	return stopCh
+}
+
+// newStopCh unconditionally installs a fresh stop channel and returns it.
+// Used by the entry points that own the shutdown lifecycle (Main and the
+// service runners).
+func newStopCh() chan struct{} {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	stopCh = make(chan struct{})
+	stopChClosed = false
+	return stopCh
+}
+
+// ensureStopCh installs a fresh stop channel only when none is set and
+// returns the current channel. It closes the check-then-assign TOCTOU window
+// that the plain accessors cannot express against a concurrent reset.
+func ensureStopCh() chan struct{} {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	if stopCh == nil {
+		stopCh = make(chan struct{})
+		stopChClosed = false
+	}
+	return stopCh
+}
+
+// closeStopCh closes the current stop channel if it is set and not already
+// closed. The closed flag under the same lock keeps the single-closer
+// contract intact and makes a double close a no-op instead of a panic, which
+// replaces the ad-hoc select-default guards the bridge goroutines used.
+func closeStopCh() {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	if stopCh != nil && !stopChClosed {
+		close(stopCh)
+		stopChClosed = true
+	}
+}
+
+// clearStopCh drops the stop channel reference. Used only by ResetForTesting.
+func clearStopCh() {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	stopCh = nil
+	stopChClosed = false
+}
 
 // ── Log ring buffer ───────────────────────────────────────────────
 
@@ -435,8 +501,9 @@ func setActiveConfig(cfg *configFile, path string) {
 // handleMgmtRequest processes a management message from the hub and
 // returns a JSON response to send back.
 // reregisterNeeded is set by config-set to signal runAgent to
-// send an updated registration to the hub with the new metadata.
-var reregisterNeeded bool
+// send an updated registration to the hub with the new metadata. It is an
+// atomic so the reset can clear it while runAgent reads it (card tela-79).
+var reregisterNeeded atomic.Bool
 
 func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 	ok := true
@@ -573,7 +640,7 @@ func handleMgmtRequest(lg *log.Logger, msg *controlMessage) []byte {
 		}
 
 		lg.Printf("mgmt: config-set machine=%s (requestId=%s)", update.Machine, msg.RequestID)
-		reregisterNeeded = true
+		reregisterNeeded.Store(true)
 		resp, _ := json.Marshal(controlMessage{
 			Type: "mgmt-response", RequestID: msg.RequestID, OK: &ok,
 		})
@@ -1189,8 +1256,9 @@ func Main() {
 	portsStr := flag.String("ports", envOrDefault("TELAD_PORTS", ""), "Comma-separated port specs: port[:name[:description]]  e.g. 22:SSH,3389:RDP,12345:MyApp (env: TELAD_PORTS)")
 	targetHost := flag.String("target-host", envOrDefault("TELAD_TARGET_HOST", "127.0.0.1"), "Target service host (env: TELAD_TARGET_HOST)")
 	mtuOverride := flag.Int("mtu", 0, "WireGuard tunnel MTU (env: TELAD_MTU; default 1100)")
-	flag.BoolVar(&verbose, "v", false, "Verbose logging")
+	verboseFlag := flag.Bool("v", false, "Verbose logging")
 	flag.Parse()
+	verbose.Store(*verboseFlag)
 
 	// Resolve MTU: flag > env > default
 	if *mtuOverride > 0 {
@@ -1204,13 +1272,13 @@ func Main() {
 	telelog.Init("telad", &logRingWriter{original: os.Stderr})
 
 	// Handle graceful shutdown
-	stopCh = make(chan struct{})
+	newStopCh()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
 		log.Println("shutting down")
-		close(stopCh)
+		closeStopCh()
 	}()
 
 	// Config-file mode
@@ -1599,10 +1667,10 @@ func serviceStatus() {
 func serviceRunDaemon(svcStop <-chan struct{}) {
 	// Bridge service stop channel to the global stopCh so
 	// runSingleMachine exits its reconnect loop on shutdown.
-	stopCh = make(chan struct{})
+	newStopCh()
 	go func() {
 		<-svcStop
-		close(stopCh)
+		closeStopCh()
 	}()
 
 	// When running as a Windows service, redirect log output to a file.
@@ -1687,10 +1755,10 @@ func serviceRun() {
 // serviceRunUserDaemon is the user-mode variant of serviceRunDaemon.
 // It loads config from the user directory instead of the system directory.
 func serviceRunUserDaemon(svcStop <-chan struct{}) {
-	stopCh = make(chan struct{})
+	newStopCh()
 	go func() {
 		<-svcStop
-		close(stopCh)
+		closeStopCh()
 	}()
 
 	logDest := io.Writer(os.Stderr)
@@ -1809,19 +1877,13 @@ func Run(ctx context.Context, cfg *Config) error {
 	// Bridge ctx cancellation to the package-level stopCh that the
 	// per-machine reconnect loops watch. This is the same channel
 	// Main() and serviceRunDaemon() set up; we just plumb a context in.
-	if stopCh == nil {
-		stopCh = make(chan struct{})
-	}
+	// ensureStopCh installs one only if a lifecycle owner has not already,
+	// and closeStopCh is idempotent under the lock, so no defensive
+	// select-default sentinel is needed here.
+	ensureStopCh()
 	go func() {
 		<-ctx.Done()
-		// Close defensively -- close on an already-closed channel
-		// would panic, so we use a select-with-default sentinel.
-		select {
-		case <-stopCh:
-			// already closed
-		default:
-			close(stopCh)
-		}
+		closeStopCh()
 	}()
 	runMultiMachine(cfg, "")
 	return nil
@@ -1932,7 +1994,7 @@ func runSingleMachine(hubURL string, reg registration, targetHost string) {
 
 		// Check for shutdown before reconnecting
 		select {
-		case <-stopCh:
+		case <-stopChan():
 			logger.Printf("shutdown received, exiting reconnect loop")
 			return
 		default:
@@ -1944,7 +2006,7 @@ func runSingleMachine(hubURL string, reg registration, targetHost string) {
 		// Wait for delay or shutdown, whichever comes first
 		select {
 		case <-time.After(delay):
-		case <-stopCh:
+		case <-stopChan():
 			logger.Printf("shutdown received, exiting reconnect loop")
 			return
 		}
@@ -2089,7 +2151,7 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 	// ReadMessage loop below unblocks promptly instead of waiting for
 	// the pong timeout.
 	go func() {
-		<-stopCh
+		<-stopChan()
 		ws.Close()
 	}()
 
@@ -2188,8 +2250,8 @@ func runAgent(lg *log.Logger, hubURL string, reg registration, targetHost string
 				lg.Printf("mgmt-response write failed: %v", err)
 			}
 			// If config changed, re-register with the hub to push updated metadata
-			if reregisterNeeded {
-				reregisterNeeded = false
+			if reregisterNeeded.Load() {
+				reregisterNeeded.Store(false)
 				activeConfigMu.RLock()
 				cfg := activeConfig
 				activeConfigMu.RUnlock()
@@ -2327,7 +2389,7 @@ func handleSession(lg *log.Logger, ws *websocket.Conn, hubURL, helperPubKeyHex, 
 
 	// Create WireGuard device
 	wgVerbose := silentLogger{}.Printf
-	if verbose {
+	if verbose.Load() {
 		wgVerbose = lg.Printf
 	}
 	logger := &device.Logger{
@@ -2761,7 +2823,7 @@ func wsToHTTP(wsURL string) string {
 }
 
 func logVerbose(lg *log.Logger, format string, args ...any) {
-	if verbose {
+	if verbose.Load() {
 		lg.Printf(format, args...)
 	}
 }
@@ -2779,15 +2841,21 @@ func envOrDefault(key, fallback string) string {
 // the agent (active config, stop channel, reregister flag, verbose
 // flag) so the next test run starts from a clean slate. Tests call
 // this in t.Cleanup. Production code never calls it.
+//
+// Every field it touches is accessed only through a synchronized accessor
+// or an atomic, mirroring internal/hub.ResetForTesting, so this can run
+// concurrently with stragglers the teststack SkipLeakCheck configurations
+// tolerate without a data race (card tela-79). agent tunnelMTU is not reset:
+// it is written only during Main() flag parsing and is read-only here.
 func ResetForTesting() {
 	activeConfigMu.Lock()
 	activeConfig = nil
 	activeConfigPath = ""
 	activeConfigMu.Unlock()
 
-	// Drain stopCh if it was closed by a previous Run; tests will
+	// Drop stopCh if it was closed by a previous Run; tests will
 	// recreate it on the next Run() call.
-	stopCh = nil
-	reregisterNeeded = false
-	verbose = false
+	clearStopCh()
+	reregisterNeeded.Store(false)
+	verbose.Store(false)
 }
