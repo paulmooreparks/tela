@@ -1,0 +1,469 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Status: Design vs. Implementation - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela Is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First Connection</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The Three Binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and Pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection Profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub Directories and Portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The Path Gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File Sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub Administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub Web Console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor Desktop App</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-Update and Release Channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a Hub on the Public Internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an Agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS Service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set Up a Path-Based Gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking Caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal Cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private Web Application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production Access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed Teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP and IT Support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education Labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT and Edge Devices</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release Process</a></li><li class="chapter-item expanded "><a href="../ops/roadmap.html"><strong aria-hidden="true">28.</strong> Roadmap to 1.0</a></li><li class="chapter-item expanded "><a href="../ops/status.html" class="active"><strong aria-hidden="true">29.</strong> Status: Design vs. Implementation</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">30.</strong> Why a Connectivity Fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">31.</strong> Remote Administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">32.</strong> File Sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">33.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">34.</strong> A. CLI Reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">35.</strong> B. Configuration File Reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">36.</strong> C. Access Model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">37.</strong> D. Portal Protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">38.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">39.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/ops/status.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="status-design-vs-implementation"><a class="header" href="#status-design-vs-implementation">Status: Design vs. Implementation</a></h1>
+<p>This is the traceability matrix that maps every section of the design documents to its implementation status. It is a living document generated from the repository and updated on every push. Use it to see at a glance what is shipped, what is in progress, and what is still on paper.</p>
+<p>Traceability matrix mapping each DESIGN.md section to current implementation status.</p>
+<p><strong>Legend:</strong></p>
+<ul>
+<li>✅ <strong>Done</strong>: Implemented (at least POC-level working code)</li>
+<li>🔶 <strong>Partial</strong>: Some aspects implemented, gaps remain</li>
+<li>⬜ <strong>Not started</strong>: No implementation yet</li>
+<li>🔮 <strong>Future</strong>: Awan Saya scope or Phase 3+</li>
+<li>📄 <strong>Doc-only</strong>: Informational section, no implementation required</li>
+</ul>
+<p>Last updated: 2026-07-11</p>
+<hr />
+<h2 id="0-3---identity-goals-philosophy"><a class="header" href="#0-3---identity-goals-philosophy">§0-§3 - Identity, Goals, Philosophy</a></h2>
+<p>These sections are design guidance; "implementation" means the codebase reflects the principles.</p>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§0</td><td>Purpose of This Document</td><td>📄</td><td>-</td></tr>
+<tr><td>§0.1</td><td>Glossary</td><td>📄</td><td>-</td></tr>
+<tr><td>§1.1</td><td>Name</td><td>📄</td><td>-</td></tr>
+<tr><td>§1.2</td><td>Positioning</td><td>📄</td><td>-</td></tr>
+<tr><td>§1.3</td><td>What Tela Is</td><td>📄</td><td>-</td></tr>
+<tr><td>§1.4</td><td>License</td><td>✅</td><td>Apache 2.0 in repo</td></tr>
+<tr><td>§2.1</td><td>Goals</td><td>🔶</td><td>Outbound-only tunneling works; multiplexing, protocol-agnostic channels, multi-platform agents not yet</td></tr>
+<tr><td>§2.2</td><td>Non-Goals</td><td>📄</td><td>-</td></tr>
+<tr><td>§3.1-3.4</td><td>Design Philosophy &amp; Invariants</td><td>📄</td><td>Guiding principles; no code artifact</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="4---architecture-overview"><a class="header" href="#4---architecture-overview">§4 - Architecture Overview</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§4.1</td><td>Components</td><td>🔶</td><td><code>telad</code> (Go agent ✅), <code>telahubd</code> (Go hub ✅), <code>tela</code> (Go client ✅), Web (landing page + downloads ✅), CLI (✅), Awan Saya (🔮)</td></tr>
+<tr><td>§4.2</td><td>Data Flow: Agent Connection</td><td>✅</td><td><code>telad</code>: outbound WS, register, reconnect, token auth</td></tr>
+<tr><td>§4.2</td><td>Data Flow: Browser Orchestration</td><td>🔶</td><td>Landing page with OS-detected download links; no login, session tokens, or machine list</td></tr>
+<tr><td>§4.2</td><td>Data Flow: Client Connection</td><td>✅</td><td><code>tela</code>: WS connect, WireGuard tunnel, auto-bind local listeners, reconnect</td></tr>
+<tr><td>§4.2</td><td>Data Flow: Multiplexed Channels</td><td>🔮</td><td>One WS per session by design. DESIGN §6.2 fixes single-channel as the v1 shape; multiplexing is reserved for a hypothetical v2 (the relay frame reserves a <code>session_id</code> field for it)</td></tr>
+<tr><td>§4.3</td><td>Component Interaction Model</td><td>🔶</td><td>Client→Hub and Agent→Hub paths work; Browser→Hub auth/session path not implemented</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="5---meshcentral-integration-boundary"><a class="header" href="#5---meshcentral-integration-boundary">§5 - MeshCentral Integration Boundary</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§5.1</td><td>Components Reused</td><td>⬜</td><td>POC is written from scratch; no MeshCentral code integrated</td></tr>
+<tr><td>§5.2</td><td>Components Replaced</td><td>📄</td><td>Design guidance for when integration happens</td></tr>
+<tr><td>§5.3</td><td>Rationale</td><td>📄</td><td>-</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="6---protocol-specification"><a class="header" href="#6---protocol-specification">§6 - Protocol Specification</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§6.1</td><td>Transport (TLS 1.3, WSS, binary)</td><td>🔶</td><td>WSS via Cloudflare tunnel; internal plain WS; binary frames for WG datagrams, JSON for control</td></tr>
+<tr><td>§6.2</td><td>Multiplexing (v1: single-channel)</td><td>🔮</td><td>Single-channel shipped as the v1 design (one WS = one session); DESIGN §6.2 reserves multiplexing for a hypothetical v2. A mux experiment landed and was reverted; the <code>session_id</code> field is held open for it</td></tr>
+<tr><td>§6.3</td><td>Frame Format (7-byte relay header)</td><td>✅</td><td>7-byte big-endian header (magic + hop + flags + session_id) on every relayed binary message, <code>internal/relay/frame.go</code>; produced and consumed by all binaries. The earlier 12-byte draft was never built and is retired (DESIGN §6.3)</td></tr>
+<tr><td>§6.4</td><td>Control Messages (v1)</td><td>✅</td><td>Frozen v1 set implemented: <code>register</code>/<code>registered</code>, <code>connect</code>, <code>session-request</code>/<code>session-join</code>/<code>session-start</code>/<code>wg-pubkey</code>/<code>ready</code>, <code>udp-offer</code>/<code>peer-endpoint</code>, <code>session-end</code>, <code>error</code>, <code>mgmt-request</code>/<code>mgmt-response</code>, <code>keepalive</code>. Envelope is <code>controlMessage</code> (agent) and <code>signalingMsg</code> (hub); receivers ignore unknown fields</td></tr>
+<tr><td>§6.5</td><td>Tokens (v1)</td><td>✅</td><td>Static hex shared secrets, ACL-keyed, <code>crypto/subtle</code> compare, revoke-by-config-removal per DESIGN §6.5. The 0.16 cycle added lifecycle metadata (<code>issuedAt</code>/<code>expiresAt</code>/<code>revokedAt</code> in <code>internal/hub/auth.go</code>) plus admin revoke/expiry/rotate (<code>internal/hub/admin_api.go</code>, issue #24). Structured/signed tokens remain a deferred 1.x item, not a v1 requirement</td></tr>
+<tr><td>§6.6</td><td>Backward Compatibility (1.x policy)</td><td>✅</td><td><code>protocolVersion</code> negotiation shipped on <code>register</code>/<code>connect</code> (absent treated as <code>1</code>), <code>internal/hub/protocol_version_test.go</code>. The 1.x compatibility contract (covered surfaces, additive-only rules, cross-version matrix) is specified in DESIGN §6.6</td></tr>
+<tr><td>§6.7</td><td>Error Handling</td><td>🔶</td><td>Basic error logging; no structured error types or per-channel error handling</td></tr>
+<tr><td>§6.8</td><td>WireGuard L3 Transport</td><td>✅</td><td>wireguard-go + gVisor netstack on both sides, ephemeral keypairs, zero-admin, hub is zero-knowledge relay</td></tr>
+<tr><td>§6.8</td><td>UDP Relay Mode</td><td>✅</td><td>Hub UDP relay (port 41820), probe/ready handshake, asymmetric fallback (UDP↔WS bridging), auto-fallback on timeout, <code>udpHost</code> advertisement for proxy/tunnel setups</td></tr>
+<tr><td>§6.8</td><td>Direct Tunnel (P2P)</td><td>✅</td><td>STUN discovery (RFC 5389), endpoint exchange via hub, simultaneous UDP hole punching, fallback cascade (direct → relay → WS)</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="7---tela-agent"><a class="header" href="#7---tela-agent">§7 - Tela Agent</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§7.1</td><td>Responsibilities</td><td>🔶</td><td>Outbound WS ✅, register ✅, TCP proxy ✅, reconnect ✅, token auth ✅, multi-port ✅, heartbeat 🔶 (WS ping/pong 20s/45s), metadata ✅ (displayName, hostname, os, tags, location, owner via YAML), service discovery ⬜, policy ⬜</td></tr>
+<tr><td>§7.2</td><td>Implementation (C/C++, static binary)</td><td>🔶</td><td>Agent is Go (telad), not C/C++. Static binary ✅, cross-compiled ✅</td></tr>
+<tr><td>§7.3</td><td>Concurrency Model (libuv)</td><td>⬜</td><td>N/A. Go runtime, not libuv</td></tr>
+<tr><td>§7.4</td><td>Configuration (<code>telad.yaml</code>)</td><td>✅</td><td>YAML config file with <code>-config</code> flag. Multi-machine, per-machine token override, rich metadata fields. System path: <code>%ProgramData%\Tela\telad.yaml</code> / <code>/etc/tela/telad.yaml</code></td></tr>
+<tr><td>§7.5</td><td>Logging</td><td>🔶</td><td>Console logging with <code>[telad]</code> prefix; no structured/rotated logs</td></tr>
+<tr><td>§7.6</td><td>Updates</td><td>✅</td><td>Channel-based self-update via <code>internal/channel</code>. CLI: <code>telad channel</code> (show/set/show-manifest) and <code>telad update</code> (self-update). Mgmt actions: <code>update</code>, <code>update-status</code>, <code>update-channel</code>. Verifies SHA-256 against the channel manifest before swapping. See <a href="RELEASE-PROCESS.html">RELEASE-PROCESS.md</a>.</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="8---tela-hub"><a class="header" href="#8---tela-hub">§8 - Tela Hub</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§8.1</td><td>Responsibilities</td><td>🔶</td><td>Accepts agents/clients ✅, brokers sessions ✅, routes data ✅, token validation ✅ (with issue/expiry/revocation metadata), UDP relay ✅, <code>/status</code> API ✅, admin REST API ✅, metadata ✅ (stored and served via register message). No browser user auth</td></tr>
+<tr><td>§8.2</td><td>Implementation (Go)</td><td>✅</td><td><code>telahubd</code>: Go, <code>gorilla/websocket</code>, no Node.js, no MeshCentral</td></tr>
+<tr><td>§8.3</td><td>Storage (SQLite / Postgres)</td><td>🔶</td><td>Auth config persisted to YAML (hot-reload); session/machine state is in-memory only</td></tr>
+<tr><td>§8.4</td><td>REST API</td><td>🔶</td><td>Hub <code>/status</code> ✅, <code>/api/history</code> ✅, <code>/api/admin/*</code> ✅ (token/ACL management); no <code>/api/v1/*</code> endpoints</td></tr>
+<tr><td>§8.5</td><td>Multiplexing</td><td>🔮</td><td>Single-channel by design (DESIGN §6.2); channel multiplexing reserved for a hypothetical v2</td></tr>
+<tr><td>§8.6</td><td>Logging &amp; Observability</td><td>🔶</td><td>Console logging; no structured logs or metrics</td></tr>
+<tr><td>§8.7</td><td>Updates</td><td>✅</td><td>Channel-based self-update via <code>internal/channel</code>. CLI: <code>telahubd channel</code> (show/set/show-manifest) and <code>telahubd update</code> (self-update). Admin API: <code>GET /api/admin/update</code> (status), <code>PATCH /api/admin/update</code> (set channel), <code>POST /api/admin/update</code> (trigger). Verifies SHA-256 before swapping.</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="9---tela-web-browser-ui"><a class="header" href="#9---tela-web-browser-ui">§9 - Tela Web (Browser UI)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§9.1</td><td>Responsibilities (auth, machine list, token, download)</td><td>🔶</td><td>Client download with OS detection ✅; hub console shows machine list ✅, services ✅, session history ✅. No auth, no session token flow</td></tr>
+<tr><td>§9.2</td><td>Non-Responsibilities</td><td>✅</td><td>Browser is not in data path</td></tr>
+<tr><td>§9.3</td><td>Helper Launch Reality</td><td>🔶</td><td>Download + manual run ✅; no <code>tela://</code> URI scheme; no port-back reporting</td></tr>
+<tr><td>§9.3</td><td>Constraints (vanilla JS)</td><td>✅</td><td>Landing page is vanilla JS</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="10---tela-helper--client"><a class="header" href="#10---tela-helper--client">§10 - Tela Helper / Client</a></h2>
+<p>Note: DESIGN.md describes a "Helper" (Go binary, TCP bridge). The current implementation evolved beyond this: <code>tela</code> is the client binary that establishes a full WireGuard L3 tunnel and auto-binds local listeners. It subsumes the Helper role while adding encrypted tunneling.</p>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§10.1</td><td>Responsibilities</td><td>✅</td><td>WS connect ✅, WG tunnel ✅, TCP bind ✅, bidirectional pipe ✅, TCP_NODELAY ✅, reconnect ✅, token auth ✅, cert pinning ✅ (SHA-256 SPKI on the hub-bound WS and HTTPS dials, <code>internal/certpin</code>, TOFU, <code>tela pin</code>). Single session per connection (see §6.2)</td></tr>
+<tr><td>§10.2</td><td>Non-Responsibilities</td><td>✅</td><td>Client stores nothing, needs no admin, doesn't install</td></tr>
+<tr><td>§10.3</td><td>Distribution &amp; Signing</td><td>🔶</td><td>Three release channels (dev/beta/stable) ✅ with channel manifests, SHA-256 verification, and <code>tela channel</code> + <code>tela update</code> CLI (plus matching subcommands on telad and telahubd). Custom channel names are also supported for self-hosted channel daemons. GitHub Releases for Windows/Linux/macOS amd64+arm64 ✅. NSIS Windows installer ✅. .deb/.rpm packages ✅. macOS .tar.gz ✅. No code signing yet (Authenticode for Windows, Developer ID for macOS) -- still on the 1.0 blocker list.</td></tr>
+<tr><td>§10.4</td><td>Data Path</td><td>✅</td><td><code>client → tela → WireGuard → Hub → WireGuard → telad → service</code> working, with optional UDP relay</td></tr>
+<tr><td>§10.5</td><td>Fallback Modes (in-browser)</td><td>⬜</td><td>No in-browser RDP/SSH client</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="11---tela-cli"><a class="header" href="#11---tela-cli">§11 - Tela CLI</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§11.1</td><td>Purpose &amp; Rationale</td><td>🔶</td><td><code>tela</code> binary serves as both client and proto-CLI</td></tr>
+<tr><td>§11.2</td><td>Core Commands</td><td>🔶</td><td><code>login</code>/<code>logout</code> ✅, <code>machines</code> ✅, <code>services</code> ✅, <code>status</code> ✅, <code>connect</code> ✅ (with <code>-services</code>, <code>-ports</code>, <code>-profile</code> flags), <code>admin</code> ✅ (noun-based: <code>access</code>, <code>tokens</code>, <code>portals</code>, <code>agent</code>, <code>hub</code>, plus <code>rotate</code>/<code>pair-code</code>), <code>channel</code> ✅ (<code>show</code>, <code>set</code>, <code>download</code>), <code>update</code> ✅ (channel-aware self-update with SHA-256 verification), <code>pair</code> ✅, <code>pin</code> ✅ (<code>tela pin &lt;hub-url&gt; [fingerprint]</code>, TOFU cert pinning), <code>mount</code> ✅ (WebDAV), <code>files</code> ✅, <code>profile</code> ✅, <code>remote</code> ✅, <code>service</code> ✅. Portal-based hub name resolution ✅. Local <code>hubs.yaml</code> fallback ✅.</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="12---security-model"><a class="header" href="#12---security-model">§12 - Security Model</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§12.1</td><td>Identity (Ed25519 agent keys)</td><td>🔶</td><td>Stable <code>agentId</code> and <code>machineRegistrationId</code> UUIDs shipped (persisted in <code>telad.state</code>, carried on <code>register</code>; see DESIGN-identity.md and §6.4.2). No Ed25519 keypair yet: agents are not cryptographically authenticated, only ACL-token authenticated</td></tr>
+<tr><td>§12.2</td><td>Certificate Pinning</td><td>🔶</td><td>SHA-256 SPKI pinning shipped for the <code>tela</code> client (hub-bound WS + HTTPS) and the hub-to-hub bridge dial via <code>internal/certpin</code>, with TOFU on first connect and <code>tela pin</code>; pins stored per hub in <code>credentials.yaml</code> / <code>hubs.yaml</code> / <code>telahubd.yaml</code>. Agent-side (<code>telad</code>) and TelaVisor-portal pinning are deferred post-1.0 (ROADMAP-1.0, issue #23)</td></tr>
+<tr><td>§12.3</td><td>Session Tokens</td><td>🔶</td><td>Named token identities with role-based ACL (owner/admin/user/viewer) ✅; auto-generated <code>console-viewer</code> token ✅; per-machine register/connect ACLs ✅; env-var bootstrap ✅; admin REST API ✅; hot-reload ✅. The 0.16 cycle added <code>issuedAt</code>/<code>expiresAt</code>/<code>revokedAt</code> metadata and admin revoke/expiry/rotate (issue #24). Still hex shared secrets, not signed or single-use JWTs</td></tr>
+<tr><td>§12.4</td><td>Transport Security (TLS 1.3)</td><td>🔶</td><td>TLS via Cloudflare + Caddy (direct); internal hub↔agent is plain WS</td></tr>
+<tr><td>§12.5</td><td>E2E Encryption</td><td>✅</td><td>WireGuard provides full E2E encryption (Curve25519 + ChaCha20-Poly1305). Hub is zero-knowledge relay</td></tr>
+<tr><td>§12.6</td><td>Threat Model</td><td>📄</td><td>Design guidance</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="13---authentication"><a class="header" href="#13---authentication">§13 - Authentication</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§13.1</td><td>Tela Standalone (bcrypt, SQLite, cookies, TOTP)</td><td>🔶</td><td>Named token identities with RBAC ✅; YAML-persisted auth config ✅; admin REST API ✅; <code>tela admin</code> CLI ✅; env-var bootstrap ✅. No bcrypt/cookies/TOTP (spec vision), but functional token-based auth is complete</td></tr>
+<tr><td>§13.2</td><td>Awan Saya (SSO)</td><td>🔮</td><td>-</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="14---end-to-end-usage-flow"><a class="header" href="#14---end-to-end-usage-flow">§14 - End-to-End Usage Flow</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§14.1</td><td>Setup (Tela Standalone)</td><td>🔶</td><td>Hub deployed ✅, Cloudflare Tunnel ✅, Caddy direct ✅, agent registered ✅, token auth + ACL ✅, env-var bootstrap ✅, remote admin ✅, <code>telad service install</code> ✅, <code>telahubd service install</code> ✅. No browser-based user creation</td></tr>
+<tr><td>§14.2</td><td>Accessing from Locked-Down Laptop</td><td>✅</td><td>Full path validated: download tela → run → SSH ✅, RDP ✅ (via WireGuard L3 tunnel)</td></tr>
+<tr><td>§14.3</td><td>In-Browser Fallback</td><td>⬜</td><td>-</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="15---literate-coding-standards"><a class="header" href="#15---literate-coding-standards">§15 - Literate Coding Standards</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§15.1</td><td>Narrative Header Blocks</td><td>✅</td><td>All Go and JS files have descriptive purpose/architecture headers</td></tr>
+<tr><td>§15.2</td><td>Inline Intent Comments</td><td>🔶</td><td>Present in critical sections (wsBind, hub relay, netstack)</td></tr>
+<tr><td>§15.3</td><td>Embedded Protocol Excerpts</td><td>⬜</td><td>DESIGN §6 is now the frozen, authoritative v1 protocol, but source files do not yet embed excerpts of it</td></tr>
+<tr><td>§15.4</td><td>"DO NOT MODIFY" Markers</td><td>⬜</td><td>-</td></tr>
+<tr><td>§15.5</td><td>Explicit Invariants</td><td>⬜</td><td>-</td></tr>
+<tr><td>§15.6</td><td>No Hidden Magic</td><td>✅</td><td>Code is straightforward</td></tr>
+<tr><td>§15.7</td><td>Language-Specific Conventions</td><td>🔶</td><td>Go conventions followed; JS hub is simple</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="16---llm-agent-guardrails"><a class="header" href="#16---llm-agent-guardrails">§16 - LLM Agent Guardrails</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§16.1-16.3</td><td>Hard Rules, Allowed Changes, Human Review</td><td>📄</td><td>Process guidance; enforced by workflow, not code</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="17---roadmap"><a class="header" href="#17---roadmap">§17 - Roadmap</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§17.1</td><td>Phase 1 - Minimum Viable Fabric</td><td>🔶</td><td>Core WG tunnel works, reconnect ✅, token auth ✅, multi-port ✅, UDP relay ✅. Protocol/mux/full-auth not started</td></tr>
+<tr><td>§17.2</td><td>Phase 2 - Fabric Extensions</td><td>⬜</td><td>-</td></tr>
+<tr><td>§17.3</td><td>Phase 3 - Substrate for Awan Saya</td><td>🔮</td><td>-</td></tr>
+<tr><td>§17.4</td><td>Phase 4 - Awan Saya v0.1</td><td>🔮</td><td>-</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="18---awan-saya-architecture"><a class="header" href="#18---awan-saya-architecture">§18 - Awan Saya Architecture</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§18.1</td><td>Three Connectivity Models</td><td>🔶</td><td>Model A (direct) demonstrated via Cloudflare Tunnel + Caddy direct; Models B &amp; C are Awan Saya scope</td></tr>
+<tr><td>§18.2</td><td>Hub Registry</td><td>🔶</td><td>Tela now ships an in-tree portal implementing the hub registry/discovery contract (DESIGN-portal.md): <code>internal/portal</code> + file-backed <code>internal/portal/store/file</code>, the standalone <code>cmd/telaportal</code> daemon, and TelaVisor Portal mode. Awan Saya remains the multi-tenant Postgres reference. Persistent relay-connection registration (Model B) stays Awan Saya scope</td></tr>
+<tr><td>§18.3</td><td>Relay Protocol</td><td>🔮</td><td>-</td></tr>
+<tr><td>§18.4</td><td>What Changes in Tela (Nothing)</td><td>📄</td><td>-</td></tr>
+<tr><td>§18.5</td><td>Eliminating External Dependencies</td><td>🔮</td><td>-</td></tr>
+<tr><td>§18.6</td><td>Analogy Summary</td><td>📄</td><td>-</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="19---risks--mitigations"><a class="header" href="#19---risks--mitigations">§19 - Risks &amp; Mitigations</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§19.1-19.2</td><td>Risks &amp; Mitigations</td><td>📄</td><td>Ongoing awareness items</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="20---testing-strategy"><a class="header" href="#20---testing-strategy">§20 - Testing Strategy</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Section</th><th>Title</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+<tr><td>§20.1</td><td>Protocol Conformance Tests</td><td>🔶</td><td>Unit tests across <code>certpin</code>, <code>channel</code>, <code>client</code>, <code>credstore</code>, <code>hub</code>, <code>portal</code>. Protocol-level coverage in <code>internal/hub</code>: <code>protocol_version_test.go</code>, <code>session_tokens_test.go</code>, <code>auth_test.go</code>, <code>admin_api_test.go</code>, <code>access_version_test.go</code>, <code>services_test.go</code>. Not yet an exhaustive conformance corpus</td></tr>
+<tr><td>§20.2</td><td>Integration Tests</td><td>🔶</td><td><code>internal/teststack</code> runs a hub and agent in-process on localhost and drives registration/status assertions; bridged-session end-to-end tests live in <code>stack_test.go</code>. Pushing real bytes through a full client tunnel in-harness is not yet automated</td></tr>
+<tr><td>§20.3</td><td>Regression Suite</td><td>🔶</td><td>The unit and integration tests run in CI (<code>go test -race -count=1 ./...</code>) on every push and PR, so they guard against regressions. No separately curated regression corpus beyond that</td></tr>
+<tr><td>§20.4</td><td>What Is Not Tested in Tela Core</td><td>📄</td><td>-</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Status</th><th>Count</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>✅ Done</td><td>23</td><td>Working implementation</td></tr>
+<tr><td>🔶 Partial</td><td>32</td><td>Covers some aspects, gaps remain</td></tr>
+<tr><td>⬜ Not started</td><td>8</td><td>No implementation</td></tr>
+<tr><td>🔮 Future</td><td>8</td><td>Awan Saya / v2 / Phase 3+</td></tr>
+<tr><td>📄 Doc-only</td><td>15</td><td>No code artifact needed</td></tr>
+</tbody></table>
+</div>
+<h3 id="whats-working-now-poc"><a class="header" href="#whats-working-now-poc">What's working now (POC)</a></h3>
+<ol>
+<li><strong>WireGuard L3 tunnel</strong>: E2E encrypted, zero-admin, zero-install on both sides (gVisor netstack)</li>
+<li><strong>UDP relay</strong>: Eliminates TCP-over-TCP; auto-fallback to WebSocket; asymmetric bridging; <code>udpHost</code> advertisement for proxy/tunnel deployments</li>
+<li><strong>Multi-port forwarding</strong>: telad advertises ports, tela auto-binds local listeners</li>
+<li><strong>Token auth with RBAC</strong>: Named identities (owner/admin/user), per-machine ACLs, env-var bootstrap for Docker, remote management via <code>tela admin</code> CLI and admin REST API, hot-reload (no restart needed)</li>
+<li><strong>Auto-reconnect</strong>: Both tela and telad reconnect on disconnect</li>
+<li><strong>Cross-platform client</strong>: Windows, Linux, macOS (Intel + ARM) binaries served from hub</li>
+<li><strong>Dual ingress</strong>: Cloudflare Tunnel + Caddy direct</li>
+<li><strong>Hub /status API</strong>: JSON endpoint for monitoring</li>
+<li><strong>Direct tunnel (P2P)</strong>: STUN hole punching with automatic fallback cascade (direct → UDP relay → WebSocket)</li>
+<li><strong>CLI remote management</strong>: <code>tela remote add</code> configures a hub directory, <code>tela remote remove</code> removes it (<code>tela login</code>/<code>tela logout</code> kept as deprecated aliases)</li>
+<li><strong>Remote-based hub name resolution</strong>: Short hub names resolved via configured remotes' <code>/api/hubs</code> with local <code>hubs.yaml</code> fallback</li>
+<li><strong>File sharing</strong>: Native file transfer protocol (list, read, write, delete, mkdir, rename, move) with live change notifications, sandboxed per machine, accessible via <code>tela files</code> CLI and TelaVisor Files tab</li>
+<li><strong>Frozen v1 wire protocol</strong>: 7-byte relay frame header (<code>internal/relay/frame.go</code>), a fixed v1 control-message set, and <code>protocolVersion</code> negotiation (absent treated as <code>1</code>), all specified authoritatively in DESIGN §6</li>
+<li><strong>Certificate pinning</strong>: SHA-256 SPKI pinning on the client's hub-bound WS and HTTPS dials and on the hub-to-hub bridge, via <code>internal/certpin</code>, with TOFU on first connect and <code>tela pin</code></li>
+<li><strong>Session-token lifecycle</strong>: <code>issuedAt</code>/<code>expiresAt</code>/<code>revokedAt</code> metadata plus admin revoke, expiry, and rotation on top of the RBAC token model (issue #24)</li>
+<li><strong>Automated test suite</strong>: unit tests across <code>certpin</code>, <code>channel</code>, <code>client</code>, <code>credstore</code>, <code>hub</code>, and <code>portal</code>, plus the in-process <code>internal/teststack</code> hub+agent integration harness, all run under <code>go test -race</code> in CI</li>
+<li><strong>In-tree portal</strong>: <code>internal/portal</code> with a file-backed store, the standalone <code>cmd/telaportal</code> daemon, and TelaVisor Portal mode implement the hub registry/discovery contract without Awan Saya</li>
+</ol>
+<h3 id="biggest-gaps-to-10"><a class="header" href="#biggest-gaps-to-10">Biggest gaps to 1.0</a></h3>
+<ol>
+<li><strong>Code signing</strong> (§10.3): no Authenticode (Windows) or Developer ID (macOS) signing yet; still on the 1.0 blocker list</li>
+<li><strong>Browser-based user auth</strong> (§13.1): token-based CLI/API auth is complete; the spec's bcrypt + cookies + TOTP browser flow is not built</li>
+<li><strong>Ed25519 agent identity</strong> (§12.1): stable <code>agentId</code>/<code>machineRegistrationId</code> UUIDs shipped, but agents still have no cryptographic keypair and are authenticated only by ACL token</li>
+<li><strong>Agent-side and TelaVisor cert pinning</strong> (§12.2): the client and hub-bridge dials pin; the <code>telad</code> agent dial and TelaVisor portal pinning are deferred post-1.0</li>
+<li><strong>Internal-hop transport security</strong> (§12.4, §6.1): TLS is terminated at the edge; the internal hub-to-agent hop is plain WS</li>
+<li><strong>End-to-end tunnel tests</strong> (§20.2): <code>teststack</code> covers registration and bridged sessions, but pushing real bytes through a client tunnel in-harness is not yet automated</li>
+</ol>
+<p>Deliberately out of v1 scope (not gaps): channel multiplexing (§6.2), which is reserved for a hypothetical v2, and structured/signed session tokens (§6.5, issue #24), which are a planned 1.x enhancement rather than a v1 requirement.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../ops/roadmap.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/design.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../ops/roadmap.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/design.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
