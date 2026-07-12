@@ -1,13 +1,13 @@
-# The three binaries
+# The Three Binaries
 
 Tela is built around three cooperating Go binaries. Each one runs from a
 single static executable with no runtime dependencies.
 
-| Binary | Role | Where it runs |
+| Binary | Role | Where It Runs |
 |--------|------|---------------|
 | `telahubd` | Hub relay. Brokers encrypted sessions between agents and clients. Sees only ciphertext. | A publicly reachable server. |
-| `telad` | Agent / daemon. Registers a machine with a hub and exposes selected TCP services through the encrypted tunnel. | The machine you want to reach. |
-| `tela` | Client CLI. Connects to a machine through a hub and binds services on deterministic loopback addresses through the encrypted tunnel. | Any machine you want to connect *from*. |
+| `telad` | Agent, or daemon. Registers a machine with a hub and exposes selected TCP services through the encrypted tunnel. | The machine you want to reach. |
+| `tela` | Client CLI. Connects to a machine through a hub and binds its services on local loopback ports through the encrypted tunnel. | Any machine you want to connect *from*. |
 
 A connection involves all three:
 
@@ -29,13 +29,14 @@ flowchart LR
 ```
 
 Both `tela` and `telad` make outbound connections to the hub. Neither side
-needs to open inbound ports or configure port forwarding. The hub is the only
-component that needs to be publicly reachable.
+needs to open inbound ports or configure port forwarding. The hub is the
+only component that needs to be publicly reachable.
 
 The hub is a blind relay. It pairs clients with agents and forwards
-WireGuard packets between them, but it cannot decrypt the contents -- only
+WireGuard packets between them, but it cannot decrypt the contents; only
 the agent and the client share the keys. Even if the hub is compromised,
 session contents are not exposed.
 
-For the full design rationale, see [Why a connectivity fabric](../architecture/design.md).
-For the CLI surface of each binary, see [Appendix A: CLI reference](reference.md).
+For the full design rationale, see
+[Why a Connectivity Fabric](../architecture/design.md). For the CLI surface
+of each binary, see [Appendix A: CLI Reference](reference.md).

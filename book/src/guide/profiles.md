@@ -1,10 +1,13 @@
-# Connection profiles
+# Connection Profiles
 
-A connection profile is a YAML file that describes one or more tunnels. Running `tela connect -profile <name>` opens all of them in parallel with a single command, each reconnecting independently on failure.
+A connection profile is a YAML file that describes one or more tunnels.
+Running `tela connect -profile <name>` opens all of them in parallel with a
+single command, each reconnecting independently on failure.
 
-Profiles live in `~/.tela/profiles/` (or `%APPDATA%\tela\profiles\` on Windows). Each file is named `<profile-name>.yaml`.
+Profiles live in `~/.tela/profiles/` (or `%APPDATA%\tela\profiles\` on
+Windows). Each file is named `<profile-name>.yaml`.
 
-## A minimal profile
+## A Minimal Profile
 
 ```yaml
 # ~/.tela/profiles/work.yaml
@@ -19,11 +22,14 @@ connections:
 tela connect -profile work
 ```
 
-This opens a tunnel to port 22 on `dev-server` and binds it to a deterministic loopback address. Use `tela status` to see the bound address.
+This opens a tunnel to port 22 on `dev-server` and binds it on
+`localhost:22`, or on a fallback port if 22 is taken locally. Use
+`tela status` to see the bound address.
 
-## Multiple connections
+## Multiple Connections
 
-A profile can open tunnels to any number of machines across any number of hubs simultaneously:
+A profile can open tunnels to any number of machines across any number of
+hubs simultaneously:
 
 ```yaml
 connections:
@@ -44,11 +50,15 @@ connections:
       - name: postgres
 ```
 
-Each connection gets its own deterministic loopback address. Services on different machines never share a local port.
+When two machines expose the same port, the first to bind gets the native
+port and the others land on fallback ports. To make the layout predictable,
+give each service an explicit `local:` port (see below).
 
-## Tokens and credentials
+## Tokens and Credentials
 
-If a token is stored in the credential store for a hub (via `tela login` or `tela pair`), the profile does not need to include it. The token is looked up automatically.
+If a token is stored in the credential store for a hub (via `tela login` or
+`tela pair`), the profile does not need to include it. The token is looked
+up automatically.
 
 To embed a token explicitly:
 
@@ -59,22 +69,25 @@ connections:
     token: ${MY_HUB_TOKEN}
 ```
 
-Profile YAML supports environment variable expansion with `${VAR}` syntax. This is useful for tokens in CI/CD environments where you do not want credentials in files on disk.
+Profile YAML supports environment variable expansion with `${VAR}` syntax.
+This is useful for tokens in CI/CD environments where you do not want
+credentials in files on disk.
 
-## Specifying services
+## Specifying Services
 
-Services can be identified by port number, by name, or with a local port override:
+Services can be identified by port number, by name, or with a local port
+override:
 
 ```yaml
 services:
-  # By port number -- connects remote port 22 to local port 22
+  # By port number: connects remote port 22 to local port 22
   - remote: 22
 
-  # By port number with a local override -- useful when 22 is taken locally
+  # By port number with a local override: useful when 22 is taken locally
   - remote: 22
     local: 2222
 
-  # By service name -- resolves the port from the hub's service registry
+  # By service name: resolves the port from the hub's service registry
   - name: postgres
 
   # By service name with a local port override
@@ -82,26 +95,20 @@ services:
     local: 13389
 ```
 
-When you specify `name: gateway` the gateway service is resolved the same way as any other named service.
+Each service binds a listener on `127.0.0.1` at its local port (which
+defaults to the remote port). If that port is already in use, the client
+falls back to the port plus 10000, then plus 10001, and so on, and prints
+the port it actually bound. A `local:` override makes the port explicit so
+you never depend on fallback behavior.
 
-## Pinning a loopback address
+A path gateway on the agent appears to clients as a service named
+`gateway` and is selected the same way as any other named service.
 
-By default each machine gets a deterministic loopback address derived from the hub URL and machine name. To fix a specific address instead:
+## Auto-Mounting File Shares
 
-```yaml
-connections:
-  - hub: wss://hub.example.com
-    machine: barn
-    address: 127.99.1.1
-    services:
-      - remote: 22
-```
-
-The address must be in the `127.0.0.0/8` range.
-
-## Auto-mounting file shares
-
-If machines in the profile have file sharing enabled, you can configure the profile to mount them as a local drive automatically when the profile connects:
+If machines in the profile have file sharing enabled, you can configure the
+profile to mount them as a local drive automatically when the profile
+connects:
 
 ```yaml
 connections:
@@ -116,22 +123,7 @@ mount:
   port: 18080      # WebDAV listen port (default 18080)
 ```
 
-## DNS name resolution
-
-The `dns` block configures the loopback prefix used by `tela dns hosts` for this profile:
-
-```yaml
-connections:
-  - hub: wss://hub.example.com
-    machine: barn
-
-dns:
-  loopback_prefix: "127.88"   # prefix for 'tela dns hosts' entries; does not affect port binding
-```
-
-See the [DNS names](#dns-names) section below for how to add machine names to your hosts file.
-
-## Managing profiles
+## Managing Profiles
 
 ```bash
 tela profile list               # list all profiles
@@ -140,15 +132,18 @@ tela profile create staging     # create a new empty profile at ~/.tela/profiles
 tela profile delete old-work    # delete a profile
 ```
 
-`tela profile create` writes a starter file with example comments. Edit it with any text editor.
+`tela profile create` writes a starter file with example comments. Edit it
+with any text editor.
 
-## DNS names
+## DNS Names
 
-`tela dns hosts` generates `/etc/hosts` entries for all machines in a profile, using their deterministic loopback addresses:
+`tela dns hosts` generates hosts-file entries for all machines in a
+profile. Each machine gets a stable loopback address derived from its hub
+URL and machine name, so the entries survive reconnects:
 
 ```bash
 tela dns hosts
-# Tela local names -- generated by 'tela dns hosts'
+# Tela local names, generated by 'tela dns hosts'
 # 127.88.12.34       barn.tela
 # 127.88.56.78       dev-server.tela
 ```
@@ -178,13 +173,32 @@ ssh user@barn.tela
 psql -h dev-server.tela -U postgres
 ```
 
-## Running a profile as an OS service
+Two profile fields tune the generated addresses. The `dns` block sets the
+loopback prefix used for all machines in the profile, and a per-connection
+`address:` field overrides the derived address for one machine:
 
-A profile can run as a persistent OS service that reconnects automatically after reboots and connection drops:
+```yaml
+connections:
+  - hub: wss://hub.example.com
+    machine: barn
+    address: 127.99.1.1      # fixed address for barn in 'tela dns hosts' output
+
+dns:
+  loopback_prefix: "127.88"  # prefix for derived addresses (default 127.88)
+```
+
+An `address:` override must be in the `127.0.0.0/8` range. Both fields
+affect only the hosts entries that `tela dns hosts` generates; they do not
+change the ports that `tela connect` binds.
+
+## Running a Profile as an OS Service
+
+A profile can run as a persistent OS service that reconnects automatically
+after reboots and connection drops:
 
 ```bash
 tela service install -config ~/.tela/profiles/work.yaml
 tela service start
 ```
 
-See [Run Tela as an OS service](../howto/services.md) for the full setup.
+See [Run Tela as an OS Service](../howto/services.md) for the full setup.

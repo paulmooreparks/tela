@@ -1,20 +1,28 @@
-# The path gateway
+# The Path Gateway
 
-The path gateway is a built-in HTTP reverse proxy inside `telad`. It exposes one tunnel port and routes incoming HTTP requests to different local services based on URL path prefix, eliminating the need for a separate nginx, Caddy, or Traefik instance for tunnel-internal routing.
+The path gateway is a built-in HTTP reverse proxy inside `telad`. It
+exposes one tunnel port and routes incoming HTTP requests to different
+local services based on URL path prefix, eliminating the need for a
+separate nginx, Caddy, or Traefik instance for tunnel-internal routing.
 
-## When to use a gateway
+## When to Use a Gateway
 
-Use a gateway when you have several HTTP services on one machine and want to reach all of them through a single tunnel port. Common examples:
+Use a gateway when you have several HTTP services on one machine and want
+to reach all of them through a single tunnel port. Common examples:
 
 - A web frontend, a REST API, and a metrics endpoint running on the same host
 - A multi-page web app with backend services on different ports
 - A development stack you want accessible through one URL
 
-You do not need a gateway when you have only one HTTP service (just expose it as a normal service), when your services use TCP rather than HTTP (expose them as normal TCP services), or when you already use a reverse proxy in front of your services and want to keep it as the edge.
+You do not need a gateway when you have only one HTTP service (just expose
+it as a normal service), when your services use TCP rather than HTTP
+(expose them as normal TCP services), or when you already use a reverse
+proxy in front of your services and want to keep it as the edge.
 
-## How it works
+## How It Works
 
-Without a gateway, a client connecting to a multi-service application gets one binding per service port:
+Without a gateway, a client connecting to a multi-service application gets
+one binding per service port:
 
 ```
 localhost:3000   → port 3000
@@ -22,7 +30,11 @@ localhost:4000   → port 4000
 localhost:4100   → port 4100
 ```
 
-The browser opens `http://localhost:3000` and calls the API on a different origin (`localhost:4000`). Same host, different port -- that is still a cross-origin request under browser CORS rules, which means either CORS headers on the API server, a hardcoded API URL in the UI code, or an extra proxy layer somewhere.
+The browser opens `http://localhost:3000` and calls the API on a different
+origin (`localhost:4000`). Same host, different port: that is still a
+cross-origin request under browser Cross-Origin Resource Sharing (CORS)
+rules, which means either CORS headers on the API server, a hardcoded API
+URL in the UI code, or an extra proxy layer somewhere.
 
 With a gateway, the client gets one binding:
 
@@ -30,14 +42,17 @@ With a gateway, the client gets one binding:
 localhost:8080   → HTTP
 ```
 
-The browser opens `http://localhost:8080/`. The UI calls `/api/users`. The gateway sees the `/api/` prefix and proxies the request to the local API service. Same origin. No CORS. No extra configuration.
+The browser opens `http://localhost:8080/`. The UI calls `/api/users`. The
+gateway sees the `/api/` prefix and proxies the request to the local API
+service. Same origin. No CORS. No extra configuration.
 
 ## Configuration
 
-Gateway configuration lives in `telad.yaml` under each machine, alongside the `services:` list:
+Gateway configuration lives in `telad.yaml` under each machine, alongside
+the `services:` list:
 
 ```yaml
-hub: wss://your-hub.example.com
+hub: wss://hub.example.com
 token: "<your-agent-token>"
 
 machines:
@@ -57,9 +72,13 @@ machines:
           target: 3000
 ```
 
-This declares one direct TCP service (PostgreSQL on port 5432, exposed through the tunnel as usual) and a gateway listening on port 8080 with three routes. The HTTP services on ports 3000, 4000, and 4100 are not in the `services:` list -- they are private to the machine and reachable only through the gateway. The tunnel exposes port 8080 and port 5432.
+This declares one direct TCP service (PostgreSQL on port 5432, exposed
+through the tunnel as usual) and a gateway listening on port 8080 with
+three routes. The HTTP services on ports 3000, 4000, and 4100 are not in
+the `services:` list; they are private to the machine and reachable only
+through the gateway. The tunnel exposes port 8080 and port 5432.
 
-### Field reference
+### Field Reference
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -68,9 +87,11 @@ This declares one direct TCP service (PostgreSQL on port 5432, exposed through t
 | `routes[].path` | Yes | URL path prefix to match (e.g. `/api/`, `/admin/`, `/`). |
 | `routes[].target` | Yes | Local TCP port to proxy matched requests to. |
 
-### Route matching
+### Route Matching
 
-Routes are matched by longest path prefix first. The order in the YAML file does not matter; `telad` sorts them at startup. A route with `path: /` matches any request not claimed by a more specific route.
+Routes are matched by longest path prefix first. The order in the YAML file
+does not matter; `telad` sorts them at startup. A route with `path: /`
+matches any request not claimed by a more specific route.
 
 With these routes:
 
@@ -84,16 +105,19 @@ routes:
     target: 4000
 ```
 
-A request to `/api/v2/users` matches `/api/v2/` (target 4002). A request to `/api/health` matches `/api/` (target 4000). A request to `/about` matches `/` (target 3000).
+A request to `/api/v2/users` matches `/api/v2/` (target 4002). A request to
+`/api/health` matches `/api/` (target 4000). A request to `/about` matches
+`/` (target 3000).
 
-## Connecting through a gateway
+## Connecting Through a Gateway
 
-The gateway appears to clients as a service named `gateway`. Use it in a connection profile like any other service:
+The gateway appears to clients as a service named `gateway`. Use it in a
+connection profile like any other service:
 
 ```yaml
 # ~/.tela/profiles/barn.yaml
 connections:
-  - hub: wss://your-hub.example.com
+  - hub: wss://hub.example.com
     machine: barn
     services:
       - name: gateway
@@ -112,7 +136,8 @@ Services available:
   localhost:5432   → port 5432
 ```
 
-Port labels come from the well-known port table (22=SSH, 80/8080=HTTP, 3389=RDP, etc.). Ports not in the table show as `port N`.
+Port labels come from the well-known port table (22=SSH, 80/8080=HTTP,
+3389=RDP, and so on). Ports not in the table show as `port N`.
 
 If port 8080 conflicts with something local, override it:
 
@@ -122,9 +147,12 @@ services:
     local: 18080
 ```
 
-### Direct access alongside the gateway
+### Direct Access Alongside the Gateway
 
-You can expose a service both through the gateway (for browser access) and as a direct service (for tools like `curl` or Postman). Add it to the agent's `services:` list as well as the gateway routes, then include it in the profile:
+You can expose a service both through the gateway (for browser access) and
+as a direct service (for tools like `curl` or Postman). Add it to the
+agent's `services:` list as well as the gateway routes, then include it in
+the profile:
 
 ```yaml
 # telad.yaml
@@ -146,7 +174,7 @@ machines:
 ```yaml
 # profile
 connections:
-  - hub: wss://your-hub.example.com
+  - hub: wss://hub.example.com
     machine: barn
     services:
       - name: gateway
@@ -154,11 +182,14 @@ connections:
         local: 14000
 ```
 
-Now `http://localhost:8080/api/...` reaches the API through the gateway, and `http://localhost:14000/...` reaches it directly.
+Now `http://localhost:8080/api/...` reaches the API through the gateway,
+and `http://localhost:14000/...` reaches it directly.
 
-## Cross-environment use
+## Cross-Environment Use
 
-When you maintain the same application across several environments, each running its own `telad`, a profile can connect to multiple gateways simultaneously:
+When you maintain the same application across several environments, each
+running its own `telad`, a profile can connect to multiple gateways
+simultaneously:
 
 ```yaml
 connections:
@@ -174,10 +205,26 @@ connections:
         local: 18080
 ```
 
-When connecting to both environments simultaneously, use `local:` overrides to put them on different ports. Without an override, both gateways would try to bind `localhost:8080` and the second would fall back to `localhost:18080`. Making it explicit avoids relying on fallback behavior. The routing logic stays in each environment's `telad.yaml`, not in the client profile.
+When connecting to both environments simultaneously, use `local:` overrides
+to put them on different ports. Without an override, both gateways would
+try to bind `localhost:8080` and the second would fall back to
+`localhost:18080`. Making it explicit avoids relying on fallback behavior.
+The routing logic stays in each environment's `telad.yaml`, not in the
+client profile.
 
 ## Limitations
 
-The gateway does not terminate TLS (the WireGuard tunnel already provides end-to-end encryption). It does not authenticate users (that is the hub's token and ACL layer). It does not load-balance across instances. It does not proxy WebSocket connections -- if you need WebSocket access to a service, expose it as a separate service alongside the gateway. It is not a replacement for an internet-facing reverse proxy with TLS termination, rate limiting, or WAF rules.
+The gateway does not terminate TLS (the WireGuard tunnel already provides
+end-to-end encryption). It does not authenticate users (that is the hub's
+token and ACL layer). It does not load-balance across instances. It does
+not transform requests or responses beyond rewriting the `Host` header to
+the local target. It is not a replacement for an internet-facing reverse
+proxy with TLS termination, rate limiting, or WAF rules. If a service
+depends on long-lived WebSocket connections and misbehaves behind the
+gateway, expose it as a separate direct service alongside the gateway.
 
-For the design rationale and the relationship between the path gateway and the other gateway primitives in Tela, see [Gateways](../architecture/gateway.md) in the Design Rationale section. For a step-by-step setup walkthrough and troubleshooting, see [Set up a path-based gateway](../howto/gateway.md).
+For the design rationale and the relationship between the path gateway and
+the other gateway primitives in Tela, see
+[Gateways](../architecture/gateway.md) in the Design Rationale section. For
+a step-by-step setup walkthrough and troubleshooting, see
+[Set Up a Path-Based Gateway](../howto/gateway.md).

@@ -1,8 +1,8 @@
-# Why a connectivity fabric
+# Why a Connectivity Fabric
 
 Tela ships as three small binaries. It uses WireGuard but not the kernel driver. Its hub relays traffic without reading it. These are not defaults that fell out of convenience: each is a deliberate choice with a specific alternative that was considered and rejected. This chapter explains the three decisions that shaped the architecture.
 
-## Three binaries, not one
+## Three Binaries, Not One
 
 Tela could have been a single binary run in different modes: `tela --mode agent`, `tela --mode hub`, `tela --mode client`. The code would be simpler and distribution easier. The problem is that a single binary conflates trust domains.
 
@@ -12,7 +12,7 @@ Separate binaries make the separation structural. `telahubd` has no code path th
 
 The same argument applies to the split between client and agent. `tela` connects outbound and creates a local port binding. `telad` registers with a hub and exposes local services. They share a Go module but are distinct processes with distinct privilege requirements and distinct deployment contexts. A machine can run an agent without having the client binary, and vice versa.
 
-## The hub is a blind relay
+## The Hub Is a Blind Relay
 
 The hub could inspect WireGuard payloads. It could decrypt them, log the content, or apply policy based on what traffic flows through. This is how most commercial VPN concentrators work.
 
@@ -22,7 +22,7 @@ The reason is that a relay that *can* inspect traffic *will* be pressured to do 
 
 By making the hub blind structurally (no keys, no decryption code path, no policy hook), the security property is not a promise the hub operator makes. It is a consequence of what the software does.
 
-## No TUN, no root
+## No TUN, No Root
 
 Standard WireGuard works through a kernel TUN device. On Linux you create a `wg0` interface. On Windows you use the WireGuard kernel driver. On macOS you use the utun driver. All of these require elevated privileges: root on Unix, Administrator on Windows.
 

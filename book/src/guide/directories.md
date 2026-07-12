@@ -1,4 +1,4 @@
-# Hub directories and portals
+# Hub Directories and Portals
 
 A single hub is enough for one team in one place. Real organizations end up
 with several: per environment, per customer, per region, per acquisition.
@@ -6,7 +6,7 @@ The fabric handles this with a small directory protocol that lets a client
 resolve hub names instead of memorizing URLs, and an optional portal layer
 that adds dashboards and visibility on top of the directory.
 
-## The directory protocol
+## The Directory Protocol
 
 Tela ships a hub directory protocol as part of the fabric, not as a separate
 product. Two endpoints define it:
@@ -20,9 +20,11 @@ product. Two endpoints define it:
   (URL), and optional metadata.
 
 That is the whole protocol. Anything that responds correctly on those two
-endpoints is a hub directory, regardless of what else it does.
+endpoints is a hub directory, regardless of what else it does. The full
+wire contract is specified in
+[Appendix D: Portal Protocol](../architecture/portal-protocol.md).
 
-## Adding a directory as a remote
+## Adding a Directory as a Remote
 
 On the client side, a hub directory is added as a **remote**:
 
@@ -40,11 +42,11 @@ tela connect -hub myhub -machine prod-web01
 
 The client does not change otherwise. The same `tela connect` command works
 whether the user typed a full URL or a name that resolved through a
-directory. A user's CLI can register more than one remote: a self-hosted
-directory for internal hubs, a managed directory for cross-organization or
-customer hubs, the same `tela` binary talking to both.
+directory. A client can register more than one remote: a self-hosted
+directory for internal hubs and a managed directory for cross-organization
+or customer hubs, with the same `tela` binary talking to both.
 
-## Listing a hub in a directory
+## Listing a Hub in a Directory
 
 On the hub side, a hub registers itself with a directory through the
 `telahubd portal` subcommand:
@@ -61,7 +63,7 @@ stores the association in the hub's configuration. From that point on, any
 client whose remote points at the same directory can find the hub by
 name.
 
-## What a portal adds on top
+## What a Portal Adds on Top
 
 The directory protocol is the floor. A **portal** is a directory plus
 whatever extras the operator wants to layer on. Typical additions:
@@ -86,22 +88,21 @@ and authorizes connections on its own, with its own tokens and its own
 access control list. The portal handles discovery, identity, and
 visibility, not trust delegation.
 
-## Two operating models
+## Three Ways to Run One
 
-Two paths to a working directory. Same protocol, different operating
-models.
+The protocol is the contract; where the server comes from is up to you.
 
-| Self-hosted directory | Managed directory |
-|-----------------------|-------------------|
-| You implement `/.well-known/tela` and `/api/hubs`, or run an existing portal you control | A vendor runs the directory and the dashboard for you |
-| Everything stays on your own infrastructure | Multi-hub visibility, personal API tokens, web console without operating the server |
-| Suitable when compliance or sovereignty rule out a hosted option | Suitable when fleet visibility and onboarding speed matter more than self-hosting |
-| Tela ships the protocol; you ship the server | **Awan Saya** is one such managed option, available on request |
+| Option | What It Is | When to Pick It |
+|--------|------------|-----------------|
+| **`telaportal`** | Tela's own standalone portal binary. Single-user, file-backed storage, zero external dependencies. Implements the full portal protocol. | You want name resolution and a personal dashboard for your own hubs without operating anything heavier than the hubs themselves. |
+| **Your own implementation** | Any service that answers `/.well-known/tela` and `/api/hubs` correctly. | You already have an internal service catalog or portal and want Tela hubs listed in it. |
+| **A managed portal** | A vendor-operated directory and dashboard. **Awan Saya** is one such option, available on request. | Fleet visibility, multi-organization access control, and onboarding speed matter more than self-hosting. |
 
 The CLI does not care which one a remote points at. The same
-`tela remote add` command and the same name-resolution path work for both.
+`tela remote add` command and the same name-resolution path work for all
+three.
 
-## When you need a directory at all
+## When You Need a Directory at All
 
 If you are running a single hub for personal use, you do not need a
 directory or a portal. The hub stands alone, the client connects to it by

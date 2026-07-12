@@ -1,11 +1,11 @@
 # Contributing
 
-Tela is an early-stage project moving fast. Contributions are welcome but
+Tela is an early-stage project moving fast. Contributions are welcome, but
 the bar is real: the code base has a "no cruft, no backward compatibility
 until 1.0" policy that drives a lot of the decisions, and PRs need to land
 clean (build, vet, gofmt, race-clean tests, no stray files).
 
-## Setting up a dev environment
+## Setting Up a Dev Environment
 
 ```bash
 git clone https://github.com/paulmooreparks/tela
@@ -16,41 +16,48 @@ go test ./...
 gofmt -l .          # should print nothing
 ```
 
+Continuous integration also enforces per-package test coverage floors on
+the security-critical packages; `go test ./...` passing locally is the main
+signal, and the coverage gate output in CI tells you exactly which package
+regressed if it trips.
+
 For TelaVisor specifically:
 
 ```bash
 cd cmd/telagui
-wails build         # outputs to ./build/bin/telavisor.exe
+wails build         # outputs to ./build/bin/
 ```
 
 You will need [Wails v2](https://wails.io/) installed.
 
-## What to read first
+## What to Read First
 
-- [CLAUDE.md](https://github.com/paulmooreparks/tela/blob/main/CLAUDE.md) --
+- [CLAUDE.md](https://github.com/paulmooreparks/tela/blob/main/CLAUDE.md):
   the project's guiding principles, coding conventions, API style, and the
   list of architectural review items
-- [Why a connectivity fabric](architecture/design.md) -- the design
+- [Why a Connectivity Fabric](architecture/design.md): the design
   rationale for the core architecture
-- [ROADMAP-1.0.md](https://github.com/paulmooreparks/tela/blob/main/ROADMAP-1.0.md) --
+- [ROADMAP-1.0.md](https://github.com/paulmooreparks/tela/blob/main/ROADMAP-1.0.md):
   the 1.0 readiness checklist (anything unticked is fair game)
-- [STATUS.md](https://github.com/paulmooreparks/tela/blob/main/STATUS.md) --
-  the live traceability matrix from design sections to implementation
+- [STATUS.md](https://github.com/paulmooreparks/tela/blob/main/STATUS.md):
+  the traceability matrix from design sections to implementation
 
-## Filing issues
+## Filing Issues
 
-Use the [GitHub issue tracker](https://github.com/paulmooreparks/tela/issues).
-For security issues, see [SECURITY.md](https://github.com/paulmooreparks/tela/blob/main/SECURITY.md)
-once it exists (it is on the 1.0 blocker list).
+Use the
+[GitHub issue tracker](https://github.com/paulmooreparks/tela/issues). For
+security issues, follow
+[SECURITY.md](https://github.com/paulmooreparks/tela/blob/main/SECURITY.md)
+rather than filing a public issue.
 
-## Pre-1.0 ground rules
+## Pre-1.0 Ground Rules
 
 - No backward-compatibility shims. If a name or shape is wrong, fix it
   everywhere in one commit.
 - Delete duplicate code paths. When a new shape replaces an old one, the
   old one goes in the same change.
 - No "deprecated" markings yet. Pre-1.0 there is no deprecation; there is
-  only "the right shape" and "the wrong shape."
+  only the right shape and the wrong shape.
 
 After 1.0, the rules invert: deprecation will be slow and deliberate, and
 backward compatibility will be maintained religiously. Anything left in the

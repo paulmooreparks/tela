@@ -1,12 +1,17 @@
-# Production access
+# Production Access
 
-## The scenario
+Your production infrastructure runs on cloud VMs or bare metal with no
+inbound ports open. Today, getting to a machine requires a bastion host, a
+VPN, or punching a hole in the firewall. All of those need ongoing
+maintenance, invite shared-credential problems, and usually end up granting
+broader access than intended ("connect to the VPN, now you can reach
+everything").
 
-Your production infrastructure runs on cloud VMs or bare metal with no inbound ports open. Today, getting to a machine requires a bastion host, a VPN, or punching a hole in the firewall. Any of those approaches requires ongoing maintenance, introduces a shared-credential problem, and often ends up with broader access than intended ("connect to the VPN, now you can reach everything").
-
-With Tela, each production VM runs `telad` as an OS service. It makes an outbound connection to a dedicated production hub and registers itself, exposing only the specific ports the team needs -- SSH, a database port, an admin panel. Access is controlled per-machine and per-identity: the on-call engineer has SSH access to the web servers, the DBA has database access, neither has access to the other's machines.
-
-When a team member needs to connect, they run `tela connect` with their profile. They get a local address for each machine they have access to:
+With Tela, each production VM runs `telad` as an OS service, makes an
+outbound connection to a dedicated production hub, and exposes only the
+specific ports the team needs. Access is per-machine and per-identity: the
+on-call engineer has SSH to the web servers, the DBA has the database port,
+and neither has the other's access.
 
 ```
 Services available:
@@ -15,170 +20,83 @@ Services available:
   localhost:5432   → port 5432    (db-01)
 ```
 
-No bastion. No VPN. No shared credentials. If a team member leaves, their identity is removed from the hub and their access ends immediately -- nothing else changes on the production machines.
+No bastion. No VPN. No shared credentials. When a team member leaves, their
+identity is removed from the hub and their access ends immediately; nothing
+changes on the production machines.
 
-## Strong recommendation for production
+## Topology
 
-- Prefer **Pattern A (Endpoint agent)** on each production VM.
-- Expose the smallest possible set of services.
-- Use a dedicated hub for production.
-- Always enable authentication. Treat hub and agent tokens as secrets.
+- **A dedicated hub per environment.** Separate hubs for production and
+  staging are the simplest possible control boundary: different owner
+  tokens, different identity lists, no way to cross by accident. Deploy the
+  production hub with TLS and a service manager per
+  [Run a Hub on the Public Internet](../howto/hub.md).
+- **An endpoint agent on every VM**, installed as an OS service
+  ([Run an Agent](../howto/telad.md),
+  [Run Tela as an OS Service](../howto/services.md)). Use the gateway
+  pattern only for machines that genuinely cannot run `telad`, and treat
+  any such gateway host as critical infrastructure: isolated, and
+  allowlisted to specific targets and ports.
+- **Minimal exposure.** A web server exposes port 22. A database server
+  exposes 22 and 5432. Nothing exposes a port range.
 
----
+## The Access Model
 
-## Step 1 - Stand up a production hub
-
-See [Run a hub on the public internet](../howto/hub.md) for the full deployment guide, including TLS setup with a reverse proxy and cloud firewall rules. For a quick start on hardened infrastructure:
-
-```bash
-telahubd
-```
-
-The hub prints an owner token on first start. Save it. Publish the hub as `wss://prod-hub.example.com`.
-
-Verify:
-- HTTPS/TLS is valid
-- WebSockets work
-- `/api/status` is reachable
-
----
-
-## Step 2 - Set up authentication
-
-Create tokens for each production machine and each operator:
+One agent identity per machine, one operator identity per human, grants
+that mirror actual responsibilities:
 
 ```bash
-# Create agent tokens (one per production machine)
-tela admin tokens add agent-web01 -hub wss://prod-hub.example.com -token <owner-token>
-# Save the printed token -- this is <agent-web01-token> used in telad on prod-web01 (Step 3)
-tela admin tokens add agent-db01 -hub wss://prod-hub.example.com -token <owner-token>
-# Save the printed token -- this is <agent-db01-token> used in telad on prod-db01 (Step 3)
+# Agents: one identity per VM, register permission on its own machine only
+tela admin tokens add agent-web01 -hub wss://prod-hub.example.com
+tela admin access grant agent-web01 prod-web01 register -hub wss://prod-hub.example.com
 
-# Grant each agent permission to register its machine
-tela admin access grant agent-web01 prod-web01 register -hub wss://prod-hub.example.com -token <owner-token>
-tela admin access grant agent-db01 prod-db01 register -hub wss://prod-hub.example.com -token <owner-token>
-
-# Create operator tokens
-tela admin tokens add alice -hub wss://prod-hub.example.com -token <owner-token>
-# Save the printed token -- give it to Alice for use with tela connect (Step 4)
-tela admin access grant alice prod-web01 connect -hub wss://prod-hub.example.com -token <owner-token>
-tela admin access grant alice prod-db01 connect -hub wss://prod-hub.example.com -token <owner-token>
+# Operators: connect grants per machine, per person
+tela admin tokens add alice -hub wss://prod-hub.example.com
+tela admin access grant alice prod-web01 connect -hub wss://prod-hub.example.com
+tela admin access grant alice prod-db01 connect -hub wss://prod-hub.example.com
 ```
 
-See [Run a hub on the public internet](../howto/hub.md) for the full list of `tela admin` commands.
+Two production-grade refinements:
 
----
+- **Per-service grants.** When a machine exposes several services, a
+  connect grant can be narrowed to named services, so the DBA reaches
+  PostgreSQL but not SSH:
 
-## Step 3 - Register production machines with `telad`
+  ```bash
+  tela admin access grant dba prod-db01 connect -services postgres -hub wss://prod-hub.example.com
+  ```
 
-### Pattern A - Endpoint agent
+- **Rotation and audit.** Rotate any credential you suspect with
+  `tela admin rotate <id>` (the old token dies instantly, permissions
+  survive), and review recent session events with the hub's history
+  (`/api/history`, the hub console, or TelaVisor's History view).
 
-On each production VM, run `telad` with a config file:
+## The Operator Workflow
 
-```yaml
-# telad.yaml
-hub: wss://prod-hub.example.com
-token: "<agent-web01-token>"
-
-machines:
-  - name: prod-web01
-    ports: [22]
-```
+Operators store their token once (`tela login wss://prod-hub.example.com`),
+keep a profile per environment with pinned `local:` ports, and connect on
+demand:
 
 ```bash
-telad -config telad.yaml
+tela connect -profile prod
+ssh -p 22 localhost          # web-01, per the profile's port layout
+psql -h localhost -p 5432 -U postgres
 ```
 
-Or with flags (quick start):
+Pinned local ports matter more here than anywhere else: muscle memory and
+shell history should never depend on which fallback port a machine happened
+to get.
 
-```bash
-telad -hub wss://prod-hub.example.com -machine prod-web01 -ports "22" -token <agent-token>
-```
+## Pitfalls Specific to This Scenario
 
-For persistent operation, install as a service:
-
-```bash
-telad service install -config telad.yaml
-telad service start
-```
-
-See [Run Tela as an OS service](../howto/services.md) for platform-specific details.
-
-Guidance:
-
-- If you need database access, require TLS on the database itself.
-- Avoid exposing wide port ranges.
-
-### Pattern B - Gateway/bridge agent (use sparingly)
-
-Use only when endpoints cannot run `telad`. The gateway becomes a critical asset: it must be isolated and tightly allowlisted to specific targets and ports.
-
----
-
-## Step 4 - Operator workflow
-
-On an operator machine:
-
-1. Download `tela` and verify the checksum.
-2. List machines:
-
-```bash
-tela machines -hub wss://prod-hub.example.com -token <your-token>
-```
-
-3. Connect to a machine:
-
-```bash
-tela connect -hub wss://prod-hub.example.com -machine prod-web01 -token <your-token>
-```
-
-4. Use tools against the local address shown in the output:
-
-- SSH:
-
-```bash
-ssh -p PORT localhost
-```
-
-- Database (example):
-
-```bash
-psql -h localhost -p PORT -U postgres
-```
-
-**Tip:** Set environment variables to avoid repeating flags:
-
-```bash
-export TELA_HUB=wss://prod-hub.example.com
-export TELA_TOKEN=<your-token>
-tela machines
-tela connect -machine prod-web01
-```
-
----
-
-## Security notes (production)
-
-- Tela encrypts the tunnel end-to-end; the hub relays ciphertext.
-- Production hardening is still necessary:
-  - Patch systems
-  - Strong SSH authentication
-  - Least privilege -- grant `connect` access only to the machines each operator needs
-  - Audit access -- check `/api/history` on the hub
-  - Rotate tokens periodically -- use `tela admin rotate`
-- Separate hubs per environment are the simplest control boundary.
-
----
-
-## Troubleshooting
-
-### Operators can reach hub but no machines appear
-
-- Confirm `telad` is running on the production VM.
-- Confirm egress from the VM allows outbound HTTPS/WebSockets to the hub.
-- If auth is enabled, confirm the agent token is valid and has been granted `register` access to the machine.
-
-### Service reachable locally on the server but not via Tela
-
-- Confirm the service is listed by `tela services -hub <hub> -machine <machine> -token <token>`.
-- Confirm the correct port is exposed in `telad`.
+- Tela moves the network perimeter; it does not replace host hardening.
+  Patching, strong SSH authentication, and TLS on the database itself all
+  still apply. The hop from `telad` to the local service is plain TCP, so
+  services that carry credentials should bring their own encryption.
+- Verify egress: production VMs with strict outbound firewalls need to
+  allow the WebSocket connection to the hub (and, optionally, UDP to the
+  hub's relay port).
+- Resist the temptation to grant `'*'` connect to operators "for now."
+  Wildcards are for the personal-cloud scenario; in production the
+  per-machine grant list is the audit trail of who was supposed to reach
+  what.

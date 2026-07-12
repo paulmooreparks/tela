@@ -1,8 +1,8 @@
 # Run a hub on the public internet
 
-## What you are setting up
+## What You Are Setting Up
 
-The hub is a single Linux (or Windows, or macOS) server sitting on the public internet with an inbound port open. It does not need to be powerful -- a $5/month virtual machine (VM) works fine. It runs `telahubd`, which serves a single endpoint that handles both WebSocket connections from agents and clients and a UDP relay for faster WireGuard transport.
+The hub is a single Linux (or Windows, or macOS) server sitting on the public internet with an inbound port open. It does not need to be powerful; a $5/month virtual machine (VM) works fine. It runs `telahubd`, which serves a single endpoint that handles both WebSocket connections from agents and clients and a UDP relay for faster WireGuard transport.
 
 Every agent and every client in your Tela deployment points at this hub. They connect outbound to it; it brokers the WireGuard sessions between them. It never decrypts tunnel traffic.
 
@@ -18,7 +18,7 @@ The hub's public URL will be `wss://hub.example.com`. Agents use that URL in the
 
 This chapter takes you from "I ran through the [First connection](../getting-started/first-connection.md) walkthrough" to a production-grade deployment with TLS, authentication, and a supervisor (Docker or the OS service manager) that keeps the hub running.
 
-## Hub server: `telahubd`
+## Hub Server: `telahubd`
 
 `telahubd` is the Go-native hub server. Single binary, no runtime dependencies. It serves HTTP, WebSocket relay, and UDP relay on one process.
 
@@ -33,11 +33,11 @@ Prerequisites: Docker Engine and Docker Compose plugin. Any modern Docker instal
 
 This walkthrough deploys the Caddy-fronted production template. Caddy terminates TLS with an auto-issued Let's Encrypt certificate, telahubd runs behind it on the internal Docker network, and the UDP relay port is published directly from the host to telahubd because Caddy is TCP-only. Three templates are maintained in the tela repo under [`deploy/docker/`](https://github.com/paulmooreparks/tela/tree/main/deploy/docker); the "Choosing a different template" section below covers the other two.
 
-#### Step 1. Point DNS
+#### Step 1: Point DNS
 
 Point an `A` record for your hub's hostname (for example `hub.example.com`) at the Docker host's public IP. Let's Encrypt needs this to resolve correctly before it will issue the certificate; if DNS is wrong, the first `docker compose up` appears to hang on the Caddy logs at the ACME challenge step.
 
-#### Step 2. Open firewall ports
+#### Step 2: Open Firewall Ports
 
 Three inbound ports on the Docker host:
 
@@ -47,7 +47,7 @@ Three inbound ports on the Docker host:
 | 443 | TCP | Hub HTTPS and WebSocket. |
 | 41820 | UDP | UDP relay tier. See "The UDP gotcha" below. |
 
-#### Step 3. Pull the compose template
+#### Step 3: Pull the Compose Template
 
 Download the Caddy-fronted production template and its companions into a working directory on the Docker host:
 
@@ -60,7 +60,7 @@ curl -Lo .env.example       "$BASE/.env.example"
 cp .env.example .env
 ```
 
-#### Step 4. Fill in `.env`
+#### Step 4: Fill in `.env`
 
 Edit `.env` and set at least two values:
 
@@ -73,7 +73,7 @@ Optionally also set `TELAHUBD_NAME` (display name shown in TelaVisor and portal 
 
 Do not commit `.env` anywhere public; it contains the owner token.
 
-#### Step 5. Bring it up
+#### Step 5: Bring It Up
 
 ```bash
 docker compose up -d
@@ -89,7 +89,7 @@ curl https://hub.example.com/.well-known/tela
 
 The response is a small JSON document with `hubId` and `protocolVersion` fields. If that is what you see, the hub is live.
 
-#### Step 6. Confirm the owner token
+#### Step 6: Confirm the Owner Token
 
 The token is whatever you put in `.env`. To use it from a workstation:
 
@@ -104,7 +104,7 @@ If you left `TELA_OWNER_TOKEN` blank in `.env`, telahubd auto-generated one on f
 docker exec telahubd telahubd user show-owner -config /data/telahubd.yaml
 ```
 
-#### The UDP gotcha
+#### The UDP Gotcha
 
 Every compose template in this chapter publishes UDP port 41820 with the `/udp` suffix:
 
@@ -117,7 +117,7 @@ Without the suffix, Docker exposes only the TCP side. telahubd does not listen o
 
 If adapting one of the templates and sessions feel slow, `docker port <container-name>` should report `41820/udp`. If it reports `41820/tcp` instead, the suffix was dropped.
 
-#### Choosing a different template
+#### Choosing a Different Template
 
 The Caddy template suits most production deployments. Two alternatives live alongside it:
 
@@ -140,15 +140,15 @@ docker compose pull
 docker compose up -d
 ```
 
-The named volume for `/data` survives container recreation, so config and tokens are preserved. To pin to a specific version instead of tracking `:stable`, edit the `image:` line in the compose file to `ghcr.io/paulmooreparks/telahubd:v0.13.0` or any other published tag.
+The named volume for `/data` survives container recreation, so config and tokens are preserved. To pin to a specific version instead of tracking `:stable`, edit the `image:` line in the compose file to `ghcr.io/paulmooreparks/telahubd:v0.15.0` or any other published tag.
 
-### Install: native binary (alternative)
+### Install: Native Binary (Alternative)
 
 Pre-built binaries for Windows, Linux, and macOS are available on the [GitHub Releases](https://github.com/paulmooreparks/tela/releases) page. Choose this path if Docker is unavailable on the host, if you are running on Windows Server without Docker Desktop, or if you prefer integrating with the host's service manager directly.
 
 The install flow has five steps. Do them in this order. The service install step writes a clean config file; the bootstrap step adds the owner token to that file; the service-start step reads the populated config. Running them out of order either duplicates tokens or leaves you starting the hub against a blank config.
 
-#### Step 1. Pick a deployment model
+#### Step 1: Pick a Deployment Model
 
 | Model | `telahubd` port | Public port | TLS | Notes |
 |-------|-----------------|-------------|-----|-------|
@@ -160,7 +160,7 @@ The install flow has five steps. Do them in this order. The service install step
 
 `telahubd` binds its port on all interfaces, so for any of the proxy models above you must block external access to that port at the firewall. Only the reverse proxy should be able to reach it, over localhost. Proxy setup details live in [Publish with TLS](#publish-with-tls-recommended) further down. Decide the port now because `service install` in step 3 writes that port into the config.
 
-#### Step 2. Download the binary
+#### Step 2: Download the Binary
 
 Replace `amd64` with `arm64` for ARM hardware (Raspberry Pi, AWS Graviton, Apple Silicon). On macOS Apple Silicon use `darwin-arm64`; on Intel Macs use `darwin-amd64`.
 
@@ -190,7 +190,7 @@ Invoke-WebRequest -Uri https://github.com/paulmooreparks/tela/releases/latest/do
 
 Add `C:\Program Files\Tela` to the system `PATH` so later commands resolve the binary. The service install step below records the absolute path in the Windows service definition regardless, so `PATH` is only needed for interactive use.
 
-#### Step 3. Install the OS service
+#### Step 3: Install the OS Service
 
 This writes a fresh YAML config to the platform-standard location and registers the service with the OS. No tokens are written yet.
 
@@ -221,7 +221,7 @@ sudo telahubd service install -config /etc/tela/telahubd.yaml
 
 That keeps the existing tokens and just registers the OS service. If you took this path, skip step 4 (the tokens are already there) and continue to step 5. To change the port or hub name after the fact, stop the service, edit the YAML file directly, and start it again.
 
-#### Step 4. Bootstrap the owner token
+#### Step 4: Bootstrap the Owner Token
 
 This adds an `owner` identity to the config file from step 3 and prints the token once. Save it immediately. You use this token to register agents, run `tela admin`, and sign into TelaVisor as an administrator.
 
@@ -239,7 +239,7 @@ sudo telahubd user bootstrap
 
 The token will not be shown again. Store it in a password manager. For day-to-day agent and client connections, create lower-privilege tokens with `tela admin tokens add` (see [Authentication](#authentication) below).
 
-#### Step 5. Start the service
+#### Step 5: Start the Service
 
 **Linux / macOS:**
 
@@ -266,7 +266,7 @@ curl http://localhost:8080/api/status   # (or port 80 for direct/Cloudflare depl
 
 You should see a JSON response with `hub`, `version`, and connection counts. If you picked a proxy model, continue to [Publish with TLS](#publish-with-tls-recommended) to configure it. If you picked direct, the hub is already reachable on port 80 and you can skip ahead to [Register with a hub directory](#register-with-a-hub-directory).
 
-### Running in the foreground (dev only)
+### Running in the Foreground (Dev Only)
 
 For local testing, you can skip the service install and run `telahubd` directly from a terminal. It looks for a config in this order:
 
@@ -283,13 +283,13 @@ telahubd -config my.yaml   # explicit config path
 
 Do not start the service and run `telahubd` in the foreground at the same time. Both try to bind the same listening port, and the second one will fail.
 
-### Build from source
+### Build from Source
 
 ```bash
 go build -o telahubd ./cmd/telahubd
 ```
 
-### Environment variables
+### Environment Variables
 
 Environment variables override the YAML config file at runtime, useful for container deployments or quick experiments without editing `/etc/tela/telahubd.yaml`.
 
@@ -327,7 +327,7 @@ The `user bootstrap` step is one way to install the owner token. Two alternative
 - **Hand-author the YAML file.** See [Appendix B: Configuration file reference](../guide/configuration.md) for the shape. Useful when the token is managed by a secrets provisioning tool.
 - **`TELA_OWNER_TOKEN` env var (foreground only).** When the variable is set and the config has no tokens, `telahubd` writes it into the config on first startup. The env var is only visible to the running process, so this works for `telahubd` launched directly in a shell (or a container with the variable set at runtime). Services launched by systemd, launchd, or Windows SCM do not inherit shell environment variables, so the env-var path does not apply to `service start`; use `user bootstrap` there.
 
-### Managing tokens remotely with `tela admin`
+### Managing Tokens Remotely with `tela admin`
 
 Once the owner token exists, manage everything from any workstation:
 
@@ -357,7 +357,7 @@ tela admin tokens remove alice -hub wss://your-hub.example.com -token <owner-tok
 
 All changes take effect immediately (hot-reload). No hub restart required.
 
-### Managing portals remotely with `tela admin`
+### Managing Portals Remotely with `tela admin`
 
 Register your hub with a portal directory (like Awan Saya) from any workstation:
 
@@ -373,7 +373,7 @@ tela admin portals list -hub wss://your-hub.example.com -token <owner-token>
 tela admin portals remove awansaya -hub wss://your-hub.example.com -token <owner-token>
 ```
 
-### Using `telad` with auth
+### Using `telad` with Auth
 
 When the hub has auth enabled, agents must present a valid token. Do not use
 the owner token here. Create a dedicated agent identity with `tela admin tokens
@@ -396,7 +396,7 @@ telad -config telad.yaml
 
 Or with a flag: `telad -hub wss://... -machine barn -ports "22,3389" -token <agent-token>`
 
-### Using `tela` (client) with auth
+### Using `tela` (Client) with Auth
 
 Client connections use a user-role token with connect permission on the target
 machine. Do not use the owner token for routine client connections. Create a
@@ -411,7 +411,7 @@ export TELA_TOKEN=<user-token>
 tela connect -machine barn
 ```
 
-## What must be reachable
+## What Must Be Reachable
 
 | Port | Protocol | Required | Purpose |
 |------|----------|----------|---------|
@@ -421,7 +421,7 @@ tela connect -machine barn
 
 \* Port 80 is required by Caddy for automatic certificate issuance. If you use DNS-01 challenges or bring your own certificate, you can skip it.
 
-### Open firewall ports (cloud VMs)
+### Open Firewall Ports (Cloud VMs)
 
 Cloud VMs block inbound traffic by default. You must explicitly allow the ports above in your provider's firewall/security group.
 
@@ -466,7 +466,7 @@ Then add the `tela-hub` network tag to your VM instance.
 
 **Self-hosted / bare metal:** Ensure `ufw`, `iptables`, or your router forwards these ports to the hub machine.
 
-## Publish with TLS (recommended)
+## Publish with TLS (Recommended)
 
 > **Docker install**: the Docker walkthrough above already configured Caddy and Let's Encrypt via `docker-compose.caddy.yml`. Skip to [Register with a hub directory](#register-with-a-hub-directory) below. The subsections here apply to native installs that need a separately-managed reverse proxy.
 
@@ -621,7 +621,7 @@ sudo certbot --apache -d myhub.example.com
 
 On RHEL / Fedora, replace `a2enmod`/`a2ensite` with editing `/etc/httpd/conf.modules.d/` and `/etc/httpd/conf.d/`, and use `systemctl reload httpd`.
 
-### Alternative: Cloudflare Tunnel (zero inbound ports)
+### Alternative: Cloudflare Tunnel (Zero Inbound Ports)
 
 If you do not want to expose any inbound ports, Cloudflare Tunnel makes an outbound connection to Cloudflare's edge, which terminates TLS and proxies traffic back to your hub. With Cloudflare Tunnel `telahubd` can stay on port 80 (the direct-deployment default from step 3 of the install flow), so skip the port-8080 change above.
 
@@ -643,11 +643,11 @@ cloudflared tunnel run my-hub
 
 Cloudflare Tunnel is TCP-only, so the UDP relay (port 41820) cannot pass through it and sessions will use WebSocket transport instead.
 
-## Register with a hub directory
+## Register with a Hub Directory
 
 Once the hub is reachable, add it to a hub directory (such as Awan Saya) so users and the CLI can find it by short name.
 
-### Option A: CLI (recommended)
+### Option A: CLI (Recommended)
 
 From any workstation with the hub's owner token:
 
@@ -660,12 +660,12 @@ tela admin portals add awansaya \
 
 The hub will register itself with the portal, exchange viewer tokens for status proxying, and store a scoped sync token so future viewer-token updates happen automatically.
 
-### Option B: Portal dashboard
+### Option B: Portal Dashboard
 
 1. Open the portal dashboard and click **Add Hub**.
 2. Enter a short name (e.g., `myhub`), the hub's public URL (e.g., `https://your-hub.example.com`), and optionally a **viewer token** (so the portal can proxy hub status server-side).
 
-### After registration
+### After Registration
 
 The hub will appear in the portal dashboard and be resolvable by the CLI:
 
@@ -675,7 +675,7 @@ tela machines -hub myhub -token <your-token>
 tela connect -hub myhub -machine mybox -token <your-token>
 ```
 
-## Verify from outside
+## Verify from Outside
 
 From a machine on the Internet (or at least outside your LAN), verify:
 
