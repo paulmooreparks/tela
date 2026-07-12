@@ -1,0 +1,556 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Roadmap to 1.0 - Tela: The Complete Reference</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="FOSS encrypted remote-access fabric using WireGuard tunnels">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/sidebar-version.css">
+        <link rel="stylesheet" href="../src/channel-banner.css">
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><li class="part-title">Getting Started</li><li class="chapter-item expanded "><a href="../getting-started/what-tela-is.html"><strong aria-hidden="true">1.</strong> What Tela Is</a></li><li class="chapter-item expanded "><a href="../getting-started/installation.html"><strong aria-hidden="true">2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../getting-started/first-connection.html"><strong aria-hidden="true">3.</strong> First Connection</a></li><li class="chapter-item expanded affix "><li class="part-title">User Guide</li><li class="chapter-item expanded "><a href="../guide/three-binaries.html"><strong aria-hidden="true">4.</strong> The Three Binaries</a></li><li class="chapter-item expanded "><a href="../guide/credentials.html"><strong aria-hidden="true">5.</strong> Credentials and Pairing</a></li><li class="chapter-item expanded "><a href="../guide/profiles.html"><strong aria-hidden="true">6.</strong> Connection Profiles</a></li><li class="chapter-item expanded "><a href="../guide/directories.html"><strong aria-hidden="true">7.</strong> Hub Directories and Portals</a></li><li class="chapter-item expanded "><a href="../guide/gateway.html"><strong aria-hidden="true">8.</strong> The Path Gateway</a></li><li class="chapter-item expanded "><a href="../guide/file-sharing.html"><strong aria-hidden="true">9.</strong> File Sharing</a></li><li class="chapter-item expanded "><a href="../guide/upstreams.html"><strong aria-hidden="true">10.</strong> Upstreams</a></li><li class="chapter-item expanded "><a href="../guide/admin.html"><strong aria-hidden="true">11.</strong> Hub Administration</a></li><li class="chapter-item expanded "><a href="../guide/hub-console.html"><strong aria-hidden="true">12.</strong> Hub Web Console</a></li><li class="chapter-item expanded "><a href="../guide/telavisor.html"><strong aria-hidden="true">13.</strong> TelaVisor Desktop App</a></li><li class="chapter-item expanded affix "><li class="part-title">How-to Guides</li><li class="chapter-item expanded "><a href="../howto/channels.html"><strong aria-hidden="true">14.</strong> Self-Update and Release Channels</a></li><li class="chapter-item expanded "><a href="../howto/hub.html"><strong aria-hidden="true">15.</strong> Run a Hub on the Public Internet</a></li><li class="chapter-item expanded "><a href="../howto/telad.html"><strong aria-hidden="true">16.</strong> Run an Agent</a></li><li class="chapter-item expanded "><a href="../howto/services.html"><strong aria-hidden="true">17.</strong> Run Tela as an OS Service</a></li><li class="chapter-item expanded "><a href="../howto/gateway.html"><strong aria-hidden="true">18.</strong> Set Up a Path-Based Gateway</a></li><li class="chapter-item expanded "><a href="../howto/networking.html"><strong aria-hidden="true">19.</strong> Networking Caveats</a></li><li class="chapter-item expanded affix "><li class="part-title">Use Cases</li><li class="chapter-item expanded "><a href="../use-cases/personal-cloud.html"><strong aria-hidden="true">20.</strong> Personal Cloud</a></li><li class="chapter-item expanded "><a href="../use-cases/private-web-app.html"><strong aria-hidden="true">21.</strong> Private Web Application</a></li><li class="chapter-item expanded "><a href="../use-cases/production-access.html"><strong aria-hidden="true">22.</strong> Production Access</a></li><li class="chapter-item expanded "><a href="../use-cases/distributed-teams.html"><strong aria-hidden="true">23.</strong> Distributed Teams</a></li><li class="chapter-item expanded "><a href="../use-cases/msp-it-support.html"><strong aria-hidden="true">24.</strong> MSP and IT Support</a></li><li class="chapter-item expanded "><a href="../use-cases/education-labs.html"><strong aria-hidden="true">25.</strong> Education Labs</a></li><li class="chapter-item expanded "><a href="../use-cases/iot-edge.html"><strong aria-hidden="true">26.</strong> IoT and Edge Devices</a></li><li class="chapter-item expanded affix "><li class="part-title">Operations</li><li class="chapter-item expanded "><a href="../ops/release-process.html"><strong aria-hidden="true">27.</strong> Release Process</a></li><li class="chapter-item expanded "><a href="../ops/roadmap.html" class="active"><strong aria-hidden="true">28.</strong> Roadmap to 1.0</a></li><li class="chapter-item expanded "><a href="../ops/status.html"><strong aria-hidden="true">29.</strong> Status: Design vs. Implementation</a></li><li class="chapter-item expanded affix "><li class="part-title">Design Rationale</li><li class="chapter-item expanded "><a href="../architecture/design.html"><strong aria-hidden="true">30.</strong> Why a Connectivity Fabric</a></li><li class="chapter-item expanded "><a href="../architecture/remote-admin.html"><strong aria-hidden="true">31.</strong> Remote Administration</a></li><li class="chapter-item expanded "><a href="../architecture/file-sharing.html"><strong aria-hidden="true">32.</strong> File Sharing</a></li><li class="chapter-item expanded "><a href="../architecture/gateway.html"><strong aria-hidden="true">33.</strong> Gateways</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../guide/reference.html"><strong aria-hidden="true">34.</strong> A. CLI Reference</a></li><li class="chapter-item expanded "><a href="../guide/configuration.html"><strong aria-hidden="true">35.</strong> B. Configuration File Reference</a></li><li class="chapter-item expanded "><a href="../architecture/access-model.html"><strong aria-hidden="true">36.</strong> C. Access Model</a></li><li class="chapter-item expanded "><a href="../architecture/portal-protocol.html"><strong aria-hidden="true">37.</strong> D. Portal Protocol</a></li><li class="chapter-item expanded "><a href="../architecture/tdl.html"><strong aria-hidden="true">38.</strong> E. Tela Design Language</a></li><li class="chapter-item expanded "><a href="../glossary.html"><strong aria-hidden="true">39.</strong> F. Glossary</a></li><li class="chapter-item expanded affix "><li class="spacer"></li><li class="chapter-item expanded affix "><a href="../contributing.html">Contributing</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tela: The Complete Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/paulmooreparks/tela/edit/main/src/ops/roadmap.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="roadmap-to-10"><a class="header" href="#roadmap-to-10">Roadmap to 1.0</a></h1>
+<p>This is the readiness checklist for the Tela 1.0 release. It groups remaining work into blockers (must ship), important (should ship), and polish (nice to have), and lists the scope decisions that define what 1.0 is and what it is not. It is a living document updated as items are completed.</p>
+<p>This is the living document tracking what is required to ship Tela 1.0. It is not a feature roadmap (see <a href="TODO.html">TODO.md</a> for that) — it is a hardening, polish, and operational-readiness checklist.</p>
+<p>The premise: once we ship 1.0, we will maintain backward compatibility religiously. That means any cruft, any half-finished surface, any unversioned protocol field becomes a permanent maintenance burden. The goal of this document is to make sure that what gets locked in at 1.0 is what we actually want to live with.</p>
+<p><strong>Status as of 2026-07-11:</strong> Roughly <strong>0.75 to 0.8</strong> of a 1.0 release. Since the April snapshot: cert pinning shipped (scoped), structured session tokens shipped, the protocol froze (protocolVersion negotiation plus the v1 spec in DESIGN.md section 6), per-service access control landed and its client-side guard was fixed end to end, the portal architecture shipped (internal/portal, telaportal, TelaVisor Portal mode), the test harness exists, and every scope decision below carries a written ruling. The remaining mass is the test suites, code signing, audit retention, observability, the user-facing book chapters, and the launch surface.</p>
+<p>Granular work is tracked in GitHub Issues under <a href="https://github.com/paulmooreparks/tela/milestone/2">milestone <code>1.0</code></a>. This document holds the narrative and design rationale; the milestone holds state. When a task ships, its issue closes; keep this doc for the "why" around each track, not the "what's left."</p>
+<hr />
+<h2 id="where-tela-stands-today"><a class="header" href="#where-tela-stands-today">Where Tela stands today</a></h2>
+<h3 id="what-is-real-and-works"><a class="header" href="#what-is-real-and-works">What is real and works</a></h3>
+<ul>
+<li><strong>Core protocol and tunnel.</strong> WireGuard userspace via gVisor netstack — no TUN, no admin, both sides outbound. Solid.</li>
+<li><strong>UDP relay</strong> with auto-fallback to WebSocket.</li>
+<li><strong>Direct P2P</strong> with STUN hole-punching and the full fallback cascade.</li>
+<li><strong>Three-binary architecture</strong> (<code>tela</code>, <code>telad</code>, <code>telahubd</code>) is clean. One Go module, no runtime dependencies.</li>
+<li><strong>Cross-platform service install</strong> (Windows SCM, systemd, launchd).</li>
+<li><strong>Token-based RBAC</strong> with owner/admin/user/viewer roles and per-machine ACLs (register/connect/manage). Hot-reload of auth changes works.</li>
+<li><strong>Unified <code>/api/admin/access</code> API</strong> is RESTful and clean. The legacy verb-based duplicates are gone.</li>
+<li><strong>Pairing codes</strong> for onboarding without copy-pasting hex tokens.</li>
+<li><strong>File sharing</strong> including the WebDAV mount (no kernel drivers).</li>
+<li><strong>TelaVisor</strong> has Infrastructure mode at sysadmin parity: hub management (logs, software update, restart, version badges), agent management (same), per-identity access view, tokens with pairing codes. TDL gives a coherent visual identity.</li>
+<li><strong>Awan Saya</strong> as a portal layer: hub directory, multi-org access, per-org dashboard, hub administration, agent fleet view, demo mode for unauthenticated visitors, responsive layout down to phone widths.</li>
+<li><strong>Self-update</strong> for hub and agent, including the OS service manager case (no orphan processes).</li>
+<li><strong>Documentation</strong> is unusually thorough for a pre-1.0 project: DESIGN.md, REFERENCE.md, the DESIGN-* set, ACCESS-MODEL.md, CONFIGURATION.md, STATUS.md, TelaVisor.md, multiple how-tos, the Tela Design Language spec, and a STATUS.md traceability matrix.</li>
+</ul>
+<hr />
+<h2 id="blockers-must-ship-for-10"><a class="header" href="#blockers-must-ship-for-10">Blockers (must ship for 1.0)</a></h2>
+<p>These are non-negotiable. A 1.0 without them would be embarrassing or actively unsafe.</p>
+<h3 id="tests"><a class="header" href="#tests">Tests</a></h3>
+<p>The harness exists and the security-critical paths (auth store, admin API, wsbind transport, WG reconnect) now carry real suites, and a CI coverage gate keeps them from silently eroding before 1.0 locks the access model and wire protocol.</p>
+<p>Already done:</p>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>internal/teststack</code>: the in-process hub + agent + client harness (<code>New(t)</code> returns a running triple with cleanup), with smoke tests for registration, client connect with listener bind, multi-machine, protocol version reporting, bridged sessions, and reset-between-runs. Both #6 acceptance boxes are now closed: <code>Stack.Close()</code> runs a goroutine-leak check (baseline captured in <code>NewWithConfig</code>, enforced in CI), and two other suites consume the harness over real HTTP (<code>internal/hub/admin_api_e2e_test.go</code> and <code>internal/portal/teststack_test.go</code>).</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>permuteArgs</code> flag reordering tests (<code>cmd/tela/admin_test.go</code>, 16 sub-tests)</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>internal/channel</code> tests: manifest parsing/validation, URL helpers, Fetcher cache + stale-on-failure, VerifyReader (94.4% coverage)</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>internal/credstore</code> tests: round-trip, normalization, permission bits, edge cases (62.7% coverage)</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>internal/certpin</code> tests (pin parse/normalize/verify, TOFU capture) and <code>internal/client</code> pinning + capability-probe tests</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>internal/hub</code> session-token lifecycle and protocol-version tests</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>internal/portal</code>, <code>store/file</code>, <code>portalclient</code>, and <code>portalaggregate</code> tests, including the portal conformance harness</li>
+</ul>
+<p>The security-boundary test wave is complete:</p>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/7">#7</a>: Auth store unit tests</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/8">#8</a>: Admin API endpoint tests</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/9">#9</a>: Ring buffer history tests</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/10">#10</a>: Portal registration and sync-token flow tests</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/11">#11</a>: WireGuard handshake-on-reconnect end-to-end test</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/12">#12</a>: wsbind transport test (WS, UDP relay, direct UDP)</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/13">#13</a>: Coverage gate (release criterion; tracks the others)</li>
+</ul>
+<p>Coverage floors for the security-critical package set (<code>internal/hub</code>, <code>internal/wsbind</code>, <code>internal/certpin</code>, <code>internal/credstore</code>, <code>internal/client</code>) are enforced in CI via <code>tools/covcheck</code> against <code>tools/covcheck/floors.yaml</code>; the 1.0 milestone can point at <code>.github/workflows/ci.yml</code> going red on any regression below the recorded floor. <code>internal/client</code>'s floor is currently an anti-deletion backstop rather than a true erosion gate, because package-level dilution makes a higher number meaningless there; card tela-71 makes its security paths properly gateable and then ratchets the floor.</p>
+<h3 id="release-engineering--complete"><a class="header" href="#release-engineering--complete">Release engineering — <strong>complete</strong></a></h3>
+<p>All release-engineering blockers shipped. Summary of what landed:</p>
+<ul>
+<li>GitHub Actions workflow building Linux/macOS/Windows binaries for amd64 and arm64 on tag push (<code>release.yml</code>), with reproducible builds (pinned Go version, <code>-trimpath</code>, deterministic ldflags), checksum files, and release notes generated from commit messages</li>
+<li>CI workflow runs build, vet, test, gofmt, and <code>go mod tidy</code> checks on every push and PR (<code>ci.yml</code>); cross-compile sanity check across all 6 target triples</li>
+<li>Three release channels (dev / beta / stable) with manifest-based self-update, documented promotion model (<code>RELEASE-PROCESS.md</code>), and atomic tag-reservation via the GitHub API</li>
+<li>Promotion workflow (<code>promote.yml</code>) wired to <code>release.yml</code> via <code>workflow_call</code></li>
+<li>Self-update CLI on every binary with <code>channel</code> and <code>update</code> subcommands accepting any valid channel name (including custom channels)</li>
+<li>Self-update API on telahubd with matching agent management proxy</li>
+<li>Channel selectors in TelaVisor and Awan Saya</li>
+</ul>
+<h3 id="code-signing"><a class="header" href="#code-signing">Code signing</a></h3>
+<p>Windows SmartScreen flags unsigned binaries with a full-screen warning; macOS Gatekeeper blocks unsigned binaries entirely. For 1.0 we sign both platforms.</p>
+<p>Open issues:</p>
+<ul>
+<li><a href="https://github.com/paulmooreparks/tela/issues/14">#14</a> — Authenticode certificate for Windows binaries</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/15">#15</a> — Apple Developer ID + notarization for macOS binaries</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/16">#16</a> — Document the signing process reproducibly</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/17">#17</a> — CI integration for tag-push releases</li>
+</ul>
+<h3 id="protocol-freeze-complete"><a class="header" href="#protocol-freeze-complete">Protocol freeze (complete)</a></h3>
+<p>The freeze landed in the 0.16 cycle. <code>register</code> and <code>connect</code> carry <code>protocolVersion: 1</code> with pre-0.16 binaries treated as v1 (#18); DESIGN.md section 6 is the frozen v1 wire specification with full message schemas and the relay frame referenced to DESIGN-relay-gateway.md section 2 (#19); section 6.6 is the 1.x backward-compatibility policy with the covered and not-covered surfaces spelled out (#20); section 6.2 records single-channel as the v1 shape with the mux experiment preserved as a deferred sketch and <code>session_id</code> reserved for a hypothetical v2 (#21); section 6.9 records the no-public-Go-API decision, Option B, everything stays <code>internal/</code> (#22). All five issues are closed. From here, wire changes are additive-only per 6.6 until a v2 bump.</p>
+<h3 id="cert-pinning--shipped-scoped-for-10"><a class="header" href="#cert-pinning--shipped-scoped-for-10">Cert pinning — <strong>shipped (scoped) for 1.0</strong></a></h3>
+<p>Tela and TelaVisor used to trust whatever TLS certificate the hub presented. Pinning closes the MITM class of attack by tying a remote entry to a specific certificate fingerprint, with TOFU on first connect and explicit refusal on mismatch.</p>
+<p>What ships at 1.0 (PRs #72 and #73): SHA-256 SPKI pinning on <code>tela CLI -&gt; hub</code> (every hub-bound WebSocket and HTTPS path), and on the bridge gateway's <code>telahubd -&gt; destination hub</code> dial. Pin storage is per-hub in <code>~/.tela/credentials.yaml</code>, <code>hubs.yaml</code>, and <code>telahubd.yaml</code> (under <code>bridges[]</code>). CLI surface: <code>tela pin &lt;hub-url&gt; [fingerprint]</code> and <code>tela login -pin</code>. TOFU on first connect captures and logs the fingerprint; mismatch refuses the connection with <code>certpin.ErrMismatch</code>.</p>
+<p>What is deliberately <strong>out of scope</strong> for 1.0: <code>TelaVisor -&gt; portal</code> pinning and <code>portal -&gt; hub</code> pinning enforced by the portal. The reasoning, including the HPKP retrospective and the Awan Saya commercial considerations, is documented in <a href="DESIGN-cert-pinning-portal.html">DESIGN-cert-pinning-portal.md</a>. Short version: defaulting to pinned would brick legitimate users on corporate networks with MITM proxies, every cert rotation would become a coordinated rollout, and the threat (rogue CA mints a cert for the portal's domain) is mitigated more effectively by Certificate Transparency monitoring on the portal-operator side than by client-side pinning. The portal -&gt; hub leg is authenticated at the application layer by the admin token, which is rotatable, scoped, and revocable -- a strictly better surface than a pinned TLS leaf cert for that hop.</p>
+<p>Issue <a href="https://github.com/paulmooreparks/tela/issues/23">#23</a> closes against this scope. Optional opt-in TelaVisor-side pinning for self-hosted portal deployments is reachable post-1.0 without protocol changes; see DESIGN-cert-pinning-portal.md §6.</p>
+<h3 id="session-tokens-shipped-in-the-016-cycle"><a class="header" href="#session-tokens-shipped-in-the-016-cycle">Session tokens (shipped in the 0.16 cycle)</a></h3>
+<p>Token entries now carry optional <code>issuedAt</code>, <code>expiresAt</code>, and <code>revokedAt</code> metadata; every auth check denies revoked or expired tokens per request; <code>POST /api/admin/tokens/{id}/revoke</code> revokes without deleting (audit trail preserved, last-owner 409 guard); rotation refreshes <code>issuedAt</code> and clears <code>revokedAt</code>, doubling as the unrevoke path; <code>tela admin tokens</code> gained <code>-expires</code>, <code>revoke</code>, and lifecycle columns; TelaVisor's Access tab surfaces the lifecycle with revoke and rotate-to-re-enable. Pre-0.16 entries migrate transparently and keep <code>issuedAt</code> blank rather than synthesized. Issue <a href="https://github.com/paulmooreparks/tela/issues/24">#24</a> is closed. The remaining token ambitions from the original sketch (scope claims beyond role, signed token formats) are 1.x material under the additive rules, not 1.0 debt.</p>
+<h3 id="audit-log-retention"><a class="header" href="#audit-log-retention">Audit log retention</a></h3>
+<p>The hub's event history is an in-memory ring buffer with undocumented retention, no persistence across restart, and no way to ship events to an external aggregator. For 1.0: documented retention story, optional on-disk persistence, pluggable log-shipping, and a compliance-reviewer-friendly writeup of what is and is not in the log.</p>
+<p>Tracked as a single bundled issue: <a href="https://github.com/paulmooreparks/tela/issues/25">#25</a>.</p>
+<hr />
+<h2 id="scope-decisions-for-10"><a class="header" href="#scope-decisions-for-10">Scope decisions for 1.0</a></h2>
+<p>These are the ambitions a reader can reasonably project onto Tela. Each one needed a written decision before 1.0, because the difference between "deferred" and "non-goal" is the difference between a healthy roadmap and a permanent expectations gap. The premise of this document is that whatever ships at 1.0 becomes a permanent maintenance burden; the same applies to whatever Tela promises <em>not</em> to be.</p>
+<p><strong>As of 2026-07-11, every entry below carries its decision.</strong> For each item: what it is, the decision and its reasoning, and what the post-1.0 path looks like where it is deferred.</p>
+<h3 id="routed-mesh-networking"><a class="header" href="#routed-mesh-networking">Routed mesh networking</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision: <strong>non-goal for 1.0.</strong> Post-1.0 only if real-world utility is demonstrated against the existing transport upgrade cascade.</li>
+<li>Tela has direct peer-to-peer as a transport tier, but it is not a routed mesh in the Tailscale or Nebula sense. Most traffic still travels client to hub to agent. The <a href="book/src/introduction.html">introduction</a> and the <a href="book/src/glossary.html">glossary</a> explicitly disclaim mesh routing under the leaf-spine framing.</li>
+<li>The current lean is non-goal. The use cases that make Tailscale's mesh worth its complexity (peer-to-peer LAN performance, NAT traversal independence) are mostly already covered by Tela's existing WS -&gt; UDP relay -&gt; direct P2P fallback. The use cases that mesh would <em>additionally</em> unlock (agent-to-agent routing without a hub on the data path, multi-hop topologies built out of agents) need to be demonstrated against real demand before the design work is justified.</li>
+<li><strong>Distinct from the relay gateway, which is in scope for 1.0</strong> (see <em>Important: Relay gateway</em> below). The relay gateway moves traffic between hubs while preserving the spine-and-leaves shape and the blind-relay property end to end. Mesh moves traffic between agents without a hub on the data path. They are not the same feature and the mesh decision does not constrain the relay gateway design.</li>
+<li>If post-1.0 work on mesh is ever picked up: sketch what it would take (routing table, multi-hop key exchange, NAT traversal beyond the current STUN cascade) and what <code>protocolVersion</code> would carry it.</li>
+</ul>
+<h3 id="hub-federation"><a class="header" href="#hub-federation">Hub federation</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>deferred to 1.x.</strong> Tracked as <a href="https://github.com/paulmooreparks/tela/issues/49">#49</a>, closed by this writeup.</li>
+<li>Today, identity is hub-scoped. A user with a token on hub A has no relationship to hub B unless they hold a separate token there. The portal layer (Awan Saya) papers over this for end users but does not fix it at the protocol level.</li>
+<li>What deferral means: through the 1.x line, the portal contract (<a href="DESIGN-portal.html">DESIGN-portal.md</a>) is the one place cross-hub identity is reconciled, and operators who need cross-hub identity run a portal. Federation stays on the table as a protocol-level feature for a future cycle, not a rejected ambition.</li>
+<li>The definition work owed when federation is picked up: the cross-hub trust model, the identity assertion format, revocation propagation between hubs, and what all three do to the access model. None of that lands before the access model freezes at 1.0, which is exactly why it waits: federation designed under freeze pressure would lock in the wrong shapes.</li>
+</ul>
+<h3 id="single-sign-on-ssooidcsaml"><a class="header" href="#single-sign-on-ssooidcsaml">Single sign-on (SSO/OIDC/SAML)</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>the portal's job, permanently.</strong> The hub will only ever speak its own token format. Tracked as <a href="https://github.com/paulmooreparks/tela/issues/50">#50</a>, closed by this writeup.</li>
+<li>The hub today uses bearer tokens issued by an admin. There is no integration with external identity providers (OpenID Connect, Security Assertion Markup Language, Lightweight Directory Access Protocol). The team-cloud and fleet tiers in the introduction lean on this; a real organization will not provision users by hand.</li>
+<li>Why the hub never grows an identity-provider dependency: the hub is the security boundary of the system, and its trust model has to stay small enough to audit end to end. Every IdP integration imports someone else's token semantics, claim mapping, clock behavior, and revocation latency into that boundary. The portal is where organizational identity already lives (accounts, orgs, teams, memberships), so protocol-wise it is the natural place for OIDC to land when demand materializes: the portal authenticates the human against the IdP and provisions hub tokens through the admin API, which is a surface the hub already exposes and already audits.</li>
+<li>The security model document (#42) owes a paragraph setting this expectation for fleet-tier evaluators: hub-native OIDC is not coming, and the supported pattern is IdP at the portal, tokens at the hub.</li>
+</ul>
+<h3 id="kernel-tun-mode-exit-node-full-ip-routing"><a class="header" href="#kernel-tun-mode-exit-node-full-ip-routing">Kernel TUN mode (exit node, full IP routing)</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>deferred post-1.0, with the two-mode plan below as the published path.</strong> TCP-only userspace operation is an intentional 1.0 tradeoff, not an oversight: it is the property that buys zero-admin, zero-driver installation on both ends. Tracked as <a href="https://github.com/paulmooreparks/tela/issues/51">#51</a>, closed by this writeup.</li>
+<li>Tela currently runs WireGuard entirely in userspace via gVisor netstack. This is the property that eliminates the need for admin rights, kernel drivers, and TUN devices. It also limits Tela to TCP-only tunneling with no OS-level network interface.</li>
+<li>An optional kernel TUN mode would use wireguard-go's <code>tun.CreateTUN()</code> instead of <code>netstack.CreateNetTUN()</code>. The wireguard-go library already ships both constructors. The result: a real network interface, full IP routing (UDP, ICMP, multicast), exit-node support (route all system traffic through a remote machine), and kernel-speed packet processing. The cost: one-time admin/root elevation to create the TUN device.</li>
+<li><strong>The two-mode model.</strong> Userspace mode (default, no admin, TCP only) and kernel mode (opt-in, elevation required, full IP). Same hub, same agent protocol, same access model, same management tools. A fleet could mix both modes. A user could run userspace on a locked-down corporate laptop and kernel mode on a home machine.</li>
+<li><strong>Why this matters.</strong> The combination of both modes covers two populations that no single tool covers today: users who cannot install Tailscale on their corporate laptop (userspace mode), and users who want Tailscale's capabilities but self-hosted with their own hub and management UI (kernel mode).</li>
+<li><strong>Implementation scope.</strong> A <code>-tun</code> flag on <code>tela</code> and <code>telad</code> that switches the constructor. The real work is platform-specific route table management, DNS interception for exit-node mode, elevation prompts, and graceful TUN interface cleanup on exit.</li>
+<li><strong>Android client.</strong> An Android client would likely use kernel mode by default (Android's VpnService API provides a TUN interface without root). This is a natural extension of the same two-mode model.</li>
+<li>User-facing docs state the tradeoff plainly: Tela is TCP-only by design in userspace mode, and this roadmap item is the pointer for the kernel-mode plan.</li>
+</ul>
+<h3 id="multi-tenant-hub"><a class="header" href="#multi-tenant-hub">Multi-tenant hub</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>deferred to 1.x.</strong> Tracked as <a href="https://github.com/paulmooreparks/tela/issues/52">#52</a>, closed by this writeup.</li>
+<li>Today the answer to "I have multiple teams" is "run multiple hubs." This is fine at small scale and starts to bite at the fleet tier. A multi-tenant hub would let one process serve multiple isolated organizations with separate identity, ACL, and history surfaces.</li>
+<li>Through 1.x, the recommended scaling pattern stays hub-per-tenant with the portal layer stitching hubs together for end users. Process-boundary isolation is also the stronger isolation story: a tenant cannot leak into another tenant's config, audit log, or session table when they do not share a process.</li>
+<li>The definition work owed when multi-tenancy is picked up: what isolation means for config, storage, the audit log, and the admin API, plus the migration path from "one hub per team" to "tenants on a shared hub." The audit-log retention work (#25) and any storage changes should keep this in peripheral vision so 1.x multi-tenancy does not require unwinding them.</li>
+</ul>
+<h3 id="portal-architecture-one-protocol-many-hosts"><a class="header" href="#portal-architecture-one-protocol-many-hosts">Portal architecture: one protocol, many hosts</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>ratified as built. TelaVisor is the local portal.</strong> The extraction ran the plan below to completion: the protocol spec is <a href="DESIGN-portal.html">DESIGN-portal.md</a>, the <code>internal/portal</code> package with the pluggable file store shipped, <code>telaportal</code> exists as the fourth binary, and TelaVisor gained Portal mode. Tracked as <a href="https://github.com/paulmooreparks/tela/issues/53">#53</a>, closed by this writeup; the contract spec issue (<a href="https://github.com/paulmooreparks/tela/issues/47">#47</a>) reduces to publishing DESIGN-portal.md in the book.</li>
+<li>Residuals tracked separately, not blockers for this decision: the Awan Saya device-code endpoints and approval page, the Awan Saya identity-amendment migration, and the <code>store/postgres</code> adapter for <code>internal/portal</code>.</li>
+<li><strong>The question, as originally posed.</strong> The portal existed as one thing: Awan Saya, a Node.js + PostgreSQL web app. There was no portal protocol spec, no Go portal package, and no way for TelaVisor to "be" a portal for personal use. A natural-feeling user request is "let TelaVisor host the portal so I have one-stop shopping that scales from solo to enterprise without two implementations." The naive answer (embed Awan Saya in TelaVisor) is wrong. The right answer requires extracting a portal protocol and a portal service from Awan Saya first.</li>
+<li><strong>The shape.</strong> Three layers stacked, currently bundled in Awan Saya:
+<ol>
+<li><strong>Directory protocol.</strong> <code>/.well-known/tela</code>, <code>/api/hubs</code>, the sync-token registration flow. This is the portal contract -- a small wire format that any portal must speak.</li>
+<li><strong>Identity store.</strong> Accounts, organizations, teams, hub memberships, permissions. Today this is Postgres-backed in Awan Saya. A single-user portal does not need any of this beyond "the user."</li>
+<li><strong>Frontend.</strong> The HTML/CSS/JS users see. Today this is the Awan Saya web UI. TelaVisor's UI is a separate frontend that talks to hub admin proxies directly.</li>
+</ol>
+</li>
+<li><strong>The plan if we pursue this</strong> (sketched here so we do not have to re-derive it later):
+<ol>
+<li><strong>Write the portal protocol spec first.</strong> A single document under <code>book/src/architecture/portal-protocol.md</code> (or <code>DESIGN-portal.md</code>) that enumerates the directory endpoints, request/response shapes, auth model, sync-token flow, and the contract any portal implementation must satisfy. ~10 routes, an afternoon of work. <strong>Nothing else can start until this exists</strong> because the spec is what prevents two implementations from drifting.</li>
+<li><strong>Extract <code>internal/portal</code></strong> from Awan Saya into the tela repo as a Go package implementing only the protocol, with pluggable storage. Reference stores: <code>internal/portal/store/file</code> (JSON or YAML on disk, single-user, zero deps) and <code>internal/portal/store/postgres</code> (multi-org, what Awan Saya already does).</li>
+<li><strong>Decide where the portal service runs.</strong> Three viable hosts that all use the same <code>internal/portal</code> package and the same wire protocol:
+<ul>
+<li>A new fourth binary, working name <code>telaportal</code>, for standalone deployments.</li>
+<li>Folded into telahubd as <code>telahubd portal serve</code> for small deployments that want hub plus portal in one process.</li>
+<li>As a goroutine inside TelaVisor for the personal-use case ("Portal mode", see below).</li>
+</ul>
+</li>
+<li><strong>TelaVisor gains a Portal mode</strong> alongside Clients and Infrastructure. In personal-use mode it runs the file-backed portal store as a goroutine and exposes the portal HTTP API on <code>127.0.0.1:NNNN</code> so other local clients can use it. In team mode it acts as a portal <em>client</em> against a remote portal service (Awan Saya, or a self-hosted <code>telaportal</code>). The UI is the same in both cases because both speak the same portal HTTP API.</li>
+<li><strong>Awan Saya becomes a portal frontend, not a portal implementation.</strong> The HTML/CSS/JS in <code>awansatu/www/</code> continues to exist for users who want a browser; it now talks to the same Go portal service the desktop client talks to. The Postgres + multi-org code becomes a <code>store/postgres</code> implementation of the same <code>internal/portal</code> interface.</li>
+</ol>
+</li>
+<li><strong>The TelaVisor mode rename.</strong> If Portal becomes a top-nav mode, the current "Infrastructure" name needs revisiting. Two reasonable framings:
+<ul>
+<li><strong>Clients / Operations / Directory</strong>: each label says exactly what the mode does without metaphor. "Operations" for hub and agent admin (the current Infrastructure mode); "Directory" for portal pages, hub list, org/team/account, hub memberships.</li>
+<li><strong>Clients / Infrastructure / Fleet</strong>: leans into the fabric framing but "Fleet" is overloaded ("many agents" vs "many hubs") and probably worse.
+Lean toward Clients / Operations / Directory unless a better label set turns up during the actual work.</li>
+</ul>
+</li>
+<li><strong>Why this is the right cut, in one paragraph.</strong> Tela's architecture is "many small things speaking small wire protocols." The hub does not bundle the agent; the agent does not bundle the client. Adding a portal that <em>actually</em> bundles the directory, the multi-org store, the web frontend, and the desktop frontend into one process would be the first time the project broke its own composition rule. Extracting the portal service the same way -- small Go package, swappable storage backend, multiple frontends -- keeps the rule and gets the "TelaVisor is one-stop shopping" outcome at the same time, <em>for free</em>, because the desktop frontend is just one of the things that can talk to the portal API. The personal-use case where the portal service runs inside TelaVisor is then a deployment topology, not a fork in the codebase.</li>
+<li><strong>What this depends on.</strong> This decision interacts with <strong>Hub federation</strong> and <strong>Multi-tenant hub</strong> above. With federation deferred to 1.x, the portal is the only place cross-hub identity is reconciled through the 1.x line, which is why the protocol spec carries the weight it does. With multi-tenant hub also deferred, the portal-stitching-many-hubs pattern is the recommended scaling story for at least 1.x.</li>
+<li><strong>How it actually went.</strong> The spec was written first (DESIGN-portal.md), exactly as planned, and the extraction followed: <code>internal/portal</code> with the file store, the conformance harness, <code>telaportal</code>, and TelaVisor Portal mode. The <code>telahubd portal serve</code> host and the <code>store/postgres</code> adapter remain unbuilt options within the same architecture. The mode-rename question resolved itself: Portal shipped as a third mode alongside Clients and Infrastructure, and no rename proved necessary.</li>
+</ul>
+<h3 id="local-names-deterministic-loopback-addresses-tela-dns"><a class="header" href="#local-names-deterministic-loopback-addresses-tela-dns">Local names (deterministic loopback addresses, <code>.tela</code> DNS)</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>deferred to 1.x.</strong> Previously untracked in this roadmap; recorded here so the 1.0 scope statement is complete.</li>
+<li>The design (<a href="DESIGN-local-names.html">DESIGN-local-names.md</a>) gives each connected machine a deterministic loopback address in 127.88.0.0/16 (Layer 1) and a stable name via an embedded DNS resolver (Layer 2), so users reach services at names and standard ports instead of <code>localhost:NNNNN</code>.</li>
+<li>Layer 1 was implemented and then reverted in the 0.10 cycle after Windows loopback shadowing broke local services (<a href="DESIGN-service-routing.html">DESIGN-service-routing.md</a> is the post-mortem). Re-landing a reverted feature late in the 1.0 cycle is risk without a forcing function, and nothing in the frozen 1.0 surfaces depends on it.</li>
+<li>Port-number ergonomics remain the 1.0 behavior. The design doc is retained as the 1.x plan; its open questions (name suffix, collision policy, coexistence with port bindings) get answered when the work is picked up, and its stale status markers are being corrected separately.</li>
+</ul>
+<hr />
+<h2 id="important-seriously-hurts-10-if-not-done"><a class="header" href="#important-seriously-hurts-10-if-not-done">Important (seriously hurts 1.0 if not done)</a></h2>
+<h3 id="relay-gateway-hub-to-hub-transit--shipped-in-v06"><a class="header" href="#relay-gateway-hub-to-hub-transit--shipped-in-v06">Relay gateway (hub-to-hub transit) — <strong>shipped in v0.6</strong></a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/26">#26</a>. Shipped 2026-04-09 as "The relay gateway release" (see <a href="CHANGELOG.html">CHANGELOG.md</a>). The design doc is <a href="DESIGN-relay-gateway.html">DESIGN-relay-gateway.md</a>; the implementation is in <code>internal/relay/frame.go</code> (7-byte wire format) and <code>internal/hub/bridge.go</code> (bridge session lifecycle, static bridge config, <code>reachableThrough</code> directory field). Bridged-session end-to-end tests live in <code>internal/teststack/stack_test.go</code>.</p>
+<p>The shape: a hub forwards opaque WireGuard ciphertext on behalf of a client whose target agent is registered with a <em>different</em> hub. The WireGuard handshake remains end to end; bridging hubs stay blind to the payload the same way the destination hub is blind today. This is the missing rung of the gateway ladder Tela already implements at every other layer of the stack: path gateway (Layer 7), bridge gateway (Layer 4 inbound), upstream gateway (Layer 4 outbound), single-hop relay gateway (Layer 3, the hub), multi-hop relay gateway (Layer 3, this feature).</p>
+<p>What it explicitly does not include:</p>
+<ul>
+<li><strong>Routing protocols.</strong> The bridging hub knows about the destination hub via static config (and, post-v1, the portal directory). It does not learn topology dynamically. No Border Gateway Protocol (BGP), no spanning tree, no link-state algorithm.</li>
+<li><strong>Identity federation.</strong> A user with a token on Hub A does not automatically have a token on Hub B. Hub A's bridging token is its own credential. The four federation-shaped scope decisions above are unaffected.</li>
+<li><strong>Mesh agent-to-agent routing.</strong> The data path is still client to hub (to hub) to agent. See the <strong>Routed mesh networking</strong> scope decision above for why mesh is not in scope and why the relay gateway is not the same thing.</li>
+</ul>
+<p>Remaining work tracked against #26 before it closes: a book chapter teaching the gateway family with the relay gateway as a shipped instance. The two implementation gaps flagged in the design-doc critical review (self-bridge detection at config load, WS ping/pong on the bridge leg) have landed.</p>
+<h3 id="telaprojectorg-launch-site-in-scope-for-10-ruled-2026-07-11"><a class="header" href="#telaprojectorg-launch-site-in-scope-for-10-ruled-2026-07-11">telaproject.org launch site (in scope for 1.0, ruled 2026-07-11)</a></h3>
+<p>The 1.0 launch ships with the telaproject.org landing site and the book's move under a <code>/book/</code> path, per <a href="DESIGN-telaproject-site.html">DESIGN-telaproject-site.md</a>. Previously untracked here; the operator ruled it into 1.0 scope. The site build, the canonical shared TDL stylesheet extraction, and the one-shot migration tied to the v1.0.0 cut are tracked on the project board; the design doc's open questions (canonical host, download detection, feed) get resolved at spec time.</p>
+<h3 id="in-browser-fallback"><a class="header" href="#in-browser-fallback">In-browser fallback</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>removed.</strong> The in-browser RDP/SSH fallback client described in early DESIGN.md drafts was never built and is struck from the design; the DESIGN.md sections that described it now carry removal notes. The tela client is already zero-admin and zero-install, which was the itch the fallback was meant to scratch. Tracked as <a href="https://github.com/paulmooreparks/tela/issues/28">#28</a>, closed by this writeup.</li>
+</ul>
+<h3 id="structured-logging"><a class="header" href="#structured-logging">Structured logging</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/29">#29</a> — migrate from <code>log.Printf</code> to <code>log/slog</code>, with <code>telelog</code> becoming a <code>slog.Handler</code>.</p>
+<h3 id="operational-fixes"><a class="header" href="#operational-fixes">Operational fixes</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+<a href="https://github.com/paulmooreparks/tela/issues/30">#30</a>: Graceful HTTP shutdown shipped in the 0.12 cycle (<code>shutdownTimeout</code> config, drain logging, two-signal escalation); closed</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/31">#31</a> — Rate limiting on the admin API (token bucket per identity per endpoint)</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/32">#32</a> — Hot reload for non-auth config, or documented restart requirement</li>
+</ul>
+<h3 id="per-service-access-control-shipped-guard-fixed"><a class="header" href="#per-service-access-control-shipped-guard-fixed">Per-service access control (shipped, guard fixed)</a></h3>
+<p>The <code>services:</code> filter on <code>connect</code> grants shipped in the 0.15 cycle (the access-model schema-freeze forcing function): no filter means all services, a filter restricts the client to the named services, enforced on the hub at session setup, filtered by service name rather than port. The client-side capability guard that refuses service-scoped grants against pre-0.15 hubs was found non-functional during board reconciliation (the probe dialed the raw <code>ws://</code> URL over HTTP, refusing every grant unconditionally) and fixed in the 0.16 cycle with fail-closed semantics and a regression test. ACCESS-MODEL.md documents the filter and the guard. Issue <a href="https://github.com/paulmooreparks/tela/issues/27">#27</a> is closed; COMPAT-0.15.md tracks the remaining operator-warning boxes (release-note boilerplate, book upgrade note).</p>
+<h3 id="agent-identity"><a class="header" href="#agent-identity">Agent identity</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/33">#33</a> — each agent generates an Ed25519 keypair on first start; hub TOFU's the public key on first registration and verifies signed registration messages thereafter. Continuity even if the bootstrap token leaks.</p>
+<h3 id="metrics"><a class="header" href="#metrics">Metrics</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/34">#34</a> — hub <code>/metrics</code> endpoint (Prometheus format by default, JSON alternative via <code>Accept</code> header) covering active sessions, bytes relayed, handshake failures, reconnect rates, transport-tier distribution, and admin API call counts.</p>
+<hr />
+<h2 id="polish-needed-but-not-blockers"><a class="header" href="#polish-needed-but-not-blockers">Polish (needed but not blockers)</a></h2>
+<h3 id="cross-platform-validation"><a class="header" href="#cross-platform-validation">Cross-platform validation</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/35">#35</a> — TelaVisor on macOS and Linux (afternoon each), plus BSD decision.</p>
+<h3 id="telavisor-ux"><a class="header" href="#telavisor-ux">TelaVisor UX</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/36">#36</a> — update-button confirm dialog, QR code for pair flow, retake outdated screenshot.</p>
+<h3 id="awan-saya-ux"><a class="header" href="#awan-saya-ux">Awan Saya UX</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/37">#37</a> — mobile UX pass, demo banner distinctiveness.</p>
+<h3 id="cli-polish"><a class="header" href="#cli-polish">CLI polish</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/38">#38</a> — help text consistency, standard <code>-v</code>/<code>--verbose</code>, documented exit codes. Note: help-flag harmonization (<code>-h</code>, <code>-?</code>, <code>-help</code>, <code>--help</code> at every subcommand) already landed in commit 4e78fef.</p>
+<h3 id="per-service-post-connect-hooks"><a class="header" href="#per-service-post-connect-hooks">Per-service post-connect hooks</a></h3>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Decision (2026-07-11): <strong>not in 1.0.</strong> Wrapper scripting around <code>tela connect</code> is the documented pattern, and the <code>hooks:</code> namespace under each service in the profile YAML is reserved now (see CONFIGURATION.md) so the feature can land in a 1.x cycle without a schema migration. If it ever ships, all three guardrails below land in the same commit. Tracked as <a href="https://github.com/paulmooreparks/tela/issues/39">#39</a>, closed by this writeup. The analysis below is retained as the design record.</li>
+<li><strong>The idea.</strong> Each service entry in a connection profile gets an optional <code>hooks:</code> list. Each hook specifies a <code>when</code> (<code>connected</code> / <code>disconnected</code> / <code>error</code>), a <code>run</code> mode (<code>once-per-session</code> / <code>once-per-process</code> / <code>on-every-connect</code>), an optional <code>detach: true</code> for long-running processes, an optional <code>timeout</code>, and a <code>command:</code> array. When the listener for the service comes up (or goes down, or errors), tela runs the configured commands. Use cases: auto-launch a terminal/RDP/database client against the new local listener, run a health check against the tunneled service to confirm end-to-end reachability, send a desktop notification, kick off provisioning scripts.</li>
+<li><strong>Why it might be worth doing.</strong> The thing every user does <em>after</em> a successful connection is a manual ritual: open a terminal and run <code>ssh localhost -p 10022</code>, fire up <code>mstsc /v:localhost:13389</code>, point a database GUI at <code>localhost:15432</code>. Profiles already capture the connection shape but stop at "the listener is up." A post-connect hook closes the loop. The architectural fit is clean: profiles already drive <code>tela connect</code>, the reconnect loop already knows when a session transitions to "connected", and the schema change is one new field on the existing service block.</li>
+<li><strong>Why it might not be worth doing.</strong> Everything in the previous paragraph can be solved by scripting outside tela today: write a wrapper shell script, run <code>tela connect -profile ... &amp;</code>, wait for the listener (poll, or sleep), then run your post-connect commands. The feature buys ergonomics, not capability. The cost is non-trivial because executing arbitrary user-supplied commands is a category of feature with sharp edges (see below).</li>
+<li><strong>The sharp edges that make this risky if done naively.</strong> Most network tools that ship <code>PostUp</code>/<code>PostDown</code>-style hooks (Tailscale, OpenVPN, autossh, wg-quick) generate the same class of bug: hooks run when the user did not expect them, hooks run again on reconnect when they shouldn't, hooks hang and block teardown, hooks fail silently with no UI surface, hooks receive untrusted input from the wire and become a command-injection vector, and profile import becomes equivalent to running an attacker-supplied script.</li>
+<li><strong>The three guardrails this would need on day one.</strong> If we ever do build it:
+<ol>
+<li><strong>Off by default per profile, opt-in via explicit trust.</strong> A profile loaded from disk MUST NOT execute hooks unless the user has run <code>tela profile trust &lt;name&gt;</code> after reviewing the hook commands. Imported profiles arrive untrusted. Trust state is sha256-keyed on the hook block so editing the profile invalidates trust. <code>tela connect -no-hooks</code> disables hooks for one run regardless. This kills the "I imported a profile and it ran a script" attack.</li>
+<li><strong>Argv mode, not shell strings.</strong> <code>command: ["wt.exe", "ssh", "-p", "${TELA_LOCAL_PORT}", "user@localhost"]</code>, never <code>command: "wt.exe ssh -p ${TELA_LOCAL_PORT} user@localhost"</code>. Variable expansion is a literal substitute on argv elements only, not a shell parse. No <code>$()</code>, no backticks, no word splitting. This kills the entire shell-injection attack surface in one rule.</li>
+<li><strong>Documented run semantics with hard timeouts.</strong> Default run mode is <code>once-per-session</code> (fires when the listener first comes up after a connect, does not re-fire on reconnect). Foreground hooks have a 30-second default timeout; tela kills them on timeout and logs a clear error. Long-running hooks must declare <code>detach: true</code> explicitly. Detached hooks survive teardown; foreground hooks are killed on teardown. Every hook execution gets a log line with start/exit/duration so users can debug.</li>
+</ol>
+</li>
+<li><strong>What it should NOT be allowed to do.</strong> Run as root or with elevated privileges (the hook runs as the user who ran <code>tela</code>, period). Receive untrusted input from the wire that becomes part of a command (machine name, hub name, etc. are passed via env vars, not interpolated into argv elements that bypass the literal-substitute rule). Modify the profile YAML on disk. Talk to the hub on its own (if a hook needs hub access, it goes through <code>tela admin</code> like everything else).</li>
+<li><strong>Where the field belongs.</strong> Client side, in the connection profile YAML, under each service. NOT on the agent side -- the agent does not know what the client wants to do after the tunnel is up.</li>
+<li><strong>Decision.</strong> Not committed for 1.0. If it ships at all it ships as a polish feature after the bigger blockers, with all three guardrails in the same commit. If it does not ship, document explicitly that scripting around <code>tela connect</code> is the recommended pattern. Either way, reserve the <code>hooks:</code> namespace in the profile schema design now so the field is available without a schema migration later.</li>
+</ul>
+<h3 id="installers"><a class="header" href="#installers">Installers</a></h3>
+<p>Tracked: <a href="https://github.com/paulmooreparks/tela/issues/40">#40</a> — refined Windows installer, notarized macOS <code>.dmg</code>/<code>.pkg</code>, Linux <code>.AppImage</code> (alongside the already-built <code>.deb</code>/<code>.rpm</code>), and package-manager distribution via Homebrew, Chocolatey, winget, and apt.</p>
+<hr />
+<h2 id="documentation-gaps"><a class="header" href="#documentation-gaps">Documentation gaps</a></h2>
+<h3 id="user-facing-docs"><a class="header" href="#user-facing-docs">User-facing docs</a></h3>
+<ul>
+<li><a href="https://github.com/paulmooreparks/tela/issues/41">#41</a> — <strong>Troubleshooting guide</strong>: "tela won't connect, what now?" The doc users need most after their first failure.</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/42">#42</a> — <strong>Security model document</strong>: threat model, what Tela protects against, what it does not. Essential for a security tool.</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/43">#43</a> — <strong>Deployment hardening guide</strong>: safely deploying a hub on the public internet.</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/44">#44</a> — <strong>Upgrade and migration guide</strong>: per-release "what's new / what to watch out for" doc.</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/45">#45</a> — <strong>Fleet operations playbook</strong>: the operational practices that distinguish "I have Tela installed" from "I run Tela for a team."</li>
+</ul>
+<h3 id="process-docs"><a class="header" href="#process-docs">Process docs</a></h3>
+<p>Already done:</p>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+CHANGELOG.md with semver discipline (kept up to date per release)</li>
+<li><input disabled="" type="checkbox" checked=""/>
+CONTRIBUTING.md (how to build, how to test, how to submit a PR)</li>
+</ul>
+<p>Open:</p>
+<ul>
+<li><a href="https://github.com/paulmooreparks/tela/issues/46">#46</a> — SECURITY.md (responsible disclosure policy, supported versions, contact)</li>
+</ul>
+<p>Also added since this roadmap was first written:</p>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+DEVELOPMENT.md — internal development workflow, branching model, custom-channel dogfooding recipe, label taxonomy, local-tag conventions (see commit history)</li>
+</ul>
+<h3 id="third-party-integration"><a class="header" href="#third-party-integration">Third-party integration</a></h3>
+<ul>
+<li><a href="https://github.com/paulmooreparks/tela/issues/47">#47</a> — <strong>Writing a portal</strong>: contract spec for <code>/.well-known/tela</code>, <code>/api/hubs</code>, admin proxy patterns, so someone could build a competing or specialized portal without reading Awan Saya source.</li>
+<li><a href="https://github.com/paulmooreparks/tela/issues/48">#48</a> — <strong>Embedding Tela</strong>: per the Go API decision (#22, Option B), this issue will document explicitly that there is no stable Go embedding story at 1.0; embedders use the CLI, wire protocol, or fork.</li>
+</ul>
+<hr />
+<h2 id="suggested-execution-order"><a class="header" href="#suggested-execution-order">Suggested execution order</a></h2>
+<p>This is the order I would do things in if I were running the project, biased toward unblocking everything else first and leaving polish for the end. Status as of 2026-07-11: steps 1 through 7 and 12 are done; the remaining work is steps 8 through 11 plus the launch surface.</p>
+<ol>
+<li><strong>CI and automated releases</strong>: done. See "Release engineering" above.</li>
+<li><strong>Test harness for end-to-end scenarios</strong>: done in substance (<code>internal/teststack</code>); leak-detection and adoption residuals ride the test wave.</li>
+<li><strong>Tests for the auth and access paths</strong>: done. The security-boundary suites (#7, #8) and the rest of the test wave (#9 through #12) landed, and #13 wired the CI coverage gate (<code>tools/covcheck</code>) that keeps the security-critical packages from eroding.</li>
+<li><strong>Per-service access control</strong>: done, including the fixed client-side guard.</li>
+<li><strong>Cert pinning</strong>: done, scoped per DESIGN-cert-pinning-portal.md.</li>
+<li><strong>Relay gateway design and v1 wire format alignment</strong>: done; shipped in the 0.6 cycle with the TTL field in the frozen frame.</li>
+<li><strong>Protocol freeze with version field and v1 spec</strong>: done. DESIGN.md section 6 is the frozen reference.</li>
+<li><strong>Code signing for Windows and macOS</strong>: next. Certificate procurement is the long pole; start it before anything else in this list.</li>
+<li><strong>Security model document and troubleshooting guide</strong>: the two most important user-facing docs still missing.</li>
+<li><strong>Relay gateway book chapter</strong>: the last item holding #26 open; docs work, parallel with everything.</li>
+<li><strong>Then the rest</strong>: audit retention, structured logging, metrics, rate limiting, agent identity, installers, package managers, UX polish, and the telaproject.org launch site.</li>
+<li><strong>Make and publish the scope decisions</strong>: done 2026-07-11. Routed mesh, hub federation, SSO/OIDC, kernel TUN, multi-tenant hub, portal architecture, in-browser fallback, post-connect hooks, and local names all carry written decisions in the scope-decisions section above. This was the step that converts ambient ambiguity into a permanent commitment, and it landed before the tag.</li>
+</ol>
+<hr />
+<h2 id="how-to-use-this-document"><a class="header" href="#how-to-use-this-document">How to use this document</a></h2>
+<p>This roadmap holds the narrative and design rationale. <a href="https://github.com/paulmooreparks/tela/milestone/2">Milestone <code>1.0</code></a> holds the state.</p>
+<ul>
+<li>When a section describes work, each piece that ships through a PR gets a GitHub Issue. State lives there (open/closed, assignees, PR linkage), not in this doc.</li>
+<li>When a section describes a decision, the decision writeup happens in an issue, and the prose here captures the reasoning. If the decision changes, update the prose; the old reasoning is preserved via git history.</li>
+<li>Add new narrative sections as the scope evolves. Do not delete rationale that turns out to be wrong — strike it through and explain why.</li>
+<li>The <code>1.0</code> milestone should be empty (no open issues) before tagging <code>v1.0.0</code>.</li>
+<li>The "Important" and "Polish" sections can carry issues past 1.0 if they are not security-critical; move their milestone to <code>1.1</code> or <code>2.0</code> rather than closing without completing.</li>
+<li>When all blockers are closed, raise the tag, write the release notes, and start treating backward compatibility as sacred.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../ops/release-process.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../ops/status.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../ops/release-process.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../ops/status.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/sidebar-version.js"></script>
+        <script src="../src/channel-banner.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
+
+
+    </div>
+    </body>
+</html>
