@@ -804,18 +804,123 @@ func TestAdminDeleteAccess_RemovesEntirelyAndScrubsACLs(t *testing.T) {
 	}
 }
 
-// TestAdminDeleteAccess_SoleOwnerCharacterization pins the CURRENT,
-// UNGUARDED behavior of deleting the sole remaining owner via
-// DELETE /api/admin/access/{id}. Unlike adminRevokeToken and
-// adminPatchAccess (which both count owners and refuse at <=1 with 409),
-// adminDeleteAccess has no last-owner guard: it removes the entry and
-// returns 200 even when the target is the last owner, which is a real
-// self-lockout path. This is decision D6 / card tela-14 item 7574. The
-// gap is tracked as a separate fix in card tela-66 (Last-Owner Guard on
-// Identity Deletion). This test deliberately asserts the present behavior
-// so it goes red the moment tela-66 lands the guard; at that point flip
-// the expectation from 200 to 409 and delete this comment.
-func TestAdminDeleteAccess_SoleOwnerCharacterization(t *testing.T) {
+// TestAdminDeleteAccess_SoleOwnerRefused verifies that deleting the sole
+// remaining owner via DELETE /api/admin/access/{id} is refused with 409.
+// Like adminRevokeToken and adminPatchAccess (which both count owners and
+// refuse at <=1), adminDeleteAccess carries a last-owner guard so an admin
+// cannot lock the hub by removing the last owner identity.
+func TestAdminDeleteAccess_SoleOwnerRefused(t *testing.T) {
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner", Token: "tok-owner", HubRole: "owner"},
+				{ID: "alice", Token: "tok-alice"},
+			},
+			Machines: map[string]machineACL{
+				"barn": {
+					RegisterToken: "tok-owner",
+					ConnectTokens: []connectGrant{{Token: "tok-owner"}},
+					ManageTokens:  []string{"tok-owner"},
+				},
+			},
+		},
+	})
+	defer restore()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/admin/access/owner", nil)
+	req.Header.Set("Authorization", "Bearer tok-owner")
+	rr := httptest.NewRecorder()
+	handleAdminAccess(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("sole-owner delete status = %d, want 409; body=%s", rr.Code, rr.Body.String())
+	}
+	if findTokenEntryInCfg("owner") == nil {
+		t.Error("sole owner removed after refused delete; the entry must remain")
+	}
+	// The refused delete must not scrub the owner's ACL entries.
+	acl := globalCfg.Auth.Machines["barn"]
+	if acl.RegisterToken != "tok-owner" {
+		t.Error("owner's RegisterToken was scrubbed despite the refused delete")
+	}
+	if !hasConnectGrant(acl.ConnectTokens, "tok-owner") {
+		t.Error("owner's connect grant was scrubbed despite the refused delete")
+	}
+	found := false
+	for _, mt := range acl.ManageTokens {
+		if mt == "tok-owner" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("owner's manage token was scrubbed despite the refused delete")
+	}
+
+	// The 409 body carries the exact error message.
+	var body map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode 409 body: %v", err)
+	}
+	if got, want := body["error"], "cannot delete the last remaining owner; promote another identity to owner first"; got != want {
+		t.Errorf("409 error = %q, want %q", got, want)
+	}
+}
+
+// TestAdminDeleteAccess_OneOfTwoOwnersSucceeds verifies that when two or
+// more non-revoked owners exist, deleting one proceeds normally: 200, the
+// entry removed, its ACL entries scrubbed, and the other owner intact.
+func TestAdminDeleteAccess_OneOfTwoOwnersSucceeds(t *testing.T) {
+	resetAccessVersions()
+	restore := withTestConfig(t, &hubConfig{
+		Auth: authConfig{
+			Tokens: []tokenEntry{
+				{ID: "owner1", Token: "tok-owner1", HubRole: "owner"},
+				{ID: "owner2", Token: "tok-owner2", HubRole: "owner"},
+			},
+			Machines: map[string]machineACL{
+				"barn": {
+					RegisterToken: "tok-owner1",
+					ConnectTokens: []connectGrant{{Token: "tok-owner1"}},
+					ManageTokens:  []string{"tok-owner1"},
+				},
+			},
+		},
+	})
+	defer restore()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/admin/access/owner1", nil)
+	req.Header.Set("Authorization", "Bearer tok-owner2")
+	rr := httptest.NewRecorder()
+	handleAdminAccess(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if findTokenEntryInCfg("owner1") != nil {
+		t.Error("owner1 still present after delete; delete must remove the entry")
+	}
+	if findTokenEntryInCfg("owner2") == nil {
+		t.Error("owner2 missing after deleting owner1; the surviving owner must remain")
+	}
+	acl := globalCfg.Auth.Machines["barn"]
+	if acl.RegisterToken == "tok-owner1" {
+		t.Error("owner1's RegisterToken not scrubbed from barn ACL")
+	}
+	if hasConnectGrant(acl.ConnectTokens, "tok-owner1") {
+		t.Error("owner1's connect grant not scrubbed from barn ACL")
+	}
+	for _, mt := range acl.ManageTokens {
+		if mt == "tok-owner1" {
+			t.Error("owner1's manage token not scrubbed from barn ACL")
+		}
+	}
+}
+
+// TestAdminDeleteAccess_UserRoleUnaffected verifies that the last-owner
+// guard does not touch non-owner deletions: a user-role identity is
+// removed with 200 even when a sole owner exists.
+func TestAdminDeleteAccess_UserRoleUnaffected(t *testing.T) {
 	resetAccessVersions()
 	restore := withTestConfig(t, &hubConfig{
 		Auth: authConfig{
@@ -827,17 +932,16 @@ func TestAdminDeleteAccess_SoleOwnerCharacterization(t *testing.T) {
 	})
 	defer restore()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/admin/access/owner", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/admin/access/alice", nil)
 	req.Header.Set("Authorization", "Bearer tok-owner")
 	rr := httptest.NewRecorder()
 	handleAdminAccess(rr, req)
 
-	// CURRENT behavior: the sole owner is deleted (200). See tela-66.
 	if rr.Code != http.StatusOK {
-		t.Fatalf("sole-owner delete status = %d, want 200 (current unguarded behavior; see card tela-66); body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("user-role delete status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
-	if findTokenEntryInCfg("owner") != nil {
-		t.Error("sole owner still present after delete; characterization expected removal under current behavior")
+	if findTokenEntryInCfg("alice") != nil {
+		t.Error("alice still present after delete; user-role deletion must remove the entry")
 	}
 }
 
