@@ -11,6 +11,8 @@ patch-level dev builds are too granular to list individually.
 
 ## [Unreleased]
 
+## [0.16] - 2026-07-13
+
 ### Added
 - **TelaVisor surfaces session-token lifecycle on the Access tab.** The By identity rail renders a status pill next to the role chip: green-on-blue *expires <date>* for an upcoming expiry, red *expired* once that date has passed, red *revoked* once the entry has been revoked; revoked rows render with a strikethrough so the terminal state is unmistakable. The identity detail header gains a **Revoke...** button between Rotate token and Delete identity, plus a small lifecycle meta line under the token preview that shows *issued <date> · expires <date> · revoked <timestamp>* as applicable. Revoking opens a themed confirm modal (per the no-web-dialogs rule) that documents the audit-trail-preserving semantics and the rotate-to-re-enable path; the modal surfaces backend 409s (notably the last-owner refusal) inline. The Add Identity modal grows an optional **Expires** field that accepts the same shorthand the CLI accepts (`30d`, `4w`, `1y`, or RFC 3339); empty means no expiry. When the selected identity is revoked, the detail header swaps Rotate token for **Rotate token (re-enables)** in the primary-button style and disables the Revoke button so the operator does not have to guess the unrevoke verb. Closes the TelaVisor follow-up to #24.
 
