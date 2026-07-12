@@ -318,7 +318,7 @@ func startControlServer(profileName string, stopCh chan struct{}) func() {
 				time.Sleep(100 * time.Millisecond)
 				log.Println("[control] shutdown requested via control API")
 				log.Println("shutting down all connections")
-				close(stopCh)
+				closeStopCh()
 			}()
 
 		default:
