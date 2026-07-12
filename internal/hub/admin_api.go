@@ -1041,6 +1041,24 @@ func adminDeleteAccess(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
+	// Last-owner guard: refuse to delete the only owner. Without this,
+	// an admin could lock the hub by deleting the last owner identity
+	// (since admin-but-not-owner can call this endpoint per
+	// requireOwnerOrAdmin). Checked before If-Match so a doomed request
+	// does not leak version-conflict semantics.
+	if entry.HubRole == "owner" {
+		owners := 0
+		for _, t := range globalCfg.Auth.Tokens {
+			if t.HubRole == "owner" && !t.isRevoked() {
+				owners++
+			}
+		}
+		if owners <= 1 {
+			writeAdminJSON(w, r, http.StatusConflict, map[string]string{"error": "cannot delete the last remaining owner; promote another identity to owner first"})
+			return
+		}
+	}
+
 	if ifm, ok := parseIfMatch(r); ok {
 		current := ensureAccessVersion(id)
 		if ifm != current {
